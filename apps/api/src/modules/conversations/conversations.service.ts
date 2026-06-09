@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   AiMode,
+  MessageType,
   Prisma,
   SenderType,
   TakeoverStatus,
@@ -148,6 +149,78 @@ export class ConversationsService {
       where: { id },
       data: { aiMode },
     });
+  }
+
+  async exportList(filters: { accountId?: string; aiMode?: AiMode; from?: string; to?: string }) {
+    const where: Prisma.ConversationWhereInput = {};
+    if (filters.accountId) where.whatsappAccountId = filters.accountId;
+    if (filters.aiMode) where.aiMode = filters.aiMode;
+    if (filters.from || filters.to) {
+      where.createdAt = {
+        ...(filters.from ? { gte: new Date(filters.from) } : {}),
+        ...(filters.to ? { lte: new Date(filters.to) } : {}),
+      };
+    }
+    return this.prisma.conversation.findMany({
+      where,
+      orderBy: { lastMessageAt: 'desc' },
+      take: 10000,
+      include: {
+        customer: { select: { name: true, phoneNumber: true, leadStage: true } },
+        _count: { select: { messages: true } },
+      },
+    });
+  }
+
+  /** Send a media message (image/document/audio/video) via WhatsApp. */
+  async sendMedia(
+    id: string,
+    adminId: string,
+    mediaType: 'image' | 'document' | 'audio' | 'video',
+    url: string,
+    caption?: string,
+  ) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      include: { customer: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const externalId = await this.wa.sendMedia(
+      conversation.whatsappAccountId,
+      conversation.customer.phoneNumber,
+      mediaType,
+      url,
+      caption,
+    );
+
+    const typeMap: Record<string, MessageType> = {
+      image: MessageType.image,
+      document: MessageType.document,
+      audio: MessageType.audio,
+      video: MessageType.video,
+    };
+
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId: id,
+        senderType: SenderType.admin,
+        senderId: adminId,
+        messageType: typeMap[mediaType] ?? MessageType.document,
+        content: caption ?? null,
+        mediaUrl: url,
+        status: 'sent',
+        externalId,
+      },
+    });
+
+    await this.prisma.conversation.update({
+      where: { id },
+      data: { lastMessage: `[${mediaType}] ${caption ?? ''}`, lastMessageAt: new Date() },
+    });
+
+    this.events.emit('message:new', { conversationId: id, message });
+    return message;
   }
 
   async update(id: string, data: { aiMode?: AiMode; takeoverStatus?: TakeoverStatus }) {

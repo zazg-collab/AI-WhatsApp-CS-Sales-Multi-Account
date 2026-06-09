@@ -6,8 +6,10 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import { ConversationsService } from './conversations.service';
@@ -20,6 +22,31 @@ import { AiMode } from '@hermes/database';
 @Controller('conversations')
 export class ConversationsController {
   constructor(private readonly conversations: ConversationsService) {}
+
+  @Get('export')
+  async export(
+    @Query('accountId') accountId: string | undefined,
+    @Query('aiMode') aiMode: AiMode | undefined,
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @Res() res: Response,
+  ) {
+    const items = await this.conversations.exportList({ accountId, aiMode, from, to });
+    const header = 'id,customerName,customerPhone,aiMode,status,messageCount,lastMessageAt,leadStage\n';
+    const rows = items.map((c) => [
+      c.id,
+      `"${(c.customer?.name ?? '').replace(/"/g, '""')}"`,
+      c.customer?.phoneNumber ?? '',
+      c.aiMode,
+      c.takeoverStatus,
+      c._count?.messages ?? 0,
+      c.lastMessageAt?.toISOString() ?? '',
+      c.customer?.leadStage ?? '',
+    ].join(',')).join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="conversations.csv"');
+    res.send(header + rows);
+  }
 
   @Get()
   list(
@@ -90,5 +117,14 @@ export class ConversationsController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: { aiMode?: AiMode }) {
     return this.conversations.update(id, dto);
+  }
+
+  @Post(':id/media')
+  sendMedia(
+    @Param('id') id: string,
+    @Body() dto: { mediaType: 'image' | 'document' | 'audio' | 'video'; url: string; caption?: string },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.conversations.sendMedia(id, user.id, dto.mediaType, dto.url, dto.caption);
   }
 }

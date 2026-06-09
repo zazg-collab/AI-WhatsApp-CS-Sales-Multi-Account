@@ -31,6 +31,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { AiService } from '../ai/ai.service';
 import { HermesService } from '../hermes/hermes.service';
 import { phoneToJid, humanDelay } from './wa.util';
+import { logAudit } from '../../common/audit.util';
 
 interface Session {
   sock: WASocket;
@@ -146,9 +147,17 @@ export class WaService implements OnModuleInit {
       m.message?.extendedTextMessage?.text ??
       m.message?.imageMessage?.caption ??
       m.message?.videoMessage?.caption ??
+      m.message?.documentMessage?.caption ??
       '';
 
     const type = this.resolveType(m);
+
+    // Capture media reference (use message key id as placeholder; actual download optional)
+    let mediaUrl: string | undefined;
+    if (type === MessageType.image || type === MessageType.video ||
+        type === MessageType.audio || type === MessageType.document) {
+      mediaUrl = m.key.id ?? undefined;
+    }
 
     const result = await this.ingest.ingest({
       accountId,
@@ -157,6 +166,7 @@ export class WaService implements OnModuleInit {
       pushName: m.pushName ?? undefined,
       text,
       type,
+      mediaUrl,
     });
 
     if (result) {
@@ -301,6 +311,55 @@ export class WaService implements OnModuleInit {
 
     const sent = await session.sock.sendMessage(jid, { text });
     return sent?.key.id ?? null;
+  }
+
+  /** Send an image or document via Baileys. */
+  async sendMedia(
+    accountId: string,
+    phone: string,
+    mediaType: 'image' | 'document' | 'audio' | 'video',
+    url: string,
+    caption?: string,
+  ): Promise<string | null> {
+    const session = this.sessions.get(accountId);
+    if (!session) {
+      throw new NotFoundException(`Account ${accountId} is not connected`);
+    }
+    const jid = phoneToJid(phone);
+    await humanDelay();
+
+    let content: Record<string, unknown>;
+    if (mediaType === 'image') {
+      content = { image: { url }, caption: caption ?? '' };
+    } else if (mediaType === 'document') {
+      content = {
+        document: { url },
+        mimetype: 'application/octet-stream',
+        fileName: caption ?? 'file',
+      };
+    } else if (mediaType === 'audio') {
+      content = { audio: { url }, mimetype: 'audio/mpeg' };
+    } else {
+      content = { video: { url }, caption: caption ?? '' };
+    }
+
+    const sent = await session.sock.sendMessage(jid, content as never);
+    return sent?.key.id ?? null;
+  }
+
+  /** Log AI mode change to audit trail. */
+  async logAiModeChange(
+    conversationId: string,
+    oldMode: string,
+    newMode: string,
+  ) {
+    await logAudit(this.prisma, {
+      action: 'ai_mode_change',
+      entityType: 'conversation',
+      entityId: conversationId,
+      oldValue: { aiMode: oldMode },
+      newValue: { aiMode: newMode },
+    });
   }
 
   getQr(accountId: string): string | null {
