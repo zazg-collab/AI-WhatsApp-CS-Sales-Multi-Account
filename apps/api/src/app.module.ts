@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from './prisma/prisma.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -12,10 +13,18 @@ import { HermesModule } from './modules/hermes/hermes.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { BotsModule } from './modules/bots/bots.module';
+import { FollowUpsModule } from './modules/followups/followups.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    BullModule.forRootAsync({
+      useFactory: (config: ConfigService) => ({
+        connection: { url: config.get('REDIS_URL') },
+      }),
+      inject: [ConfigService],
+    }),
     PrismaModule,
     RealtimeModule,
     NotificationsModule,
@@ -27,6 +36,8 @@ import { BotsModule } from './modules/bots/bots.module';
     KnowledgeModule,
     CustomersModule,
     BotsModule,
+    FollowUpsModule,
+    DashboardModule,
   ],
   controllers: [HealthController],
 })
