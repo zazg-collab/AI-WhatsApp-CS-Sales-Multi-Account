@@ -66,3 +66,31 @@ jobs:
       - name: TypeScript check (Web)
         run: npx tsc --noEmit
         working-directory: apps/web
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Test API (unit + coverage)
+        run: npm run test:cov --workspace=@hermes/api
+
+      - name: Test API (e2e)
+        run: npm run test:e2e --workspace=@hermes/api
+
+      - name: Test Web (coverage)
+        run: npm run test:cov --workspace=@hermes/web
