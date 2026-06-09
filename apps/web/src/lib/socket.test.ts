@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const ioMock = vi.fn(() => ({ id: 'sock' }));
 vi.mock('socket.io-client', () => ({
-  io: (...args: any[]) => ioMock(...args),
+  io: (...args: [string, ...any[]]) => ioMock(...args),
 }));
 
 describe('getSocket', () => {
