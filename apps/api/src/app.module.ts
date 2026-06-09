@@ -53,6 +53,8 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
   ],
   controllers: [HealthController],
   providers: [
+    // Cross-cutting production hardening: consistent errors, rate limits,
+    // request tracing/logging. Feature modules stay focused on domain logic.
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_INTERCEPTOR, useClass: RequestLoggingInterceptor },

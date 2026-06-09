@@ -27,11 +27,13 @@ assert.match(appModule, /APP_FILTER[\s\S]*AllExceptionsFilter/, 'AppModule must 
 assert.match(appModule, /APP_GUARD[\s\S]*RateLimitGuard/, 'AppModule must register global rate limiter');
 assert.match(appModule, /APP_INTERCEPTOR[\s\S]*RequestLoggingInterceptor/, 'AppModule must register request logging');
 assert.match(appModule, /RequestIdMiddleware/, 'AppModule must register request IDs');
+assert.match(appModule, /SecurityHeadersMiddleware/, 'AppModule must register security headers');
 
 const main = read('apps/api/src/main.ts');
 assert.match(main, /forbidNonWhitelisted: true/, 'Validation must reject non-whitelisted fields');
 assert.match(main, /SanitizationPipe/, 'Main bootstrap must register sanitization pipe');
 assert.match(main, /enableShutdownHooks/, 'Main bootstrap must enable graceful shutdown hooks');
+assert.match(main, /disable\('x-powered-by'\)/, 'Main bootstrap must disable x-powered-by');
 
 const webError = read('apps/web/src/app/error.tsx');
 assert.match(webError, /Something went wrong/, 'Web app must include route error boundary');

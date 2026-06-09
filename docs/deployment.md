@@ -80,6 +80,7 @@ The API enables these cross-cutting protections by default:
 - Consistent JSON error responses with request IDs.
 - Request/response logging with status, duration, IP, and user context when available.
 - Graceful shutdown hooks so Prisma/BullMQ providers can close on process signals.
+- Security headers (`x-content-type-options`, `x-frame-options`, `referrer-policy`, `permissions-policy`) on every API response.
 
 For multi-instance deployments, replace in-memory rate limiting with a Redis-backed limiter at the gateway or application layer.
 
