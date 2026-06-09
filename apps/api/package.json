@@ -7,7 +7,32 @@
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
-    "lint": "eslint \"src/**/*.ts\""
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage",
+    "test:e2e": "jest --config ./test/jest-e2e.json"
+  },
+  "jest": {
+    "rootDir": ".",
+    "roots": ["<rootDir>/src"],
+    "moduleFileExtensions": ["js", "json", "ts"],
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "<rootDir>/tsconfig.json" }]
+    },
+    "moduleNameMapper": {
+      "^@hermes/database$": "<rootDir>/../../packages/database/src/index.ts"
+    },
+    "collectCoverageFrom": [
+      "src/**/*.(t|j)s",
+      "!src/**/*.module.ts",
+      "!src/main.ts",
+      "!src/**/*.dto.ts",
+      "!src/**/dto/**"
+    ],
+    "coverageDirectory": "<rootDir>/coverage",
+    "testEnvironment": "node"
   },
   "dependencies": {
     "@hermes/database": "*",
@@ -42,6 +67,12 @@
     "@types/node": "^22.7.0",
     "@types/passport-jwt": "^4.0.1",
     "@types/qrcode": "^1.5.5",
+    "@nestjs/testing": "^10.4.0",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.13",
+    "ts-jest": "^29.2.5",
+    "supertest": "^7.0.0",
+    "@types/supertest": "^6.0.2",
     "typescript": "^5.6.3"
   }
 }
