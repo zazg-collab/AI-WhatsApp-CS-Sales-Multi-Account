@@ -5,6 +5,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import { Role } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -73,7 +74,7 @@ export class UsersService {
         name: dto.name || dto.email.split('@')[0],
         email: dto.email,
         passwordHash,
-        role: dto.role || 'admin',
+        role: (dto.role as Role) || Role.admin,
         status: 'active',
       },
       select: {
@@ -138,7 +139,7 @@ export class UsersService {
       where: { id },
       data: {
         ...(dto.email && { email: dto.email }),
-        ...(dto.role && { role: dto.role }),
+        ...(dto.role && { role: dto.role as Role }),
         ...(dto.name && { name: dto.name }),
       },
       select: {

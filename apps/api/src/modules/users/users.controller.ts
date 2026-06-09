@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -55,7 +56,7 @@ export class UsersController {
   async get(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     // Allow user to fetch their own details, or owner/supervisor to fetch any user
     if (id !== user.id && user.role !== 'owner' && user.role !== 'supervisor') {
-      throw new Error('Forbidden');
+      throw new ForbiddenException('You do not have permission to view this user');
     }
     return this.users.get(id);
   }
@@ -73,7 +74,7 @@ export class UsersController {
     if (id !== user.id && user.role !== 'owner') {
       // Self-update: only allow email/name, not role
       if (dto.role) {
-        throw new Error('Forbidden');
+        throw new ForbiddenException('You can only update your own email/name');
       }
     }
     return this.users.update(id, dto, user.id);
@@ -99,7 +100,7 @@ export class UsersController {
   ) {
     // Allow user to change their own password, or owner to change any password
     if (id !== user.id && user.role !== 'owner') {
-      throw new Error('Forbidden');
+      throw new ForbiddenException('You can only change your own password');
     }
     return this.users.changePassword(id, dto);
   }
