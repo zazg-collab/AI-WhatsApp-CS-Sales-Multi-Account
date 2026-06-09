@@ -10,7 +10,27 @@ The PRD is the source of truth for product scope. Status:
 - **Iteration 1 (foundation)** ✅ — monorepo, full Prisma data model, JWT auth, stubbed controllers.
 - **Iteration 2 (WhatsApp gateway)** ✅ — Baileys multi-account sessions, QR, receive→persist→live-push, manual reply, takeover, AI-mode toggle.
 - **Iteration 3 (AI engine)** ✅ — provider-agnostic, OpenAI-compatible. reply/draft, summarize, lead-score, model listing, and AI_ON auto-reply through Baileys.
-- **Not yet implemented**: Hermes supervisor (`/hermes/*`), knowledge base (`/knowledge*`), customers CRM endpoints (`/customers/*`) — still stubbed (501).
+- **Iteration 4 (Hermes supervisor)** ✅ — rules engine + LLM review, confidence/risk decision, pre-send gate (supervised) and post-send audit (ai_on), alerts/daily-report/bot-performance/knowledge-gaps.
+- **Not yet implemented**: knowledge base CRUD (`/knowledge*`), customers CRM endpoints (`/customers/*`) — still stubbed (501).
+
+## Hermes Supervisor
+
+The review gate lives in `modules/hermes`:
+- `rules.engine.ts` — deterministic keyword rules (PRD §16: refund→takeover,
+  legal/threat→pause_ai, complaint→draft) + confidence gates. "Most
+  restrictive decision wins" via `mostRestrictive`/`highestRisk`.
+- `HermesService.review()` — merges the rules pass with an LLM judgement
+  (`HERMES_SYSTEM` prompt, PRD §15.2), persists a `HermesReview`, and emits a
+  `hermes:alert` socket event when the outcome is actionable.
+- Integration point is `WaService.maybeAutoReply`:
+  - `ai_draft` → store unsent draft (`message:draft`).
+  - `ai_supervised` → Hermes reviews **before** send; approve→send,
+    draft→hold as draft, block/pause/takeover→pause AI + waiting_admin.
+  - `ai_on` → send immediately, then Hermes **post-send** audit links the
+    review to the message.
+- Dashboards: `/hermes/alerts`, `/hermes/reports/daily`,
+  `/hermes/bot-performance`, `/hermes/knowledge-gaps` (detects the AI fallback
+  phrase). Web page at `/hermes`.
 
 ## AI Provider (provider-agnostic)
 

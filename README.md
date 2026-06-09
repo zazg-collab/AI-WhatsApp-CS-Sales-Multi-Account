@@ -54,4 +54,10 @@ npm run dev:web           # http://localhost:3000
   `AI_ON` auto-reply through Baileys. Available models are read live from
   `{AI_BASE_URL}/models` (see `/settings/ai`).
 
-Hermes supervisor lands in a subsequent iteration.
+- **Iteration 4 — Hermes supervisor**: a review gate combining a deterministic
+  rules engine (refund→takeover, legal/threat→pause, complaint→draft) with an
+  LLM judgement (confidence/risk/decision). Pre-send gate for `AI_SUPERVISED`,
+  post-send audit for `AI_ON`. Alerts, daily report, bot performance, and
+  knowledge-gap detection at `/hermes`.
+
+Next: knowledge base CRUD and the customer CRM endpoints.

@@ -17,6 +17,8 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import {
   AiMode,
+  HermesDecision,
+  MessageStatus,
   MessageType,
   SenderType,
   SessionStatus,
@@ -26,6 +28,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { MessageIngestService } from './message-ingest.service';
 import { AiService } from '../ai/ai.service';
+import { HermesService } from '../hermes/hermes.service';
 import { phoneToJid, humanDelay } from './wa.util';
 
 interface Session {
@@ -49,6 +52,7 @@ export class WaService implements OnModuleInit {
     private readonly events: EventsGateway,
     private readonly ingest: MessageIngestService,
     private readonly ai: AiService,
+    private readonly hermes: HermesService,
     config: ConfigService,
   ) {
     this.sessionDir = config.get<string>('WA_SESSION_DIR') ?? './.wa-sessions';
@@ -161,9 +165,11 @@ export class WaService implements OnModuleInit {
   }
 
   /**
-   * Auto-reply path: only fires when the conversation is in AI_ON and no
-   * admin has taken over. Draft/supervised modes are handled by the
-   * dashboard (and, later, the Hermes review gate) — not auto-sent here.
+   * AI reply path with Hermes gating:
+   *   ai_off / ai_paused / admin takeover → nothing
+   *   ai_draft        → generate, store as unsent draft for admin
+   *   ai_supervised   → generate, Hermes reviews PRE-send and decides
+   *   ai_on           → generate + send, Hermes audits POST-send
    */
   private async maybeAutoReply(conversationId: string) {
     const convo = await this.prisma.conversation.findUnique({
@@ -171,36 +177,99 @@ export class WaService implements OnModuleInit {
       include: { customer: true },
     });
     if (!convo) return;
-    if (convo.aiMode !== AiMode.ai_on) return;
     if (convo.takeoverStatus === TakeoverStatus.admin_takeover) return;
+    if (convo.aiMode === AiMode.ai_off || convo.aiMode === AiMode.ai_paused) {
+      return;
+    }
     if (!convo.customer.phoneNumber) return;
 
     const { text } = await this.ai.generateReply(conversationId);
     if (!text) return;
 
+    if (convo.aiMode === AiMode.ai_draft) {
+      await this.storeDraft(conversationId, text);
+      return;
+    }
+
+    if (convo.aiMode === AiMode.ai_supervised) {
+      const review = await this.hermes.review(conversationId, text);
+      if (review.decision === HermesDecision.approve) {
+        await this.sendAndStore(convo, text, review.id);
+      } else if (review.decision === HermesDecision.draft) {
+        await this.storeDraft(conversationId, text, review.id);
+      } else {
+        // block / pause_ai / takeover_required — hold AI for this customer.
+        await this.prisma.conversation.update({
+          where: { id: conversationId },
+          data: {
+            aiMode: AiMode.ai_paused,
+            takeoverStatus: TakeoverStatus.waiting_admin,
+          },
+        });
+      }
+      return;
+    }
+
+    // ai_on: send directly, then post-send audit (no gating).
+    const message = await this.sendAndStore(convo, text);
+    this.hermes
+      .review(conversationId, text)
+      .then((review) =>
+        this.prisma.message.update({
+          where: { id: message.id },
+          data: { hermesReviewId: review.id },
+        }),
+      )
+      .catch((err) => this.logger.error(`Post-send audit failed: ${err}`));
+  }
+
+  private async sendAndStore(
+    convo: { id: string; whatsappAccountId: string; customer: { phoneNumber: string } },
+    text: string,
+    hermesReviewId?: string,
+  ) {
     const externalId = await this.sendText(
       convo.whatsappAccountId,
       convo.customer.phoneNumber,
       text,
     );
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId: convo.id,
+        senderType: SenderType.ai,
+        content: text,
+        status: MessageStatus.sent,
+        aiGenerated: true,
+        externalId,
+        hermesReviewId,
+      },
+    });
+    await this.prisma.conversation.update({
+      where: { id: convo.id },
+      data: { lastMessage: text, lastMessageAt: new Date() },
+    });
+    this.events.emit('message:new', { conversationId: convo.id, message });
+    return message;
+  }
 
+  /** Persist an AI draft without sending; the dashboard shows it for review. */
+  private async storeDraft(
+    conversationId: string,
+    text: string,
+    hermesReviewId?: string,
+  ) {
     const message = await this.prisma.message.create({
       data: {
         conversationId,
         senderType: SenderType.ai,
         content: text,
-        status: 'sent',
+        status: MessageStatus.pending,
         aiGenerated: true,
-        externalId,
+        hermesReviewId,
       },
     });
-
-    await this.prisma.conversation.update({
-      where: { id: conversationId },
-      data: { lastMessage: text, lastMessageAt: new Date() },
-    });
-
-    this.events.emit('message:new', { conversationId, message });
+    this.events.emit('message:draft', { conversationId, message });
+    return message;
   }
 
   private resolveType(m: proto.IWebMessageInfo): MessageType {
