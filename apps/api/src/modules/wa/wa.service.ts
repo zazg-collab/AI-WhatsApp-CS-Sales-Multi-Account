@@ -334,7 +334,7 @@ export class WaService implements OnModuleInit {
 
     if (status === SessionStatus.banned || status === SessionStatus.disconnected) {
       this.notifications.send(
-        `⚠️ <b>WhatsApp ${status}</b>\nAkun: ${account.accountName} (${account.phoneNumber})`,
+        `⚠️ WhatsApp ${status}\nAkun: ${account.accountName} (${account.phoneNumber})`,
       );
     }
   }

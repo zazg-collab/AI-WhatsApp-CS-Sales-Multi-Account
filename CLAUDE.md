@@ -40,10 +40,35 @@ The review gate lives in `modules/hermes`:
 - **Per-bot deep-dive**: `GET /hermes/bot/:botId/insight` aggregates a bot's
   last 7 days of reviews + knowledge gaps and returns metrics + an LLM analysis
   with concrete fixes (PRD §8.3).
-- **Proactive alerts** (`notifications/`, global `NotificationsService`,
-  Telegram via `TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALERT_CHAT_ID`): Hermes pushes on
-  pause_ai/takeover/critical reviews; WaService on WhatsApp banned/disconnected;
-  AiService on hot/very-hot leads. All fire-and-forget — no-op if unconfigured.
+- **Proactive alerts** (`notifications/`, global `NotificationsService`):
+  Hermes pushes on pause_ai/takeover/critical reviews; WaService on WhatsApp
+  banned/disconnected; AiService on hot/very-hot leads. All fire-and-forget —
+  no-op if unconfigured. **Delivery goes through the Hermes Agent gateway**
+  (see below), not a hardcoded Telegram call.
+
+## Where Hermes Agent (NousResearch) fits
+
+This repo builds a multi-account CS/Sales platform; **Hermes Agent** is the Nous
+Research personal-agent CLI. They are layered, not merged:
+
+| Layer | Owner | Notes |
+|---|---|---|
+| Chatbot agents (reply to customers) | **custom AI engine** + Baileys | provider-agnostic, unchanged |
+| Hermes supervisor (review, scoring, insight, ask) | in-app `modules/hermes` | the PRD's quality/monitoring layer |
+| Outbound notifications to many platforms | **Hermes Agent** (`hermes send`) | one integration → Telegram/Discord/Slack/WhatsApp/Signal/SMS/Matrix |
+
+`NotificationsService` shells out to `hermes send --to $HERMES_NOTIFY_TARGET`
+(stdin = message body). `hermes send` calls each platform's REST endpoint
+directly — no running gateway process needed — and per-platform credentials
+live in the Hermes Agent config (`hermes gateway setup`), not in this app.
+
+Why not run the Hermes Agent CLI as the chatbot brain: it is single-user /
+personal-assistant shaped (one SOUL.md, one memory, "grows with *you*"), whereas
+this app is multi-account, multi-admin, human-in-the-loop CRM. We reuse Hermes
+Agent for what it's strong at here — multi-platform outbound messaging — and
+keep the custom engine for the bots. (The optional `AIAgent` Python library,
+`from run_agent import AIAgent`, could later power deeper agentic supervision via
+a Python sidecar, but is not wired in.)
 
 ## AI Provider (provider-agnostic)
 

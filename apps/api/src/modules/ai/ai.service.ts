@@ -116,7 +116,7 @@ Acuan stage: 0-30 cold, 31-60 warm, 61-80 hot, 81-100 very_hot.`,
       result.stage === LeadStage.very_hot
     ) {
       this.notifications.send(
-        `🔥 <b>Hot Lead</b> (${result.score})\n${customer.name ?? customer.phoneNumber}\n${result.reasons.slice(0, 3).join(', ')}`,
+        `🔥 Hot Lead (${result.score})\n${customer.name ?? customer.phoneNumber}\n${result.reasons.slice(0, 3).join(', ')}`,
       );
     }
 

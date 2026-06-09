@@ -108,7 +108,7 @@ export class HermesService {
         riskLevel === RiskLevel.critical
       ) {
         this.notifications.send(
-          `🚨 <b>Hermes Alert</b>\nKeputusan: <b>${decision}</b> (risk ${riskLevel})\nAlasan: ${reason}\n${review.recommendation ? `Rekomendasi: ${review.recommendation}` : ''}`,
+          `🚨 Hermes Alert\nKeputusan: ${decision} (risk ${riskLevel})\nAlasan: ${reason}${review.recommendation ? `\nRekomendasi: ${review.recommendation}` : ''}`,
         );
       }
     }

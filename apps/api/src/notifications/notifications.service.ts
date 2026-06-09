@@ -1,40 +1,58 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { spawn } from 'node:child_process';
 
 /**
- * Outbound alert channel. Currently Telegram (PRD 17.3 / 18); the interface
- * is channel-agnostic so WhatsApp-group / email can be added later.
+ * Outbound alert channel — delegated to the Hermes Agent messaging gateway
+ * (NousResearch/hermes-agent) via its `hermes send --to <platform>` CLI.
+ *
+ * Why the gateway instead of a per-platform integration: `hermes send` already
+ * supports Telegram, Discord, Slack, WhatsApp, Signal, SMS, Matrix, etc., and
+ * calls each platform's REST endpoint directly (no running gateway process
+ * required). Per-platform credentials live in the Hermes Agent config, not in
+ * this app — so adding a channel is a Hermes config change, not a code change.
+ *
+ * Config:
+ *   HERMES_NOTIFY_TARGET  e.g. "telegram", "slack:#alerts", "whatsapp"
+ *   HERMES_BIN            path to the hermes CLI (default: "hermes")
+ *
+ * Fire-and-forget: never throws into the caller, and no-ops when the target
+ * is unset or the CLI is unavailable.
  */
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
-  private readonly token: string;
-  private readonly chatId: string;
+  private readonly target: string;
+  private readonly bin: string;
 
   constructor(config: ConfigService) {
-    this.token = config.get<string>('TELEGRAM_BOT_TOKEN') ?? '';
-    this.chatId = config.get<string>('TELEGRAM_ALERT_CHAT_ID') ?? '';
+    this.target = config.get<string>('HERMES_NOTIFY_TARGET') ?? '';
+    this.bin = config.get<string>('HERMES_BIN') ?? 'hermes';
   }
 
   get enabled(): boolean {
-    return Boolean(this.token && this.chatId);
+    return Boolean(this.target);
   }
 
-  /** Fire-and-forget alert; never throws into the caller's flow. */
   async send(text: string): Promise<void> {
     if (!this.enabled) return;
-    try {
-      await fetch(`https://api.telegram.org/bot${this.token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: this.chatId,
-          text,
-          parse_mode: 'HTML',
-        }),
+    await new Promise<void>((resolve) => {
+      let stderr = '';
+      const child = spawn(this.bin, ['send', '--to', this.target], {
+        stdio: ['pipe', 'ignore', 'pipe'],
       });
-    } catch (err) {
-      this.logger.error(`Telegram notify failed: ${err}`);
-    }
+      child.stderr?.on('data', (d) => (stderr += d));
+      child.on('error', (err) => {
+        this.logger.error(`hermes send unavailable: ${err.message}`);
+        resolve();
+      });
+      child.on('close', (code) => {
+        if (code !== 0) {
+          this.logger.warn(`hermes send exited ${code}: ${stderr.trim()}`);
+        }
+        resolve();
+      });
+      child.stdin?.end(text);
+    });
   }
 }
