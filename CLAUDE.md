@@ -20,6 +20,7 @@ The PRD is the source of truth for product scope. Status:
 - **Iteration 11 (Controlled campaigns)** ✅ — campaign drafts, recipient preview, approval flow, queued sends, rate limiting, idempotency, and campaign monitoring UI.
 - **Iteration 12 (Performance monitoring)** ✅ — response-time metrics, AI quality/fallback stats, campaign delivery rates, and monitoring dashboard.
 - **Iteration 13 (Stabilization + QA hardening)** ✅ — campaign duplicate-job guardrails, validated monitoring ranges/status filters, and automated source-level QA checks.
+- **Iteration 14 (Deployment readiness)** ✅ — env template, deployment guide, readiness/config health checks, Redis persistence/healthcheck, and pilot checklist.
 - **All PRD section-14 endpoints are now implemented** (no more 501 stubs).
 
 ## Hermes Supervisor
