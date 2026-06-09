@@ -26,4 +26,24 @@ export class DashboardController {
   getAiModeBreakdown() {
     return this.dashboardService.getAiModeBreakdown();
   }
+
+  @Get('performance')
+  getPerformance(@Query('days') days = '7') {
+    return this.dashboardService.getPerformanceOverview(parseInt(days, 10));
+  }
+
+  @Get('performance/response-time')
+  getResponseTime(@Query('days') days = '7') {
+    return this.dashboardService.getResponseTime(parseInt(days, 10));
+  }
+
+  @Get('performance/ai-quality')
+  getAiQuality(@Query('days') days = '7') {
+    return this.dashboardService.getAiQuality(parseInt(days, 10));
+  }
+
+  @Get('performance/campaigns')
+  getCampaignPerformance(@Query('days') days = '7') {
+    return this.dashboardService.getCampaignPerformance(parseInt(days, 10));
+  }
 }

@@ -12,11 +12,13 @@ import {
 import { Response } from 'express';
 import { LeadStage } from '@hermes/database';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
+import { Roles, RolesGuard } from '../../auth/roles';
 import { CustomersService } from './customers.service';
-import { UpdateCustomerDto, AddNoteDto } from './dto/customers.dto';
+import { UpdateCustomerDto, AddNoteDto, BulkCustomerActionDto } from './dto/customers.dto';
 
 // PRD 14.7 — Customers / CRM.
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('customers')
 export class CustomersController {
   constructor(private readonly customers: CustomersService) {}
@@ -56,19 +58,31 @@ export class CustomersController {
     return this.customers.list({ stage, tag, search });
   }
 
+  @Post('bulk')
+  @Roles('owner', 'supervisor', 'admin')
+  bulkAction(@Body() dto: BulkCustomerActionDto, @CurrentUser() user: AuthUser) {
+    return this.customers.bulkAction(dto, user.id);
+  }
+
   @Get(':id')
   get(@Param('id') id: string) {
     return this.customers.get(id);
   }
 
   @Patch(':id')
+  @Roles('owner', 'supervisor', 'admin')
   update(@Param('id') id: string, @Body() dto: UpdateCustomerDto) {
     return this.customers.update(id, dto);
   }
 
   @Post(':id/notes')
-  addNote(@Param('id') id: string, @Body() dto: AddNoteDto) {
-    return this.customers.addNote(id, dto.note);
+  @Roles('owner', 'supervisor', 'admin')
+  addNote(
+    @Param('id') id: string,
+    @Body() dto: AddNoteDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.customers.addNote(id, dto.note, user.id);
   }
 
   @Get(':id/timeline')
