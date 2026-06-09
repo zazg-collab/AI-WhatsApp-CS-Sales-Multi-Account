@@ -10,6 +10,7 @@ import { EventsGateway } from '../../realtime/events.gateway';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { AiProviderService } from '../ai/ai-provider.service';
 import { PromptBuilderService } from '../ai/prompt-builder.service';
+import { HermesAgentClient } from './hermes-agent.client';
 import { HERMES_SYSTEM } from './hermes-prompt';
 import {
   decisionFromConfidence,
@@ -43,6 +44,7 @@ export class HermesService {
     private readonly prompts: PromptBuilderService,
     private readonly events: EventsGateway,
     private readonly notifications: NotificationsService,
+    private readonly agent: HermesAgentClient,
   ) {}
 
   /**
@@ -304,24 +306,25 @@ export class HermesService {
    * Conversational supervisor assistant (PRD 8.7). The admin/owner asks about
    * chatbot performance and Hermes answers using the live snapshot as context.
    */
-  async ask(question: string): Promise<{ answer: string }> {
+  async ask(question: string): Promise<{ answer: string; via: string }> {
     const snapshot = await this.performanceSnapshot();
+    const context = JSON.stringify(snapshot);
+    const system = `Kamu adalah Hermes, supervisor assistant yang membantu owner/admin memantau kinerja banyak chatbot WhatsApp CS/Sales.
+Jawab pertanyaan berdasarkan DATA real-time yang diberikan. Jangan mengarang angka di luar data.
+Beri jawaban ringkas, actionable, dalam Bahasa Indonesia. Jika relevan, sebutkan bot/customer spesifik dan rekomendasi konkret.`;
+
+    // Prefer the agentic Hermes Agent sidecar; fall back to the plain model.
+    const viaAgent = await this.agent.ask(question, context, system);
+    if (viaAgent) return { answer: viaAgent, via: 'hermes-agent' };
+
     const answer = await this.provider.chat(
       [
-        {
-          role: 'system',
-          content: `Kamu adalah Hermes, supervisor assistant yang membantu owner/admin memantau kinerja banyak chatbot WhatsApp CS/Sales.
-Jawab pertanyaan berdasarkan DATA berikut (JSON real-time). Jangan mengarang angka di luar data.
-Beri jawaban ringkas, actionable, dalam Bahasa Indonesia. Jika relevan, sebutkan bot/customer spesifik dan rekomendasi konkret.
-
-DATA:
-${JSON.stringify(snapshot)}`,
-        },
+        { role: 'system', content: `${system}\n\nDATA:\n${context}` },
         { role: 'user', content: question },
       ],
       { temperature: 0.3, maxTokens: 600 },
     );
-    return { answer };
+    return { answer, via: 'model' };
   }
 
   /**
@@ -383,21 +386,19 @@ ${JSON.stringify(snapshot)}`,
       ),
     };
 
-    const insight = await this.provider.chat(
-      [
-        {
-          role: 'system',
-          content: `Kamu Hermes, supervisor chatbot. Analisa performa SATU bot selama 7 hari terakhir berdasarkan data berikut. Sebutkan: kekuatan, masalah berulang, dan 2-3 perbaikan konkret (mis. update knowledge, ubah persona, perlu takeover). Ringkas, Bahasa Indonesia, jangan mengarang angka.
+    const system = `Kamu Hermes, supervisor chatbot. Analisa performa SATU bot selama 7 hari terakhir berdasarkan data. Sebutkan: kekuatan, masalah berulang, dan 2-3 perbaikan konkret (mis. update knowledge, ubah persona, perlu takeover). Ringkas, Bahasa Indonesia, jangan mengarang angka.`;
+    const context = `Bot: ${bot.botName}\nMetrik: ${JSON.stringify(metrics)}\nKnowledge-gap (fallback ke admin): ${gapCount}\nSampel review terbaru: ${JSON.stringify(recent)}`;
+    const question = `Berikan analisa dan rekomendasi untuk bot ${bot.botName}.`;
 
-Bot: ${bot.botName}
-Metrik: ${JSON.stringify(metrics)}
-Knowledge-gap (fallback ke admin): ${gapCount}
-Sampel review terbaru: ${JSON.stringify(recent)}`,
-        },
-        { role: 'user', content: 'Berikan analisa dan rekomendasi bot ini.' },
-      ],
-      { temperature: 0.3, maxTokens: 600 },
-    );
+    const insight =
+      (await this.agent.ask(question, context, system)) ??
+      (await this.provider.chat(
+        [
+          { role: 'system', content: `${system}\n\nDATA:\n${context}` },
+          { role: 'user', content: question },
+        ],
+        { temperature: 0.3, maxTokens: 600 },
+      ));
 
     return { bot: bot.botName, metrics, insight };
   }

@@ -21,5 +21,10 @@ packages/database/prisma/*.db
 .wa-sessions/
 auth_info_baileys/
 
+# python
+__pycache__/
+*.pyc
+.venv/
+
 # os
 .DS_Store

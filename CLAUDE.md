@@ -66,9 +66,18 @@ Why not run the Hermes Agent CLI as the chatbot brain: it is single-user /
 personal-assistant shaped (one SOUL.md, one memory, "grows with *you*"), whereas
 this app is multi-account, multi-admin, human-in-the-loop CRM. We reuse Hermes
 Agent for what it's strong at here — multi-platform outbound messaging — and
-keep the custom engine for the bots. (The optional `AIAgent` Python library,
-`from run_agent import AIAgent`, could later power deeper agentic supervision via
-a Python sidecar, but is not wired in.)
+keep the custom engine for the bots.
+
+### Agentic supervision sidecar (optional)
+
+`services/hermes-sidecar/` is a FastAPI service wrapping hermes-agent's
+`AIAgent` (`from run_agent import AIAgent`). When `HERMES_SIDECAR_URL` is set,
+`HermesService.ask()` and `botInsight()` route through it (`POST /ask`) so the
+*supervisor* uses Hermes Agent's model + memory + skills. `HermesAgentClient`
+returns null on any failure, so the backend transparently falls back to the
+plain `AiProviderService`. The customer chatbots never use the sidecar.
+Run it in the same Python env that has hermes-agent installed; see the
+sidecar README.
 
 ## AI Provider (provider-agnostic)
 
