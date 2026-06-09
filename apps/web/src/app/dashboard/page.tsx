@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
+import { Sidebar } from '@/components/Sidebar';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -58,6 +59,15 @@ interface ConvDetail {
 }
 
 type FilterTab = 'all' | 'ai_on' | 'ai_off' | 'ai_supervised' | 'needs_attention';
+
+interface FollowUp {
+  id: string;
+  conversationId: string;
+  scheduledAt: string;
+  message: string;
+  status: 'pending' | 'sent' | 'cancelled';
+  sentAt: string | null;
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -434,6 +444,57 @@ function RightPanel({
   onAddNote: (note: string) => void;
 }) {
   const [note, setNote] = useState('');
+  const [followUps, setFollowUps] = useState<FollowUp[]>([]);
+  const [showFollowUpForm, setShowFollowUpForm] = useState(false);
+  const [fuMessage, setFuMessage] = useState('');
+  const [fuDateTime, setFuDateTime] = useState('');
+  const [fuLoading, setFuLoading] = useState(false);
+
+  const loadFollowUps = useCallback(async (convId: string) => {
+    try {
+      const data = await api<FollowUp[]>(`/follow-ups?conversationId=${convId}`);
+      setFollowUps(data);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (conv?.id) loadFollowUps(conv.id);
+    else setFollowUps([]);
+  }, [conv?.id, loadFollowUps]);
+
+  async function handleScheduleFollowUp() {
+    if (!conv || !fuMessage.trim() || !fuDateTime) return;
+    setFuLoading(true);
+    try {
+      await api('/follow-ups', {
+        method: 'POST',
+        body: JSON.stringify({
+          conversationId: conv.id,
+          scheduledAt: new Date(fuDateTime).toISOString(),
+          message: fuMessage.trim(),
+        }),
+      });
+      setFuMessage('');
+      setFuDateTime('');
+      setShowFollowUpForm(false);
+      loadFollowUps(conv.id);
+    } catch {
+      // ignore
+    } finally {
+      setFuLoading(false);
+    }
+  }
+
+  async function handleCancelFollowUp(id: string) {
+    try {
+      await api(`/follow-ups/${id}/cancel`, { method: 'PATCH' });
+      setFollowUps((prev) => prev.map((f) => f.id === id ? { ...f, status: 'cancelled' } : f));
+    } catch {
+      // ignore
+    }
+  }
 
   if (!conv) return <aside className="w-72 border-l border-black/40 bg-wa-panel" />;
 
@@ -564,6 +625,82 @@ function RightPanel({
           <p className="text-xs text-gray-300">{conv.bot.botName}</p>
         </div>
       )}
+
+      {/* Follow-ups */}
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Follow-ups</h3>
+          <button
+            onClick={() => setShowFollowUpForm((v) => !v)}
+            className="rounded bg-emerald-700 px-2 py-0.5 text-xs font-medium text-emerald-100 hover:bg-emerald-600"
+          >
+            {showFollowUpForm ? 'Batal' : '+ Jadwalkan'}
+          </button>
+        </div>
+
+        {showFollowUpForm && (
+          <div className="mb-3 space-y-2 rounded bg-black/20 p-2">
+            <textarea
+              rows={2}
+              value={fuMessage}
+              onChange={(e) => setFuMessage(e.target.value)}
+              placeholder="Pesan follow-up..."
+              className="w-full resize-none rounded bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-600"
+            />
+            <input
+              type="datetime-local"
+              value={fuDateTime}
+              onChange={(e) => setFuDateTime(e.target.value)}
+              className="w-full rounded bg-black/30 px-2 py-1 text-xs text-gray-200 outline-none"
+            />
+            <button
+              onClick={handleScheduleFollowUp}
+              disabled={fuLoading || !fuMessage.trim() || !fuDateTime}
+              className="w-full rounded bg-emerald-700 py-1 text-xs font-medium text-emerald-100 disabled:opacity-50 hover:bg-emerald-600"
+            >
+              {fuLoading ? 'Menjadwalkan...' : 'Jadwalkan'}
+            </button>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {followUps.length === 0 && (
+            <p className="text-xs text-gray-600">Belum ada follow-up.</p>
+          )}
+          {followUps.map((fu) => (
+            <div key={fu.id} className="rounded bg-black/20 p-2 text-xs">
+              <div className="mb-1 flex items-center justify-between gap-1">
+                <span
+                  className={`rounded px-1.5 py-0.5 font-medium ${
+                    fu.status === 'pending'
+                      ? 'bg-yellow-800 text-yellow-200'
+                      : fu.status === 'sent'
+                      ? 'bg-green-800 text-green-200'
+                      : 'bg-gray-700 text-gray-400'
+                  }`}
+                >
+                  {fu.status}
+                </span>
+                {fu.status === 'pending' && (
+                  <button
+                    onClick={() => handleCancelFollowUp(fu.id)}
+                    className="text-gray-500 hover:text-red-400"
+                    title="Batalkan"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <p className="mb-1 text-gray-300">{fu.message}</p>
+              <p className="text-gray-500">
+                {new Date(fu.scheduledAt).toLocaleString('id', {
+                  day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+                })}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
     </aside>
   );
 }
@@ -720,7 +857,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-gray-900 text-gray-100">
+      <Sidebar />
+      <div className="flex flex-1 overflow-hidden">
       <LeftPanel
         conversations={conversations}
         selectedId={selectedId}
@@ -746,6 +885,7 @@ export default function DashboardPage() {
         onAddNote={handleAddNote}
       />
       {toast && <Toast msg={toast} onDismiss={() => setToast(null)} />}
+      </div>
     </div>
   );
 }

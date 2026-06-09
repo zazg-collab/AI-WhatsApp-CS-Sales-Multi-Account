@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
+import { AppLayout } from '@/components/AppLayout';
 
 interface Review {
   id: string;
@@ -79,7 +80,7 @@ export default function HermesPage() {
   }, [load]);
 
   return (
-    <main className="mx-auto max-w-4xl p-8">
+    <AppLayout><main className="mx-auto max-w-4xl p-8">
       <h1 className="mb-6 text-xl font-semibold text-wa-accent">
         Hermes Monitoring
       </h1>
@@ -162,7 +163,7 @@ export default function HermesPage() {
           <li className="text-sm text-gray-500">Belum ada alert.</li>
         )}
       </ul>
-    </main>
+    </main></AppLayout>
   );
 }
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
+import { AppLayout } from '@/components/AppLayout';
 
 interface Account {
   id: string;
@@ -56,7 +57,7 @@ export default function AccountsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-8">
+    <AppLayout><main className="mx-auto max-w-3xl p-8">
       <h1 className="mb-6 text-xl font-semibold text-wa-accent">
         Nomor WhatsApp
       </h1>
@@ -105,6 +106,6 @@ export default function AccountsPage() {
           </li>
         ))}
       </ul>
-    </main>
+    </main></AppLayout>
   );
 }

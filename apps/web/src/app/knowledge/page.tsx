@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { AppLayout } from '@/components/AppLayout';
 
 interface Base {
   id: string;
@@ -61,7 +62,7 @@ export default function KnowledgePage() {
   }
 
   return (
-    <main className="mx-auto flex max-w-5xl gap-6 p-8">
+    <AppLayout><main className="mx-auto flex max-w-5xl gap-6 p-8">
       <aside className="w-64 shrink-0">
         <h1 className="mb-4 text-lg font-semibold text-wa-accent">
           Knowledge Base
@@ -149,6 +150,6 @@ export default function KnowledgePage() {
           </p>
         )}
       </section>
-    </main>
+    </main></AppLayout>
   );
 }

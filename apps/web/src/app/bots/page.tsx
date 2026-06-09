@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { AppLayout } from '@/components/AppLayout';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -542,7 +543,7 @@ export default function BotsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl p-8">
+    <AppLayout><main className="mx-auto max-w-4xl p-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-semibold text-wa-accent">Bot Manager</h1>
         <button
@@ -618,6 +619,6 @@ export default function BotsPage() {
           </div>
         </div>
       )}
-    </main>
+    </main></AppLayout>
   );
 }

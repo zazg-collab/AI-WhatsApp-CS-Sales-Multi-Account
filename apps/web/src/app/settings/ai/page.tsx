@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { AppLayout } from '@/components/AppLayout';
 
 export default function AiSettingsPage() {
   const [config, setConfig] = useState<{
@@ -31,7 +32,7 @@ export default function AiSettingsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
+    <AppLayout><main className="mx-auto max-w-2xl p-8">
       <h1 className="mb-6 text-xl font-semibold text-wa-accent">
         Pengaturan AI
       </h1>
@@ -70,6 +71,6 @@ export default function AiSettingsPage() {
           ))}
         </ul>
       )}
-    </main>
+    </main></AppLayout>
   );
 }
