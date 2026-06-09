@@ -1,0 +1,375 @@
+// Hermes AI Sales & CS Control Center — data model
+// See PRD section 13. All tables map 1:1 to the PRD spec.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ─────────────────────────────────────────────────
+
+enum Role {
+  owner
+  supervisor
+  admin
+  viewer
+}
+
+enum UserStatus {
+  active
+  suspended
+}
+
+enum GatewayType {
+  baileys
+  gowa
+  cloud_api
+}
+
+enum SessionStatus {
+  connected
+  disconnected
+  qr_required
+  banned
+  reconnecting
+  paused
+}
+
+/// AI behaviour mode. Applies at account / bot / conversation level.
+enum AiMode {
+  ai_on
+  ai_off
+  ai_draft
+  ai_supervised
+  ai_paused
+}
+
+enum BotStatus {
+  active
+  inactive
+  draft
+}
+
+enum KnowledgeStatus {
+  draft
+  active
+  expired
+  archived
+  needs_review
+}
+
+enum LeadStage {
+  cold
+  warm
+  hot
+  very_hot
+}
+
+enum TakeoverStatus {
+  ai_active
+  admin_takeover
+  waiting_admin
+  resolved
+  returned_to_ai
+}
+
+enum SenderType {
+  customer
+  admin
+  ai
+  system
+  hermes
+}
+
+enum MessageType {
+  text
+  image
+  video
+  audio
+  voice
+  document
+  sticker
+  location
+  system
+}
+
+enum MessageStatus {
+  pending
+  sent
+  delivered
+  read
+  failed
+}
+
+enum HermesDecision {
+  approve
+  draft
+  block
+  pause_ai
+  takeover_required
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum FollowUpStatus {
+  scheduled
+  sent
+  cancelled
+  done
+}
+
+// ── Models ────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(uuid())
+  name         String
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  role         Role       @default(admin)
+  status       UserStatus @default(active)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  assignedAccounts WhatsappAccount[] @relation("AccountAdmin")
+  assignedCustomers Customer[]       @relation("CustomerAdmin")
+  conversations    Conversation[]    @relation("ConversationAdmin")
+  followUps        FollowUp[]
+  auditLogs        AuditLog[]
+  createdKnowledge KnowledgeBase[]   @relation("KnowledgeCreatedBy")
+  approvedKnowledge KnowledgeBase[]  @relation("KnowledgeApprovedBy")
+
+  @@map("users")
+}
+
+model WhatsappAccount {
+  id              String        @id @default(uuid())
+  accountName     String        @map("account_name")
+  phoneNumber     String        @unique @map("phone_number")
+  gatewayType     GatewayType   @default(baileys) @map("gateway_type")
+  sessionStatus   SessionStatus @default(disconnected) @map("session_status")
+  assignedBotId   String?       @map("assigned_bot_id")
+  assignedAdminId String?       @map("assigned_admin_id")
+  aiMode          AiMode        @default(ai_draft) @map("ai_mode")
+  isActive        Boolean       @default(true) @map("is_active")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  assignedBot   Bot?           @relation(fields: [assignedBotId], references: [id])
+  assignedAdmin User?          @relation("AccountAdmin", fields: [assignedAdminId], references: [id])
+  customers     Customer[]
+  conversations Conversation[]
+
+  @@map("whatsapp_accounts")
+}
+
+model Bot {
+  id              String    @id @default(uuid())
+  botName         String    @map("bot_name")
+  personaId       String?   @map("persona_id")
+  knowledgeBaseId String?   @map("knowledge_base_id")
+  marketingFlowId String?   @map("marketing_flow_id")
+  defaultAiMode   AiMode    @default(ai_draft) @map("default_ai_mode")
+  language        String    @default("id")
+  status          BotStatus @default(draft)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  persona       Persona?         @relation(fields: [personaId], references: [id])
+  knowledgeBase KnowledgeBase?   @relation(fields: [knowledgeBaseId], references: [id])
+  accounts      WhatsappAccount[]
+  conversations Conversation[]
+  hermesReviews HermesReview[]
+
+  @@map("bots")
+}
+
+model Persona {
+  id             String   @id @default(uuid())
+  name           String
+  soulMd         String   @map("soul_md")
+  tone           String?
+  style          String?
+  rules          String?
+  forbiddenWords String[] @default([]) @map("forbidden_words")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  bots Bot[]
+
+  @@map("personas")
+}
+
+model KnowledgeBase {
+  id          String          @id @default(uuid())
+  name        String
+  description String?
+  status      KnowledgeStatus @default(draft)
+  createdById String?         @map("created_by")
+  approvedById String?        @map("approved_by")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  createdBy  User?           @relation("KnowledgeCreatedBy", fields: [createdById], references: [id])
+  approvedBy User?           @relation("KnowledgeApprovedBy", fields: [approvedById], references: [id])
+  items      KnowledgeItem[]
+  bots       Bot[]
+
+  @@map("knowledge_bases")
+}
+
+model KnowledgeItem {
+  id              String          @id @default(uuid())
+  knowledgeBaseId String          @map("knowledge_base_id")
+  title           String
+  content         String
+  category        String?
+  productName     String?         @map("product_name")
+  validFrom       DateTime?       @map("valid_from")
+  validUntil      DateTime?       @map("valid_until")
+  status          KnowledgeStatus @default(draft)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  @@index([knowledgeBaseId])
+  @@map("knowledge_items")
+}
+
+model Customer {
+  id              String    @id @default(uuid())
+  name            String?
+  phoneNumber     String    @map("phone_number")
+  sourceAccountId String?   @map("source_account_id")
+  assignedAdminId String?   @map("assigned_admin_id")
+  status          String?
+  leadScore       Int       @default(0) @map("lead_score")
+  leadStage       LeadStage @default(cold) @map("lead_stage")
+  tags            String[]  @default([])
+  notes           String?
+  lastMessageAt   DateTime? @map("last_message_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  sourceAccount WhatsappAccount? @relation(fields: [sourceAccountId], references: [id])
+  assignedAdmin User?            @relation("CustomerAdmin", fields: [assignedAdminId], references: [id])
+  conversations Conversation[]
+  followUps     FollowUp[]
+
+  @@unique([phoneNumber, sourceAccountId])
+  @@index([leadStage])
+  @@map("customers")
+}
+
+model Conversation {
+  id                String         @id @default(uuid())
+  customerId        String         @map("customer_id")
+  whatsappAccountId String         @map("whatsapp_account_id")
+  botId             String?        @map("bot_id")
+  aiMode            AiMode         @default(ai_draft) @map("ai_mode")
+  takeoverStatus    TakeoverStatus @default(ai_active) @map("takeover_status")
+  assignedAdminId   String?        @map("assigned_admin_id")
+  lastMessage       String?        @map("last_message")
+  lastMessageAt     DateTime?      @map("last_message_at")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  customer        Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id])
+  bot             Bot?            @relation(fields: [botId], references: [id])
+  assignedAdmin   User?           @relation("ConversationAdmin", fields: [assignedAdminId], references: [id])
+  messages        Message[]
+  hermesReviews   HermesReview[]
+  followUps       FollowUp[]
+
+  @@index([whatsappAccountId])
+  @@index([customerId])
+  @@map("conversations")
+}
+
+model Message {
+  id             String        @id @default(uuid())
+  conversationId String        @map("conversation_id")
+  senderType     SenderType    @map("sender_type")
+  senderId       String?       @map("sender_id")
+  messageType    MessageType   @default(text) @map("message_type")
+  content        String?
+  mediaUrl       String?       @map("media_url")
+  status         MessageStatus @default(pending)
+  aiGenerated    Boolean       @default(false) @map("ai_generated")
+  hermesReviewId String?       @unique @map("hermes_review_id")
+  externalId     String?       @map("external_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  hermesReview HermesReview? @relation(fields: [hermesReviewId], references: [id])
+
+  @@index([conversationId])
+  @@map("messages")
+}
+
+model HermesReview {
+  id              String         @id @default(uuid())
+  messageId       String?        @map("message_id")
+  conversationId  String         @map("conversation_id")
+  botId           String?        @map("bot_id")
+  confidenceScore Int            @map("confidence_score")
+  riskScore       Int            @map("risk_score")
+  riskLevel       RiskLevel      @map("risk_level")
+  decision        HermesDecision
+  reason          String?
+  recommendation  String?
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  bot          Bot?         @relation(fields: [botId], references: [id])
+  message      Message?
+
+  @@index([conversationId])
+  @@map("hermes_reviews")
+}
+
+model FollowUp {
+  id                 String         @id @default(uuid())
+  customerId         String         @map("customer_id")
+  conversationId     String?        @map("conversation_id")
+  scheduledAt        DateTime       @map("scheduled_at")
+  status             FollowUpStatus @default(scheduled)
+  messageTemplate    String?        @map("message_template")
+  aiGeneratedMessage String?        @map("ai_generated_message")
+  assignedAdminId    String?        @map("assigned_admin_id")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  conversation  Conversation? @relation(fields: [conversationId], references: [id])
+  assignedAdmin User?         @relation(fields: [assignedAdminId], references: [id])
+
+  @@index([scheduledAt])
+  @@map("follow_ups")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String
+  entityType String?  @map("entity_type")
+  entityId   String?  @map("entity_id")
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

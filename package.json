@@ -1,0 +1,22 @@
+{
+  "name": "hermes-control-center",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hermes AI Sales & Customer Service Control Center",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace=@hermes/api",
+    "dev:web": "npm run dev --workspace=@hermes/web",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "db:generate": "npm run generate --workspace=@hermes/database",
+    "db:migrate": "npm run migrate --workspace=@hermes/database",
+    "db:seed": "npm run seed --workspace=@hermes/database"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -6,7 +6,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Hermes AI Sales & Customer Service Control Center** — a semi-automated system for managing multiple WhatsApp chatbots from a single dashboard, with Hermes as an AI supervisor layer sitting above all bots.
 
-This project is currently in initial setup. No code has been written yet. The PRD is the source of truth for what to build.
+The PRD is the source of truth for product scope. Iteration 1 (foundation) is in place: monorepo, full Prisma data model, JWT auth, and stubbed controllers for every PRD section-14 endpoint. WhatsApp gateway, AI engine, and Hermes logic are not yet implemented.
+
+## Commands
+
+```bash
+npm install              # install all workspaces
+npm run db:generate      # regenerate Prisma client (after schema edits)
+npm run db:migrate       # create/apply migrations (needs DATABASE_URL + running Postgres)
+npm run db:seed          # seed initial owner user
+npm run dev:api          # NestJS dev server → http://localhost:3001/api/v1
+npm run dev:web          # Next.js dev server → http://localhost:3000
+npm run build            # build all workspaces
+docker compose up -d     # local Postgres + Redis
+```
+
+Build a single workspace: `npm run build --workspace=@hermes/api` (or `@hermes/web`).
+
+## Repository Layout
+
+```
+apps/api/        NestJS backend. Global prefix /api/v1. Auth is real; feature
+                 modules (wa, conversations, ai, hermes, knowledge, customers)
+                 are stubbed via common/not-implemented.ts (returns HTTP 501).
+apps/web/        Next.js (App Router) + Tailwind. Login page + 3-panel dashboard
+                 placeholder. API client in src/lib/api.ts (JWT in localStorage).
+packages/database/  Prisma schema (all 12 PRD tables) + shared client. Import
+                 from '@hermes/database'.
+```
+
+### Conventions
+- Stubbed endpoints throw `NotImplemented('operation')` (501), not silent empties — so "stubbed" is distinguishable from "broken". Replace these as features land.
+- Auth: `@UseGuards(JwtAuthGuard)` for any protected route; add `RolesGuard` + `@Roles('owner', ...)` for role restrictions. Get the caller via `@CurrentUser()`.
+- All Prisma tables use `@map`/`@@map` snake_case in DB but camelCase in code.
 
 ## Planned Tech Stack
 
