@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { PrismaModule } from './prisma/prisma.module';
@@ -18,6 +19,11 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { UsersModule } from './modules/users/users.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import { RateLimitGuard } from './common/rate-limit.guard';
+import { RequestIdMiddleware } from './common/request-id.middleware';
+import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
+import { SecurityHeadersMiddleware } from './common/security-headers.middleware';
 
 @Module({
   imports: [
@@ -46,5 +52,16 @@ import { CampaignsModule } from './modules/campaigns/campaigns.module';
     CampaignsModule,
   ],
   controllers: [HealthController],
+  providers: [
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    { provide: APP_GUARD, useClass: RateLimitGuard },
+    { provide: APP_INTERCEPTOR, useClass: RequestLoggingInterceptor },
+  ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(RequestIdMiddleware, SecurityHeadersMiddleware)
+      .forRoutes('*');
+  }
+}

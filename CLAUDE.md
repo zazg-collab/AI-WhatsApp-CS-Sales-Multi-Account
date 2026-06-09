@@ -21,6 +21,7 @@ The PRD is the source of truth for product scope. Status:
 - **Iteration 12 (Performance monitoring)** ✅ — response-time metrics, AI quality/fallback stats, campaign delivery rates, and monitoring dashboard.
 - **Iteration 13 (Stabilization + QA hardening)** ✅ — campaign duplicate-job guardrails, validated monitoring ranges/status filters, and automated source-level QA checks.
 - **Iteration 14 (Deployment readiness)** ✅ — env template, deployment guide, readiness/config health checks, Redis persistence/healthcheck, and pilot checklist.
+- **Iteration 15 (Production hardening)** ✅ — sanitization, strict validation, rate limiting, structured error responses, request logging, graceful shutdown, error boundaries, and DB pool tuning guidance.
 - **All PRD section-14 endpoints are now implemented** (no more 501 stubs).
 
 ## Hermes Supervisor
