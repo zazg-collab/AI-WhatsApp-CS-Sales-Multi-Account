@@ -27,6 +27,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { MessageIngestService } from './message-ingest.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import { AiService } from '../ai/ai.service';
 import { HermesService } from '../hermes/hermes.service';
 import { phoneToJid, humanDelay } from './wa.util';
@@ -53,6 +54,7 @@ export class WaService implements OnModuleInit {
     private readonly ingest: MessageIngestService,
     private readonly ai: AiService,
     private readonly hermes: HermesService,
+    private readonly notifications: NotificationsService,
     config: ConfigService,
   ) {
     this.sessionDir = config.get<string>('WA_SESSION_DIR') ?? './.wa-sessions';
@@ -324,10 +326,16 @@ export class WaService implements OnModuleInit {
   }
 
   private async setStatus(accountId: string, status: SessionStatus) {
-    await this.prisma.whatsappAccount.update({
+    const account = await this.prisma.whatsappAccount.update({
       where: { id: accountId },
       data: { sessionStatus: status },
     });
     this.events.emit('wa:status', { accountId, status });
+
+    if (status === SessionStatus.banned || status === SessionStatus.disconnected) {
+      this.notifications.send(
+        `⚠️ <b>WhatsApp ${status}</b>\nAkun: ${account.accountName} (${account.phoneNumber})`,
+      );
+    }
   }
 }

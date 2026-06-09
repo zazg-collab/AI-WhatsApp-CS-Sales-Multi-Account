@@ -37,6 +37,13 @@ The review gate lives in `modules/hermes`:
   questions grounded in that snapshot (no fabricated numbers). The `/hermes`
   page has a "Tanya Hermes" chat box. This is the conversational supervisor —
   the AI chatbots themselves stay on the custom AI engine.
+- **Per-bot deep-dive**: `GET /hermes/bot/:botId/insight` aggregates a bot's
+  last 7 days of reviews + knowledge gaps and returns metrics + an LLM analysis
+  with concrete fixes (PRD §8.3).
+- **Proactive alerts** (`notifications/`, global `NotificationsService`,
+  Telegram via `TELEGRAM_BOT_TOKEN`/`TELEGRAM_ALERT_CHAT_ID`): Hermes pushes on
+  pause_ai/takeover/critical reviews; WaService on WhatsApp banned/disconnected;
+  AiService on hot/very-hot leads. All fire-and-forget — no-op if unconfigured.
 
 ## AI Provider (provider-agnostic)
 

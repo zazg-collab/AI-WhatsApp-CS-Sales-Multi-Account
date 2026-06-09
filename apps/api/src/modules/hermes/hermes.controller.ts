@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { HermesService } from './hermes.service';
@@ -44,6 +51,12 @@ export class HermesController {
   @Post('ask')
   ask(@Body() dto: AskDto) {
     return this.hermes.ask(dto.question);
+  }
+
+  /** Deep-dive analysis + recommendations for one bot. */
+  @Get('bot/:botId/insight')
+  botInsight(@Param('botId') botId: string) {
+    return this.hermes.botInsight(botId);
   }
 
   @Get('knowledge-gaps')

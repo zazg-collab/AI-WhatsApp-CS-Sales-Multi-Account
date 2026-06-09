@@ -7,6 +7,7 @@ import {
 } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
+import { NotificationsService } from '../../notifications/notifications.service';
 import { AiProviderService } from '../ai/ai-provider.service';
 import { PromptBuilderService } from '../ai/prompt-builder.service';
 import { HERMES_SYSTEM } from './hermes-prompt';
@@ -41,6 +42,7 @@ export class HermesService {
     private readonly provider: AiProviderService,
     private readonly prompts: PromptBuilderService,
     private readonly events: EventsGateway,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -99,6 +101,16 @@ export class HermesService {
 
     if (ACTIONABLE.includes(decision) || riskLevel === RiskLevel.critical) {
       this.events.emit('hermes:alert', { conversationId, review });
+      // Proactively push critical/high-risk cases to admins (PRD 18).
+      if (
+        decision === HermesDecision.pause_ai ||
+        decision === HermesDecision.takeover_required ||
+        riskLevel === RiskLevel.critical
+      ) {
+        this.notifications.send(
+          `🚨 <b>Hermes Alert</b>\nKeputusan: <b>${decision}</b> (risk ${riskLevel})\nAlasan: ${reason}\n${review.recommendation ? `Rekomendasi: ${review.recommendation}` : ''}`,
+        );
+      }
     }
 
     return review;
@@ -310,6 +322,84 @@ ${JSON.stringify(snapshot)}`,
       { temperature: 0.3, maxTokens: 600 },
     );
     return { answer };
+  }
+
+  /**
+   * Deep-dive analysis of a single bot: aggregates its recent reviews and
+   * has Hermes summarize strengths, recurring issues, and concrete fixes
+   * (PRD 8.3 bot performance scoring + recommendation).
+   */
+  async botInsight(botId: string): Promise<{
+    bot: string;
+    metrics: {
+      reviews: number;
+      avgConfidence: number;
+      avgRisk: number;
+      decisions: Record<string, number>;
+    };
+    insight: string;
+  }> {
+    const bot = await this.prisma.bot.findUnique({ where: { id: botId } });
+    if (!bot) throw new NotFoundException('Bot not found');
+
+    const since = new Date();
+    since.setDate(since.getDate() - 7);
+
+    const [agg, decisions, recent, gapCount] = await Promise.all([
+      this.prisma.hermesReview.aggregate({
+        where: { botId, createdAt: { gte: since } },
+        _avg: { confidenceScore: true, riskScore: true },
+        _count: { _all: true },
+      }),
+      this.prisma.hermesReview.groupBy({
+        by: ['decision'],
+        where: { botId, createdAt: { gte: since } },
+        _count: { _all: true },
+      }),
+      this.prisma.hermesReview.findMany({
+        where: { botId, createdAt: { gte: since } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: { decision: true, riskLevel: true, reason: true },
+      }),
+      this.prisma.message.count({
+        where: {
+          senderType: SenderType.ai,
+          conversation: { botId },
+          content: {
+            contains: 'konfirmasi dulu ke admin',
+            mode: 'insensitive',
+          },
+        },
+      }),
+    ]);
+
+    const metrics = {
+      reviews: agg._count._all,
+      avgConfidence: Math.round(agg._avg.confidenceScore ?? 0),
+      avgRisk: Math.round(agg._avg.riskScore ?? 0),
+      decisions: Object.fromEntries(
+        decisions.map((d) => [d.decision, d._count._all]),
+      ),
+    };
+
+    const insight = await this.provider.chat(
+      [
+        {
+          role: 'system',
+          content: `Kamu Hermes, supervisor chatbot. Analisa performa SATU bot selama 7 hari terakhir berdasarkan data berikut. Sebutkan: kekuatan, masalah berulang, dan 2-3 perbaikan konkret (mis. update knowledge, ubah persona, perlu takeover). Ringkas, Bahasa Indonesia, jangan mengarang angka.
+
+Bot: ${bot.botName}
+Metrik: ${JSON.stringify(metrics)}
+Knowledge-gap (fallback ke admin): ${gapCount}
+Sampel review terbaru: ${JSON.stringify(recent)}`,
+        },
+        { role: 'user', content: 'Berikan analisa dan rekomendasi bot ini.' },
+      ],
+      { temperature: 0.3, maxTokens: 600 },
+    );
+
+    return { bot: bot.botName, metrics, insight };
   }
 
   async approve(conversationId: string) {

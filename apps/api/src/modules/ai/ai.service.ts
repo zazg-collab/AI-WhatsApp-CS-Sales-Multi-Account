@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { LeadStage } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import {
   AiProviderService,
   ChatMessage,
@@ -26,6 +27,7 @@ export class AiService {
     private readonly prisma: PrismaService,
     private readonly provider: AiProviderService,
     private readonly prompts: PromptBuilderService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   listModels() {
@@ -104,10 +106,19 @@ Acuan stage: 0-30 cold, 31-60 warm, 61-80 hot, 81-100 very_hot.`,
 
     const result = this.parseLeadScore(raw);
 
-    await this.prisma.customer.update({
+    const customer = await this.prisma.customer.update({
       where: { id: conversation.customerId },
       data: { leadScore: result.score, leadStage: result.stage },
     });
+
+    if (
+      result.stage === LeadStage.hot ||
+      result.stage === LeadStage.very_hot
+    ) {
+      this.notifications.send(
+        `🔥 <b>Hot Lead</b> (${result.score})\n${customer.name ?? customer.phoneNumber}\n${result.reasons.slice(0, 3).join(', ')}`,
+      );
+    }
 
     return result;
   }
