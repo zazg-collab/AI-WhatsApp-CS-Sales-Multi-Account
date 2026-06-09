@@ -44,6 +44,7 @@ npm run dev:web           # http://localhost:3000
 - Copy `.env.example` to `.env` and replace all production secrets.
 - Use `GET /api/v1/health/ready` before promoting a deployment.
 - See [docs/deployment.md](./docs/deployment.md) for migration, health check, backup, and pilot verification steps.
+- Production hardening is enabled by default: strict validation, sanitization, rate limiting, request IDs, request logging, security headers, graceful shutdown, and structured error responses.
 
 ## Status
 

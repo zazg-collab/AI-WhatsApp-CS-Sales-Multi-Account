@@ -10,6 +10,8 @@ assert.match(envExample, /JWT_SECRET=/, '.env.example must document JWT_SECRET')
 assert.match(envExample, /DATABASE_URL=/, '.env.example must document DATABASE_URL');
 assert.match(envExample, /REDIS_URL=/, '.env.example must document REDIS_URL');
 assert.match(envExample, /WA_SESSION_DIR=/, '.env.example must document WA_SESSION_DIR');
+assert.match(envExample, /RATE_LIMIT_PER_IP=/, '.env.example must document IP rate limits');
+assert.match(envExample, /connection_limit=10/, '.env.example must document Prisma connection pool tuning');
 
 const deploymentGuide = read('docs/deployment.md');
 assert.match(deploymentGuide, /\/api\/v1\/health\/ready/, 'Deployment guide must document readiness checks');
@@ -19,6 +21,22 @@ const healthController = read('apps/api/src/health.controller.ts');
 assert.match(healthController, /@Get\('ready'\)/, 'Health controller must expose readiness endpoint');
 assert.match(healthController, /@Get\('config'\)/, 'Health controller must expose non-secret config endpoint');
 assert.match(healthController, /checkRequiredConfig/, 'Readiness must validate required config');
+
+const appModule = read('apps/api/src/app.module.ts');
+assert.match(appModule, /APP_FILTER[\s\S]*AllExceptionsFilter/, 'AppModule must register global exception filter');
+assert.match(appModule, /APP_GUARD[\s\S]*RateLimitGuard/, 'AppModule must register global rate limiter');
+assert.match(appModule, /APP_INTERCEPTOR[\s\S]*RequestLoggingInterceptor/, 'AppModule must register request logging');
+assert.match(appModule, /RequestIdMiddleware/, 'AppModule must register request IDs');
+assert.match(appModule, /SecurityHeadersMiddleware/, 'AppModule must register security headers');
+
+const main = read('apps/api/src/main.ts');
+assert.match(main, /forbidNonWhitelisted: true/, 'Validation must reject non-whitelisted fields');
+assert.match(main, /SanitizationPipe/, 'Main bootstrap must register sanitization pipe');
+assert.match(main, /enableShutdownHooks/, 'Main bootstrap must enable graceful shutdown hooks');
+assert.match(main, /disable\('x-powered-by'\)/, 'Main bootstrap must disable x-powered-by');
+
+const webError = read('apps/web/src/app/error.tsx');
+assert.match(webError, /Something went wrong/, 'Web app must include route error boundary');
 
 const schema = read('packages/database/prisma/schema.prisma');
 assert.match(schema, /model Campaign\s*{[\s\S]*@@map\("campaigns"\)/, 'Campaign model must be mapped');

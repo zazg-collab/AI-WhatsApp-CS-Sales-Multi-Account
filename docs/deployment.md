@@ -27,7 +27,7 @@ cp .env.example .env
 Mandatory production changes:
 
 - Replace `JWT_SECRET` with a strong random value.
-- Point `DATABASE_URL` and `REDIS_URL` at managed/persistent services.
+- Point `DATABASE_URL` and `REDIS_URL` at managed/persistent services. Tune Prisma with `connection_limit` and `pool_timeout` in the Postgres URL.
 - Set `WA_SESSION_DIR` to a persistent mounted path.
 - Set `AI_BASE_URL`, `AI_API_KEY`, and `AI_MODEL` for your provider.
 - Set `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SOCKET_URL` to public API endpoints.
@@ -70,7 +70,21 @@ The API exposes:
 
 Expected readiness response has `status: "ok"`. A `degraded` response should block deployment promotion.
 
-## 6. Operational checks before pilot
+## 6. Production hardening defaults
+
+The API enables these cross-cutting protections by default:
+
+- Global DTO validation with `whitelist` and `forbidNonWhitelisted`.
+- Recursive input sanitization for body/query/params to reduce stored XSS risk.
+- In-memory rate limiting by IP/token with `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_PER_IP`, and `RATE_LIMIT_PER_USER`.
+- Consistent JSON error responses with request IDs.
+- Request/response logging with status, duration, IP, and user context when available.
+- Graceful shutdown hooks so Prisma/BullMQ providers can close on process signals.
+- Security headers (`x-content-type-options`, `x-frame-options`, `referrer-policy`, `permissions-policy`) on every API response.
+
+For multi-instance deployments, replace in-memory rate limiting with a Redis-backed limiter at the gateway or application layer.
+
+## 7. Operational checks before pilot
 
 Run these commands before handing the app to operators:
 
@@ -91,7 +105,7 @@ Then verify manually:
 7. Create a campaign draft, preview recipients, submit, approve, and start with a low rate limit.
 8. Open `/monitoring` and confirm response, AI quality, and campaign metrics load.
 
-## 7. Backup notes
+## 8. Backup notes
 
 Back up at least:
 
