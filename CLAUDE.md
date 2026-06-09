@@ -11,7 +11,8 @@ The PRD is the source of truth for product scope. Status:
 - **Iteration 2 (WhatsApp gateway)** ✅ — Baileys multi-account sessions, QR, receive→persist→live-push, manual reply, takeover, AI-mode toggle.
 - **Iteration 3 (AI engine)** ✅ — provider-agnostic, OpenAI-compatible. reply/draft, summarize, lead-score, model listing, and AI_ON auto-reply through Baileys.
 - **Iteration 4 (Hermes supervisor)** ✅ — rules engine + LLM review, confidence/risk decision, pre-send gate (supervised) and post-send audit (ai_on), alerts/daily-report/bot-performance/knowledge-gaps.
-- **Not yet implemented**: knowledge base CRUD (`/knowledge*`), customers CRM endpoints (`/customers/*`) — still stubbed (501).
+- **Iteration 5 (Knowledge base + Customer CRM)** ✅ — knowledge-base/items CRUD (feeds the AI prompt), customer list/filter/update, internal notes, unified timeline.
+- **All PRD section-14 endpoints are now implemented** (no more 501 stubs).
 
 ## Hermes Supervisor
 
@@ -65,9 +66,9 @@ Build a single workspace: `npm run build --workspace=@hermes/api` (or `@hermes/w
 ## Repository Layout
 
 ```
-apps/api/        NestJS backend. Global prefix /api/v1. Real: auth, wa
-                 (Baileys gateway), conversations. Stubbed (501) via
-                 common/not-implemented.ts: ai, hermes, knowledge, customers.
+apps/api/        NestJS backend. Global prefix /api/v1. Modules: auth, wa
+                 (Baileys gateway), conversations, ai, hermes, knowledge,
+                 customers — all implemented.
   realtime/        Socket.IO hub (EventsGateway), namespace /events. Emits
                    wa:status, wa:qr, message:new.
   modules/wa/      WaService manages one Baileys connection per account
@@ -83,8 +84,8 @@ packages/database/  Prisma schema (all 12 PRD tables) + shared client. Import
 ```
 
 ### Conventions
-- Stubbed endpoints throw `NotImplemented('operation')` (501), not silent empties — so "stubbed" is distinguishable from "broken". Replace these as features land.
 - Auth: `@UseGuards(JwtAuthGuard)` for any protected route; add `RolesGuard` + `@Roles('owner', ...)` for role restrictions. Get the caller via `@CurrentUser()`.
+- The active knowledge items of a bot's knowledge base are injected into the AI prompt by `PromptBuilderService` (only `status: active` and within `validUntil`). Editing knowledge immediately changes AI answers.
 - All Prisma tables use `@map`/`@@map` snake_case in DB but camelCase in code.
 
 ## Planned Tech Stack

@@ -60,4 +60,8 @@ npm run dev:web           # http://localhost:3000
   post-send audit for `AI_ON`. Alerts, daily report, bot performance, and
   knowledge-gap detection at `/hermes`.
 
-Next: knowledge base CRUD and the customer CRM endpoints.
+- **Iteration 5 — Knowledge base & Customer CRM**: knowledge-base/items CRUD
+  (`/knowledge`) whose active items feed the AI prompt, plus customer
+  list/filter/update, internal notes, and a unified timeline (`/customers/*`).
+
+All PRD section-14 endpoints are now implemented.
