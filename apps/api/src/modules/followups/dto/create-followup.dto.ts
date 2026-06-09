@@ -2,11 +2,11 @@ import { IsString, IsDateString } from 'class-validator';
 
 export class CreateFollowUpDto {
   @IsString()
-  conversationId: string;
+  conversationId!: string;
 
   @IsDateString()
-  scheduledAt: string;
+  scheduledAt!: string;
 
   @IsString()
-  message: string;
+  message!: string;
 }

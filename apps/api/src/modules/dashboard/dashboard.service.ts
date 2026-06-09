@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { FollowUpStatus, LeadStage } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -22,16 +23,16 @@ export class DashboardService {
       this.prisma.conversation.count(),
       this.prisma.conversation.count({ where: { takeoverStatus: 'waiting_admin' } }),
       this.prisma.conversation.count({ where: { aiMode: 'ai_on' } }),
-      this.prisma.followUp.count({ where: { status: 'pending' } }),
+      this.prisma.followUp.count({ where: { status: FollowUpStatus.scheduled } }),
       this.prisma.message.count({ where: { createdAt: { gte: yesterday } } }),
       this.prisma.customer.count({
-        where: { leadStage: 'hot', updatedAt: { gte: yesterday } },
+        where: { leadStage: LeadStage.hot, updatedAt: { gte: yesterday } },
       }),
       this.prisma.customer.count({
-        where: { leadStage: 'warm', updatedAt: { gte: yesterday } },
+        where: { leadStage: LeadStage.warm, updatedAt: { gte: yesterday } },
       }),
       this.prisma.customer.count({
-        where: { leadStage: 'cold', updatedAt: { gte: yesterday } },
+        where: { leadStage: LeadStage.cold, updatedAt: { gte: yesterday } },
       }),
     ]);
 
@@ -94,7 +95,7 @@ export class DashboardService {
   }
 
   async getLeadFunnel() {
-    const stages = ['cold', 'warm', 'hot', 'very_hot'];
+    const stages = Object.values(LeadStage);
     const counts = await Promise.all(
       stages.map((stage) =>
         this.prisma.customer.count({ where: { leadStage: stage } }).then((count) => ({

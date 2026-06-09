@@ -18,6 +18,7 @@ export class FollowUpsService {
   async schedule(dto: CreateFollowUpDto) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: dto.conversationId },
+      include: { customer: true },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
 
@@ -27,9 +28,10 @@ export class FollowUpsService {
     const followUp = await this.prisma.followUp.create({
       data: {
         conversationId: dto.conversationId,
+        customerId: conversation.customerId,
         scheduledAt,
-        message: dto.message,
-        status: 'pending',
+        messageTemplate: dto.message,
+        status: 'scheduled',
       },
     });
 
@@ -86,21 +88,22 @@ export class FollowUpsService {
       return;
     }
 
-    if (followUp.status !== 'pending') {
+    if (followUp.status !== 'scheduled') {
       this.logger.log(`Follow-up ${followUpId} is ${followUp.status}, skipping`);
       return;
     }
 
     try {
+      const conv = followUp.conversation!;
       await this.waService.sendText(
-        followUp.conversation.whatsappAccount.id,
-        followUp.conversation.customer.phoneNumber,
-        followUp.message,
+        conv.whatsappAccount.id,
+        conv.customer.phoneNumber,
+        followUp.messageTemplate ?? '',
       );
 
       await this.prisma.followUp.update({
         where: { id: followUpId },
-        data: { status: 'sent', sentAt: new Date() },
+        data: { status: 'sent' },
       });
 
       this.logger.log(`Follow-up ${followUpId} sent successfully`);
