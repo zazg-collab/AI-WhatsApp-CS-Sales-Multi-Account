@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import { ConversationsService } from './conversations.service';
@@ -18,11 +19,14 @@ import { AiModeDto } from './dto/ai-mode.dto';
 import { AiMode } from '@hermes/database';
 
 // PRD 14.3 — Conversations.
+@ApiTags('conversations')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('conversations')
 export class ConversationsController {
   constructor(private readonly conversations: ConversationsService) {}
 
+  @ApiOperation({ summary: 'Export conversations as CSV' })
   @Get('export')
   async export(
     @Query('accountId') accountId: string | undefined,
@@ -48,6 +52,7 @@ export class ConversationsController {
     res.send(header + rows);
   }
 
+  @ApiOperation({ summary: 'List conversations with optional filters' })
   @Get()
   list(
     @Query('accountId') accountId?: string,
@@ -67,6 +72,7 @@ export class ConversationsController {
     });
   }
 
+  @ApiOperation({ summary: 'Get a conversation with its messages' })
   @Get(':id')
   get(
     @Param('id') id: string,
