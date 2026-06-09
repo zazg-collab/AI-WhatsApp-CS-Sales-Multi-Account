@@ -13,6 +13,7 @@ import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import { ConversationsService } from './conversations.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { AiModeDto } from './dto/ai-mode.dto';
+import { AiMode } from '@hermes/database';
 
 // PRD 14.3 — Conversations.
 @UseGuards(JwtAuthGuard)
@@ -21,17 +22,49 @@ export class ConversationsController {
   constructor(private readonly conversations: ConversationsService) {}
 
   @Get()
-  list(@Query('accountId') accountId?: string) {
-    return this.conversations.list(accountId);
+  list(
+    @Query('accountId') accountId?: string,
+    @Query('aiMode') aiMode?: AiMode,
+    @Query('search') search?: string,
+    @Query('needsAttention') needsAttention?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.conversations.list({
+      accountId,
+      aiMode,
+      search,
+      needsAttention: needsAttention === 'true',
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 50,
+    });
   }
 
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.conversations.get(id);
+  get(
+    @Param('id') id: string,
+    @Query('messagePage') messagePage?: string,
+    @Query('messageLimit') messageLimit?: string,
+  ) {
+    return this.conversations.get(
+      id,
+      messagePage ? parseInt(messagePage, 10) : 1,
+      messageLimit ? parseInt(messageLimit, 10) : 100,
+    );
   }
 
-  @Post(':id/send')
+  @Post(':id/messages')
   send(
+    @Param('id') id: string,
+    @Body() dto: SendMessageDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.conversations.send(id, user.id, dto.text);
+  }
+
+  // Legacy endpoint kept for compatibility
+  @Post(':id/send')
+  sendLegacy(
     @Param('id') id: string,
     @Body() dto: SendMessageDto,
     @CurrentUser() user: AuthUser,
@@ -52,5 +85,10 @@ export class ConversationsController {
   @Patch(':id/ai-mode')
   setAiMode(@Param('id') id: string, @Body() dto: AiModeDto) {
     return this.conversations.setAiMode(id, dto.aiMode);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: { aiMode?: AiMode }) {
+    return this.conversations.update(id, dto);
   }
 }

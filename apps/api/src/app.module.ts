@@ -11,6 +11,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { HermesModule } from './modules/hermes/hermes.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { BotsModule } from './modules/bots/bots.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { CustomersModule } from './modules/customers/customers.module';
     HermesModule,
     KnowledgeModule,
     CustomersModule,
+    BotsModule,
   ],
   controllers: [HealthController],
 })

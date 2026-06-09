@@ -1,12 +1,22 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   AiMode,
+  Prisma,
   SenderType,
   TakeoverStatus,
 } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { WaService } from '../wa/wa.service';
+
+interface ListFilters {
+  accountId?: string;
+  aiMode?: AiMode;
+  search?: string;
+  needsAttention?: boolean;
+  page?: number;
+  limit?: number;
+}
 
 @Injectable()
 export class ConversationsService {
@@ -16,21 +26,61 @@ export class ConversationsService {
     private readonly events: EventsGateway,
   ) {}
 
-  list(accountId?: string) {
-    return this.prisma.conversation.findMany({
-      where: accountId ? { whatsappAccountId: accountId } : undefined,
-      orderBy: { lastMessageAt: 'desc' },
-      include: { customer: true, whatsappAccount: true },
-      take: 100,
-    });
+  async list(filters: ListFilters) {
+    const { accountId, aiMode, search, needsAttention, page = 1, limit = 50 } = filters;
+    const where: Prisma.ConversationWhereInput = {};
+
+    if (accountId) where.whatsappAccountId = accountId;
+    if (aiMode) where.aiMode = aiMode;
+    if (needsAttention) {
+      where.OR = [
+        { takeoverStatus: TakeoverStatus.waiting_admin },
+        { aiMode: AiMode.ai_paused },
+      ];
+    }
+    if (search) {
+      where.customer = {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { phoneNumber: { contains: search } },
+        ],
+      };
+    }
+
+    const [total, items] = await Promise.all([
+      this.prisma.conversation.count({ where }),
+      this.prisma.conversation.findMany({
+        where,
+        orderBy: { lastMessageAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          customer: { select: { id: true, name: true, phoneNumber: true, leadScore: true, leadStage: true, tags: true } },
+          whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true } },
+          messages: { orderBy: { createdAt: 'desc' }, take: 1, select: { content: true, senderType: true, createdAt: true, status: true } },
+        },
+      }),
+    ]);
+
+    return { total, page, limit, items };
   }
 
-  async get(id: string) {
+  async get(id: string, messagePage = 1, messageLimit = 100) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: {
         customer: true,
-        messages: { orderBy: { createdAt: 'asc' }, take: 200 },
+        whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true } },
+        bot: { select: { id: true, botName: true, defaultAiMode: true } },
+        messages: {
+          orderBy: { createdAt: 'asc' },
+          skip: (messagePage - 1) * messageLimit,
+          take: messageLimit,
+        },
+        hermesReviews: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
@@ -98,5 +148,11 @@ export class ConversationsService {
       where: { id },
       data: { aiMode },
     });
+  }
+
+  async update(id: string, data: { aiMode?: AiMode; takeoverStatus?: TakeoverStatus }) {
+    const conversation = await this.prisma.conversation.findUnique({ where: { id } });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+    return this.prisma.conversation.update({ where: { id }, data });
   }
 }
