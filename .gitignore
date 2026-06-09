@@ -1,0 +1,30 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+
+# env
+.env
+.env.local
+*.local
+
+# logs
+*.log
+npm-debug.log*
+
+# prisma
+packages/database/prisma/*.db
+
+# whatsapp sessions
+.wa-sessions/
+auth_info_baileys/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# os
+.DS_Store

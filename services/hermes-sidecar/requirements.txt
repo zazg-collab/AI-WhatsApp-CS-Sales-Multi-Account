@@ -1,0 +1,8 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+pydantic>=2.9
+
+# hermes-agent itself is installed separately so `run_agent` is importable:
+#   curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+# (it manages its own Python env via uv; install this sidecar's deps into the
+#  same environment, or expose run_agent on PYTHONPATH)
