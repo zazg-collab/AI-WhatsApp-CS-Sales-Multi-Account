@@ -56,6 +56,23 @@ export class CustomersService {
     return this.prisma.customer.update({ where: { id }, data: { notes } });
   }
 
+  async exportList(filters: ListFilters) {
+    const where: Prisma.CustomerWhereInput = {};
+    if (filters.stage) where.leadStage = filters.stage;
+    if (filters.tag) where.tags = { has: filters.tag };
+    if (filters.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { phoneNumber: { contains: filters.search } },
+      ];
+    }
+    return this.prisma.customer.findMany({
+      where,
+      orderBy: { lastMessageAt: 'desc' },
+      take: 10000,
+    });
+  }
+
   /**
    * Unified customer timeline (PRD 14.7): messages, Hermes reviews and
    * follow-ups merged into one reverse-chronological feed.

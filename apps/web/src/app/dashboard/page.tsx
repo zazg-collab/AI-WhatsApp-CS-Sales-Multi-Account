@@ -21,6 +21,8 @@ interface Message {
   id: string;
   senderType: 'customer' | 'admin' | 'ai' | 'system' | 'hermes';
   content: string | null;
+  mediaUrl: string | null;
+  messageType: string;
   status: string;
   aiGenerated: boolean;
   createdAt: string;
@@ -236,9 +238,113 @@ function LeftPanel({
 
 // ── Center Panel ───────────────────────────────────────────────────────────────
 
+function MediaModal({
+  onClose,
+  onSend,
+}: {
+  onClose: () => void;
+  onSend: (mediaType: string, url: string, caption: string) => void;
+}) {
+  const [url, setUrl] = useState('');
+  const [mediaType, setMediaType] = useState('image');
+  const [caption, setCaption] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="w-96 rounded-lg border border-gray-700 bg-gray-800 p-5">
+        <h3 className="mb-4 text-sm font-semibold text-gray-100">Kirim Media</h3>
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs text-gray-400">Tipe Media</label>
+            <select
+              value={mediaType}
+              onChange={(e) => setMediaType(e.target.value)}
+              className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none"
+            >
+              <option value="image">Gambar</option>
+              <option value="document">Dokumen</option>
+              <option value="audio">Audio</option>
+              <option value="video">Video</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-gray-400">URL</label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://..."
+              className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-gray-400">Caption (opsional)</label>
+            <input
+              type="text"
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder="Keterangan..."
+              className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600"
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={() => { if (url.trim()) { onSend(mediaType, url.trim(), caption); onClose(); } }}
+              disabled={!url.trim()}
+              className="flex-1 rounded bg-emerald-600 py-1.5 text-sm font-medium text-white disabled:opacity-50 hover:bg-emerald-500"
+            >
+              Kirim
+            </button>
+            <button
+              onClick={onClose}
+              className="flex-1 rounded bg-gray-700 py-1.5 text-sm font-medium text-gray-100 hover:bg-gray-600"
+            >
+              Batal
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MessageMedia({ msg }: { msg: Message }) {
+  if (msg.messageType === 'image' && msg.mediaUrl) {
+    return (
+      <div>
+        <img src={msg.mediaUrl} alt={msg.content ?? 'image'} className="max-w-full rounded" />
+        {msg.content && <p className="mt-1 text-xs text-gray-300">{msg.content}</p>}
+      </div>
+    );
+  }
+  if (msg.messageType === 'document' && msg.mediaUrl) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-lg">📄</span>
+        <a href={msg.mediaUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-300 underline">
+          {msg.content ?? 'Dokumen'}
+        </a>
+      </div>
+    );
+  }
+  if (msg.messageType === 'audio' && msg.mediaUrl) {
+    return <audio controls src={msg.mediaUrl} className="w-full" />;
+  }
+  if (msg.messageType === 'video' && msg.mediaUrl) {
+    return (
+      <div>
+        <video controls src={msg.mediaUrl} className="max-w-full rounded" />
+        {msg.content && <p className="mt-1 text-xs text-gray-300">{msg.content}</p>}
+      </div>
+    );
+  }
+  return <p className="whitespace-pre-wrap">{msg.content}</p>;
+}
+
 function CenterPanel({
   conv,
   onSend,
+  onSendMedia,
   onTakeover,
   onReturnToAi,
   onToggleAi,
@@ -248,6 +354,7 @@ function CenterPanel({
 }: {
   conv: ConvDetail | null;
   onSend: (text: string) => void;
+  onSendMedia: (mediaType: string, url: string, caption: string) => void;
   onTakeover: () => void;
   onReturnToAi: () => void;
   onToggleAi: () => void;
@@ -256,6 +363,7 @@ function CenterPanel({
   sending: boolean;
 }) {
   const [text, setText] = useState('');
+  const [showMediaModal, setShowMediaModal] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -361,7 +469,7 @@ function CenterPanel({
                     <span>Draft AI</span>
                   </div>
                 )}
-                <p className="whitespace-pre-wrap">{m.content}</p>
+                <MessageMedia msg={m} />
                 <div className="mt-1 flex items-center justify-end gap-1">
                   <span className="text-xs opacity-50">{fmtTime(m.createdAt)}</span>
                   {m.aiGenerated && !isCustomer && (
@@ -392,10 +500,25 @@ function CenterPanel({
         <div ref={bottomRef} />
       </div>
 
+      {/* Media Modal */}
+      {showMediaModal && (
+        <MediaModal
+          onClose={() => setShowMediaModal(false)}
+          onSend={onSendMedia}
+        />
+      )}
+
       {/* Input */}
       {canSend && (
         <div className="border-t border-black/40 bg-wa-panel px-4 py-3">
           <div className="flex gap-2">
+            <button
+              onClick={() => setShowMediaModal(true)}
+              title="Kirim media"
+              className="rounded bg-black/30 px-2 py-2 text-gray-400 hover:text-gray-200"
+            >
+              📎
+            </button>
             <textarea
               rows={1}
               value={text}
@@ -784,6 +907,19 @@ export default function DashboardPage() {
     };
   }, [loadList]);
 
+  async function handleSendMedia(mediaType: string, url: string, caption: string) {
+    if (!selectedId) return;
+    try {
+      await api(`/conversations/${selectedId}/media`, {
+        method: 'POST',
+        body: JSON.stringify({ mediaType, url, caption }),
+      });
+      if (selectedId) await loadConv(selectedId);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal mengirim media');
+    }
+  }
+
   async function handleSend(text: string) {
     if (!selectedId) return;
     setSending(true);
@@ -872,6 +1008,7 @@ export default function DashboardPage() {
       <CenterPanel
         conv={conv}
         onSend={handleSend}
+        onSendMedia={handleSendMedia}
         onTakeover={handleTakeover}
         onReturnToAi={handleReturnToAi}
         onToggleAi={handleToggleAi}

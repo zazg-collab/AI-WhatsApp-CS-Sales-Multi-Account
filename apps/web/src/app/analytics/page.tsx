@@ -89,7 +89,45 @@ export default function AnalyticsPage() {
   return (
     <AppLayout>
       <div className="flex-1 overflow-y-auto p-6">
-        <h1 className="mb-6 text-xl font-bold text-gray-100">Analytics</h1>
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-xl font-bold text-gray-100">Analytics</h1>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
+                const url = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/customers/export`;
+                fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+                  .then((r) => r.blob())
+                  .then((blob) => {
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'customers.csv';
+                    a.click();
+                  });
+              }}
+              className="rounded bg-emerald-700 px-3 py-1.5 text-xs font-medium text-emerald-100 hover:bg-emerald-600"
+            >
+              Export Customers CSV
+            </button>
+            <button
+              onClick={() => {
+                const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
+                const url = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/conversations/export`;
+                fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+                  .then((r) => r.blob())
+                  .then((blob) => {
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'conversations.csv';
+                    a.click();
+                  });
+              }}
+              className="rounded bg-blue-700 px-3 py-1.5 text-xs font-medium text-blue-100 hover:bg-blue-600"
+            >
+              Export Conversations CSV
+            </button>
+          </div>
+        </div>
 
         {loading ? (
           <p className="text-sm text-gray-400">Memuat data...</p>

@@ -18,6 +18,7 @@ import {
   highestRisk,
   mostRestrictive,
 } from './rules.engine';
+import { logAudit } from '../../common/audit.util';
 
 interface LlmReview {
   decision: HermesDecision;
@@ -103,6 +104,19 @@ export class HermesService {
 
     if (ACTIONABLE.includes(decision) || riskLevel === RiskLevel.critical) {
       this.events.emit('hermes:alert', { conversationId, review });
+      // Audit actionable Hermes decisions.
+      if (
+        decision === HermesDecision.block ||
+        decision === HermesDecision.pause_ai ||
+        decision === HermesDecision.takeover_required
+      ) {
+        logAudit(this.prisma, {
+          action: 'hermes_action',
+          entityType: 'conversation',
+          entityId: conversationId,
+          newValue: { decision, riskLevel, reason },
+        }).catch(() => undefined);
+      }
       // Proactively push critical/high-risk cases to admins (PRD 18).
       if (
         decision === HermesDecision.pause_ai ||
