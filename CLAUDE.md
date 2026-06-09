@@ -9,7 +9,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The PRD is the source of truth for product scope. Status:
 - **Iteration 1 (foundation)** ✅ — monorepo, full Prisma data model, JWT auth, stubbed controllers.
 - **Iteration 2 (WhatsApp gateway)** ✅ — Baileys multi-account sessions, QR, receive→persist→live-push, manual reply, takeover, AI-mode toggle.
-- **Not yet implemented**: AI engine (`/ai/*`), Hermes supervisor (`/hermes/*`), knowledge base (`/knowledge*`), customers CRM endpoints (`/customers/*`) — still stubbed (501).
+- **Iteration 3 (AI engine)** ✅ — provider-agnostic, OpenAI-compatible. reply/draft, summarize, lead-score, model listing, and AI_ON auto-reply through Baileys.
+- **Not yet implemented**: Hermes supervisor (`/hermes/*`), knowledge base (`/knowledge*`), customers CRM endpoints (`/customers/*`) — still stubbed (501).
+
+## AI Provider (provider-agnostic)
+
+The AI engine targets any **OpenAI-compatible** endpoint, selected purely by env:
+`AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`. Works with OpenAI, OpenRouter, Ollama,
+LM Studio, vLLM, etc. `GET /ai/models` lists models from `{AI_BASE_URL}/models`;
+`GET /ai/config` returns the base URL + default model (no secrets).
+- `AiProviderService` — low-level HTTP (`chat`, `listModels`) via native fetch.
+- `PromptBuilderService` — assembles the PRD §15.1 system prompt (Soul.md +
+  active knowledge items + customer memory) followed by mapped chat history.
+- `AiService` — `generateReply`, `summarizeChat`, `leadScore` (persists score
+  + stage to the customer). Lead-score parsing tolerates fenced/prose JSON.
+- Auto-reply lives in `WaService.maybeAutoReply`: fires only when conversation
+  `aiMode === ai_on` and not under admin takeover. Draft/supervised modes are
+  not auto-sent (reserved for the Hermes gate).
 
 ## Commands
 

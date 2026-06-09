@@ -15,10 +15,17 @@ import makeWASocket, {
   type WASocket,
   type proto,
 } from '@whiskeysockets/baileys';
-import { MessageType, SessionStatus } from '@hermes/database';
+import {
+  AiMode,
+  MessageType,
+  SenderType,
+  SessionStatus,
+  TakeoverStatus,
+} from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { MessageIngestService } from './message-ingest.service';
+import { AiService } from '../ai/ai.service';
 import { phoneToJid, humanDelay } from './wa.util';
 
 interface Session {
@@ -41,6 +48,7 @@ export class WaService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly events: EventsGateway,
     private readonly ingest: MessageIngestService,
+    private readonly ai: AiService,
     config: ConfigService,
   ) {
     this.sessionDir = config.get<string>('WA_SESSION_DIR') ?? './.wa-sessions';
@@ -136,7 +144,7 @@ export class WaService implements OnModuleInit {
 
     const type = this.resolveType(m);
 
-    await this.ingest.ingest({
+    const result = await this.ingest.ingest({
       accountId,
       remoteJid: m.key.remoteJid,
       externalId: m.key.id ?? '',
@@ -144,6 +152,55 @@ export class WaService implements OnModuleInit {
       text,
       type,
     });
+
+    if (result) {
+      await this.maybeAutoReply(result.conversation.id).catch((err) =>
+        this.logger.error(`Auto-reply failed: ${err}`),
+      );
+    }
+  }
+
+  /**
+   * Auto-reply path: only fires when the conversation is in AI_ON and no
+   * admin has taken over. Draft/supervised modes are handled by the
+   * dashboard (and, later, the Hermes review gate) — not auto-sent here.
+   */
+  private async maybeAutoReply(conversationId: string) {
+    const convo = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: { customer: true },
+    });
+    if (!convo) return;
+    if (convo.aiMode !== AiMode.ai_on) return;
+    if (convo.takeoverStatus === TakeoverStatus.admin_takeover) return;
+    if (!convo.customer.phoneNumber) return;
+
+    const { text } = await this.ai.generateReply(conversationId);
+    if (!text) return;
+
+    const externalId = await this.sendText(
+      convo.whatsappAccountId,
+      convo.customer.phoneNumber,
+      text,
+    );
+
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId,
+        senderType: SenderType.ai,
+        content: text,
+        status: 'sent',
+        aiGenerated: true,
+        externalId,
+      },
+    });
+
+    await this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessage: text, lastMessageAt: new Date() },
+    });
+
+    this.events.emit('message:new', { conversationId, message });
   }
 
   private resolveType(m: proto.IWebMessageInfo): MessageType {

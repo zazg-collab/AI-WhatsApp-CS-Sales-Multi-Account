@@ -48,4 +48,10 @@ npm run dev:web           # http://localhost:3000
   human takeover, and AI-mode toggle. Live updates over Socket.IO (`/events`).
   Add a number at `/accounts` and scan the QR to connect.
 
-AI engine and Hermes supervisor land in subsequent iterations.
+- **Iteration 3 — AI engine (provider-agnostic)**: any OpenAI-compatible
+  endpoint via `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` (OpenAI, OpenRouter,
+  Ollama, LM Studio, vLLM…). Reply/draft, chat summary, lead scoring, and
+  `AI_ON` auto-reply through Baileys. Available models are read live from
+  `{AI_BASE_URL}/models` (see `/settings/ai`).
+
+Hermes supervisor lands in a subsequent iteration.
