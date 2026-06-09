@@ -8,25 +8,31 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { FollowUpsService } from './followups.service';
 import { CreateFollowUpDto } from './dto/create-followup.dto';
 
+@ApiTags('follow-ups')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('follow-ups')
 export class FollowUpsController {
   constructor(private readonly followUpsService: FollowUpsService) {}
 
+  @ApiOperation({ summary: 'Schedule a follow-up for a conversation' })
   @Post()
   schedule(@Body() dto: CreateFollowUpDto) {
     return this.followUpsService.schedule(dto);
   }
 
+  @ApiOperation({ summary: 'List follow-ups for a conversation' })
   @Get()
   list(@Query('conversationId') conversationId: string) {
     return this.followUpsService.list(conversationId);
   }
 
+  @ApiOperation({ summary: 'Cancel a follow-up' })
   @Patch(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.followUpsService.cancel(id);

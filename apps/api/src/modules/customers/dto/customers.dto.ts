@@ -10,32 +10,39 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { LeadStage } from '@hermes/database';
 
 export class UpdateCustomerDto {
+  @ApiPropertyOptional({ example: 'Budi Santoso' })
   @IsOptional()
   @IsString()
   name?: string;
 
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   status?: string;
 
+  @ApiPropertyOptional({ minimum: 0, maximum: 100 })
   @IsOptional()
   @IsInt()
   @Min(0)
   @Max(100)
   leadScore?: number;
 
+  @ApiPropertyOptional({ enum: LeadStage })
   @IsOptional()
   @IsEnum(LeadStage)
   leadStage?: LeadStage;
 
+  @ApiPropertyOptional({ type: [String] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
 
+  @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   assignedAdminId?: string;

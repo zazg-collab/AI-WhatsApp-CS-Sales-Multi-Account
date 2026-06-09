@@ -67,6 +67,19 @@ jobs:
         run: npx tsc --noEmit
         working-directory: apps/web
 
+  docker-build:
+    name: Docker Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API Docker image
+        run: docker build -f apps/api/Dockerfile -t hermes-api:ci .
+
+      - name: Build Web Docker image
+        run: docker build -f apps/web/Dockerfile -t hermes-web:ci .
+
   test:
     name: Tests
     runs-on: ubuntu-latest

@@ -211,6 +211,23 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* API Docs link */}
+      <div className="px-1 lg:px-2 mb-1">
+        <a
+          href={`${(process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v1$/, '')}/api/docs`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex w-full items-center justify-center gap-3 rounded-lg px-2 py-2.5 text-sm text-gray-400 hover:bg-gray-800 hover:text-gray-100 lg:justify-start lg:px-3"
+          title="API Docs"
+        >
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+          </svg>
+          <span className="hidden lg:block">API Docs</span>
+        </a>
+      </div>
+
       {/* Logout */}
       <div className="border-t border-gray-700 pt-3 px-1 lg:px-2">
         <button
