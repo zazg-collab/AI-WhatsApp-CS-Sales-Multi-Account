@@ -39,6 +39,20 @@ The AI engine targets any **OpenAI-compatible** endpoint, selected purely by env
 `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`. Works with OpenAI, OpenRouter, Ollama,
 LM Studio, vLLM, etc. `GET /ai/models` lists models from `{AI_BASE_URL}/models`;
 `GET /ai/config` returns the base URL + default model (no secrets).
+
+**Default brain: Nous Research Hermes models** via Nous Portal
+(`https://inference-api.nousresearch.com/v1`, models `Hermes-4-70B` /
+`Hermes-4.3-36B` / `Hermes-4-405B`). Because the engine is OpenAI-compatible,
+this is pure config — no code change. The local Nous subscription proxy
+(`http://127.0.0.1:8645/v1`) also works.
+
+> Naming note: the in-app **"Hermes supervisor"** module (`modules/hermes`) is
+> the PRD's review/quality layer — distinct from **Hermes Agent** (the Nous
+> Research CLI). We use Hermes *models* as the brain, not the Hermes Agent CLI
+> runtime. The Soul.md / provider-agnostic concepts in this repo are inspired
+> by Hermes Agent; running its CLI as the orchestrator was rejected because it
+> is single-user/personal-assistant shaped, whereas this app is a multi-account
+> multi-admin CRM platform.
 - `AiProviderService` — low-level HTTP (`chat`, `listModels`) via native fetch.
 - `PromptBuilderService` — assembles the PRD §15.1 system prompt (Soul.md +
   active knowledge items + customer memory) followed by mapped chat history.
