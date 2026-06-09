@@ -41,7 +41,11 @@ npm run dev:web           # http://localhost:3000
 
 ## Status
 
-Iteration 1 — **foundation**: monorepo, full Prisma data model, JWT auth with
-role guard (owner/supervisor/admin/viewer), and stubbed controllers for all PRD
-section 14 endpoints. WhatsApp gateway, AI engine, and Hermes logic land in
-subsequent iterations.
+- **Iteration 1 — foundation**: monorepo, full Prisma data model, JWT auth with
+  role guard (owner/supervisor/admin/viewer), stubbed controllers.
+- **Iteration 2 — WhatsApp gateway (Baileys)**: multi-account sessions with QR
+  scan, auto-reconnect, inbound messages persisted to the CRM, manual reply,
+  human takeover, and AI-mode toggle. Live updates over Socket.IO (`/events`).
+  Add a number at `/accounts` and scan the QR to connect.
+
+AI engine and Hermes supervisor land in subsequent iterations.

@@ -6,7 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Hermes AI Sales & Customer Service Control Center** — a semi-automated system for managing multiple WhatsApp chatbots from a single dashboard, with Hermes as an AI supervisor layer sitting above all bots.
 
-The PRD is the source of truth for product scope. Iteration 1 (foundation) is in place: monorepo, full Prisma data model, JWT auth, and stubbed controllers for every PRD section-14 endpoint. WhatsApp gateway, AI engine, and Hermes logic are not yet implemented.
+The PRD is the source of truth for product scope. Status:
+- **Iteration 1 (foundation)** ✅ — monorepo, full Prisma data model, JWT auth, stubbed controllers.
+- **Iteration 2 (WhatsApp gateway)** ✅ — Baileys multi-account sessions, QR, receive→persist→live-push, manual reply, takeover, AI-mode toggle.
+- **Not yet implemented**: AI engine (`/ai/*`), Hermes supervisor (`/hermes/*`), knowledge base (`/knowledge*`), customers CRM endpoints (`/customers/*`) — still stubbed (501).
 
 ## Commands
 
@@ -26,11 +29,19 @@ Build a single workspace: `npm run build --workspace=@hermes/api` (or `@hermes/w
 ## Repository Layout
 
 ```
-apps/api/        NestJS backend. Global prefix /api/v1. Auth is real; feature
-                 modules (wa, conversations, ai, hermes, knowledge, customers)
-                 are stubbed via common/not-implemented.ts (returns HTTP 501).
-apps/web/        Next.js (App Router) + Tailwind. Login page + 3-panel dashboard
-                 placeholder. API client in src/lib/api.ts (JWT in localStorage).
+apps/api/        NestJS backend. Global prefix /api/v1. Real: auth, wa
+                 (Baileys gateway), conversations. Stubbed (501) via
+                 common/not-implemented.ts: ai, hermes, knowledge, customers.
+  realtime/        Socket.IO hub (EventsGateway), namespace /events. Emits
+                   wa:status, wa:qr, message:new.
+  modules/wa/      WaService manages one Baileys connection per account
+                   (sessions Map, auth persisted to WA_SESSION_DIR, auto-
+                   reconnect). MessageIngestService upserts customer +
+                   conversation + message on inbound. wa.util has jid/phone
+                   helpers + humanDelay (anti-ban).
+apps/web/        Next.js (App Router) + Tailwind. Pages: / (login),
+                 /accounts (add account + live QR scan), /dashboard (3-panel
+                 placeholder). src/lib/api.ts (JWT), src/lib/socket.ts (live).
 packages/database/  Prisma schema (all 12 PRD tables) + shared client. Import
                  from '@hermes/database'.
 ```
