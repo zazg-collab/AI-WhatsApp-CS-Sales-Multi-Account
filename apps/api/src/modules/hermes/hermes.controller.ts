@@ -2,7 +2,11 @@ import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { HermesService } from './hermes.service';
-import { ReviewReplyDto, ConversationActionDto } from './dto/hermes.dto';
+import {
+  ReviewReplyDto,
+  ConversationActionDto,
+  AskDto,
+} from './dto/hermes.dto';
 
 // PRD 14.5 + section 8 — Hermes supervisor.
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -28,6 +32,18 @@ export class HermesController {
   @Get('bot-performance')
   botPerformance() {
     return this.hermes.botPerformance();
+  }
+
+  /** Live performance snapshot across all chatbots. */
+  @Get('snapshot')
+  snapshot() {
+    return this.hermes.performanceSnapshot();
+  }
+
+  /** Ask the Hermes supervisor assistant about chatbot performance. */
+  @Post('ask')
+  ask(@Body() dto: AskDto) {
+    return this.hermes.ask(dto.question);
   }
 
   @Get('knowledge-gaps')

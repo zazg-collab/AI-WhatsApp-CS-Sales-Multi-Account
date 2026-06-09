@@ -34,6 +34,31 @@ const RISK_COLOR: Record<string, string> = {
 export default function HermesPage() {
   const [alerts, setAlerts] = useState<Review[]>([]);
   const [report, setReport] = useState<DailyReport | null>(null);
+  const [question, setQuestion] = useState('');
+  const [chat, setChat] = useState<{ q: string; a: string }[]>([]);
+  const [asking, setAsking] = useState(false);
+
+  async function ask(e: React.FormEvent) {
+    e.preventDefault();
+    const q = question.trim();
+    if (!q) return;
+    setQuestion('');
+    setAsking(true);
+    try {
+      const res = await api<{ answer: string }>('/hermes/ask', {
+        method: 'POST',
+        body: JSON.stringify({ question: q }),
+      });
+      setChat((prev) => [...prev, { q, a: res.answer }]);
+    } catch (err) {
+      setChat((prev) => [
+        ...prev,
+        { q, a: err instanceof Error ? err.message : 'Gagal bertanya' },
+      ]);
+    } finally {
+      setAsking(false);
+    }
+  }
 
   const load = useCallback(async () => {
     const [a, r] = await Promise.all([
@@ -74,6 +99,37 @@ export default function HermesPage() {
           />
         </div>
       )}
+
+      <section className="mb-8 rounded-lg bg-wa-panel p-4">
+        <h2 className="mb-3 text-sm font-semibold text-gray-400">
+          Tanya Hermes (supervisor assistant)
+        </h2>
+        <div className="mb-3 space-y-3">
+          {chat.map((c, i) => (
+            <div key={i}>
+              <p className="text-sm text-gray-400">› {c.q}</p>
+              <p className="whitespace-pre-wrap text-sm text-gray-100">
+                {c.a}
+              </p>
+            </div>
+          ))}
+          {asking && <p className="text-sm text-gray-500">Hermes berpikir…</p>}
+        </div>
+        <form onSubmit={ask} className="flex gap-2">
+          <input
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="mis. Bot mana yang paling bermasalah hari ini?"
+            className="flex-1 rounded bg-black/30 px-3 py-2 text-sm outline-none"
+          />
+          <button
+            disabled={asking}
+            className="rounded bg-wa-accent px-4 text-sm font-medium text-black disabled:opacity-50"
+          >
+            Tanya
+          </button>
+        </form>
+      </section>
 
       <h2 className="mb-3 text-sm font-semibold text-gray-400">
         Alert ({alerts.length})

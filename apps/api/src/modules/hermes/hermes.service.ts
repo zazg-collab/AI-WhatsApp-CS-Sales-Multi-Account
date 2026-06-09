@@ -239,6 +239,79 @@ export class HermesService {
     });
   }
 
+  /**
+   * Compact real-time snapshot of how every chatbot is doing — fed to the
+   * Hermes supervisor assistant so its answers are grounded in actual data.
+   */
+  async performanceSnapshot() {
+    const [report, perf, bots, leadDist, gapCount, recentAlerts] =
+      await Promise.all([
+        this.dailyReport(),
+        this.botPerformance(),
+        this.prisma.bot.findMany({ select: { id: true, botName: true } }),
+        this.prisma.customer.groupBy({
+          by: ['leadStage'],
+          _count: { _all: true },
+        }),
+        this.prisma.message.count({
+          where: {
+            senderType: SenderType.ai,
+            content: {
+              contains: 'konfirmasi dulu ke admin',
+              mode: 'insensitive',
+            },
+          },
+        }),
+        this.alerts(15),
+      ]);
+
+    const botName = new Map(bots.map((b) => [b.id, b.botName]));
+
+    return {
+      today: report,
+      leadDistribution: Object.fromEntries(
+        leadDist.map((l) => [l.leadStage, l._count._all]),
+      ),
+      knowledgeGapCount: gapCount,
+      bots: perf.map((p) => ({
+        bot: p.botId ? (botName.get(p.botId) ?? p.botId) : 'unassigned',
+        reviews: p.reviews,
+        avgConfidence: p.avgConfidence,
+        avgRisk: p.avgRisk,
+      })),
+      alerts: recentAlerts.map((a) => ({
+        customer: a.conversation?.customer?.name ?? a.conversation?.customer?.phoneNumber,
+        decision: a.decision,
+        riskLevel: a.riskLevel,
+        reason: a.reason,
+      })),
+    };
+  }
+
+  /**
+   * Conversational supervisor assistant (PRD 8.7). The admin/owner asks about
+   * chatbot performance and Hermes answers using the live snapshot as context.
+   */
+  async ask(question: string): Promise<{ answer: string }> {
+    const snapshot = await this.performanceSnapshot();
+    const answer = await this.provider.chat(
+      [
+        {
+          role: 'system',
+          content: `Kamu adalah Hermes, supervisor assistant yang membantu owner/admin memantau kinerja banyak chatbot WhatsApp CS/Sales.
+Jawab pertanyaan berdasarkan DATA berikut (JSON real-time). Jangan mengarang angka di luar data.
+Beri jawaban ringkas, actionable, dalam Bahasa Indonesia. Jika relevan, sebutkan bot/customer spesifik dan rekomendasi konkret.
+
+DATA:
+${JSON.stringify(snapshot)}`,
+        },
+        { role: 'user', content: question },
+      ],
+      { temperature: 0.3, maxTokens: 600 },
+    );
+    return { answer };
+  }
+
   async approve(conversationId: string) {
     return this.prisma.conversation.update({
       where: { id: conversationId },

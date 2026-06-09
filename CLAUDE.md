@@ -32,6 +32,11 @@ The review gate lives in `modules/hermes`:
 - Dashboards: `/hermes/alerts`, `/hermes/reports/daily`,
   `/hermes/bot-performance`, `/hermes/knowledge-gaps` (detects the AI fallback
   phrase). Web page at `/hermes`.
+- **Supervisor assistant** (PRD §8.7): `GET /hermes/snapshot` builds a live
+  cross-bot performance snapshot; `POST /hermes/ask {question}` answers admin
+  questions grounded in that snapshot (no fabricated numbers). The `/hermes`
+  page has a "Tanya Hermes" chat box. This is the conversational supervisor —
+  the AI chatbots themselves stay on the custom AI engine.
 
 ## AI Provider (provider-agnostic)
 
