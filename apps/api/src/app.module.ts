@@ -16,6 +16,7 @@ import { BotsModule } from './modules/bots/bots.module';
 import { FollowUpsModule } from './modules/followups/followups.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { AuditModule } from './modules/audit/audit.module';
     FollowUpsModule,
     DashboardModule,
     AuditModule,
+    UsersModule,
   ],
   controllers: [HealthController],
 })

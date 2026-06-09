@@ -2,8 +2,44 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { getToken } from '@/lib/api';
 
-const navItems = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  requiredRole?: 'owner' | 'supervisor' | 'admin' | 'viewer';
+}
+
+function getRoleFromToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role;
+  } catch {
+    return null;
+  }
+}
+
+const roleHierarchy: Record<string, number> = {
+  owner: 4,
+  supervisor: 3,
+  admin: 2,
+  viewer: 1,
+};
+
+function canView(userRole: string | null, requiredRole?: string): boolean {
+  if (!requiredRole) return true;
+  if (!userRole) return false;
+  return (roleHierarchy[userRole] ?? 0) >= (roleHierarchy[requiredRole] ?? 0);
+}
+
+const navItems: NavItem[] = [
   {
     href: '/dashboard',
     label: 'Dashboard',
