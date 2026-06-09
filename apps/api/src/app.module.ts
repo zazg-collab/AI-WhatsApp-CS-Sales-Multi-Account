@@ -17,6 +17,7 @@ import { FollowUpsModule } from './modules/followups/followups.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { UsersModule } from './modules/users/users.module';
+import { CampaignsModule } from './modules/campaigns/campaigns.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { UsersModule } from './modules/users/users.module';
     DashboardModule,
     AuditModule,
     UsersModule,
+    CampaignsModule,
   ],
   controllers: [HealthController],
 })

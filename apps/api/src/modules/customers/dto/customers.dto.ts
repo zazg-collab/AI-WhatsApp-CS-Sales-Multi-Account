@@ -1,6 +1,9 @@
 import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
   IsArray,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -41,4 +44,33 @@ export class UpdateCustomerDto {
 export class AddNoteDto {
   @IsString()
   note!: string;
+}
+
+export class BulkCustomerActionDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(100, { message: 'Bulk actions are limited to 100 customers at a time' })
+  @IsString({ each: true })
+  customerIds!: string[];
+
+  @IsOptional()
+  @IsEnum(LeadStage)
+  leadStage?: LeadStage;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
+
+  @IsOptional()
+  @IsIn(['replace', 'append', 'remove'])
+  tagMode?: 'replace' | 'append' | 'remove';
+
+  @IsOptional()
+  @IsString()
+  assignedAdminId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }

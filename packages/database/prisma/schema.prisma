@@ -127,6 +127,27 @@ enum FollowUpStatus {
   done
 }
 
+enum CampaignStatus {
+  draft
+  pending_approval
+  approved
+  scheduled
+  running
+  paused
+  completed
+  cancelled
+  failed
+}
+
+enum CampaignRecipientStatus {
+  pending
+  queued
+  sending
+  sent
+  failed
+  skipped
+}
+
 // ── Models ────────────────────────────────────────────────
 
 model User {
@@ -144,6 +165,8 @@ model User {
   conversations    Conversation[]    @relation("ConversationAdmin")
   followUps        FollowUp[]
   auditLogs        AuditLog[]
+  createdCampaigns Campaign[]       @relation("CampaignCreatedBy")
+  approvedCampaigns Campaign[]      @relation("CampaignApprovedBy")
   createdKnowledge KnowledgeBase[]   @relation("KnowledgeCreatedBy")
   approvedKnowledge KnowledgeBase[]  @relation("KnowledgeApprovedBy")
 
@@ -167,6 +190,7 @@ model WhatsappAccount {
   assignedAdmin User?          @relation("AccountAdmin", fields: [assignedAdminId], references: [id])
   customers     Customer[]
   conversations Conversation[]
+  campaigns     Campaign[]
 
   @@map("whatsapp_accounts")
 }
@@ -262,8 +286,9 @@ model Customer {
 
   sourceAccount WhatsappAccount? @relation(fields: [sourceAccountId], references: [id])
   assignedAdmin User?            @relation("CustomerAdmin", fields: [assignedAdminId], references: [id])
-  conversations Conversation[]
-  followUps     FollowUp[]
+  conversations      Conversation[]
+  followUps          FollowUp[]
+  campaignRecipients CampaignRecipient[]
 
   @@unique([phoneNumber, sourceAccountId])
   @@index([leadStage])
@@ -290,6 +315,7 @@ model Conversation {
   messages        Message[]
   hermesReviews   HermesReview[]
   followUps       FollowUp[]
+  campaignRecipients CampaignRecipient[]
 
   @@index([whatsappAccountId])
   @@index([customerId])
@@ -356,6 +382,59 @@ model FollowUp {
 
   @@index([scheduledAt])
   @@map("follow_ups")
+}
+
+
+model Campaign {
+  id                  String         @id @default(uuid())
+  name                String
+  messageTemplate     String         @map("message_template")
+  targetFilter        Json?          @map("target_filter")
+  status              CampaignStatus @default(draft)
+  whatsappAccountId   String         @map("whatsapp_account_id")
+  createdById         String?        @map("created_by_id")
+  approvedById        String?        @map("approved_by_id")
+  scheduledAt         DateTime?      @map("scheduled_at")
+  startedAt           DateTime?      @map("started_at")
+  completedAt         DateTime?      @map("completed_at")
+  rateLimitPerMinute  Int            @default(6) @map("rate_limit_per_minute")
+  humanDelayMinMs     Int            @default(5000) @map("human_delay_min_ms")
+  humanDelayMaxMs     Int            @default(20000) @map("human_delay_max_ms")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id])
+  createdBy       User?           @relation("CampaignCreatedBy", fields: [createdById], references: [id])
+  approvedBy      User?           @relation("CampaignApprovedBy", fields: [approvedById], references: [id])
+  recipients      CampaignRecipient[]
+
+  @@index([status])
+  @@index([whatsappAccountId])
+  @@map("campaigns")
+}
+
+model CampaignRecipient {
+  id             String                  @id @default(uuid())
+  campaignId     String                  @map("campaign_id")
+  customerId      String                  @map("customer_id")
+  conversationId  String?                 @map("conversation_id")
+  phoneNumber     String                  @map("phone_number")
+  status          CampaignRecipientStatus @default(pending)
+  idempotencyKey  String                  @unique @map("idempotency_key")
+  sentMessageId   String?                 @map("sent_message_id")
+  error           String?
+  sentAt          DateTime?               @map("sent_at")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+
+  campaign     Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id])
+
+  @@unique([campaignId, customerId])
+  @@index([campaignId, status])
+  @@index([customerId])
+  @@map("campaign_recipients")
 }
 
 model AuditLog {
