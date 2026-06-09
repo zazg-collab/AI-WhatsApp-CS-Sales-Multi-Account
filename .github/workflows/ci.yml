@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**', 'feat/**', 'fix/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-build:
+    name: Lint & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Lint API
+        run: npm run lint --workspace=@hermes/api
+        continue-on-error: true
+
+      - name: Lint Web
+        run: npm run lint --workspace=@hermes/web
+        continue-on-error: true
+
+      - name: Build API
+        run: npm run build --workspace=@hermes/api
+
+      - name: Build Web
+        run: npm run build --workspace=@hermes/web
+
+  typecheck:
+    name: TypeScript Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: TypeScript check (API)
+        run: npx tsc --noEmit
+        working-directory: apps/api
+
+      - name: TypeScript check (Web)
+        run: npx tsc --noEmit
+        working-directory: apps/web
+
+  docker-build:
+    name: Docker Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API Docker image
+        run: docker build -f apps/api/Dockerfile -t hermes-api:ci .
+
+      - name: Build Web Docker image
+        run: docker build -f apps/web/Dockerfile -t hermes-web:ci .
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Test API (unit + coverage)
+        run: npm run test:cov --workspace=@hermes/api
+
+      - name: Test API (e2e)
+        run: npm run test:e2e --workspace=@hermes/api
+
+      - name: Test Web (coverage)
+        run: npm run test:cov --workspace=@hermes/web

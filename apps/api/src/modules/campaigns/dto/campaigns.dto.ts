@@ -12,6 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { LeadStage } from '@hermes/database';
 
 export class CampaignTargetFilterDto {
@@ -35,14 +36,17 @@ export class CampaignTargetFilterDto {
 }
 
 export class CreateCampaignDto {
+  @ApiProperty({ example: 'Promo Ramadan 2025', minLength: 3 })
   @IsString()
   @MinLength(3)
   name!: string;
 
+  @ApiProperty({ example: 'Halo {name}, ada promo spesial untuk kamu!' })
   @IsString()
   @MinLength(1)
   messageTemplate!: string;
 
+  @ApiProperty({ description: 'WhatsApp account ID to send from' })
   @IsString()
   whatsappAccountId!: string;
 

@@ -6,6 +6,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { HermesService } from './hermes.service';
@@ -16,60 +17,69 @@ import {
 } from './dto/hermes.dto';
 
 // PRD 14.5 + section 8 — Hermes supervisor.
+@ApiTags('hermes')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('hermes')
 export class HermesController {
   constructor(private readonly hermes: HermesService) {}
 
+  @ApiOperation({ summary: 'Review a draft reply through Hermes supervisor' })
   @Post('review-reply')
   reviewReply(@Body() dto: ReviewReplyDto) {
     return this.hermes.review(dto.conversationId, dto.draftText);
   }
 
+  @ApiOperation({ summary: 'Get recent Hermes alerts' })
   @Get('alerts')
   alerts() {
     return this.hermes.alerts();
   }
 
+  @ApiOperation({ summary: 'Get daily Hermes report' })
   @Get('reports/daily')
   dailyReport() {
     return this.hermes.dailyReport();
   }
 
+  @ApiOperation({ summary: 'Get bot performance metrics' })
   @Get('bot-performance')
   botPerformance() {
     return this.hermes.botPerformance();
   }
 
-  /** Live performance snapshot across all chatbots. */
+  @ApiOperation({ summary: 'Live performance snapshot across all chatbots' })
   @Get('snapshot')
   snapshot() {
     return this.hermes.performanceSnapshot();
   }
 
-  /** Ask the Hermes supervisor assistant about chatbot performance. */
+  @ApiOperation({ summary: 'Ask Hermes supervisor about chatbot performance' })
   @Post('ask')
   ask(@Body() dto: AskDto) {
     return this.hermes.ask(dto.question);
   }
 
-  /** Deep-dive analysis + recommendations for one bot. */
+  @ApiOperation({ summary: 'Deep-dive analysis and recommendations for one bot' })
   @Get('bot/:botId/insight')
   botInsight(@Param('botId') botId: string) {
     return this.hermes.botInsight(botId);
   }
 
+  @ApiOperation({ summary: 'Get knowledge gaps detected by Hermes' })
   @Get('knowledge-gaps')
   knowledgeGaps() {
     return this.hermes.knowledgeGaps();
   }
 
+  @ApiOperation({ summary: 'Approve a supervised conversation reply' })
   @Roles('owner', 'supervisor')
   @Post('approve')
   approve(@Body() dto: ConversationActionDto) {
     return this.hermes.approve(dto.conversationId);
   }
 
+  @ApiOperation({ summary: 'Block a conversation reply' })
   @Roles('owner', 'supervisor')
   @Post('block')
   block(@Body() dto: ConversationActionDto) {

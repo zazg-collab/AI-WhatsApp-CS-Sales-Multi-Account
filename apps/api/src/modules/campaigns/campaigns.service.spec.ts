@@ -1,0 +1,172 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { CampaignStatus, CampaignRecipientStatus } from '@hermes/database';
+
+jest.mock('../wa/wa.service', () => ({ WaService: class {} }));
+
+import { CampaignsService } from './campaigns.service';
+
+describe('CampaignsService', () => {
+  let service: CampaignsService;
+  let prisma: any;
+  let audit: any;
+  let wa: any;
+  let events: any;
+  let queue: any;
+
+  beforeEach(() => {
+    prisma = {
+      campaign: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn(),
+        create: jest.fn().mockResolvedValue({ id: 'cmp1', name: 'C' }),
+        update: jest.fn().mockResolvedValue({ id: 'cmp1', name: 'C' }),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      campaignRecipient: {
+        groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn(),
+        update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        count: jest.fn().mockResolvedValue(0),
+        deleteMany: jest.fn(),
+        createMany: jest.fn(),
+      },
+      customer: { findMany: jest.fn().mockResolvedValue([]) },
+      whatsappAccount: { findUnique: jest.fn() },
+      $transaction: jest.fn((ps: any[]) => Promise.all(ps)),
+    };
+    audit = { log: jest.fn().mockResolvedValue({}) };
+    wa = { sendText: jest.fn().mockResolvedValue('ext1') };
+    events = { emit: jest.fn() };
+    queue = { add: jest.fn().mockResolvedValue({}), getJob: jest.fn() };
+    service = new CampaignsService(prisma, audit, wa, events, queue);
+  });
+
+  describe('list', () => {
+    it('rejects invalid status', async () => {
+      await expect(service.list('bogus')).rejects.toThrow(BadRequestException);
+    });
+    it('returns campaigns with stats', async () => {
+      prisma.campaign.findMany.mockResolvedValue([{ id: 'cmp1' }]);
+      const r = await service.list();
+      expect(r[0]).toHaveProperty('recipientStats');
+    });
+  });
+
+  describe('get', () => {
+    it('throws when missing', async () => {
+      prisma.campaign.findUnique.mockResolvedValue(null);
+      await expect(service.get('x')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('create', () => {
+    it('rejects min>max delay', async () => {
+      await expect(
+        service.create({ name: 'C', humanDelayMinMs: 100, humanDelayMaxMs: 10 } as any, 'u1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+    it('throws when account missing', async () => {
+      prisma.whatsappAccount.findUnique.mockResolvedValue(null);
+      await expect(
+        service.create({ name: 'C', whatsappAccountId: 'a1' } as any, 'u1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+    it('creates campaign', async () => {
+      prisma.whatsappAccount.findUnique.mockResolvedValue({ id: 'a1' });
+      const r = await service.create({ name: 'C', whatsappAccountId: 'a1', messageTemplate: 'hi' } as any, 'u1');
+      expect(r.id).toBe('cmp1');
+      expect(audit.log).toHaveBeenCalled();
+    });
+  });
+
+  describe('approve', () => {
+    it('rejects when not pending_approval', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({ id: 'cmp1', status: CampaignStatus.draft });
+      await expect(service.approve('cmp1', 'u1')).rejects.toThrow(BadRequestException);
+    });
+    it('approves pending campaign', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({ id: 'cmp1', status: CampaignStatus.pending_approval });
+      await service.approve('cmp1', 'u1');
+      expect(prisma.campaign.update.mock.calls[0][0].data.status).toBe(CampaignStatus.approved);
+    });
+  });
+
+  describe('start', () => {
+    it('rejects wrong status', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({ id: 'cmp1', status: CampaignStatus.draft });
+      await expect(service.start('cmp1', 'u1')).rejects.toThrow(BadRequestException);
+    });
+    it('rejects when no pending recipients', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({ id: 'cmp1', status: CampaignStatus.approved });
+      prisma.campaignRecipient.findMany.mockResolvedValue([]);
+      await expect(service.start('cmp1', 'u1')).rejects.toThrow(BadRequestException);
+    });
+    it('queues jobs for recipients', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({
+        id: 'cmp1', status: CampaignStatus.approved, scheduledAt: null,
+        rateLimitPerMinute: 6, humanDelayMinMs: 100, humanDelayMaxMs: 200,
+      });
+      prisma.campaignRecipient.findMany.mockResolvedValue([{ id: 'r1' }, { id: 'r2' }]);
+      await service.start('cmp1', 'u1');
+      expect(queue.add).toHaveBeenCalledTimes(2);
+      expect(prisma.campaign.update.mock.calls[0][0].data.status).toBe(CampaignStatus.running);
+    });
+  });
+
+  describe('pause/cancel/retryFailed', () => {
+    beforeEach(() => prisma.campaign.findUnique.mockResolvedValue({ id: 'cmp1', status: CampaignStatus.running }));
+    it('pause sets paused', async () => {
+      await service.pause('cmp1', 'u1');
+      expect(prisma.campaign.update.mock.calls[0][0].data.status).toBe(CampaignStatus.paused);
+    });
+    it('cancel sets cancelled', async () => {
+      await service.cancel('cmp1', 'u1');
+      expect(prisma.campaign.update.mock.calls[0][0].data.status).toBe(CampaignStatus.cancelled);
+    });
+    it('retryFailed resets failed recipients', async () => {
+      await service.retryFailed('cmp1', 'u1');
+      expect(prisma.campaignRecipient.updateMany).toHaveBeenCalled();
+    });
+  });
+
+  describe('processRecipient', () => {
+    it('throws when recipient missing', async () => {
+      prisma.campaignRecipient.findUnique.mockResolvedValue(null);
+      await expect(service.processRecipient('r1')).rejects.toThrow(NotFoundException);
+    });
+    it('skips already-sent', async () => {
+      prisma.campaignRecipient.findUnique.mockResolvedValue({ id: 'r1', status: CampaignRecipientStatus.sent });
+      await service.processRecipient('r1');
+      expect(wa.sendText).not.toHaveBeenCalled();
+    });
+    it('sends queued recipient on running campaign', async () => {
+      prisma.campaignRecipient.findUnique.mockResolvedValue({
+        id: 'r1', status: CampaignRecipientStatus.queued, campaignId: 'cmp1',
+        phoneNumber: '628', conversationId: 'conv1',
+        campaign: { status: CampaignStatus.running, whatsappAccountId: 'a1', messageTemplate: 'hi', createdById: 'u1' },
+      });
+      prisma.message = { create: jest.fn().mockResolvedValue({ id: 'm1' }) };
+      prisma.conversation = { update: jest.fn().mockResolvedValue({}) };
+      await service.processRecipient('r1');
+      expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'hi');
+    });
+  });
+
+  describe('preview', () => {
+    it('builds eligible targets, skipping opt-out & risky', async () => {
+      prisma.whatsappAccount.findUnique.mockResolvedValue({ id: 'a1' });
+      prisma.customer.findMany.mockResolvedValue([
+        { id: 'cust1', phoneNumber: '628', name: 'A', tags: [], status: 'active',
+          conversations: [{ id: 'conv1', aiMode: 'ai_on', takeoverStatus: 'none' }] },
+        { id: 'cust2', phoneNumber: '629', name: 'B', tags: ['opt_out'], status: 'active', conversations: [] },
+        { id: 'cust3', phoneNumber: '', name: 'C', tags: [], status: 'active', conversations: [] },
+      ]);
+      const r = await service.preview('a1', {} as any);
+      expect(r.eligibleCount).toBe(1);
+      expect(r.skipped.optOut).toBe(1);
+      expect(r.skipped.invalidPhone).toBe(1);
+    });
+  });
+});
