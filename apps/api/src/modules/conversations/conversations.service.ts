@@ -399,6 +399,11 @@ export class ConversationsService {
     });
     const externalIds = inbound.map((m) => m.externalId!).filter(Boolean);
     await this.wa.markRead(conversation.whatsappAccountId, conversation.customer.phoneNumber, externalIds);
+    // Clear the unread badge now that an admin has the chat open.
+    await this.prisma.conversation.update({
+      where: { id },
+      data: { unreadCount: 0 },
+    });
     return { marked: externalIds.length };
   }
 

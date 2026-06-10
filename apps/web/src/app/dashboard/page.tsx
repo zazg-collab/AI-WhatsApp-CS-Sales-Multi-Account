@@ -44,6 +44,7 @@ interface ConvSummary {
   takeoverStatus: string;
   lastMessage: string | null;
   lastMessageAt: string | null;
+  unreadCount?: number;
   customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[] };
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
   messages: { content: string | null; senderType: string; createdAt: string; status: string }[];
@@ -106,6 +107,40 @@ function decisionBadge(decision: string) {
       {decision.replace('_', ' ')}
     </span>
   );
+}
+
+/** Short notification beep via Web Audio (no asset bundling needed). */
+function playBeep() {
+  try {
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.26);
+    osc.onended = () => ctx.close();
+  } catch {
+    // audio is best-effort
+  }
+}
+
+/** Beep + browser notification for a new inbound message. */
+function notifyInbound(title: string, body: string) {
+  playBeep();
+  try {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body, tag: 'hermes-inbound' });
+    }
+  } catch {
+    // notifications are best-effort
+  }
 }
 
 /** WhatsApp-style delivery ticks for an outgoing message. */
@@ -265,6 +300,11 @@ function LeftPanel({
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <span className="text-xs text-gray-500">{fmtTime(c.lastMessageAt)}</span>
+                  {c.unreadCount && c.unreadCount > 0 ? (
+                    <span className="min-w-[18px] rounded-full bg-wa-accent px-1.5 text-center text-[11px] font-semibold text-black">
+                      {c.unreadCount > 99 ? '99+' : c.unreadCount}
+                    </span>
+                  ) : null}
                   {aiModeBadge(c.aiMode)}
                 </div>
               </div>
@@ -1024,6 +1064,10 @@ export default function DashboardPage() {
     api<WaAccount[]>('/wa/accounts')
       .then(setAccounts)
       .catch(() => setAccounts([]));
+    // Ask for browser notification permission (best-effort).
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
   }, []);
 
   // load conversation list
@@ -1074,12 +1118,21 @@ export default function DashboardPage() {
     const socket = getSocket();
 
     socket.on('message:new', ({ conversationId, message }: { conversationId: string; message: Message }) => {
+      const isOpen = convRef.current?.id === conversationId;
       // update detail if active
       setConv((prev) => {
         if (!prev || prev.id !== conversationId) return prev;
         return { ...prev, messages: [...prev.messages, message] };
       });
-      // refresh list
+      if (message.senderType === 'customer') {
+        if (isOpen) {
+          // Admin is looking → keep it read, don't notify.
+          api(`/conversations/${conversationId}/read`, { method: 'POST' }).catch(() => {});
+        } else {
+          notifyInbound('Pesan baru', message.content?.slice(0, 80) ?? '[media]');
+        }
+      }
+      // refresh list (also refreshes unread badges)
       loadList();
     });
 

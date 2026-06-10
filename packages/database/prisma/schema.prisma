@@ -304,6 +304,7 @@ model Conversation {
   aiMode            AiMode         @default(ai_draft) @map("ai_mode")
   previousAiMode    AiMode?        @map("previous_ai_mode")
   takeoverStatus    TakeoverStatus @default(ai_active) @map("takeover_status")
+  unreadCount       Int            @default(0) @map("unread_count")
   assignedAdminId   String?        @map("assigned_admin_id")
   lastMessage       String?        @map("last_message")
   lastMessageAt     DateTime?      @map("last_message_at")

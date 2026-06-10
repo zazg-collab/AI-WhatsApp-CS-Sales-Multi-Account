@@ -125,7 +125,12 @@ export class MessageIngestService {
 
     await this.prisma.conversation.update({
       where: { id: conversation.id },
-      data: { lastMessage: msg.text, lastMessageAt: new Date() },
+      // Inbound is always from the customer → bump the unread badge.
+      data: {
+        lastMessage: msg.text,
+        lastMessageAt: new Date(),
+        unreadCount: { increment: 1 },
+      },
     });
 
     this.events.emitToAccount(account.id, 'message:new', {
