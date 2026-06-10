@@ -6,8 +6,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { join } from 'path';
-import { randomUUID } from 'crypto';
-import { mkdir, writeFile } from 'fs/promises';
 import * as QRCode from 'qrcode';
 import pino from 'pino';
 import makeWASocket, {
@@ -34,6 +32,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { AiService } from '../ai/ai.service';
 import { HermesService } from '../hermes/hermes.service';
 import { phoneToJid, humanDelay, isDirectChatJid, extForMimetype } from './wa.util';
+import { MediaStorageService } from '../media/media-storage.service';
 import { logAudit } from '../../common/audit.util';
 
 interface Session {
@@ -51,7 +50,6 @@ export class WaService implements OnModuleInit {
   private readonly logger = new Logger(WaService.name);
   private readonly sessions = new Map<string, Session>();
   private readonly sessionDir: string;
-  private readonly mediaDir: string;
   private readonly mediaMaxBytes: number;
 
   constructor(
@@ -61,10 +59,10 @@ export class WaService implements OnModuleInit {
     private readonly ai: AiService,
     private readonly hermes: HermesService,
     private readonly notifications: NotificationsService,
+    private readonly storage: MediaStorageService,
     config: ConfigService,
   ) {
     this.sessionDir = config.get<string>('WA_SESSION_DIR') ?? './.wa-sessions';
-    this.mediaDir = config.get<string>('WA_MEDIA_DIR') ?? './.wa-media';
     this.mediaMaxBytes = Number(
       config.get<string>('WA_MEDIA_MAX_BYTES') ?? 25 * 1024 * 1024,
     );
@@ -334,10 +332,8 @@ export class WaService implements OnModuleInit {
       m.message?.videoMessage?.mimetype ??
       m.message?.audioMessage?.mimetype ??
       m.message?.documentMessage?.mimetype;
-    const filename = `${randomUUID()}.${extForMimetype(mime)}`;
-    await mkdir(this.mediaDir, { recursive: true });
-    await writeFile(join(this.mediaDir, filename), buffer);
-    return `/media/${filename}`;
+    const { url } = await this.storage.save(buffer, extForMimetype(mime));
+    return url;
   }
 
   private resolveType(m: proto.IWebMessageInfo): MessageType {
