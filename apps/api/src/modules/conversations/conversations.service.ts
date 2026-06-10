@@ -124,23 +124,41 @@ export class ConversationsService {
   }
 
   /** Admin takes over: AI stops replying to this conversation. */
-  takeover(id: string, adminId: string) {
+  async takeover(id: string, adminId: string) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      select: { aiMode: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
     return this.prisma.conversation.update({
       where: { id },
       data: {
         takeoverStatus: TakeoverStatus.admin_takeover,
+        // DR1: remember the pre-takeover mode (unless already off) so
+        // return-to-AI can restore it rather than forcing ai_on.
+        previousAiMode:
+          conversation.aiMode === AiMode.ai_off ? undefined : conversation.aiMode,
         aiMode: AiMode.ai_off,
         assignedAdminId: adminId,
       },
     });
   }
 
-  returnToAi(id: string) {
+  async returnToAi(id: string) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      select: { previousAiMode: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+    // DR1: restore the mode that was active before takeover. Falling back to
+    // ai_draft (not ai_on) avoids silently re-enabling unsupervised auto-reply.
+    const restored = conversation.previousAiMode ?? AiMode.ai_draft;
     return this.prisma.conversation.update({
       where: { id },
       data: {
         takeoverStatus: TakeoverStatus.returned_to_ai,
-        aiMode: AiMode.ai_on,
+        aiMode: restored,
+        previousAiMode: null,
       },
     });
   }

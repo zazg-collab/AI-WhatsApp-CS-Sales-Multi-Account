@@ -82,16 +82,27 @@ describe('ConversationsService', () => {
     });
   });
 
-  it('takeover sets admin_takeover + ai_off', async () => {
+  it('takeover sets admin_takeover + ai_off and remembers previous mode', async () => {
+    prisma.conversation.findUnique.mockResolvedValue({ aiMode: AiMode.ai_supervised });
     await service.takeover('c1', 'admin');
     const data = prisma.conversation.update.mock.calls[0][0].data;
     expect(data.takeoverStatus).toBe(TakeoverStatus.admin_takeover);
     expect(data.aiMode).toBe(AiMode.ai_off);
+    expect(data.previousAiMode).toBe(AiMode.ai_supervised);
   });
 
-  it('returnToAi sets ai_on', async () => {
+  it('returnToAi restores the previous mode (DR1), not ai_on', async () => {
+    prisma.conversation.findUnique.mockResolvedValue({ previousAiMode: AiMode.ai_supervised });
     await service.returnToAi('c1');
-    expect(prisma.conversation.update.mock.calls[0][0].data.aiMode).toBe(AiMode.ai_on);
+    const data = prisma.conversation.update.mock.calls[0][0].data;
+    expect(data.aiMode).toBe(AiMode.ai_supervised);
+    expect(data.previousAiMode).toBeNull();
+  });
+
+  it('returnToAi defaults to ai_draft when no previous mode recorded', async () => {
+    prisma.conversation.findUnique.mockResolvedValue({ previousAiMode: null });
+    await service.returnToAi('c1');
+    expect(prisma.conversation.update.mock.calls[0][0].data.aiMode).toBe(AiMode.ai_draft);
   });
 
   it('setAiMode updates mode', async () => {

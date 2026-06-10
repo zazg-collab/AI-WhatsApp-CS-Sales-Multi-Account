@@ -31,6 +31,15 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
     BullModule.forRootAsync({
       useFactory: (config: ConfigService) => ({
         connection: { url: config.get('REDIS_URL') },
+        // M5: bounded retries with backoff and automatic cleanup so a transient
+        // failure is retried, a permanent one stops, and Redis doesn't grow
+        // unbounded with finished jobs.
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5_000 },
+          removeOnComplete: { age: 24 * 3600, count: 1000 },
+          removeOnFail: { age: 7 * 24 * 3600 },
+        },
       }),
       inject: [ConfigService],
     }),

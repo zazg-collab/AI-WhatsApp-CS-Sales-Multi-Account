@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { LoginThrottleGuard } from './login-throttle.guard';
 import { CurrentUser, AuthUser } from './current-user.decorator';
 
 @ApiTags('auth')
@@ -11,6 +12,7 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @ApiOperation({ summary: 'Login with email and password' })
+  @UseGuards(LoginThrottleGuard)
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);

@@ -17,6 +17,7 @@ describe('CampaignsService', () => {
     prisma = {
       campaign: {
         findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
         findUnique: jest.fn(),
         create: jest.fn().mockResolvedValue({ id: 'cmp1', name: 'C' }),
         update: jest.fn().mockResolvedValue({ id: 'cmp1', name: 'C' }),

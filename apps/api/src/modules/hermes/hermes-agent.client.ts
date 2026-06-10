@@ -11,12 +11,16 @@ import { ConfigService } from '@nestjs/config';
 export class HermesAgentClient {
   private readonly logger = new Logger(HermesAgentClient.name);
   private readonly url: string;
+  private readonly token: string;
+  private readonly timeoutMs: number;
 
   constructor(config: ConfigService) {
     this.url = (config.get<string>('HERMES_SIDECAR_URL') ?? '').replace(
       /\/$/,
       '',
     );
+    this.token = config.get<string>('HERMES_SIDECAR_TOKEN') ?? '';
+    this.timeoutMs = Number(config.get<string>('AI_TIMEOUT_MS') ?? 30_000);
   }
 
   get enabled(): boolean {
@@ -30,10 +34,17 @@ export class HermesAgentClient {
   ): Promise<string | null> {
     if (!this.enabled) return null;
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      // C4: authenticate to the sidecar so /ask is not an open agent endpoint.
+      if (this.token) headers.Authorization = `Bearer ${this.token}`;
       const res = await fetch(`${this.url}/ask`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ question, context, system }),
+        // H8: never let the supervisor hang on an unresponsive sidecar.
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
       if (!res.ok) {
         this.logger.warn(`sidecar /ask returned ${res.status}`);

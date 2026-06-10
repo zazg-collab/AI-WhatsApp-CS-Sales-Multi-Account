@@ -3,9 +3,11 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const apiMock = vi.fn();
+const hasRoleMock = vi.fn(() => true);
 vi.mock('@/lib/api', () => ({
   api: (...a: any[]) => apiMock(...a),
   getToken: () => null,
+  hasRole: (...a: any[]) => hasRoleMock(...a),
 }));
 
 const socketHandlers: Record<string, Function> = {};
@@ -22,6 +24,8 @@ import AccountsPage from './page';
 describe('AccountsPage', () => {
   beforeEach(() => {
     apiMock.mockReset();
+    hasRoleMock.mockReset();
+    hasRoleMock.mockReturnValue(true);
     fakeSocket.off.mockClear();
   });
 

@@ -17,6 +17,9 @@ import { CreateCampaignDto, CampaignTargetFilterDto, UpdateCampaignDto } from '.
 
 const BLOCKED_TAGS = ['opt_out', 'blocked', 'do_not_contact'];
 const MAX_RECIPIENTS = 1000;
+// M8: WhatsApp ban mitigation — one running campaign per account and a daily
+// cap on messages actually sent from an account.
+const MAX_DAILY_SENDS_PER_ACCOUNT = 500;
 
 export interface CandidateTarget {
   customerId: string;
@@ -200,6 +203,37 @@ export class CampaignsService {
     const campaign = await this.findCampaign(id);
     if (!([CampaignStatus.approved, CampaignStatus.paused, CampaignStatus.scheduled] as CampaignStatus[]).includes(campaign.status)) {
       throw new BadRequestException('Campaign must be approved, scheduled, or paused before start');
+    }
+
+    // M8: refuse to run two campaigns into the same WhatsApp account at once —
+    // concurrent sends multiply the per-minute rate and risk a ban.
+    const concurrent = await this.prisma.campaign.findFirst({
+      where: {
+        id: { not: id },
+        whatsappAccountId: campaign.whatsappAccountId,
+        status: { in: [CampaignStatus.running, CampaignStatus.scheduled] },
+      },
+      select: { id: true, name: true },
+    });
+    if (concurrent) {
+      throw new BadRequestException(
+        `Account already has a running/scheduled campaign ("${concurrent.name}"). Wait for it to finish or pause it first.`,
+      );
+    }
+
+    // M8: enforce a daily send cap per account across all campaigns.
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const sentToday = await this.prisma.campaignRecipient.count({
+      where: {
+        status: CampaignRecipientStatus.sent,
+        sentAt: { gte: since },
+        campaign: { whatsappAccountId: campaign.whatsappAccountId },
+      },
+    });
+    if (sentToday >= MAX_DAILY_SENDS_PER_ACCOUNT) {
+      throw new BadRequestException(
+        `Daily send cap reached for this account (${MAX_DAILY_SENDS_PER_ACCOUNT}/24h). Try again later.`,
+      );
     }
 
     const recipients = await this.prisma.campaignRecipient.findMany({

@@ -1,7 +1,12 @@
 import { HermesAgentClient } from './hermes-agent.client';
 
 function make(url?: string) {
-  return new HermesAgentClient({ get: () => url } as any);
+  const get = (key: string) => {
+    if (key === 'HERMES_SIDECAR_URL') return url;
+    if (key === 'AI_TIMEOUT_MS') return '30000';
+    return undefined;
+  };
+  return new HermesAgentClient({ get } as any);
 }
 
 describe('HermesAgentClient', () => {

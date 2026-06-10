@@ -302,6 +302,7 @@ model Conversation {
   whatsappAccountId String         @map("whatsapp_account_id")
   botId             String?        @map("bot_id")
   aiMode            AiMode         @default(ai_draft) @map("ai_mode")
+  previousAiMode    AiMode?        @map("previous_ai_mode")
   takeoverStatus    TakeoverStatus @default(ai_active) @map("takeover_status")
   assignedAdminId   String?        @map("assigned_admin_id")
   lastMessage       String?        @map("last_message")

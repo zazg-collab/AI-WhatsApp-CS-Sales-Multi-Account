@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { api } from '@/lib/api';
+import { api, hasRole } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { AppLayout } from '@/components/AppLayout';
 
@@ -18,6 +18,8 @@ export default function AccountsPage() {
   const [phone, setPhone] = useState('');
   const [qr, setQr] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  // M7: the QR grants full control of a WhatsApp number — only admins+ may scan.
+  const canScan = hasRole('admin');
 
   const load = useCallback(async () => {
     try {
@@ -96,13 +98,20 @@ export default function AccountsPage() {
                 {a.sessionStatus}
               </span>
             </div>
-            {qr[a.id] && a.sessionStatus === 'qr_required' && (
-              <img
-                src={qr[a.id]}
-                alt="QR"
-                className="mt-4 h-48 w-48 rounded bg-white p-2"
-              />
-            )}
+            {a.sessionStatus === 'qr_required' &&
+              (canScan && qr[a.id] ? (
+                <img
+                  src={qr[a.id]}
+                  alt="QR"
+                  className="mt-4 h-48 w-48 rounded bg-white p-2"
+                />
+              ) : (
+                !canScan && (
+                  <p className="mt-4 text-xs text-gray-400">
+                    Menunggu admin untuk memindai QR.
+                  </p>
+                )
+              ))}
           </li>
         ))}
       </ul>

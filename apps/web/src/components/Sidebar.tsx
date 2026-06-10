@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { getToken } from '@/lib/api';
+import { getToken, clearToken } from '@/lib/api';
 
 interface NavItem {
   href: string;
@@ -173,9 +173,7 @@ export function Sidebar() {
   const router = useRouter();
 
   function handleLogout() {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('token');
-    }
+    clearToken();
     router.push('/');
   }
 

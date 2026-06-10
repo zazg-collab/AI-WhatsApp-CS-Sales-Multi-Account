@@ -16,6 +16,33 @@ export function clearToken() {
   window.localStorage.removeItem(TOKEN_KEY);
 }
 
+/** Decode the role claim from the stored JWT (display gating only — the API enforces auth). */
+export function getRole(): string | null {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    return JSON.parse(atob(parts[1])).role ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const roleHierarchy: Record<string, number> = {
+  owner: 4,
+  supervisor: 3,
+  admin: 2,
+  viewer: 1,
+};
+
+/** True when the current user's role meets or exceeds the required role. */
+export function hasRole(required: string): boolean {
+  const role = getRole();
+  if (!role) return false;
+  return (roleHierarchy[role] ?? 0) >= (roleHierarchy[required] ?? 0);
+}
+
 export async function api<T>(
   path: string,
   options: RequestInit = {},
