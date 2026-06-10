@@ -1,4 +1,4 @@
-import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, extForMimetype } from './wa.util';
+import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, extForMimetype, typingDelay, backoffDelay } from './wa.util';
 
 describe('wa.util', () => {
   describe('phoneToJid', () => {
@@ -65,6 +65,58 @@ describe('wa.util', () => {
       expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 100);
       jest.runAllTimers();
       await p;
+    });
+  });
+
+  describe('typingDelay', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it('is proportional to message length (~50ms/char)', () => {
+      const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+      typingDelay('a'.repeat(40)); // 40 * 50 = 2000ms, within bounds
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2000);
+    });
+
+    it('clamps to the minimum for short messages', () => {
+      const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+      typingDelay('hi'); // 2 * 50 = 100ms → clamped to 800
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 800);
+    });
+
+    it('clamps to the maximum for long messages', () => {
+      const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+      typingDelay('x'.repeat(1000)); // 50000ms → clamped to 6000
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 6000);
+    });
+
+    it('handles empty/undefined text via the minimum', () => {
+      const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+      typingDelay('');
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 800);
+    });
+  });
+
+  describe('backoffDelay', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    it('grows exponentially from the base', () => {
+      jest.spyOn(Math, 'random').mockReturnValue(0.5); // jitter factor = 1.0
+      expect(backoffDelay(0)).toBe(2000);
+      expect(backoffDelay(1)).toBe(4000);
+      expect(backoffDelay(2)).toBe(8000);
+    });
+
+    it('caps at the maximum', () => {
+      jest.spyOn(Math, 'random').mockReturnValue(0.5);
+      expect(backoffDelay(20)).toBe(60000);
+    });
+
+    it('applies jitter within ±20%', () => {
+      jest.spyOn(Math, 'random').mockReturnValue(0); // jitter factor = 0.8
+      expect(backoffDelay(1)).toBe(3200); // 4000 * 0.8
+      jest.spyOn(Math, 'random').mockReturnValue(1); // jitter factor ≈ 1.2
+      expect(backoffDelay(1)).toBe(4800); // 4000 * 1.2
     });
   });
 });

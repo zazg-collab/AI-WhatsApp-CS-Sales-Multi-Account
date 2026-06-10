@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { WaController } from './wa.controller';
 import { MediaController } from './media.controller';
 import { WaService } from './wa.service';
@@ -9,7 +10,7 @@ import { HermesModule } from '../hermes/hermes.module';
 import { MediaModule } from '../media/media.module';
 
 @Module({
-  imports: [AiModule, HermesModule, MediaModule],
+  imports: [ScheduleModule.forRoot(), AiModule, HermesModule, MediaModule],
   controllers: [WaController, MediaController],
   providers: [WaService, MessageIngestService, AutoAssignService],
   exports: [WaService],
