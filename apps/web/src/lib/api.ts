@@ -42,6 +42,19 @@ export function getRole(): string | null {
   }
 }
 
+/** Decode the user id (sub) from the stored JWT — used for "assign to me". */
+export function getUserId(): string | null {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    return JSON.parse(atob(parts[1])).sub ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const roleHierarchy: Record<string, number> = {
   owner: 4,
   supervisor: 3,

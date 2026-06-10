@@ -1,5 +1,5 @@
-import { NotFoundException } from '@nestjs/common';
-import { AiMode, TakeoverStatus } from '@hermes/database';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { AiMode, ConversationStatus, TakeoverStatus } from '@hermes/database';
 
 jest.mock('../wa/wa.service', () => ({ WaService: class {} }));
 
@@ -23,8 +23,12 @@ describe('ConversationsService', () => {
       message: {
         create: jest.fn().mockResolvedValue({ id: 'm1' }),
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
         update: jest.fn().mockResolvedValue({ id: 'm1', status: 'sent' }),
+      },
+      user: {
+        findFirst: jest.fn(),
       },
     };
     wa = {
@@ -70,9 +74,93 @@ describe('ConversationsService', () => {
         id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
       });
       await service.send('c1', 'admin', 'hello');
-      expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'hello');
+      expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'hello', undefined);
       expect(prisma.message.create).toHaveBeenCalled();
       expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'message:new', expect.anything());
+    });
+    it('passes the quoted message to the gateway and persists the link', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
+      });
+      prisma.message.findFirst.mockResolvedValue({
+        externalId: 'wamid1', content: 'original', senderType: 'customer',
+      });
+      await service.send('c1', 'admin', 'reply', 'q1');
+      expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'reply', {
+        externalId: 'wamid1', content: 'original', fromMe: false,
+      });
+      expect(prisma.message.create.mock.calls[0][0].data.quotedMessageId).toBe('q1');
+    });
+    it('rejects a quoted id from another conversation', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
+      });
+      prisma.message.findFirst.mockResolvedValue(null);
+      await expect(service.send('c1', 'admin', 'reply', 'q1')).rejects.toThrow(BadRequestException);
+      expect(wa.sendText).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setStatus', () => {
+    it('updates status and emits conversation:updated', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1' });
+      prisma.conversation.update.mockResolvedValue({ id: 'c1', status: 'resolved', assignedAdmin: null });
+      await service.setStatus('c1', ConversationStatus.resolved);
+      expect(prisma.conversation.update.mock.calls[0][0].data.status).toBe(ConversationStatus.resolved);
+      expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'conversation:updated', expect.objectContaining({ conversationId: 'c1' }));
+    });
+    it('throws when missing', async () => {
+      prisma.conversation.findUnique.mockResolvedValue(null);
+      await expect(service.setStatus('c1', ConversationStatus.open)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('assign', () => {
+    it('assigns to an existing admin and emits', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1' });
+      prisma.user.findFirst.mockResolvedValue({ id: 'u1' });
+      prisma.conversation.update.mockResolvedValue({ id: 'c1', status: 'open', assignedAdmin: { id: 'u1', name: 'Ani' } });
+      await service.assign('c1', 'u1');
+      expect(prisma.conversation.update.mock.calls[0][0].data.assignedAdminId).toBe('u1');
+      expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'conversation:updated', expect.anything());
+    });
+    it('unassigns with null', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1' });
+      prisma.conversation.update.mockResolvedValue({ id: 'c1', status: 'open', assignedAdmin: null });
+      await service.assign('c1', null);
+      expect(prisma.user.findFirst).not.toHaveBeenCalled();
+      expect(prisma.conversation.update.mock.calls[0][0].data.assignedAdminId).toBeNull();
+    });
+    it('rejects an unknown admin', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1' });
+      prisma.user.findFirst.mockResolvedValue(null);
+      await expect(service.assign('c1', 'ghost')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('searchMessages', () => {
+    it('searches case-insensitively within the conversation', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ id: 'c1' });
+      prisma.message.findMany.mockResolvedValue([{ id: 'm1', content: 'Harga 100rb' }]);
+      const r = await service.searchMessages('c1', 'harga');
+      const where = prisma.message.findMany.mock.calls[0][0].where;
+      expect(where.conversationId).toBe('c1');
+      expect(where.content).toEqual({ contains: 'harga', mode: 'insensitive' });
+      expect(r.items).toHaveLength(1);
+    });
+    it('returns empty for a blank query without hitting the db', async () => {
+      const r = await service.searchMessages('c1', '   ');
+      expect(r.items).toEqual([]);
+      expect(prisma.message.findMany).not.toHaveBeenCalled();
+    });
+    it('caps the limit at 100', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ id: 'c1' });
+      await service.searchMessages('c1', 'x', 5000);
+      expect(prisma.message.findMany.mock.calls[0][0].take).toBe(100);
+    });
+    it('throws when conversation missing', async () => {
+      prisma.conversation.findUnique.mockResolvedValue(null);
+      await expect(service.searchMessages('c1', 'x')).rejects.toThrow(NotFoundException);
     });
   });
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { api, uploadFile, resolveMediaUrl } from '@/lib/api';
+import { api, uploadFile, resolveMediaUrl, getUserId } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { Sidebar } from '@/components/Sidebar';
 
@@ -17,6 +17,13 @@ interface Customer {
   notes: string | null;
 }
 
+interface QuotedMessage {
+  id: string;
+  content: string | null;
+  senderType: string;
+  messageType: string;
+}
+
 interface Message {
   id: string;
   senderType: 'customer' | 'admin' | 'ai' | 'system' | 'hermes';
@@ -26,6 +33,8 @@ interface Message {
   status: string;
   aiGenerated: boolean;
   createdAt: string;
+  quotedMessageId?: string | null;
+  quotedMessage?: QuotedMessage | null;
 }
 
 interface HermesReview {
@@ -38,15 +47,22 @@ interface HermesReview {
   recommendation: string | null;
 }
 
+interface AdminUser {
+  id: string;
+  name: string;
+}
+
 interface ConvSummary {
   id: string;
   aiMode: string;
   takeoverStatus: string;
+  status: string;
   lastMessage: string | null;
   lastMessageAt: string | null;
   unreadCount?: number;
   customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[] };
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
+  assignedAdmin?: AdminUser | null;
   messages: { content: string | null; senderType: string; createdAt: string; status: string }[];
 }
 
@@ -54,9 +70,11 @@ interface ConvDetail {
   id: string;
   aiMode: string;
   takeoverStatus: string;
+  status: string;
   customer: Customer & { status: string | null };
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
   bot: { id: string; botName: string } | null;
+  assignedAdmin?: AdminUser | null;
   messages: Message[];
   hermesReviews: HermesReview[];
 }
@@ -92,6 +110,25 @@ function aiModeBadge(mode: string) {
   return (
     <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>{label}</span>
   );
+}
+
+function statusBadge(status: string) {
+  const map: Record<string, { label: string; cls: string }> = {
+    open: { label: 'Open', cls: 'bg-emerald-900 text-emerald-200' },
+    pending: { label: 'Pending', cls: 'bg-yellow-900 text-yellow-200' },
+    resolved: { label: 'Resolved', cls: 'bg-gray-700 text-gray-300' },
+  };
+  const { label, cls } = map[status] ?? { label: status, cls: 'bg-gray-700 text-gray-100' };
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>{label}</span>
+  );
+}
+
+/** Short display label for who sent a (quoted) message. */
+function senderLabel(senderType: string, customerName?: string | null) {
+  if (senderType === 'customer') return customerName || 'Customer';
+  if (senderType === 'ai') return 'AI';
+  return 'Anda';
 }
 
 function decisionBadge(decision: string) {
@@ -199,6 +236,8 @@ function LeftPanel({
   accounts,
   accountId,
   onAccountChange,
+  statusFilter,
+  onStatusFilterChange,
 }: {
   conversations: ConvSummary[];
   selectedId: string | null;
@@ -210,6 +249,8 @@ function LeftPanel({
   accounts: WaAccount[];
   accountId: string;
   onAccountChange: (id: string) => void;
+  statusFilter: string;
+  onStatusFilterChange: (s: string) => void;
 }) {
   const tabs: { key: FilterTab; label: string }[] = [
     { key: 'all', label: 'Semua' },
@@ -237,6 +278,18 @@ function LeftPanel({
               {a.accountName} · {a.phoneNumber}
             </option>
           ))}
+        </select>
+        {/* Workflow status filter (open/pending/resolved) */}
+        <select
+          value={statusFilter}
+          onChange={(e) => onStatusFilterChange(e.target.value)}
+          className="mb-2 w-full rounded bg-black/30 px-2 py-1.5 text-sm outline-none"
+          title="Filter status percakapan"
+        >
+          <option value="">Semua Status</option>
+          <option value="open">Open</option>
+          <option value="pending">Pending</option>
+          <option value="resolved">Resolved</option>
         </select>
         <input
           type="text"
@@ -292,6 +345,14 @@ function LeftPanel({
                   <p className="truncate text-xs text-gray-400">
                     {lastMsg?.content ?? 'Belum ada pesan'}
                   </p>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    {statusBadge(c.status)}
+                    {c.assignedAdmin && (
+                      <span className="truncate text-[10px] text-gray-500" title="Ditugaskan ke">
+                        👤 {c.assignedAdmin.name}
+                      </span>
+                    )}
+                  </div>
                   {!accountId && (
                     <p className="mt-0.5 truncate text-[10px] text-wa-accent/70">
                       via {c.whatsappAccount.accountName}
@@ -536,7 +597,7 @@ function CenterPanel({
   typing,
 }: {
   conv: ConvDetail | null;
-  onSend: (text: string) => void;
+  onSend: (text: string, quotedMessageId?: string) => void;
   onSendMedia: (mediaType: string, url: string, caption: string) => void;
   onUploadMedia: (file: File, caption: string) => Promise<void>;
   onTakeover: () => void;
@@ -551,7 +612,13 @@ function CenterPanel({
 }) {
   const [text, setText] = useState('');
   const [showMediaModal, setShowMediaModal] = useState(false);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
+  const [searchResults, setSearchResults] = useState<(QuotedMessage & { createdAt: string })[]>([]);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function handleSuggest() {
     const suggestion = await onSuggest();
@@ -562,10 +629,51 @@ function CenterPanel({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conv?.messages]);
 
+  // Reset chat-local state when switching conversations.
+  useEffect(() => {
+    setReplyTo(null);
+    setSearchOpen(false);
+    setSearchQ('');
+    setSearchResults([]);
+    setHighlightId(null);
+  }, [conv?.id]);
+
+  // In-conversation search, debounced against the server.
+  useEffect(() => {
+    if (!conv?.id || !searchQ.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const convId = conv.id;
+    const t = setTimeout(async () => {
+      try {
+        const r = await api<{ items: (QuotedMessage & { createdAt: string })[] }>(
+          `/conversations/${convId}/messages/search?q=${encodeURIComponent(searchQ.trim())}`,
+        );
+        setSearchResults(r.items);
+      } catch {
+        setSearchResults([]);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [conv?.id, searchQ]);
+
+  /** Scroll to a message bubble (if loaded) and flash-highlight it. */
+  function jumpToMessage(id: string) {
+    const el = document.getElementById(`msg-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightId(id);
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+      highlightTimer.current = setTimeout(() => setHighlightId(null), 1800);
+    }
+  }
+
   function handleSend() {
     if (!text.trim() || sending) return;
-    onSend(text.trim());
+    onSend(text.trim(), replyTo?.id);
     setText('');
+    setReplyTo(null);
   }
 
   if (!conv) {
@@ -601,6 +709,17 @@ function CenterPanel({
           </div>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setSearchOpen((v) => !v)}
+            title="Cari dalam percakapan"
+            className={`rounded px-2.5 py-1 text-xs font-medium ring-1 ${
+              searchOpen
+                ? 'bg-wa-accent text-black ring-wa-accent'
+                : 'text-gray-300 ring-gray-600 hover:ring-gray-400'
+            }`}
+          >
+            🔍
+          </button>
           {isAdmin ? (
             <button
               onClick={onReturnToAi}
@@ -625,6 +744,39 @@ function CenterPanel({
         </div>
       </header>
 
+      {/* In-conversation search */}
+      {searchOpen && (
+        <div className="border-b border-black/40 bg-wa-panel px-4 py-2">
+          <input
+            type="text"
+            autoFocus
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            placeholder="Cari teks dalam chat ini..."
+            className="w-full rounded bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
+          />
+          {searchQ.trim() && (
+            <div className="mt-1 max-h-48 overflow-y-auto rounded bg-black/20">
+              {searchResults.length === 0 && (
+                <p className="px-3 py-2 text-xs text-gray-500">Tidak ditemukan</p>
+              )}
+              {searchResults.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => jumpToMessage(r.id)}
+                  className="block w-full border-b border-black/20 px-3 py-1.5 text-left text-xs hover:bg-black/30"
+                >
+                  <span className="mr-2 text-gray-500">
+                    {senderLabel(r.senderType, conv.customer.name)} · {fmtTime(r.createdAt)}
+                  </span>
+                  <span className="text-gray-200">{(r.content ?? '').slice(0, 90)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {conv.messages.map((m) => {
@@ -642,24 +794,55 @@ function CenterPanel({
             );
           }
 
+          // Resolve the quoted message: prefer the API include, fall back to
+          // a lookup in the loaded timeline.
+          const quoted =
+            m.quotedMessage ??
+            (m.quotedMessageId ? conv.messages.find((x) => x.id === m.quotedMessageId) ?? null : null);
+
           return (
             <div
               key={m.id}
-              className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}
+              id={`msg-${m.id}`}
+              className={`group flex items-center gap-1 ${isCustomer ? 'justify-start' : 'justify-end'}`}
             >
+              {/* Reply button (left of our own bubbles) */}
+              {!isCustomer && !isDraft && (
+                <button
+                  onClick={() => setReplyTo(m)}
+                  title="Balas pesan ini"
+                  className="hidden shrink-0 rounded bg-black/30 px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-100 group-hover:block"
+                >
+                  ↩
+                </button>
+              )}
               <div
-                className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
+                className={`max-w-[70%] rounded-lg px-3 py-2 text-sm transition-shadow ${
                   isCustomer
                     ? 'bg-[#1f2c34] text-gray-100'
                     : isDraft
                     ? 'bg-yellow-900/60 text-yellow-100 ring-1 ring-yellow-600'
                     : 'bg-[#005c4b] text-gray-100'
-                }`}
+                } ${highlightId === m.id ? 'ring-2 ring-wa-accent' : ''}`}
               >
                 {isDraft && (
                   <div className="mb-1 flex items-center gap-1 text-xs text-yellow-400">
                     <span>Draft AI</span>
                   </div>
+                )}
+                {/* Quoted message block (WhatsApp-style reply preview) */}
+                {quoted && (
+                  <button
+                    onClick={() => jumpToMessage(quoted.id)}
+                    className="mb-1 block w-full rounded border-l-2 border-wa-accent bg-black/20 px-2 py-1 text-left"
+                  >
+                    <span className="block text-[10px] font-medium text-wa-accent">
+                      {senderLabel(quoted.senderType, conv.customer.name)}
+                    </span>
+                    <span className="block truncate text-xs text-gray-400">
+                      {quoted.content || `[${quoted.messageType}]`}
+                    </span>
+                  </button>
                 )}
                 <MessageMedia msg={m} />
                 <div className="mt-1 flex items-center justify-end gap-1">
@@ -691,6 +874,16 @@ function CenterPanel({
                   </div>
                 )}
               </div>
+              {/* Reply button (right of customer bubbles) */}
+              {isCustomer && (
+                <button
+                  onClick={() => setReplyTo(m)}
+                  title="Balas pesan ini"
+                  className="hidden shrink-0 rounded bg-black/30 px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-100 group-hover:block"
+                >
+                  ↩
+                </button>
+              )}
             </div>
           );
         })}
@@ -709,6 +902,26 @@ function CenterPanel({
       {/* Input */}
       {canSend && (
         <div className="border-t border-black/40 bg-wa-panel px-4 py-3">
+          {/* Quoted reply preview */}
+          {replyTo && (
+            <div className="mb-2 flex items-start gap-2 rounded border-l-2 border-wa-accent bg-black/20 px-2 py-1.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-medium text-wa-accent">
+                  Membalas {senderLabel(replyTo.senderType, conv.customer.name)}
+                </p>
+                <p className="truncate text-xs text-gray-400">
+                  {replyTo.content || `[${replyTo.messageType}]`}
+                </p>
+              </div>
+              <button
+                onClick={() => setReplyTo(null)}
+                title="Batal membalas"
+                className="text-gray-500 hover:text-gray-200"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           {isAdmin && (
             <div className="mb-2 flex items-center gap-2">
               <button
@@ -772,12 +985,18 @@ function CenterPanel({
 
 function RightPanel({
   conv,
+  admins,
   onAiModeChange,
   onAddNote,
+  onStatusChange,
+  onAssign,
 }: {
   conv: ConvDetail | null;
+  admins: AdminUser[];
   onAiModeChange: (mode: string) => void;
   onAddNote: (note: string) => void;
+  onStatusChange: (status: string) => void;
+  onAssign: (adminId: string | null) => void;
 }) {
   const [note, setNote] = useState('');
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
@@ -868,6 +1087,62 @@ function RightPanel({
                   {tag}
                 </span>
               ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Status & Assignment */}
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+          Status & Penugasan
+        </h3>
+        <div className="space-y-2">
+          <select
+            value={conv.status}
+            onChange={(e) => onStatusChange(e.target.value)}
+            className="w-full rounded bg-black/30 px-2 py-1.5 text-sm outline-none"
+            title="Status percakapan"
+          >
+            <option value="open">Open</option>
+            <option value="pending">Pending</option>
+            <option value="resolved">Resolved</option>
+          </select>
+          {admins.length > 0 ? (
+            <select
+              value={conv.assignedAdmin?.id ?? ''}
+              onChange={(e) => onAssign(e.target.value || null)}
+              className="w-full rounded bg-black/30 px-2 py-1.5 text-sm outline-none"
+              title="Tugaskan ke admin"
+            >
+              <option value="">— Tidak ditugaskan —</option>
+              {admins.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            // Plain admins can't list users → offer self-assign only.
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-xs text-gray-400">
+                {conv.assignedAdmin ? `👤 ${conv.assignedAdmin.name}` : 'Belum ditugaskan'}
+              </span>
+              {conv.assignedAdmin?.id === getUserId() ? (
+                <button
+                  onClick={() => onAssign(null)}
+                  className="shrink-0 rounded bg-gray-700 px-2 py-0.5 text-xs text-gray-200 hover:bg-gray-600"
+                >
+                  Lepas
+                </button>
+              ) : (
+                <button
+                  onClick={() => { const me = getUserId(); if (me) onAssign(me); }}
+                  className="shrink-0 rounded bg-emerald-700 px-2 py-0.5 text-xs text-emerald-100 hover:bg-emerald-600"
+                >
+                  Ambil untuk saya
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1046,10 +1321,12 @@ function RightPanel({
 export default function DashboardPage() {
   const [conversations, setConversations] = useState<ConvSummary[]>([]);
   const [accounts, setAccounts] = useState<WaAccount[]>([]);
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [accountId, setAccountId] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [conv, setConv] = useState<ConvDetail | null>(null);
   const [filter, setFilter] = useState<FilterTab>('all');
+  const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [sending, setSending] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
@@ -1064,6 +1341,11 @@ export default function DashboardPage() {
     api<WaAccount[]>('/wa/accounts')
       .then(setAccounts)
       .catch(() => setAccounts([]));
+    // Admin list for the assignment dropdown. Owner/supervisor only — plain
+    // admins get a 403 and fall back to the self-assign button.
+    api<{ users: (AdminUser & { role: string })[] }>('/users?limit=100')
+      .then((r) => setAdmins(r.users.filter((u) => u.role !== 'viewer')))
+      .catch(() => setAdmins([]));
     // Ask for browser notification permission (best-effort).
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {});
@@ -1076,6 +1358,7 @@ export default function DashboardPage() {
       const params = new URLSearchParams();
       if (filter === 'needs_attention') params.set('needsAttention', 'true');
       else if (filter !== 'all') params.set('aiMode', filter);
+      if (statusFilter) params.set('status', statusFilter);
       if (search) params.set('search', search);
       if (accountId) params.set('accountId', accountId);
       params.set('limit', '100');
@@ -1084,7 +1367,7 @@ export default function DashboardPage() {
     } catch {
       // silently fail on list
     }
-  }, [filter, search, accountId]);
+  }, [filter, statusFilter, search, accountId]);
 
   useEffect(() => {
     loadList();
@@ -1170,6 +1453,15 @@ export default function DashboardPage() {
       }
     });
 
+    // Status / assignment changed (possibly by another admin) → live-sync.
+    socket.on('conversation:updated', ({ conversationId, status, assignedAdmin }: { conversationId: string; status: string; assignedAdmin: AdminUser | null }) => {
+      setConv((prev) => {
+        if (!prev || prev.id !== conversationId) return prev;
+        return { ...prev, status, assignedAdmin };
+      });
+      loadList();
+    });
+
     socket.on('hermes:alert', ({ decision, reason }: { decision: string; reason: string }) => {
       setToast(`Hermes Alert: ${decision} — ${reason ?? ''}`);
     });
@@ -1180,6 +1472,7 @@ export default function DashboardPage() {
       socket.off('wa:presence');
       socket.off('message:draft');
       socket.off('message:draft-removed');
+      socket.off('conversation:updated');
       socket.off('hermes:alert');
     };
   }, [loadList]);
@@ -1212,19 +1505,49 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleSend(text: string) {
+  async function handleSend(text: string, quotedMessageId?: string) {
     if (!selectedId) return;
     setSending(true);
     try {
       await api(`/conversations/${selectedId}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, ...(quotedMessageId ? { quotedMessageId } : {}) }),
       });
       await loadConv(selectedId);
     } catch (e) {
       setToast(e instanceof Error ? e.message : 'Gagal mengirim');
     } finally {
       setSending(false);
+    }
+  }
+
+  // Conversation workflow status (open/pending/resolved).
+  async function handleStatusChange(status: string) {
+    if (!conv) return;
+    try {
+      await api(`/conversations/${conv.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+      setConv((prev) => (prev ? { ...prev, status } : prev));
+      loadList();
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal mengubah status');
+    }
+  }
+
+  // Assign / unassign the conversation to an admin.
+  async function handleAssign(adminId: string | null) {
+    if (!conv) return;
+    try {
+      const updated = await api<{ assignedAdmin: AdminUser | null }>(`/conversations/${conv.id}/assign`, {
+        method: 'PATCH',
+        body: JSON.stringify({ adminId }),
+      });
+      setConv((prev) => (prev ? { ...prev, assignedAdmin: updated.assignedAdmin } : prev));
+      loadList();
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal menugaskan');
     }
   }
 
@@ -1334,6 +1657,8 @@ export default function DashboardPage() {
         accounts={accounts}
         accountId={accountId}
         onAccountChange={setAccountId}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
       />
       <CenterPanel
         conv={conv}
@@ -1352,8 +1677,11 @@ export default function DashboardPage() {
       />
       <RightPanel
         conv={conv}
+        admins={admins}
         onAiModeChange={handleAiModeChange}
         onAddNote={handleAddNote}
+        onStatusChange={handleStatusChange}
+        onAssign={handleAssign}
       />
       {toast && <Toast msg={toast} onDismiss={() => setToast(null)} />}
       </div>

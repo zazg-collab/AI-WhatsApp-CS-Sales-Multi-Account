@@ -1,4 +1,4 @@
-import { AiMode } from '@hermes/database';
+import { AiMode, ConversationStatus } from '@hermes/database';
 
 jest.mock('../wa/wa.service', () => ({ WaService: class {} }));
 
@@ -24,11 +24,33 @@ describe('ConversationsController', () => {
   });
 
   it('list parses query params', () => {
-    controller.list('a1', AiMode.ai_on, 'budi', 'true', '2', '10');
+    controller.list('a1', AiMode.ai_on, ConversationStatus.open, 'u1', 'budi', 'true', '2', '10');
     expect(svc.list).toHaveBeenCalledWith({
-      accountId: 'a1', aiMode: AiMode.ai_on, search: 'budi',
+      accountId: 'a1', aiMode: AiMode.ai_on, status: ConversationStatus.open,
+      assignedAdminId: 'u1', search: 'budi',
       needsAttention: true, page: 2, limit: 10,
     });
+  });
+
+  it('list rejects an invalid status', () => {
+    expect(() => controller.list(undefined, undefined, 'bogus' as any)).toThrow();
+  });
+
+  it('searchMessages delegates with defaults', () => {
+    svc.searchMessages = jest.fn().mockResolvedValue({ items: [] });
+    controller.searchMessages('c1', 'harga');
+    expect(svc.searchMessages).toHaveBeenCalledWith('c1', 'harga', 50);
+  });
+
+  it('setStatus and assign delegate', () => {
+    svc.setStatus = jest.fn().mockResolvedValue({});
+    svc.assign = jest.fn().mockResolvedValue({});
+    controller.setStatus('c1', { status: ConversationStatus.resolved });
+    controller.assign('c1', { adminId: 'u1' });
+    controller.assign('c1', {});
+    expect(svc.setStatus).toHaveBeenCalledWith('c1', ConversationStatus.resolved);
+    expect(svc.assign).toHaveBeenCalledWith('c1', 'u1');
+    expect(svc.assign).toHaveBeenCalledWith('c1', null);
   });
 
   it('list defaults page/limit', () => {

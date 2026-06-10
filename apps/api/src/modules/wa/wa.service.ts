@@ -241,6 +241,14 @@ export class WaService implements OnModuleInit {
       });
     }
 
+    // If the customer replied to (quoted) an earlier message, WhatsApp sends
+    // the original's id as contextInfo.stanzaId — link it to our stored row.
+    const ctx =
+      m.message?.extendedTextMessage?.contextInfo ??
+      m.message?.imageMessage?.contextInfo ??
+      m.message?.videoMessage?.contextInfo ??
+      m.message?.documentMessage?.contextInfo;
+
     const result = await this.ingest.ingest({
       accountId,
       remoteJid: m.key.remoteJid,
@@ -249,6 +257,7 @@ export class WaService implements OnModuleInit {
       text,
       type,
       mediaUrl,
+      quotedExternalId: ctx?.stanzaId ?? undefined,
     });
 
     if (result) {
@@ -417,8 +426,17 @@ export class WaService implements OnModuleInit {
     return MessageType.text;
   }
 
-  /** Send a text message through the account's connection. */
-  async sendText(accountId: string, phone: string, text: string) {
+  /**
+   * Send a text message through the account's connection. When `quoted` is
+   * given the message is sent as a WhatsApp reply: Baileys only needs the
+   * original key + a text stub, which we reconstruct from our stored row.
+   */
+  async sendText(
+    accountId: string,
+    phone: string,
+    text: string,
+    quoted?: { externalId: string; content: string | null; fromMe: boolean },
+  ) {
     const session = this.sessions.get(accountId);
     if (!session) {
       throw new NotFoundException(`Account ${accountId} is not connected`);
@@ -431,7 +449,16 @@ export class WaService implements OnModuleInit {
     await humanDelay();
     await session.sock.sendPresenceUpdate('paused', jid);
 
-    const sent = await session.sock.sendMessage(jid, { text });
+    const options = quoted
+      ? {
+          quoted: {
+            key: { remoteJid: jid, id: quoted.externalId, fromMe: quoted.fromMe },
+            message: { conversation: quoted.content ?? '' },
+          },
+        }
+      : undefined;
+
+    const sent = await session.sock.sendMessage(jid, { text }, options as never);
     return sent?.key.id ?? null;
   }
 

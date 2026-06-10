@@ -12,6 +12,8 @@ interface IncomingMessage {
   text: string;
   type: MessageType;
   mediaUrl?: string;
+  /** WhatsApp id of the message the customer replied to, if any. */
+  quotedExternalId?: string;
 }
 
 /**
@@ -95,6 +97,22 @@ export class MessageIngestService {
       }
     }
 
+    // Resolve a customer reply/quote to the original stored message, if we
+    // have it. Best-effort: an unknown stanzaId just means no quote link.
+    let quotedMessageId: string | null = null;
+    if (msg.quotedExternalId) {
+      const quoted = await this.prisma.message.findUnique({
+        where: {
+          conversationId_externalId: {
+            conversationId: conversation.id,
+            externalId: msg.quotedExternalId,
+          },
+        },
+        select: { id: true },
+      });
+      quotedMessageId = quoted?.id ?? null;
+    }
+
     let message;
     try {
       message = await this.prisma.message.create({
@@ -106,7 +124,11 @@ export class MessageIngestService {
           content: msg.text,
           mediaUrl: msg.mediaUrl,
           externalId: msg.externalId || null,
+          quotedMessageId,
           status: 'delivered',
+        },
+        include: {
+          quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } },
         },
       });
     } catch (err) {

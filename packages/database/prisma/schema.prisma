@@ -69,6 +69,13 @@ enum LeadStage {
   very_hot
 }
 
+/// Workflow status of a conversation, set by admins (open → pending → resolved).
+enum ConversationStatus {
+  open
+  pending
+  resolved
+}
+
 enum TakeoverStatus {
   ai_active
   admin_takeover
@@ -304,6 +311,7 @@ model Conversation {
   aiMode            AiMode         @default(ai_draft) @map("ai_mode")
   previousAiMode    AiMode?        @map("previous_ai_mode")
   takeoverStatus    TakeoverStatus @default(ai_active) @map("takeover_status")
+  status            ConversationStatus @default(open)
   unreadCount       Int            @default(0) @map("unread_count")
   assignedAdminId   String?        @map("assigned_admin_id")
   lastMessage       String?        @map("last_message")
@@ -337,10 +345,13 @@ model Message {
   aiGenerated    Boolean       @default(false) @map("ai_generated")
   hermesReviewId String?       @unique @map("hermes_review_id")
   externalId     String?       @map("external_id")
+  quotedMessageId String?      @map("quoted_message_id")
   createdAt      DateTime      @default(now()) @map("created_at")
 
   conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   hermesReview HermesReview? @relation(fields: [hermesReviewId], references: [id])
+  quotedMessage Message?     @relation("MessageQuote", fields: [quotedMessageId], references: [id], onDelete: SetNull)
+  quotedBy      Message[]    @relation("MessageQuote")
 
   @@unique([conversationId, externalId])
   @@index([conversationId])

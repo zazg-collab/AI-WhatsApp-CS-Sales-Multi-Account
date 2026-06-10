@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   AiMode,
+  ConversationStatus,
   MessageType,
   Prisma,
   SenderType,
@@ -24,6 +25,8 @@ function mediaTypeForMime(mime: string): 'image' | 'document' | 'audio' | 'video
 interface ListFilters {
   accountId?: string;
   aiMode?: AiMode;
+  status?: ConversationStatus;
+  assignedAdminId?: string;
   search?: string;
   needsAttention?: boolean;
   page?: number;
@@ -40,11 +43,13 @@ export class ConversationsService {
   ) {}
 
   async list(filters: ListFilters) {
-    const { accountId, aiMode, search, needsAttention, page = 1, limit = 50 } = filters;
+    const { accountId, aiMode, status, assignedAdminId, search, needsAttention, page = 1, limit = 50 } = filters;
     const where: Prisma.ConversationWhereInput = {};
 
     if (accountId) where.whatsappAccountId = accountId;
     if (aiMode) where.aiMode = aiMode;
+    if (status) where.status = status;
+    if (assignedAdminId) where.assignedAdminId = assignedAdminId;
     if (needsAttention) {
       where.OR = [
         { takeoverStatus: TakeoverStatus.waiting_admin },
@@ -70,6 +75,7 @@ export class ConversationsService {
         include: {
           customer: { select: { id: true, name: true, phoneNumber: true, leadScore: true, leadStage: true, tags: true } },
           whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true } },
+          assignedAdmin: { select: { id: true, name: true } },
           messages: { orderBy: { createdAt: 'desc' }, take: 1, select: { content: true, senderType: true, createdAt: true, status: true } },
         },
       }),
@@ -85,10 +91,14 @@ export class ConversationsService {
         customer: true,
         whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true } },
         bot: { select: { id: true, botName: true, defaultAiMode: true } },
+        assignedAdmin: { select: { id: true, name: true } },
         messages: {
           orderBy: { createdAt: 'asc' },
           skip: (messagePage - 1) * messageLimit,
           take: messageLimit,
+          include: {
+            quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } },
+          },
         },
         hermesReviews: {
           orderBy: { createdAt: 'desc' },
@@ -101,17 +111,36 @@ export class ConversationsService {
   }
 
   /** Manual reply sent by an admin through the account's WhatsApp connection. */
-  async send(id: string, adminId: string, text: string) {
+  async send(id: string, adminId: string, text: string, quotedMessageId?: string) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: { customer: true },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
 
+    // Reply/quote: the quoted message must belong to this conversation and
+    // have a WhatsApp id we can reference. Otherwise send as a plain message.
+    let quoted: { externalId: string; content: string | null; fromMe: boolean } | undefined;
+    if (quotedMessageId) {
+      const quotedMsg = await this.prisma.message.findFirst({
+        where: { id: quotedMessageId, conversationId: id },
+        select: { externalId: true, content: true, senderType: true },
+      });
+      if (!quotedMsg) throw new BadRequestException('Quoted message not found in this conversation');
+      if (quotedMsg.externalId) {
+        quoted = {
+          externalId: quotedMsg.externalId,
+          content: quotedMsg.content,
+          fromMe: quotedMsg.senderType !== SenderType.customer,
+        };
+      }
+    }
+
     const externalId = await this.wa.sendText(
       conversation.whatsappAccountId,
       conversation.customer.phoneNumber,
       text,
+      quoted,
     );
 
     const message = await this.prisma.message.create({
@@ -122,6 +151,10 @@ export class ConversationsService {
         content: text,
         status: 'sent',
         externalId,
+        quotedMessageId: quotedMessageId ?? null,
+      },
+      include: {
+        quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } },
       },
     });
 
@@ -243,6 +276,77 @@ export class ConversationsService {
       where: { id },
       data: { aiMode },
     });
+  }
+
+  /** Set the workflow status (open/pending/resolved) of a conversation. */
+  async setStatus(id: string, status: ConversationStatus) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      select: { whatsappAccountId: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+    const updated = await this.prisma.conversation.update({
+      where: { id },
+      data: { status },
+      include: { assignedAdmin: { select: { id: true, name: true } } },
+    });
+    this.events.emitToAccount(conversation.whatsappAccountId, 'conversation:updated', {
+      conversationId: id,
+      status: updated.status,
+      assignedAdmin: updated.assignedAdmin,
+    });
+    return updated;
+  }
+
+  /** Assign a conversation to an admin (or unassign with adminId = null). */
+  async assign(id: string, adminId: string | null) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      select: { whatsappAccountId: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    if (adminId) {
+      const admin = await this.prisma.user.findFirst({
+        where: { id: adminId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!admin) throw new BadRequestException('Admin not found');
+    }
+
+    const updated = await this.prisma.conversation.update({
+      where: { id },
+      data: { assignedAdminId: adminId },
+      include: { assignedAdmin: { select: { id: true, name: true } } },
+    });
+    this.events.emitToAccount(conversation.whatsappAccountId, 'conversation:updated', {
+      conversationId: id,
+      status: updated.status,
+      assignedAdmin: updated.assignedAdmin,
+    });
+    return updated;
+  }
+
+  /** Full-text search within one conversation's messages (most recent first). */
+  async searchMessages(id: string, query: string, limit = 50) {
+    const q = query.trim();
+    if (!q) return { items: [] };
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const items = await this.prisma.message.findMany({
+      where: {
+        conversationId: id,
+        content: { contains: q, mode: 'insensitive' },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(limit, 100),
+      select: { id: true, content: true, senderType: true, messageType: true, createdAt: true },
+    });
+    return { items };
   }
 
   async exportList(filters: { accountId?: string; aiMode?: AiMode; from?: string; to?: string }) {

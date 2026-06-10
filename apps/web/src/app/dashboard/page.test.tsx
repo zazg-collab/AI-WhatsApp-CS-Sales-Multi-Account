@@ -7,6 +7,7 @@ vi.mock('@/lib/api', () => ({
   api: (...a: any[]) => apiMock(...a),
   uploadFile: vi.fn(),
   getToken: () => 't',
+  getUserId: () => 'u1',
   resolveMediaUrl: (u: string | null) =>
     u && (u.startsWith('/media/') || u.startsWith('http')) ? u : null,
 }));
@@ -69,6 +70,28 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
     await userEvent.click(await screen.findByText('Andi'));
     expect(await screen.findByText('Pesan detail unik')).toBeInTheDocument();
+  });
+
+  it('filters by workflow status', async () => {
+    apiMock.mockImplementation((path: string = '') => {
+      if (path === '/wa/accounts') return Promise.resolve(accounts);
+      return path.startsWith('/conversations?') ? Promise.resolve(convList) : Promise.resolve(convDetail);
+    });
+    render(<DashboardPage />);
+    await screen.findByText('Percakapan');
+    await userEvent.selectOptions(screen.getByTitle('Filter status percakapan'), 'pending');
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(expect.stringContaining('status=pending')),
+    );
+  });
+
+  it('shows the status badge on a conversation row', async () => {
+    apiMock.mockImplementation((path: string = '') => {
+      if (path === '/wa/accounts') return Promise.resolve(accounts);
+      return path.startsWith('/conversations?') ? Promise.resolve(convList) : Promise.resolve(convDetail);
+    });
+    render(<DashboardPage />);
+    expect(await screen.findByText('Open')).toBeInTheDocument();
   });
 
   it('filters by search input', async () => {

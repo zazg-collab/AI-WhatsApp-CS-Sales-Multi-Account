@@ -23,7 +23,9 @@ import { ConversationsService } from './conversations.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ApproveDraftDto } from './dto/approve-draft.dto';
 import { AiModeDto } from './dto/ai-mode.dto';
-import { AiMode } from '@hermes/database';
+import { ConversationStatusDto } from './dto/conversation-status.dto';
+import { AssignConversationDto } from './dto/assign-conversation.dto';
+import { AiMode, ConversationStatus } from '@hermes/database';
 import { csvRow } from '../../common/csv.util';
 
 // PRD 14.3 — Conversations.
@@ -67,19 +69,37 @@ export class ConversationsController {
   list(
     @Query('accountId') accountId?: string,
     @Query('aiMode') aiMode?: AiMode,
+    @Query('status') status?: ConversationStatus,
+    @Query('assignedAdminId') assignedAdminId?: string,
     @Query('search') search?: string,
     @Query('needsAttention') needsAttention?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
+    if (status && !Object.values(ConversationStatus).includes(status)) {
+      throw new BadRequestException(`Invalid status: ${status}`);
+    }
     return this.conversations.list({
       accountId,
       aiMode,
+      status,
+      assignedAdminId,
       search,
       needsAttention: needsAttention === 'true',
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 50,
     });
+  }
+
+  @ApiOperation({ summary: 'Search messages inside one conversation' })
+  @Roles('viewer')
+  @Get(':id/messages/search')
+  searchMessages(
+    @Param('id') id: string,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.conversations.searchMessages(id, q ?? '', limit ? parseInt(limit, 10) : 50);
   }
 
   @ApiOperation({ summary: 'Get a conversation with its messages' })
@@ -104,7 +124,7 @@ export class ConversationsController {
     @Body() dto: SendMessageDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.send(id, user.id, dto.text);
+    return this.conversations.send(id, user.id, dto.text, dto.quotedMessageId);
   }
 
   @Roles('admin', 'supervisor', 'owner')
@@ -159,6 +179,20 @@ export class ConversationsController {
   @Patch(':id/ai-mode')
   setAiMode(@Param('id') id: string, @Body() dto: AiModeDto) {
     return this.conversations.setAiMode(id, dto.aiMode);
+  }
+
+  @ApiOperation({ summary: 'Set conversation workflow status (open/pending/resolved)' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Patch(':id/status')
+  setStatus(@Param('id') id: string, @Body() dto: ConversationStatusDto) {
+    return this.conversations.setStatus(id, dto.status);
+  }
+
+  @ApiOperation({ summary: 'Assign a conversation to an admin (null = unassign)' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Patch(':id/assign')
+  assign(@Param('id') id: string, @Body() dto: AssignConversationDto) {
+    return this.conversations.assign(id, dto.adminId ?? null);
   }
 
   @Roles('admin', 'supervisor', 'owner')
