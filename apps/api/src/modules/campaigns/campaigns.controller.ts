@@ -4,7 +4,7 @@ import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { CampaignsService } from './campaigns.service';
-import { CreateCampaignDto, PreviewCampaignDto, UpdateCampaignDto } from './dto/campaigns.dto';
+import { CreateCampaignDto, OptOutDto, PreviewCampaignDto, UpdateCampaignDto } from './dto/campaigns.dto';
 
 @ApiTags('campaigns')
 @ApiBearerAuth()
@@ -88,5 +88,36 @@ export class CampaignsController {
   @Roles('owner', 'supervisor')
   retryFailed(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.campaigns.retryFailed(id, user.id);
+  }
+
+  @ApiOperation({ summary: 'Duplicate a campaign as a new draft' })
+  @Post(':id/duplicate')
+  @Roles('owner', 'supervisor', 'admin')
+  duplicate(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.campaigns.duplicate(id, user.id);
+  }
+
+  @ApiOperation({ summary: 'Manually mark a customer as opted out of campaigns' })
+  @Post('opt-out')
+  @Roles('owner', 'supervisor', 'admin')
+  optOut(@Body() dto: OptOutDto, @CurrentUser() user: AuthUser) {
+    return this.campaigns.optOut(dto.customerId, user.id);
+  }
+
+  @ApiOperation({ summary: 'Reverse a customer opt-out' })
+  @Post('opt-in')
+  @Roles('owner', 'supervisor', 'admin')
+  optIn(@Body() dto: OptOutDto, @CurrentUser() user: AuthUser) {
+    return this.campaigns.optIn(dto.customerId, user.id);
+  }
+
+  @ApiOperation({ summary: 'List opted-out customers (paginated)' })
+  @Get('opted-out/list')
+  @Roles('owner', 'supervisor', 'admin')
+  optedOut(@Query('page') page?: string, @Query('pageSize') pageSize?: string) {
+    return this.campaigns.listOptedOut(
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 50,
+    );
   }
 }

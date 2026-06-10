@@ -235,6 +235,57 @@ describe('CampaignsService', () => {
     });
   });
 
+  describe('duplicate', () => {
+    it('clones a campaign as a new draft and audits', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({
+        id: 'src', name: 'Promo', status: CampaignStatus.completed,
+        messageTemplate: 'hi', whatsappAccountId: 'a1', targetFilter: {},
+        rateLimitPerMinute: 6, humanDelayMinMs: 100, humanDelayMaxMs: 200,
+      });
+      prisma.campaign.create.mockResolvedValue({ id: 'copy1', name: 'Promo (copy)' });
+      const r = await service.duplicate('src', 'u1');
+      expect(r.id).toBe('copy1');
+      const data = prisma.campaign.create.mock.calls[0][0].data;
+      expect(data.name).toBe('Promo (copy)');
+      expect(data.status).toBe(CampaignStatus.draft);
+      expect(audit.log).toHaveBeenCalled();
+    });
+  });
+
+  describe('runScheduledCampaigns', () => {
+    it('starts due scheduled campaigns', async () => {
+      prisma.campaign.findMany.mockResolvedValueOnce([{ id: 'cmp1', createdById: 'u1' }]);
+      const startSpy = jest.spyOn(service, 'start').mockResolvedValue({} as any);
+      await service.runScheduledCampaigns();
+      expect(startSpy).toHaveBeenCalledWith('cmp1', 'u1');
+    });
+    it('never throws when start fails', async () => {
+      prisma.campaign.findMany.mockResolvedValueOnce([{ id: 'cmp1', createdById: 'u1' }]);
+      jest.spyOn(service, 'start').mockRejectedValue(new Error('boom'));
+      await expect(service.runScheduledCampaigns()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('optOut/optIn', () => {
+    it('optOut marks customer opted out', async () => {
+      prisma.customer.findUnique = jest.fn().mockResolvedValue({ id: 'c1' });
+      prisma.customer.update = jest.fn().mockResolvedValue({ id: 'c1', optedOut: true });
+      await service.optOut('c1', 'u1');
+      expect(prisma.customer.update.mock.calls[0][0].data.optedOut).toBe(true);
+      expect(audit.log).toHaveBeenCalled();
+    });
+    it('optIn clears opt-out', async () => {
+      prisma.customer.findUnique = jest.fn().mockResolvedValue({ id: 'c1' });
+      prisma.customer.update = jest.fn().mockResolvedValue({ id: 'c1', optedOut: false });
+      await service.optIn('c1', 'u1');
+      expect(prisma.customer.update.mock.calls[0][0].data.optedOut).toBe(false);
+    });
+    it('optOut throws when customer missing', async () => {
+      prisma.customer.findUnique = jest.fn().mockResolvedValue(null);
+      await expect(service.optOut('x', 'u1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('preview', () => {
     it('builds eligible targets, skipping opt-out & risky', async () => {
       prisma.whatsappAccount.findUnique.mockResolvedValue({ id: 'a1' });

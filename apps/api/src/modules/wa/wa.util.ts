@@ -9,14 +9,31 @@ export function jidToPhone(jid: string): string {
   return jid.split('@')[0].split(':')[0];
 }
 
-/**
- * True only for 1-on-1 customer chats (M1). Groups (@g.us), broadcast lists
- * (@broadcast), newsletters/channels (@newsletter) must never be ingested:
- * they would create bogus "customers" from group ids and let the bot
- * auto-reply into group chats.
- */
 export function isDirectChatJid(jid: string): boolean {
   return jid.endsWith('@s.whatsapp.net');
+}
+
+/** Keywords (case-insensitive) that signal a customer wants to opt out. */
+const OPT_OUT_KEYWORDS = ['stop', 'berhenti', 'unsubscribe', 'cancel langganan', 'jangan kirim'];
+
+export function isOptOutMessage(text?: string | null): boolean {
+  if (!text) return false;
+  const normalized = text.toLowerCase();
+  return OPT_OUT_KEYWORDS.some((keyword) => {
+    if (keyword.includes(' ')) return normalized.includes(keyword);
+    return new RegExp(`\\b${keyword}\\b`).test(normalized);
+  });
+}
+
+export function renderTemplate(
+  template: string,
+  vars: { name?: string | null; phone?: string | null },
+): string {
+  const name = vars.name?.trim() || 'Kak';
+  const phone = vars.phone?.trim() || '';
+  return template
+    .replace(/\{\{\s*name\s*\}\}/gi, name)
+    .replace(/\{\{\s*phone\s*\}\}/gi, phone);
 }
 
 /** Human-like delay to reduce ban risk (PRD 22.1 mitigation). */
