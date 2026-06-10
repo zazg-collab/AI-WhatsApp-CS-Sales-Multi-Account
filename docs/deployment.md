@@ -84,6 +84,18 @@ The API enables these cross-cutting protections by default:
 
 For multi-instance deployments, replace in-memory rate limiting with a Redis-backed limiter at the gateway or application layer.
 
+### Tunable safety limits
+
+All defaults are conservative; override via env only with a clear reason:
+
+| Env | Default | Controls |
+|---|---|---|
+| `LOGIN_MAX_ATTEMPTS` | `10` | failed logins per IP+email before lockout |
+| `LOGIN_LOCKOUT_WINDOW_MS` | `900000` (15 min) | lockout / attempt-counting window |
+| `AI_TIMEOUT_MS` | `30000` | upper bound on every AI provider / sidecar HTTP call |
+| `CAMPAIGN_MAX_RECIPIENTS` | `1000` | max targets per campaign |
+| `CAMPAIGN_MAX_DAILY_SENDS` | `500` | campaign sends per WhatsApp account per 24h (ban mitigation) |
+
 ## 7. Operational checks before pilot
 
 Run these commands before handing the app to operators:
