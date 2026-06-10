@@ -25,7 +25,7 @@ describe('ConversationsService', () => {
       sendText: jest.fn().mockResolvedValue('ext1'),
       sendMedia: jest.fn().mockResolvedValue('ext2'),
     };
-    events = { emit: jest.fn() };
+    events = { emit: jest.fn(), emitToAccount: jest.fn() };
     service = new ConversationsService(prisma, wa, events);
   });
 
@@ -63,7 +63,7 @@ describe('ConversationsService', () => {
       await service.send('c1', 'admin', 'hello');
       expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'hello');
       expect(prisma.message.create).toHaveBeenCalled();
-      expect(events.emit).toHaveBeenCalledWith('message:new', expect.anything());
+      expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'message:new', expect.anything());
     });
   });
 
@@ -74,7 +74,7 @@ describe('ConversationsService', () => {
       });
       await service.sendMedia('c1', 'admin', 'image', 'http://x/y.png', 'cap');
       expect(wa.sendMedia).toHaveBeenCalled();
-      expect(events.emit).toHaveBeenCalled();
+      expect(events.emitToAccount).toHaveBeenCalled();
     });
     it('throws when missing', async () => {
       prisma.conversation.findUnique.mockResolvedValue(null);

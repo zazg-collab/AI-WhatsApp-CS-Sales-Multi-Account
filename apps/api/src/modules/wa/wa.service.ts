@@ -30,7 +30,7 @@ import { MessageIngestService } from './message-ingest.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { AiService } from '../ai/ai.service';
 import { HermesService } from '../hermes/hermes.service';
-import { phoneToJid, humanDelay } from './wa.util';
+import { phoneToJid, humanDelay, isDirectChatJid } from './wa.util';
 import { logAudit } from '../../common/audit.util';
 
 interface Session {
@@ -100,7 +100,7 @@ export class WaService implements OnModuleInit {
         const session = this.sessions.get(accountId);
         if (session) session.qr = dataUrl;
         await this.setStatus(accountId, SessionStatus.qr_required);
-        this.events.emit('wa:qr', { accountId, qr: dataUrl });
+        this.events.emitToAccount(accountId, 'wa:qr', { accountId, qr: dataUrl });
       }
 
       if (connection === 'open') {
@@ -140,7 +140,8 @@ export class WaService implements OnModuleInit {
 
   private async handleIncoming(accountId: string, m: proto.IWebMessageInfo) {
     if (m.key.fromMe || !m.key.remoteJid) return;
-    if (m.key.remoteJid === 'status@broadcast') return;
+    // Only 1-on-1 chats (M1): drop groups, broadcast lists, newsletters.
+    if (!isDirectChatJid(m.key.remoteJid)) return;
 
     const text =
       m.message?.conversation ??
@@ -213,7 +214,7 @@ export class WaService implements OnModuleInit {
     const effectiveMode = fresh.aiMode;
 
     if (effectiveMode === AiMode.ai_draft) {
-      await this.storeDraft(conversationId, text);
+      await this.storeDraft(conversationId, convo.whatsappAccountId, text);
       return;
     }
 
@@ -222,7 +223,7 @@ export class WaService implements OnModuleInit {
       if (review.decision === HermesDecision.approve) {
         await this.sendAndStore(convo, text, review.id);
       } else if (review.decision === HermesDecision.draft) {
-        await this.storeDraft(conversationId, text, review.id);
+        await this.storeDraft(conversationId, convo.whatsappAccountId, text, review.id);
       } else {
         // block / pause_ai / takeover_required — hold AI for this customer.
         await this.prisma.conversation.update({
@@ -274,13 +275,14 @@ export class WaService implements OnModuleInit {
       where: { id: convo.id },
       data: { lastMessage: text, lastMessageAt: new Date() },
     });
-    this.events.emit('message:new', { conversationId: convo.id, message });
+    this.events.emitToAccount(convo.whatsappAccountId, 'message:new', { conversationId: convo.id, message });
     return message;
   }
 
   /** Persist an AI draft without sending; the dashboard shows it for review. */
   private async storeDraft(
     conversationId: string,
+    accountId: string,
     text: string,
     hermesReviewId?: string,
   ) {
@@ -294,7 +296,7 @@ export class WaService implements OnModuleInit {
         hermesReviewId,
       },
     });
-    this.events.emit('message:draft', { conversationId, message });
+    this.events.emitToAccount(accountId, 'message:draft', { conversationId, message });
     return message;
   }
 
@@ -403,7 +405,7 @@ export class WaService implements OnModuleInit {
       where: { id: accountId },
       data: { sessionStatus: status },
     });
-    this.events.emit('wa:status', { accountId, status });
+    this.events.emitToAccount(accountId, 'wa:status', { accountId, status });
 
     if (status === SessionStatus.banned || status === SessionStatus.disconnected) {
       this.notifications.send(

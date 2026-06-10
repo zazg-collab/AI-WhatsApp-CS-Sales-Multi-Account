@@ -105,12 +105,52 @@ Then verify manually:
 7. Create a campaign draft, preview recipients, submit, approve, and start with a low rate limit.
 8. Open `/monitoring` and confirm response, AI quality, and campaign metrics load.
 
-## 8. Backup notes
+## 8. Backup procedures
 
-Back up at least:
+### What to back up
 
-- PostgreSQL database.
-- `WA_SESSION_DIR` directory.
-- Hermes Agent config if outbound notifications are enabled.
+| Asset | Why | Loss impact |
+|---|---|---|
+| PostgreSQL database | all CRM/chat/campaign data | total data loss |
+| `WA_SESSION_DIR` | Baileys auth state | every account must re-scan QR |
+| Redis AOF (`hermes_redisdata` volume) | queued campaign/follow-up jobs | queued sends lost (DB rows remain `queued`) |
+| `.env` (stored in a secrets manager, not in the repo) | JWT secret, DB creds, AI keys | sessions invalidated, manual reconfiguration |
+| Hermes Agent config | outbound notification credentials | alerts silently disabled |
 
-Redis is used for queues; persistent Redis storage is recommended for campaign/follow-up delivery reliability.
+### Database
+
+Nightly dump with 14-day retention (run from cron or a scheduler container):
+
+```bash
+pg_dump "$DATABASE_URL" --format=custom \
+  --file="/backups/hermes-$(date +%F).dump"
+find /backups -name 'hermes-*.dump' -mtime +14 -delete
+```
+
+Restore:
+
+```bash
+pg_restore --clean --if-exists --dbname="$DATABASE_URL" /backups/hermes-YYYY-MM-DD.dump
+```
+
+### WhatsApp sessions
+
+`WA_SESSION_DIR` contains live credential files that change on every
+connection. Back it up with the API **stopped** (or accept a small risk of a
+torn copy — Baileys usually recovers):
+
+```bash
+tar czf "/backups/wa-sessions-$(date +%F).tgz" -C "$WA_SESSION_DIR" .
+```
+
+A stale session backup may be rejected by WhatsApp; treat QR re-scan as the
+recovery of last resort and keep account phone numbers documented.
+
+### Verify restores
+
+A backup that has never been restored is not a backup. Quarterly (and before
+any schema migration in production):
+
+1. Restore the latest dump into a scratch database.
+2. Run `npx prisma migrate deploy` against it — it must apply cleanly.
+3. Spot-check row counts for `customers`, `conversations`, `messages`.

@@ -62,6 +62,9 @@ jobs:
       - name: Run API tests
         run: npm run test --workspace=@hermes/api
 
+      - name: Run API e2e tests (security wiring)
+        run: npm run test:e2e --workspace=@hermes/api
+
   typecheck:
     name: TypeScript Check
     runs-on: ubuntu-latest

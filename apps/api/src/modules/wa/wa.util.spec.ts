@@ -1,4 +1,4 @@
-import { phoneToJid, jidToPhone, humanDelay } from './wa.util';
+import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid } from './wa.util';
 
 describe('wa.util', () => {
   describe('phoneToJid', () => {
@@ -16,6 +16,18 @@ describe('wa.util', () => {
     });
     it('strips device suffix', () => {
       expect(jidToPhone('6281234567890:12@s.whatsapp.net')).toBe('6281234567890');
+    });
+  });
+
+  describe('isDirectChatJid', () => {
+    it('accepts 1-on-1 chats', () => {
+      expect(isDirectChatJid('6281234567890@s.whatsapp.net')).toBe(true);
+    });
+    it('rejects groups, broadcasts, newsletters (M1)', () => {
+      expect(isDirectChatJid('123456-789@g.us')).toBe(false);
+      expect(isDirectChatJid('status@broadcast')).toBe(false);
+      expect(isDirectChatJid('999@broadcast')).toBe(false);
+      expect(isDirectChatJid('abc@newsletter')).toBe(false);
     });
   });
 

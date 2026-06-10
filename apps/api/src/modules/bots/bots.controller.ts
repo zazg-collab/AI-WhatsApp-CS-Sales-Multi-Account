@@ -24,6 +24,7 @@ export class BotsController {
   constructor(private readonly bots: BotsService) {}
 
   @ApiOperation({ summary: 'List all bots' })
+  @Roles('viewer')
   @Get()
   list() {
     return this.bots.list();
@@ -37,6 +38,7 @@ export class BotsController {
   }
 
   @ApiOperation({ summary: 'Get a bot by ID' })
+  @Roles('viewer')
   @Get(':id')
   get(@Param('id') id: string) {
     return this.bots.get(id);
@@ -67,6 +69,7 @@ export class BotsController {
   }
 
   @ApiOperation({ summary: 'List all personas' })
+  @Roles('viewer')
   @Get('personas/list')
   listPersonas() {
     return this.bots.listPersonas();

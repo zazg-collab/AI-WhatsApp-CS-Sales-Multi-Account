@@ -29,6 +29,7 @@ export class ConversationsController {
   constructor(private readonly conversations: ConversationsService) {}
 
   @ApiOperation({ summary: 'Export conversations as CSV' })
+  @Roles('viewer')
   @Get('export')
   async export(
     @Query('accountId') accountId: string | undefined,
@@ -55,6 +56,7 @@ export class ConversationsController {
   }
 
   @ApiOperation({ summary: 'List conversations with optional filters' })
+  @Roles('viewer')
   @Get()
   list(
     @Query('accountId') accountId?: string,
@@ -75,6 +77,7 @@ export class ConversationsController {
   }
 
   @ApiOperation({ summary: 'Get a conversation with its messages' })
+  @Roles('viewer')
   @Get(':id')
   get(
     @Param('id') id: string,

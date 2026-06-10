@@ -398,7 +398,7 @@ export class CampaignsService {
             lastMessageAt: new Date(),
           },
         });
-        this.events.emit('message:new', { conversationId: recipient.conversationId, message });
+        this.events.emitToAccount(recipient.campaign.whatsappAccountId, 'message:new', { conversationId: recipient.conversationId, message });
       }
     } catch (err) {
       this.logger.error(

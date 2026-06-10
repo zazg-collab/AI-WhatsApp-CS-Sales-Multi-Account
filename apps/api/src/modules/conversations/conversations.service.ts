@@ -119,7 +119,7 @@ export class ConversationsService {
       data: { lastMessage: text, lastMessageAt: new Date() },
     });
 
-    this.events.emit('message:new', { conversationId: id, message });
+    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message });
     return message;
   }
 
@@ -223,7 +223,7 @@ export class ConversationsService {
       data: { lastMessage: `[${mediaType}] ${caption ?? ''}`, lastMessageAt: new Date() },
     });
 
-    this.events.emit('message:new', { conversationId: id, message });
+    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message });
     return message;
   }
 

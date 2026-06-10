@@ -128,7 +128,7 @@ export class MessageIngestService {
       data: { lastMessage: msg.text, lastMessageAt: new Date() },
     });
 
-    this.events.emit('message:new', {
+    this.events.emitToAccount(account.id, 'message:new', {
       conversationId: conversation.id,
       message,
     });

@@ -39,7 +39,7 @@ describe('CampaignsService', () => {
     };
     audit = { log: jest.fn().mockResolvedValue({}) };
     wa = { sendText: jest.fn().mockResolvedValue('ext1') };
-    events = { emit: jest.fn() };
+    events = { emit: jest.fn(), emitToAccount: jest.fn() };
     queue = { add: jest.fn().mockResolvedValue({}), getJob: jest.fn() };
     service = new CampaignsService(prisma, audit, wa, events, queue);
   });
