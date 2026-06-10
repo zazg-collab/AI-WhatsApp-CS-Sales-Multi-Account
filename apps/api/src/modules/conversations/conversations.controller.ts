@@ -12,6 +12,7 @@ import {
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import { ConversationsService } from './conversations.service';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -21,7 +22,7 @@ import { AiMode } from '@hermes/database';
 // PRD 14.3 — Conversations.
 @ApiTags('conversations')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('conversations')
 export class ConversationsController {
   constructor(private readonly conversations: ConversationsService) {}
@@ -86,6 +87,7 @@ export class ConversationsController {
     );
   }
 
+  @Roles('admin', 'supervisor', 'owner')
   @Post(':id/messages')
   send(
     @Param('id') id: string,
@@ -95,7 +97,7 @@ export class ConversationsController {
     return this.conversations.send(id, user.id, dto.text);
   }
 
-  // Legacy endpoint kept for compatibility
+  @Roles('admin', 'supervisor', 'owner')
   @Post(':id/send')
   sendLegacy(
     @Param('id') id: string,
@@ -105,26 +107,31 @@ export class ConversationsController {
     return this.conversations.send(id, user.id, dto.text);
   }
 
+  @Roles('admin', 'supervisor', 'owner')
   @Post(':id/takeover')
   takeover(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.conversations.takeover(id, user.id);
   }
 
+  @Roles('admin', 'supervisor', 'owner')
   @Post(':id/return-to-ai')
   returnToAi(@Param('id') id: string) {
     return this.conversations.returnToAi(id);
   }
 
+  @Roles('admin', 'supervisor', 'owner')
   @Patch(':id/ai-mode')
   setAiMode(@Param('id') id: string, @Body() dto: AiModeDto) {
     return this.conversations.setAiMode(id, dto.aiMode);
   }
 
+  @Roles('admin', 'supervisor', 'owner')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: { aiMode?: AiMode }) {
     return this.conversations.update(id, dto);
   }
 
+  @Roles('admin', 'supervisor', 'owner')
   @Post(':id/media')
   sendMedia(
     @Param('id') id: string,
