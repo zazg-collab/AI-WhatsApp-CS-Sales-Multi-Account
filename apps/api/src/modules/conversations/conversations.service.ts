@@ -123,6 +123,70 @@ export class ConversationsService {
     return message;
   }
 
+  /**
+   * Approve a supervised/draft AI message: send the (possibly edited) text to
+   * the customer and flip the stored draft from pending → sent. The draft row
+   * is updated in place so it keeps its position in the timeline.
+   */
+  async approveDraft(id: string, messageId: string, adminId: string, editedText?: string) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      include: { customer: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const draft = await this.prisma.message.findFirst({
+      where: { id: messageId, conversationId: id, senderType: SenderType.ai, status: 'pending' },
+    });
+    if (!draft) throw new NotFoundException('Draft not found or already handled');
+
+    const text = (editedText ?? draft.content ?? '').trim();
+    if (!text) throw new NotFoundException('Draft has no content to send');
+
+    const externalId = await this.wa.sendText(
+      conversation.whatsappAccountId,
+      conversation.customer.phoneNumber,
+      text,
+    );
+
+    const message = await this.prisma.message.update({
+      where: { id: draft.id },
+      data: { content: text, status: 'sent', externalId, senderId: adminId },
+    });
+
+    await this.prisma.conversation.update({
+      where: { id },
+      data: { lastMessage: text, lastMessageAt: new Date() },
+    });
+
+    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message });
+    return message;
+  }
+
+  /** Block/discard a supervised draft: mark it failed so it is never sent. */
+  async blockDraft(id: string, messageId: string) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      select: { whatsappAccountId: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const draft = await this.prisma.message.findFirst({
+      where: { id: messageId, conversationId: id, senderType: SenderType.ai, status: 'pending' },
+    });
+    if (!draft) throw new NotFoundException('Draft not found or already handled');
+
+    const message = await this.prisma.message.update({
+      where: { id: draft.id },
+      data: { status: 'failed' },
+    });
+    this.events.emitToAccount(conversation.whatsappAccountId, 'message:draft-removed', {
+      conversationId: id,
+      messageId: draft.id,
+    });
+    return message;
+  }
+
   /** Admin takes over: AI stops replying to this conversation. */
   async takeover(id: string, adminId: string) {
     const conversation = await this.prisma.conversation.findUnique({

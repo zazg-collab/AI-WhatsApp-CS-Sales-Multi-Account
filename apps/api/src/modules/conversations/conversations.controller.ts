@@ -16,6 +16,7 @@ import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import { ConversationsService } from './conversations.service';
 import { SendMessageDto } from './dto/send-message.dto';
+import { ApproveDraftDto } from './dto/approve-draft.dto';
 import { AiModeDto } from './dto/ai-mode.dto';
 import { AiMode } from '@hermes/database';
 import { csvRow } from '../../common/csv.util';
@@ -109,6 +110,25 @@ export class ConversationsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.conversations.send(id, user.id, dto.text);
+  }
+
+  @ApiOperation({ summary: 'Approve & send a supervised AI draft' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Post(':id/messages/:messageId/approve')
+  approveDraft(
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body() dto: ApproveDraftDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.conversations.approveDraft(id, messageId, user.id, dto.text);
+  }
+
+  @ApiOperation({ summary: 'Block/discard a supervised AI draft' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Post(':id/messages/:messageId/block')
+  blockDraft(@Param('id') id: string, @Param('messageId') messageId: string) {
+    return this.conversations.blockDraft(id, messageId);
   }
 
   @Roles('admin', 'supervisor', 'owner')

@@ -62,6 +62,12 @@ interface ConvDetail {
 
 type FilterTab = 'all' | 'ai_on' | 'ai_off' | 'ai_supervised' | 'needs_attention';
 
+interface WaAccount {
+  id: string;
+  accountName: string;
+  phoneNumber: string;
+}
+
 interface FollowUp {
   id: string;
   conversationId: string;
@@ -146,6 +152,9 @@ function LeftPanel({
   onSearchChange,
   filter,
   search,
+  accounts,
+  accountId,
+  onAccountChange,
 }: {
   conversations: ConvSummary[];
   selectedId: string | null;
@@ -154,6 +163,9 @@ function LeftPanel({
   onSearchChange: (s: string) => void;
   filter: FilterTab;
   search: string;
+  accounts: WaAccount[];
+  accountId: string;
+  onAccountChange: (id: string) => void;
 }) {
   const tabs: { key: FilterTab; label: string }[] = [
     { key: 'all', label: 'Semua' },
@@ -168,6 +180,20 @@ function LeftPanel({
       {/* Header */}
       <div className="border-b border-black/30 p-3">
         <h2 className="mb-2 text-sm font-semibold text-wa-accent">Percakapan</h2>
+        {/* Account switcher — filter the list by WhatsApp account */}
+        <select
+          value={accountId}
+          onChange={(e) => onAccountChange(e.target.value)}
+          className="mb-2 w-full rounded bg-black/30 px-2 py-1.5 text-sm outline-none"
+          title="Pilih akun WhatsApp"
+        >
+          <option value="">Semua Akun ({accounts.length})</option>
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.accountName} · {a.phoneNumber}
+            </option>
+          ))}
+        </select>
         <input
           type="text"
           placeholder="Cari nama / nomor..."
@@ -222,6 +248,11 @@ function LeftPanel({
                   <p className="truncate text-xs text-gray-400">
                     {lastMsg?.content ?? 'Belum ada pesan'}
                   </p>
+                  {!accountId && (
+                    <p className="mt-0.5 truncate text-[10px] text-wa-accent/70">
+                      via {c.whatsappAccount.accountName}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <span className="text-xs text-gray-500">{fmtTime(c.lastMessageAt)}</span>
@@ -350,6 +381,8 @@ function CenterPanel({
   onToggleAi,
   onApproveDraft,
   onBlockDraft,
+  onSuggest,
+  suggesting,
   sending,
 }: {
   conv: ConvDetail | null;
@@ -360,11 +393,18 @@ function CenterPanel({
   onToggleAi: () => void;
   onApproveDraft: (msgId: string) => void;
   onBlockDraft: (msgId: string) => void;
+  onSuggest: () => Promise<string | null>;
+  suggesting: boolean;
   sending: boolean;
 }) {
   const [text, setText] = useState('');
   const [showMediaModal, setShowMediaModal] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  async function handleSuggest() {
+    const suggestion = await onSuggest();
+    if (suggestion) setText(suggestion);
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -386,12 +426,6 @@ function CenterPanel({
 
   const isAdmin = conv.takeoverStatus === 'admin_takeover';
   const canSend = conv.aiMode === 'ai_off' || isAdmin;
-  const isSupervisedPending = conv.aiMode === 'ai_supervised';
-
-  // find draft messages for supervised mode
-  const draftMessages = conv.messages.filter(
-    (m) => m.senderType === 'ai' && m.status === 'pending' && isSupervisedPending,
-  );
 
   return (
     <section className="flex flex-1 flex-col overflow-hidden">
@@ -476,14 +510,15 @@ function CenterPanel({
                     <span className="text-xs opacity-50">🤖</span>
                   )}
                 </div>
-                {/* Approve / Block buttons for supervised draft */}
-                {isDraft && isSupervisedPending && (
+                {/* Approve (send) / Block (discard) for any pending AI draft —
+                    applies to both ai_draft and ai_supervised modes. */}
+                {isDraft && (
                   <div className="mt-2 flex gap-2">
                     <button
                       onClick={() => onApproveDraft(m.id)}
                       className="rounded bg-green-700 px-2 py-0.5 text-xs font-medium hover:bg-green-600"
                     >
-                      Approve
+                      Approve & Kirim
                     </button>
                     <button
                       onClick={() => onBlockDraft(m.id)}
@@ -511,6 +546,21 @@ function CenterPanel({
       {/* Input */}
       {canSend && (
         <div className="border-t border-black/40 bg-wa-panel px-4 py-3">
+          {isAdmin && (
+            <div className="mb-2 flex items-center gap-2">
+              <button
+                onClick={handleSuggest}
+                disabled={suggesting}
+                title="Minta AI menyarankan balasan"
+                className="rounded bg-blue-700/70 px-2 py-1 text-xs font-medium text-blue-100 hover:bg-blue-600 disabled:opacity-50"
+              >
+                {suggesting ? '⏳ Menyiapkan...' : '💡 Saran AI'}
+              </button>
+              <span className="text-[10px] text-gray-500">
+                Saran bisa diedit sebelum dikirim
+              </span>
+            </div>
+          )}
           <div className="flex gap-2">
             <button
               onClick={() => setShowMediaModal(true)}
@@ -832,12 +882,22 @@ function RightPanel({
 
 export default function DashboardPage() {
   const [conversations, setConversations] = useState<ConvSummary[]>([]);
+  const [accounts, setAccounts] = useState<WaAccount[]>([]);
+  const [accountId, setAccountId] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [conv, setConv] = useState<ConvDetail | null>(null);
   const [filter, setFilter] = useState<FilterTab>('all');
   const [search, setSearch] = useState('');
   const [sending, setSending] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // load WhatsApp accounts once for the switcher
+  useEffect(() => {
+    api<WaAccount[]>('/wa/accounts')
+      .then(setAccounts)
+      .catch(() => setAccounts([]));
+  }, []);
 
   // load conversation list
   const loadList = useCallback(async () => {
@@ -846,13 +906,14 @@ export default function DashboardPage() {
       if (filter === 'needs_attention') params.set('needsAttention', 'true');
       else if (filter !== 'all') params.set('aiMode', filter);
       if (search) params.set('search', search);
+      if (accountId) params.set('accountId', accountId);
       params.set('limit', '100');
       const data = await api<{ items: ConvSummary[] }>(`/conversations?${params}`);
       setConversations(data.items);
     } catch {
       // silently fail on list
     }
-  }, [filter, search]);
+  }, [filter, search, accountId]);
 
   useEffect(() => {
     loadList();
@@ -896,6 +957,13 @@ export default function DashboardPage() {
       });
     });
 
+    socket.on('message:draft-removed', ({ conversationId, messageId }: { conversationId: string; messageId: string }) => {
+      setConv((prev) => {
+        if (!prev || prev.id !== conversationId) return prev;
+        return { ...prev, messages: prev.messages.filter((m) => m.id !== messageId) };
+      });
+    });
+
     socket.on('hermes:alert', ({ decision, reason }: { decision: string; reason: string }) => {
       setToast(`Hermes Alert: ${decision} — ${reason ?? ''}`);
     });
@@ -903,6 +971,7 @@ export default function DashboardPage() {
     return () => {
       socket.off('message:new');
       socket.off('message:draft');
+      socket.off('message:draft-removed');
       socket.off('hermes:alert');
     };
   }, [loadList]);
@@ -983,13 +1052,48 @@ export default function DashboardPage() {
     }
   }
 
-  // Stub: approve/block draft — in real flow you'd call hermes endpoint
+  // Approve a supervised draft → actually sends it to the customer.
   async function handleApproveDraft(msgId: string) {
-    setToast(`Draft approved (msg ${msgId.slice(0, 8)})`);
+    if (!selectedId) return;
+    try {
+      await api(`/conversations/${selectedId}/messages/${msgId}/approve`, { method: 'POST' });
+      await loadConv(selectedId);
+      loadList();
+      setToast('Draft terkirim ke customer.');
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal mengirim draft');
+    }
   }
 
+  // Block a supervised draft → discards it, never sent.
   async function handleBlockDraft(msgId: string) {
-    setToast(`Draft blocked (msg ${msgId.slice(0, 8)})`);
+    if (!selectedId) return;
+    try {
+      await api(`/conversations/${selectedId}/messages/${msgId}/block`, { method: 'POST' });
+      await loadConv(selectedId);
+      setToast('Draft dibatalkan.');
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal membatalkan draft');
+    }
+  }
+
+  // Ask the AI for a suggested reply (used during takeover). Returns the text
+  // so the input box can be pre-filled for the admin to edit before sending.
+  async function handleSuggest(): Promise<string | null> {
+    if (!selectedId) return null;
+    setSuggesting(true);
+    try {
+      const res = await api<{ text: string }>(`/ai/generate-draft`, {
+        method: 'POST',
+        body: JSON.stringify({ conversationId: selectedId }),
+      });
+      return res.text;
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal membuat saran AI');
+      return null;
+    } finally {
+      setSuggesting(false);
+    }
   }
 
   return (
@@ -1004,6 +1108,9 @@ export default function DashboardPage() {
         search={search}
         onFilterChange={setFilter}
         onSearchChange={setSearch}
+        accounts={accounts}
+        accountId={accountId}
+        onAccountChange={setAccountId}
       />
       <CenterPanel
         conv={conv}
@@ -1014,6 +1121,8 @@ export default function DashboardPage() {
         onToggleAi={handleToggleAi}
         onApproveDraft={handleApproveDraft}
         onBlockDraft={handleBlockDraft}
+        onSuggest={handleSuggest}
+        suggesting={suggesting}
         sending={sending}
       />
       <RightPanel

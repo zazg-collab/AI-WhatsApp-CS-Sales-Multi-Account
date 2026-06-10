@@ -15,15 +15,20 @@ import DashboardPage from './page';
 
 const convList = {
   items: [
-    { id: 'c1', customer: { id: 'cu1', name: 'Andi', phoneNumber: '628111' }, aiMode: 'ai_on', lastMessageAt: '2026-06-01T00:00:00.000Z', unreadCount: 0, status: 'open', messages: [{ id: 'm0', senderType: 'customer', content: 'Halo', createdAt: '2026-06-01T00:00:00.000Z' }] },
+    { id: 'c1', customer: { id: 'cu1', name: 'Andi', phoneNumber: '628111' }, whatsappAccount: { id: 'a1', accountName: 'Sales Bot', phoneNumber: '628000' }, aiMode: 'ai_on', lastMessageAt: '2026-06-01T00:00:00.000Z', unreadCount: 0, status: 'open', messages: [{ id: 'm0', senderType: 'customer', content: 'Halo', createdAt: '2026-06-01T00:00:00.000Z' }] },
   ],
 };
+
+const accounts = [
+  { id: 'a1', accountName: 'Sales Bot', phoneNumber: '628000' },
+];
 
 const convDetail = {
   id: 'c1',
   aiMode: 'ai_on',
   status: 'open',
   customer: { id: 'cu1', name: 'Andi', phoneNumber: '628111', leadScore: 50, leadStage: 'warm', tags: [], notes: '' },
+  whatsappAccount: { id: 'a1', accountName: 'Sales Bot', phoneNumber: '628000' },
   hermesReviews: [],
   messages: [
     { id: 'm1', senderType: 'customer', content: 'Pesan detail unik', createdAt: '2026-06-01T00:00:00.000Z' },
@@ -38,6 +43,7 @@ describe('DashboardPage', () => {
 
   it('renders conversation list', async () => {
     apiMock.mockImplementation((path: string = '') => {
+      if (path === '/wa/accounts') return Promise.resolve(accounts);
       if (path.startsWith('/conversations?')) return Promise.resolve(convList);
       return Promise.resolve(convDetail);
     });
@@ -48,6 +54,7 @@ describe('DashboardPage', () => {
 
   it('opens a conversation when clicked', async () => {
     apiMock.mockImplementation((path: string = '') => {
+      if (path === '/wa/accounts') return Promise.resolve(accounts);
       if (path.startsWith('/conversations?')) return Promise.resolve(convList);
       if (path === '/conversations/c1') return Promise.resolve(convDetail);
       if (path.startsWith('/follow-ups')) return Promise.resolve([]);
@@ -59,9 +66,10 @@ describe('DashboardPage', () => {
   });
 
   it('filters by search input', async () => {
-    apiMock.mockImplementation((path: string = '') =>
-      path.startsWith('/conversations?') ? Promise.resolve(convList) : Promise.resolve(convDetail),
-    );
+    apiMock.mockImplementation((path: string = '') => {
+      if (path === '/wa/accounts') return Promise.resolve(accounts);
+      return path.startsWith('/conversations?') ? Promise.resolve(convList) : Promise.resolve(convDetail);
+    });
     render(<DashboardPage />);
     await screen.findByText('Percakapan');
     await userEvent.type(screen.getByPlaceholderText('Cari nama / nomor...'), 'Andi');
