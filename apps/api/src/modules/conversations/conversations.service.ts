@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { WaService } from '../wa/wa.service';
+import { assertSafeMediaUrl } from '../../common/media-url.util';
 
 interface ListFilters {
   accountId?: string;
@@ -180,6 +181,9 @@ export class ConversationsService {
     url: string,
     caption?: string,
   ) {
+    // SSRF guard (M2): the gateway fetches this URL server-side.
+    assertSafeMediaUrl(url);
+
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: { customer: true },

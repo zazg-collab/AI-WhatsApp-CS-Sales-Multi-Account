@@ -40,6 +40,28 @@ jobs:
       - name: Build Web
         run: npm run build --workspace=@hermes/web
 
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Run API tests
+        run: npm run test --workspace=@hermes/api
+
   typecheck:
     name: TypeScript Check
     runs-on: ubuntu-latest

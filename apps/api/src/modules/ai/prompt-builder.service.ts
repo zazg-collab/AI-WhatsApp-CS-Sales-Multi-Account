@@ -103,13 +103,15 @@ export class PromptBuilderService {
     tags: string[];
     notes: string | null;
   }): string {
+    // Internal admin notes (M6) are NOT injected into the bot prompt: they are
+    // private, may contain commentary not meant for the customer, and could be
+    // reflected back verbatim by the model. Only customer-facing memory is used.
     const lines = [
       `Nama: ${customer.name ?? 'Belum diketahui'}`,
       `Nomor: ${customer.phoneNumber}`,
       `Lead stage: ${customer.leadStage}`,
     ];
     if (customer.tags.length) lines.push(`Tags: ${customer.tags.join(', ')}`);
-    if (customer.notes) lines.push(`Catatan admin: ${customer.notes}`);
     return lines.join('\n');
   }
 }

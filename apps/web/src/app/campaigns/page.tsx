@@ -172,6 +172,15 @@ export default function CampaignsPage() {
 
   async function runAction(action: 'submit' | 'approve' | 'start' | 'pause' | 'cancel' | 'retry-failed') {
     if (!selectedCampaign) return;
+    // Confirm high-consequence actions (M7): approving or starting a campaign
+    // authorizes outbound messages to real customers.
+    const confirmMessages: Partial<Record<typeof action, string>> = {
+      approve: 'Approve this campaign? It will be cleared for sending to all recipients.',
+      start: 'Start sending this campaign to all queued recipients now?',
+      cancel: 'Cancel this campaign? Pending recipients will be skipped.',
+    };
+    const confirmMsg = confirmMessages[action];
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
     setSubmitting(true);
     try {
       await api(`/campaigns/${selectedCampaign.id}/${action}`, { method: 'POST' });
