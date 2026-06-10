@@ -1,5 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
-import { PromptBuilderService } from './prompt-builder.service';
+import {
+  PromptBuilderService,
+  MAX_HISTORY_MESSAGES,
+  MAX_CONTEXT_CHARS,
+  estimateTokens,
+} from './prompt-builder.service';
 
 describe('PromptBuilderService', () => {
   let service: PromptBuilderService;
@@ -62,5 +67,51 @@ describe('PromptBuilderService', () => {
     const msgs = await service.buildForConversation('c1');
     expect(msgs[0].content).toContain('belum ada knowledge');
     expect(prisma.knowledgeItem.findMany).not.toHaveBeenCalled();
+  });
+
+  it('estimateTokens approximates ~4 chars/token', () => {
+    expect(estimateTokens('')).toBe(0);
+    expect(estimateTokens('abcd')).toBe(1);
+    expect(estimateTokens('abcde')).toBe(2);
+  });
+
+  it('caps history to MAX_HISTORY_MESSAGES and adds a summary placeholder', async () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({
+      senderType: i % 2 === 0 ? 'customer' : 'ai',
+      content: `pesan ${i}`,
+    }));
+    prisma.conversation.findUnique.mockResolvedValue({
+      id: 'c1',
+      customer: { ...customer, tags: [], notes: null },
+      bot: { persona: { soulMd: 's' }, knowledgeBaseId: null },
+      messages: many,
+    });
+
+    const msgs = await service.buildForConversation('c1', 40);
+    const nonSystem = msgs.slice(1);
+    // first non-system turn is the summary placeholder
+    expect(nonSystem[0].role).toBe('system');
+    expect(nonSystem[0].content).toContain('Ringkasan percakapan sebelumnya');
+    const turns = nonSystem.slice(1);
+    expect(turns.length).toBeLessThanOrEqual(MAX_HISTORY_MESSAGES);
+  });
+
+  it('trims oldest history turns to stay under MAX_CONTEXT_CHARS', async () => {
+    const big = 'x'.repeat(5000);
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      senderType: i % 2 === 0 ? 'customer' : 'ai',
+      content: big,
+    }));
+    prisma.conversation.findUnique.mockResolvedValue({
+      id: 'c1',
+      customer: { ...customer, tags: [], notes: null },
+      bot: { persona: { soulMd: 's' }, knowledgeBaseId: null },
+      messages: many,
+    });
+
+    const msgs = await service.buildForConversation('c1', 40);
+    const turns = msgs.slice(1).filter((m) => m.role !== 'system');
+    const chars = turns.reduce((s, m) => s + m.content.length, 0);
+    expect(chars).toBeLessThanOrEqual(MAX_CONTEXT_CHARS);
   });
 });

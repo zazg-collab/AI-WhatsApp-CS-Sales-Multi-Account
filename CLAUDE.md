@@ -24,6 +24,7 @@ The PRD is the source of truth for product scope. Status:
 - **Iteration 15 (API docs + production Docker)** ✅ — Swagger/OpenAPI at /api/docs, production Dockerfiles for api+web, docker-compose full stack, GitHub Actions deploy workflow.
 - **Iteration 15b (Production hardening)** ✅ — sanitization, strict validation, rate limiting, structured error responses, request IDs/logging, security headers, graceful shutdown, error boundaries, and DB pool tuning guidance.
 - **Iteration 16 (WhatsApp stability + anti-ban)** ✅ — exponential-backoff reconnect with retry cap + alerts, typing-delay + per-account send throttle, periodic session health check, and a per-account health endpoint.
+- **Iteration 17 (AI quality)** ✅ — bounded context window with token-budget trimming, customer sentiment analysis, conservative response cache with hit/miss stats, and sentiment/cache-stats endpoints.
 - **All PRD section-14 endpoints are now implemented** (no more 501 stubs).
 
 ## Hermes Supervisor
