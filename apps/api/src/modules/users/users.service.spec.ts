@@ -22,6 +22,7 @@ describe('UsersService', () => {
     status: 'active',
     createdAt: new Date(),
     updatedAt: new Date(),
+    deletedAt: null,
   };
 
   beforeEach(() => {
@@ -40,11 +41,11 @@ describe('UsersService', () => {
   });
 
   describe('list', () => {
-    it('returns paginated users with role filter', async () => {
+    it('returns paginated users with role filter, excluding soft-deleted', async () => {
       const r = await service.list({ role: 'admin', limit: 10, offset: 0 });
       expect(r.total).toBe(1);
       expect(r.users).toHaveLength(1);
-      expect(prisma.user.findMany.mock.calls[0][0].where).toEqual({ role: 'admin' });
+      expect(prisma.user.findMany.mock.calls[0][0].where).toEqual({ deletedAt: null, role: 'admin' });
     });
   });
 
@@ -107,11 +108,17 @@ describe('UsersService', () => {
       prisma.user.findUnique.mockResolvedValue(null);
       await expect(service.delete('x', 'u')).rejects.toThrow(NotFoundException);
     });
-    it('deletes and audits', async () => {
+    it('soft-deletes and audits', async () => {
       prisma.user.findUnique.mockResolvedValue(safeUser);
       const r = await service.delete('u1', 'deleter');
       expect(r).toEqual({ success: true });
-      expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'u1' } });
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'u1' },
+          data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+        }),
+      );
+      expect(audit.log).toHaveBeenCalled();
     });
   });
 
