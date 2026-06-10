@@ -12,6 +12,7 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
   type WASocket,
   type proto,
 } from '@whiskeysockets/baileys';
@@ -30,8 +31,10 @@ import { MessageIngestService } from './message-ingest.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { AiService } from '../ai/ai.service';
 import { HermesService } from '../hermes/hermes.service';
-import { phoneToJid, humanDelay } from './wa.util';
+import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, extForMimetype } from './wa.util';
+import { MediaStorageService } from '../media/media-storage.service';
 import { logAudit } from '../../common/audit.util';
+import { isWithinBusinessHours } from '../../common/business-hours.util';
 
 interface Session {
   sock: WASocket;
@@ -48,6 +51,8 @@ export class WaService implements OnModuleInit {
   private readonly logger = new Logger(WaService.name);
   private readonly sessions = new Map<string, Session>();
   private readonly sessionDir: string;
+  private readonly mediaMaxBytes: number;
+  private readonly awayCooldownMs: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -56,9 +61,15 @@ export class WaService implements OnModuleInit {
     private readonly ai: AiService,
     private readonly hermes: HermesService,
     private readonly notifications: NotificationsService,
+    private readonly storage: MediaStorageService,
     config: ConfigService,
   ) {
     this.sessionDir = config.get<string>('WA_SESSION_DIR') ?? './.wa-sessions';
+    this.mediaMaxBytes = Number(
+      config.get<string>('WA_MEDIA_MAX_BYTES') ?? 25 * 1024 * 1024,
+    );
+    const cooldown = Number(config.get('AUTO_AWAY_COOLDOWN_MS'));
+    this.awayCooldownMs = Number.isFinite(cooldown) && cooldown > 0 ? cooldown : 12 * 60 * 60 * 1000;
   }
 
   /** Reconnect every active account on boot. */
@@ -100,7 +111,7 @@ export class WaService implements OnModuleInit {
         const session = this.sessions.get(accountId);
         if (session) session.qr = dataUrl;
         await this.setStatus(accountId, SessionStatus.qr_required);
-        this.events.emit('wa:qr', { accountId, qr: dataUrl });
+        this.events.emitToAccount(accountId, 'wa:qr', { accountId, qr: dataUrl });
       }
 
       if (connection === 'open') {
@@ -136,11 +147,82 @@ export class WaService implements OnModuleInit {
         await this.handleIncoming(accountId, m);
       }
     });
+
+    // Customer typing/online indicator → live to the dashboard (scoped to account).
+    sock.ev.on('presence.update', ({ id, presences }) => {
+      if (!isDirectChatJid(id)) return;
+      const state = presences?.[id]?.lastKnownPresence;
+      const typing = state === 'composing' || state === 'recording';
+      this.events.emitToAccount(accountId, 'wa:presence', {
+        accountId,
+        phone: jidToPhone(id),
+        typing,
+        presence: state ?? 'unavailable',
+      });
+    });
+
+    // Delivery/read receipts for messages WE sent → update status + checkmarks.
+    sock.ev.on('messages.update', async (updates) => {
+      for (const u of updates) {
+        const status = u.update?.status;
+        if (status === undefined || status === null || !u.key?.id) continue;
+        await this.applyReceipt(accountId, u.key.id, status).catch((err) =>
+          this.logger.warn(`Receipt update failed for ${u.key?.id}: ${err}`),
+        );
+      }
+    });
+  }
+
+  /** Map a Baileys numeric status to our MessageStatus and persist + emit it. */
+  private async applyReceipt(
+    accountId: string,
+    externalId: string,
+    waStatus: number | string,
+  ) {
+    // Baileys WAMessageStatus: 2 = DELIVERY_ACK, 3 = READ, 4 = PLAYED.
+    const code = Number(waStatus);
+    let status: MessageStatus | undefined;
+    if (code >= 4) status = MessageStatus.read;
+    else if (code === 3) status = MessageStatus.read;
+    else if (code === 2) status = MessageStatus.delivered;
+    if (!status) return;
+
+    const message = await this.prisma.message.findFirst({
+      where: { externalId },
+      select: { id: true, conversationId: true, status: true },
+    });
+    if (!message) return;
+    // Never downgrade (read → delivered).
+    if (message.status === MessageStatus.read) return;
+
+    await this.prisma.message.update({ where: { id: message.id }, data: { status } });
+    this.events.emitToAccount(accountId, 'message:status', {
+      conversationId: message.conversationId,
+      messageId: message.id,
+      status,
+    });
+  }
+
+  /**
+   * Mark the customer's recent inbound messages as read in WhatsApp (blue
+   * ticks) when an admin opens the chat. Best-effort; never throws to caller.
+   */
+  async markRead(accountId: string, phone: string, externalIds: string[]) {
+    const session = this.sessions.get(accountId);
+    if (!session || externalIds.length === 0) return;
+    const remoteJid = phoneToJid(phone);
+    const keys = externalIds.map((id) => ({ remoteJid, id, fromMe: false }));
+    try {
+      await session.sock.readMessages(keys as never);
+    } catch (err) {
+      this.logger.warn(`markRead failed for ${remoteJid}: ${err}`);
+    }
   }
 
   private async handleIncoming(accountId: string, m: proto.IWebMessageInfo) {
     if (m.key.fromMe || !m.key.remoteJid) return;
-    if (m.key.remoteJid === 'status@broadcast') return;
+    // Only 1-on-1 chats (M1): drop groups, broadcast lists, newsletters.
+    if (!isDirectChatJid(m.key.remoteJid)) return;
 
     const text =
       m.message?.conversation ??
@@ -152,12 +234,24 @@ export class WaService implements OnModuleInit {
 
     const type = this.resolveType(m);
 
-    // Capture media reference (use message key id as placeholder; actual download optional)
+    // Download inbound media to WA_MEDIA_DIR and reference it as /media/<file>.
+    // Failure is non-fatal: the message is still ingested, just without media.
     let mediaUrl: string | undefined;
     if (type === MessageType.image || type === MessageType.video ||
         type === MessageType.audio || type === MessageType.document) {
-      mediaUrl = m.key.id ?? undefined;
+      mediaUrl = await this.downloadInboundMedia(m).catch((err) => {
+        this.logger.warn(`Media download failed for ${m.key.id}: ${err}`);
+        return undefined;
+      });
     }
+
+    // If the customer replied to (quoted) an earlier message, WhatsApp sends
+    // the original's id as contextInfo.stanzaId — link it to our stored row.
+    const ctx =
+      m.message?.extendedTextMessage?.contextInfo ??
+      m.message?.imageMessage?.contextInfo ??
+      m.message?.videoMessage?.contextInfo ??
+      m.message?.documentMessage?.contextInfo;
 
     const result = await this.ingest.ingest({
       accountId,
@@ -167,13 +261,63 @@ export class WaService implements OnModuleInit {
       text,
       type,
       mediaUrl,
+      quotedExternalId: ctx?.stanzaId ?? undefined,
     });
 
     if (result) {
+      await this.maybeAutoAway(result).catch((err) =>
+        this.logger.warn(`Auto-away failed: ${err}`),
+      );
       await this.maybeAutoReply(result.conversation.id).catch((err) =>
         this.logger.error(`Auto-reply failed: ${err}`),
       );
     }
+  }
+
+  /**
+   * Send a configured away message when an inbound arrives outside the
+   * account's business hours and the bot isn't handling it (ai_on). Throttled
+   * per conversation by AUTO_AWAY_COOLDOWN_MS so the customer isn't spammed.
+   */
+  private async maybeAutoAway(result: {
+    conversation: { id: string; aiMode: AiMode; lastAwayAt: Date | null };
+    customer: { phoneNumber: string };
+    account: {
+      id: string;
+      awayMessage: string | null;
+      businessHoursEnabled: boolean;
+      businessHoursStart: string | null;
+      businessHoursEnd: string | null;
+      businessDays: number[];
+      businessTimezone: string | null;
+    };
+  }) {
+    const { conversation, customer, account } = result;
+    if (!account.businessHoursEnabled || !account.awayMessage) return;
+    if (conversation.aiMode === AiMode.ai_on) return; // bot replies 24/7
+    if (isWithinBusinessHours(account)) return;
+    if (
+      conversation.lastAwayAt &&
+      Date.now() - conversation.lastAwayAt.getTime() < this.awayCooldownMs
+    ) {
+      return;
+    }
+
+    const externalId = await this.sendText(account.id, customer.phoneNumber, account.awayMessage);
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        senderType: SenderType.system,
+        content: account.awayMessage,
+        status: MessageStatus.sent,
+        externalId,
+      },
+    });
+    await this.prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastAwayAt: new Date(), lastMessage: account.awayMessage, lastMessageAt: new Date() },
+    });
+    this.events.emitToAccount(account.id, 'message:new', { conversationId: conversation.id, message });
   }
 
   /**
@@ -213,7 +357,7 @@ export class WaService implements OnModuleInit {
     const effectiveMode = fresh.aiMode;
 
     if (effectiveMode === AiMode.ai_draft) {
-      await this.storeDraft(conversationId, text);
+      await this.storeDraft(conversationId, convo.whatsappAccountId, text);
       return;
     }
 
@@ -222,7 +366,7 @@ export class WaService implements OnModuleInit {
       if (review.decision === HermesDecision.approve) {
         await this.sendAndStore(convo, text, review.id);
       } else if (review.decision === HermesDecision.draft) {
-        await this.storeDraft(conversationId, text, review.id);
+        await this.storeDraft(conversationId, convo.whatsappAccountId, text, review.id);
       } else {
         // block / pause_ai / takeover_required — hold AI for this customer.
         await this.prisma.conversation.update({
@@ -274,13 +418,14 @@ export class WaService implements OnModuleInit {
       where: { id: convo.id },
       data: { lastMessage: text, lastMessageAt: new Date() },
     });
-    this.events.emit('message:new', { conversationId: convo.id, message });
+    this.events.emitToAccount(convo.whatsappAccountId, 'message:new', { conversationId: convo.id, message });
     return message;
   }
 
   /** Persist an AI draft without sending; the dashboard shows it for review. */
   private async storeDraft(
     conversationId: string,
+    accountId: string,
     text: string,
     hermesReviewId?: string,
   ) {
@@ -294,8 +439,33 @@ export class WaService implements OnModuleInit {
         hermesReviewId,
       },
     });
-    this.events.emit('message:draft', { conversationId, message });
+    this.events.emitToAccount(accountId, 'message:draft', { conversationId, message });
     return message;
+  }
+
+  /**
+   * Download an inbound media message's bytes and persist them under
+   * WA_MEDIA_DIR as <uuid>.<ext>. Returns a `/media/<file>` path served by
+   * MediaController, or undefined when the payload is empty/oversized.
+   */
+  private async downloadInboundMedia(
+    m: proto.IWebMessageInfo,
+  ): Promise<string | undefined> {
+    const buffer = await downloadMediaMessage(m as never, 'buffer', {});
+    if (!buffer || buffer.length === 0) return undefined;
+    if (buffer.length > this.mediaMaxBytes) {
+      this.logger.warn(
+        `Media ${m.key.id} is ${buffer.length}B > cap ${this.mediaMaxBytes}B, skipping`,
+      );
+      return undefined;
+    }
+    const mime =
+      m.message?.imageMessage?.mimetype ??
+      m.message?.videoMessage?.mimetype ??
+      m.message?.audioMessage?.mimetype ??
+      m.message?.documentMessage?.mimetype;
+    const { url } = await this.storage.save(buffer, extForMimetype(mime));
+    return url;
   }
 
   private resolveType(m: proto.IWebMessageInfo): MessageType {
@@ -309,8 +479,17 @@ export class WaService implements OnModuleInit {
     return MessageType.text;
   }
 
-  /** Send a text message through the account's connection. */
-  async sendText(accountId: string, phone: string, text: string) {
+  /**
+   * Send a text message through the account's connection. When `quoted` is
+   * given the message is sent as a WhatsApp reply: Baileys only needs the
+   * original key + a text stub, which we reconstruct from our stored row.
+   */
+  async sendText(
+    accountId: string,
+    phone: string,
+    text: string,
+    quoted?: { externalId: string; content: string | null; fromMe: boolean },
+  ) {
     const session = this.sessions.get(accountId);
     if (!session) {
       throw new NotFoundException(`Account ${accountId} is not connected`);
@@ -323,7 +502,16 @@ export class WaService implements OnModuleInit {
     await humanDelay();
     await session.sock.sendPresenceUpdate('paused', jid);
 
-    const sent = await session.sock.sendMessage(jid, { text });
+    const options = quoted
+      ? {
+          quoted: {
+            key: { remoteJid: jid, id: quoted.externalId, fromMe: quoted.fromMe },
+            message: { conversation: quoted.content ?? '' },
+          },
+        }
+      : undefined;
+
+    const sent = await session.sock.sendMessage(jid, { text }, options as never);
     return sent?.key.id ?? null;
   }
 
@@ -355,6 +543,46 @@ export class WaService implements OnModuleInit {
       content = { audio: { url }, mimetype: 'audio/mpeg' };
     } else {
       content = { video: { url }, caption: caption ?? '' };
+    }
+
+    const sent = await session.sock.sendMessage(jid, content as never);
+    return sent?.key.id ?? null;
+  }
+
+  /**
+   * Send media from raw bytes (admin upload). Bytes go straight to Baileys —
+   * no URL round-trip — so the gateway never has to fetch from our own API and
+   * private object storage stays private.
+   */
+  async sendMediaBuffer(
+    accountId: string,
+    phone: string,
+    mediaType: 'image' | 'document' | 'audio' | 'video',
+    buffer: Buffer,
+    mimetype: string,
+    caption?: string,
+    fileName?: string,
+  ): Promise<string | null> {
+    const session = this.sessions.get(accountId);
+    if (!session) {
+      throw new NotFoundException(`Account ${accountId} is not connected`);
+    }
+    const jid = phoneToJid(phone);
+    await humanDelay();
+
+    let content: Record<string, unknown>;
+    if (mediaType === 'image') {
+      content = { image: buffer, caption: caption ?? '' };
+    } else if (mediaType === 'document') {
+      content = {
+        document: buffer,
+        mimetype: mimetype || 'application/octet-stream',
+        fileName: fileName ?? caption ?? 'file',
+      };
+    } else if (mediaType === 'audio') {
+      content = { audio: buffer, mimetype: mimetype || 'audio/mpeg' };
+    } else {
+      content = { video: buffer, caption: caption ?? '' };
     }
 
     const sent = await session.sock.sendMessage(jid, content as never);
@@ -403,7 +631,7 @@ export class WaService implements OnModuleInit {
       where: { id: accountId },
       data: { sessionStatus: status },
     });
-    this.events.emit('wa:status', { accountId, status });
+    this.events.emitToAccount(accountId, 'wa:status', { accountId, status });
 
     if (status === SessionStatus.banned || status === SessionStatus.disconnected) {
       this.notifications.send(

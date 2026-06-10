@@ -28,6 +28,7 @@ export class CustomersController {
   constructor(private readonly customers: CustomersService) {}
 
   @ApiOperation({ summary: 'Export customers as CSV' })
+  @Roles('viewer')
   @Get('export')
   async export(
     @Query('stage') stage: LeadStage | undefined,
@@ -55,6 +56,7 @@ export class CustomersController {
   }
 
   @ApiOperation({ summary: 'List customers with optional filters' })
+  @Roles('viewer')
   @Get()
   list(
     @Query('stage') stage?: LeadStage,
@@ -72,6 +74,7 @@ export class CustomersController {
   }
 
   @ApiOperation({ summary: 'Get a customer by ID' })
+  @Roles('viewer')
   @Get(':id')
   get(@Param('id') id: string) {
     return this.customers.get(id);
@@ -96,6 +99,7 @@ export class CustomersController {
   }
 
   @ApiOperation({ summary: 'Get unified timeline for a customer' })
+  @Roles('viewer')
   @Get(':id/timeline')
   timeline(@Param('id') id: string) {
     return this.customers.timeline(id);

@@ -32,24 +32,28 @@ export class HermesController {
   }
 
   @ApiOperation({ summary: 'Get recent Hermes alerts' })
+  @Roles('viewer')
   @Get('alerts')
   alerts() {
     return this.hermes.alerts();
   }
 
   @ApiOperation({ summary: 'Get daily Hermes report' })
+  @Roles('viewer')
   @Get('reports/daily')
   dailyReport() {
     return this.hermes.dailyReport();
   }
 
   @ApiOperation({ summary: 'Get bot performance metrics' })
+  @Roles('viewer')
   @Get('bot-performance')
   botPerformance() {
     return this.hermes.botPerformance();
   }
 
   @ApiOperation({ summary: 'Live performance snapshot across all chatbots' })
+  @Roles('viewer')
   @Get('snapshot')
   snapshot() {
     return this.hermes.performanceSnapshot();
@@ -63,12 +67,14 @@ export class HermesController {
   }
 
   @ApiOperation({ summary: 'Deep-dive analysis and recommendations for one bot' })
+  @Roles('viewer')
   @Get('bot/:botId/insight')
   botInsight(@Param('botId') botId: string) {
     return this.hermes.botInsight(botId);
   }
 
   @ApiOperation({ summary: 'Get knowledge gaps detected by Hermes' })
+  @Roles('viewer')
   @Get('knowledge-gaps')
   knowledgeGaps() {
     return this.hermes.knowledgeGaps();

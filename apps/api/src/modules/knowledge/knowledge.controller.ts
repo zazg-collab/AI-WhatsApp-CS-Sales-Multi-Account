@@ -28,6 +28,7 @@ export class KnowledgeController {
   constructor(private readonly knowledge: KnowledgeService) {}
 
   @ApiOperation({ summary: 'List all knowledge bases' })
+  @Roles('viewer')
   @Get('knowledge-bases')
   list() {
     return this.knowledge.listBases();
@@ -41,6 +42,7 @@ export class KnowledgeController {
   }
 
   @ApiOperation({ summary: 'Get a knowledge base by ID' })
+  @Roles('viewer')
   @Get('knowledge-bases/:id')
   get(@Param('id') id: string) {
     return this.knowledge.getBase(id);

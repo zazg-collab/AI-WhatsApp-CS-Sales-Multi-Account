@@ -29,6 +29,7 @@ export class FollowUpsController {
   }
 
   @ApiOperation({ summary: 'List follow-ups for a conversation' })
+  @Roles('viewer')
   @Get()
   list(@Query('conversationId') conversationId: string) {
     return this.followUpsService.list(conversationId);

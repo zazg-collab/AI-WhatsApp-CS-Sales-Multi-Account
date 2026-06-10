@@ -27,7 +27,7 @@ describe('HermesService', () => {
     };
     provider = { chat: jest.fn() };
     prompts = { buildForConversation: jest.fn().mockResolvedValue([]) };
-    events = { emit: jest.fn() };
+    events = { emit: jest.fn(), emitToAccount: jest.fn() };
     notifications = { send: jest.fn() };
     agent = { ask: jest.fn().mockResolvedValue(null) };
     service = new HermesService(prisma, provider, prompts, events, notifications, agent);
@@ -48,12 +48,12 @@ describe('HermesService', () => {
       prisma.hermesReview.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'r1', ...data }));
       const r: any = await service.review('c1', 'baik kak');
       expect(r.decision).toBe(HermesDecision.approve);
-      expect(events.emit).not.toHaveBeenCalled();
+      expect(events.emitToAccount).not.toHaveBeenCalled();
       expect(notifications.send).not.toHaveBeenCalled();
     });
 
     it('escalates via rules (refund) to most restrictive + emits alert', async () => {
-      prisma.conversation.findUnique.mockResolvedValue({ id: 'c1', botId: 'b1', messages: [{ content: 'saya minta refund uang saya' }] });
+      prisma.conversation.findUnique.mockResolvedValue({ id: 'c1', botId: 'b1', whatsappAccountId: 'a1', messages: [{ content: 'saya minta refund uang saya' }] });
       provider.chat.mockResolvedValue(JSON.stringify({
         decision: 'approve', confidence_score: 95, risk_score: 5,
         risk_level: 'low', reason: 'looks fine', recommendation: 'r',
@@ -61,7 +61,7 @@ describe('HermesService', () => {
       prisma.hermesReview.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'r1', ...data }));
       const r: any = await service.review('c1', 'baik kak');
       expect(r.decision).toBe(HermesDecision.takeover_required);
-      expect(events.emit).toHaveBeenCalledWith('hermes:alert', expect.anything());
+      expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'hermes:alert', expect.anything());
       expect(notifications.send).toHaveBeenCalled();
       expect(prisma.auditLog.create).toHaveBeenCalled();
     });

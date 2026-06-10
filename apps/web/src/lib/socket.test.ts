@@ -4,6 +4,7 @@ const ioMock = vi.fn(() => ({ id: 'sock' }));
 vi.mock('socket.io-client', () => ({
   io: (...args: [string, ...any[]]) => ioMock(...args),
 }));
+vi.mock('./api', () => ({ getToken: () => 'test-token' }));
 
 describe('getSocket', () => {
   beforeEach(() => {
@@ -16,6 +17,7 @@ describe('getSocket', () => {
     getSocket();
     expect(ioMock).toHaveBeenCalledWith('http://localhost:3001/events', {
       transports: ['websocket'],
+      auth: { token: 'test-token' },
     });
   });
 

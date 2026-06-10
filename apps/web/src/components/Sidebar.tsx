@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { getToken } from '@/lib/api';
+import { getToken, clearToken } from '@/lib/api';
 
 interface NavItem {
   href: string;
@@ -102,6 +102,16 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    href: '/templates',
+    label: 'Templates',
+    icon: (
+      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-4 4v-4z" />
+      </svg>
+    ),
+  },
+  {
     href: '/hermes',
     label: 'Hermes',
     icon: (
@@ -173,9 +183,7 @@ export function Sidebar() {
   const router = useRouter();
 
   function handleLogout() {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('token');
-    }
+    clearToken();
     router.push('/');
   }
 

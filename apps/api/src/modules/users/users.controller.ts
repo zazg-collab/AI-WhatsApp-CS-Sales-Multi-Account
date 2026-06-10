@@ -49,6 +49,7 @@ export class UsersController {
   }
 
   @ApiOperation({ summary: 'Get a user by ID (self or owner/supervisor)' })
+  @Roles('viewer')
   @Get(':id')
   async get(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     // Allow user to fetch their own details, or owner/supervisor to fetch any user
@@ -59,6 +60,7 @@ export class UsersController {
   }
 
   @ApiOperation({ summary: 'Update a user (self or owner)' })
+  @Roles('viewer')
   @Patch(':id')
   async update(
     @Param('id') id: string,
@@ -83,6 +85,7 @@ export class UsersController {
   }
 
   @ApiOperation({ summary: 'Change password (self or owner)' })
+  @Roles('viewer')
   @Post(':id/change-password')
   changePassword(
     @Param('id') id: string,

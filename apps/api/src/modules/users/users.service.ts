@@ -21,7 +21,7 @@ export class UsersService {
 
   /**
    * List users with optional role filter and pagination.
-   * Excludes passwordHash from response.
+   * Excludes deleted users and passwordHash from response.
    */
   async list(filters: {
     role?: string;
@@ -29,7 +29,7 @@ export class UsersService {
     offset?: number;
   } = {}) {
     const { role, limit = 20, offset = 0 } = filters;
-    const where: any = {};
+    const where: any = { deletedAt: null };
     if (role) where.role = role;
 
     const [total, users] = await Promise.all([
@@ -96,6 +96,7 @@ export class UsersService {
 
   /**
    * Get a user by ID without password.
+   * Excludes soft-deleted users.
    */
   async get(id: string) {
     const user = await this.prisma.user.findUnique({
@@ -108,18 +109,30 @@ export class UsersService {
         status: true,
         createdAt: true,
         updatedAt: true,
+        deletedAt: true,
       },
     });
-    if (!user) throw new NotFoundException('User not found');
-    return user;
+    if (!user || user.deletedAt) throw new NotFoundException('User not found');
+    const { deletedAt, ...result } = user;
+    return result;
   }
 
   /**
    * Update user (email, role, name).
    */
   async update(id: string, dto: UpdateUserDto, updaterId: string) {
-    const existing = await this.prisma.user.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('User not found');
+    const existing = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        deletedAt: true,
+      },
+    });
+    if (!existing || existing.deletedAt) throw new NotFoundException('User not found');
 
     // Check if new email already exists (if changing email)
     if (dto.email && dto.email !== existing.email) {
@@ -169,10 +182,22 @@ export class UsersService {
    * Hard delete a user.
    */
   async delete(id: string, deleterId: string) {
-    const existing = await this.prisma.user.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('User not found');
+    const existing = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        deletedAt: true,
+      },
+    });
+    if (!existing || existing.deletedAt) throw new NotFoundException('User not found');
 
-    await this.prisma.user.delete({ where: { id } });
+    await this.prisma.user.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
 
     // Log action
     await this.audit.log(deleterId, 'user_deleted', 'User', id, { deletedUser: existing });

@@ -32,14 +32,37 @@ describe('CampaignsProcessor', () => {
 });
 
 describe('EventsGateway', () => {
-  it('emits through socket server when present', () => {
-    const g = new EventsGateway({} as any, { get: () => 'secret' } as any);
-    g.server = { emit: jest.fn() } as any;
-    g.emit('wa:status', { a: 1 });
-    expect(g.server.emit).toHaveBeenCalledWith('wa:status', { a: 1 });
+  const makeGateway = () =>
+    new EventsGateway({} as any, { get: () => 'secret' } as any, {} as any);
+  const makeServer = () => {
+    const emit = jest.fn();
+    const rooms: string[] = [];
+    const chain = { to: jest.fn(), emit };
+    chain.to.mockImplementation((room: string) => {
+      rooms.push(room);
+      return chain;
+    });
+    return { server: chain as any, emit, rooms };
+  };
+
+  it('scopes account events to the account room + all-accounts room', () => {
+    const g = makeGateway();
+    const { server, emit, rooms } = makeServer();
+    g.server = server;
+    g.emitToAccount('a1', 'wa:status', { a: 1 });
+    expect(rooms).toEqual(['account:a1', 'accounts:all']);
+    expect(emit).toHaveBeenCalledWith('wa:status', { a: 1 });
+  });
+  it('global events reach only the all-accounts room', () => {
+    const g = makeGateway();
+    const { server, rooms } = makeServer();
+    g.server = server;
+    g.emit('x', {});
+    expect(rooms).toEqual(['accounts:all']);
   });
   it('no-ops when server undefined', () => {
-    const g = new EventsGateway({} as any, { get: () => 'secret' } as any);
+    const g = makeGateway();
     expect(() => g.emit('x', {})).not.toThrow();
+    expect(() => g.emitToAccount('a1', 'x', {})).not.toThrow();
   });
 });

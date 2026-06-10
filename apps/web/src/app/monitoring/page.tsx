@@ -29,6 +29,27 @@ interface PerformanceOverview {
   };
   messageVolume: { date: string; count: number }[];
   topAccounts: { id: string; name: string; messageCount: number }[];
+  csat?: {
+    responses: number;
+    requested: number;
+    responseRate: number;
+    avgScore: number;
+    distribution: Record<string, number>;
+  };
+}
+
+interface AdminWorkload {
+  rangeDays: number;
+  admins: {
+    id: string;
+    name: string;
+    role: string;
+    assigned: number;
+    resolved: number;
+    messagesSent: number;
+    avgResponseSeconds: number;
+    responseSamples: number;
+  }[];
 }
 
 function formatDuration(seconds: number) {
@@ -51,6 +72,7 @@ function MetricCard({ label, value, hint }: { label: string; value: string | num
 export default function MonitoringPage() {
   const [days, setDays] = useState(7);
   const [data, setData] = useState<PerformanceOverview | null>(null);
+  const [workload, setWorkload] = useState<AdminWorkload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +86,12 @@ export default function MonitoringPage() {
         setError(err instanceof Error ? err.message : 'Failed to load performance metrics');
       } finally {
         setLoading(false);
+      }
+      // Workload is supervisor/owner-only; ignore a 403 for lesser roles.
+      try {
+        setWorkload(await api<AdminWorkload>(`/dashboard/admin-workload?days=${days}`));
+      } catch {
+        setWorkload(null);
       }
     }
     load();
@@ -171,6 +199,32 @@ export default function MonitoringPage() {
                   </div>
                 </div>
 
+                {data.csat && (
+                  <div className="rounded-lg border border-gray-700 bg-gray-800 p-5">
+                    <h2 className="mb-4 font-semibold text-gray-100">Customer Satisfaction (CSAT)</h2>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <MetricCard label="Avg score" value={`${data.csat.avgScore} / 5`} hint={`${data.csat.responses} respon`} />
+                      <MetricCard label="Response rate" value={`${data.csat.responseRate}%`} hint={`${data.csat.requested} diminta`} />
+                      <MetricCard label="Responses" value={data.csat.responses} />
+                    </div>
+                    <div className="mt-4 space-y-1">
+                      {[5, 4, 3, 2, 1].map((score) => {
+                        const count = data.csat!.distribution[String(score)] ?? 0;
+                        const pct = data.csat!.responses > 0 ? Math.round((count / data.csat!.responses) * 100) : 0;
+                        return (
+                          <div key={score} className="flex items-center gap-2 text-sm">
+                            <span className="w-10 text-gray-400">{score}★</span>
+                            <div className="h-2 flex-1 overflow-hidden rounded bg-gray-900">
+                              <div className="h-full bg-emerald-500/80" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="w-10 text-right text-gray-400">{count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="rounded-lg border border-gray-700 bg-gray-800 p-5">
                   <h2 className="mb-4 font-semibold text-gray-100">Top Accounts</h2>
                   {data.topAccounts.length === 0 ? <p className="text-sm text-gray-500">No account activity.</p> : data.topAccounts.map((account) => (
@@ -192,6 +246,48 @@ export default function MonitoringPage() {
                   </div>
                 ))}
               </section>
+
+              {Array.isArray(workload?.admins) && (
+                <section className="rounded-lg border border-gray-700 bg-gray-800 p-5">
+                  <h2 className="mb-1 font-semibold text-gray-100">Beban Kerja Admin</h2>
+                  <p className="mb-4 text-xs text-gray-500">
+                    Penugasan, penyelesaian, dan kecepatan balas per admin ({workload.rangeDays} hari).
+                  </p>
+                  {workload.admins.length === 0 ? (
+                    <p className="text-sm text-gray-500">Belum ada admin.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-700 text-left text-xs uppercase tracking-wide text-gray-500">
+                            <th className="py-2 pr-3">Admin</th>
+                            <th className="py-2 pr-3 text-right">Ditugaskan</th>
+                            <th className="py-2 pr-3 text-right">Resolved</th>
+                            <th className="py-2 pr-3 text-right">Pesan Dikirim</th>
+                            <th className="py-2 text-right">Avg Balas</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {workload.admins.map((a) => (
+                            <tr key={a.id} className="border-b border-gray-700/60">
+                              <td className="py-2 pr-3">
+                                <span className="text-gray-200">{a.name}</span>
+                                <span className="ml-2 text-xs text-gray-500">{a.role}</span>
+                              </td>
+                              <td className="py-2 pr-3 text-right text-gray-300">{a.assigned}</td>
+                              <td className="py-2 pr-3 text-right text-gray-300">{a.resolved}</td>
+                              <td className="py-2 pr-3 text-right text-gray-300">{a.messagesSent}</td>
+                              <td className="py-2 text-right text-gray-300">
+                                {a.responseSamples > 0 ? formatDuration(a.avgResponseSeconds) : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              )}
             </div>
           )}
         </main>

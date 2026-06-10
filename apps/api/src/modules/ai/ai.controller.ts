@@ -14,12 +14,14 @@ export class AiController {
   constructor(private readonly ai: AiService) {}
 
   @ApiOperation({ summary: 'Get AI provider config (base URL + default model)' })
+  @Roles('viewer')
   @Get('config')
   config() {
     return this.ai.config();
   }
 
   @ApiOperation({ summary: 'List models from AI provider' })
+  @Roles('viewer')
   @Get('models')
   models() {
     return this.ai.listModels();

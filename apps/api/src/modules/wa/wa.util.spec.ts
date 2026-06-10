@@ -1,4 +1,4 @@
-import { phoneToJid, jidToPhone, humanDelay } from './wa.util';
+import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, extForMimetype } from './wa.util';
 
 describe('wa.util', () => {
   describe('phoneToJid', () => {
@@ -16,6 +16,34 @@ describe('wa.util', () => {
     });
     it('strips device suffix', () => {
       expect(jidToPhone('6281234567890:12@s.whatsapp.net')).toBe('6281234567890');
+    });
+  });
+
+  describe('isDirectChatJid', () => {
+    it('accepts 1-on-1 chats', () => {
+      expect(isDirectChatJid('6281234567890@s.whatsapp.net')).toBe(true);
+    });
+    it('rejects groups, broadcasts, newsletters (M1)', () => {
+      expect(isDirectChatJid('123456-789@g.us')).toBe(false);
+      expect(isDirectChatJid('status@broadcast')).toBe(false);
+      expect(isDirectChatJid('999@broadcast')).toBe(false);
+      expect(isDirectChatJid('abc@newsletter')).toBe(false);
+    });
+  });
+
+  describe('extForMimetype', () => {
+    it('maps common WhatsApp mimetypes', () => {
+      expect(extForMimetype('image/jpeg')).toBe('jpg');
+      expect(extForMimetype('video/mp4')).toBe('mp4');
+      expect(extForMimetype('application/pdf')).toBe('pdf');
+    });
+    it('strips codec parameters (voice notes)', () => {
+      expect(extForMimetype('audio/ogg; codecs=opus')).toBe('ogg');
+    });
+    it('falls back to bin for unknown/missing types', () => {
+      expect(extForMimetype('application/x-evil')).toBe('bin');
+      expect(extForMimetype(undefined)).toBe('bin');
+      expect(extForMimetype(null)).toBe('bin');
     });
   });
 

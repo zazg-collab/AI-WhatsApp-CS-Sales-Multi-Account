@@ -27,6 +27,7 @@ export class WaController {
   ) {}
 
   @ApiOperation({ summary: 'List all WhatsApp accounts' })
+  @Roles('viewer')
   @Get()
   list() {
     return this.prisma.whatsappAccount.findMany({
@@ -44,6 +45,7 @@ export class WaController {
   }
 
   @ApiOperation({ summary: 'Get QR code for a WhatsApp account' })
+  @Roles('viewer')
   @Get(':id/qr')
   qr(@Param('id') id: string) {
     return { qr: this.wa.getQr(id), connected: this.wa.isConnected(id) };

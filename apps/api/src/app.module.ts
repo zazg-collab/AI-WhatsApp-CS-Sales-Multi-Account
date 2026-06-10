@@ -19,6 +19,8 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { UsersModule } from './modules/users/users.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
+import { SlaModule } from './modules/sla/sla.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { RateLimitGuard } from './common/rate-limit.guard';
 import { RequestIdMiddleware } from './common/request-id.middleware';
@@ -31,6 +33,15 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
     BullModule.forRootAsync({
       useFactory: (config: ConfigService) => ({
         connection: { url: config.get('REDIS_URL') },
+        // M5: bounded retries with backoff and automatic cleanup so a transient
+        // failure is retried, a permanent one stops, and Redis doesn't grow
+        // unbounded with finished jobs.
+        defaultJobOptions: {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5_000 },
+          removeOnComplete: { age: 24 * 3600, count: 1000 },
+          removeOnFail: { age: 7 * 24 * 3600 },
+        },
       }),
       inject: [ConfigService],
     }),
@@ -52,6 +63,8 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
     AuditModule,
     UsersModule,
     CampaignsModule,
+    QuickRepliesModule,
+    SlaModule,
   ],
   controllers: [HealthController],
   providers: [

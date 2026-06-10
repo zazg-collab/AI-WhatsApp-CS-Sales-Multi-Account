@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import {
@@ -16,7 +17,11 @@ import { WaService } from '../wa/wa.service';
 import { CreateCampaignDto, CampaignTargetFilterDto, UpdateCampaignDto } from './dto/campaigns.dto';
 
 const BLOCKED_TAGS = ['opt_out', 'blocked', 'do_not_contact'];
-const MAX_RECIPIENTS = 1000;
+// Defaults for env-tunable limits (see .env.example):
+//   CAMPAIGN_MAX_RECIPIENTS         max targets per campaign
+//   CAMPAIGN_MAX_DAILY_SENDS        per-account send cap per 24h (M8)
+const DEFAULT_MAX_RECIPIENTS = 1000;
+const DEFAULT_MAX_DAILY_SENDS_PER_ACCOUNT = 500;
 
 export interface CandidateTarget {
   customerId: string;
@@ -29,6 +34,8 @@ export interface CandidateTarget {
 @Injectable()
 export class CampaignsService {
   private readonly logger = new Logger(CampaignsService.name);
+  private readonly maxRecipients: number;
+  private readonly maxDailySendsPerAccount: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -36,7 +43,16 @@ export class CampaignsService {
     private readonly wa: WaService,
     private readonly events: EventsGateway,
     @InjectQueue('campaigns') private readonly campaignsQueue: Queue,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.maxRecipients = Number(
+      config.get<string>('CAMPAIGN_MAX_RECIPIENTS') ?? DEFAULT_MAX_RECIPIENTS,
+    );
+    this.maxDailySendsPerAccount = Number(
+      config.get<string>('CAMPAIGN_MAX_DAILY_SENDS') ??
+        DEFAULT_MAX_DAILY_SENDS_PER_ACCOUNT,
+    );
+  }
 
   async list(status?: string) {
     if (status && !this.isCampaignStatus(status)) {
@@ -200,6 +216,37 @@ export class CampaignsService {
     const campaign = await this.findCampaign(id);
     if (!([CampaignStatus.approved, CampaignStatus.paused, CampaignStatus.scheduled] as CampaignStatus[]).includes(campaign.status)) {
       throw new BadRequestException('Campaign must be approved, scheduled, or paused before start');
+    }
+
+    // M8: refuse to run two campaigns into the same WhatsApp account at once —
+    // concurrent sends multiply the per-minute rate and risk a ban.
+    const concurrent = await this.prisma.campaign.findFirst({
+      where: {
+        id: { not: id },
+        whatsappAccountId: campaign.whatsappAccountId,
+        status: { in: [CampaignStatus.running, CampaignStatus.scheduled] },
+      },
+      select: { id: true, name: true },
+    });
+    if (concurrent) {
+      throw new BadRequestException(
+        `Account already has a running/scheduled campaign ("${concurrent.name}"). Wait for it to finish or pause it first.`,
+      );
+    }
+
+    // M8: enforce a daily send cap per account across all campaigns.
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const sentToday = await this.prisma.campaignRecipient.count({
+      where: {
+        status: CampaignRecipientStatus.sent,
+        sentAt: { gte: since },
+        campaign: { whatsappAccountId: campaign.whatsappAccountId },
+      },
+    });
+    if (sentToday >= this.maxDailySendsPerAccount) {
+      throw new BadRequestException(
+        `Daily send cap reached for this account (${this.maxDailySendsPerAccount}/24h). Try again later.`,
+      );
     }
 
     const recipients = await this.prisma.campaignRecipient.findMany({
@@ -398,7 +445,7 @@ export class CampaignsService {
             lastMessageAt: new Date(),
           },
         });
-        this.events.emit('message:new', { conversationId: recipient.conversationId, message });
+        this.events.emitToAccount(recipient.campaign.whatsappAccountId, 'message:new', { conversationId: recipient.conversationId, message });
       }
     } catch (err) {
       this.logger.error(
@@ -463,7 +510,7 @@ export class CampaignsService {
           take: 3,
         },
       },
-      take: MAX_RECIPIENTS,
+      take: this.maxRecipients,
     });
 
     const targets: CandidateTarget[] = [];

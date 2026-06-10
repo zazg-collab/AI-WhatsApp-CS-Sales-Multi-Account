@@ -14,6 +14,7 @@ export class CampaignsController {
   constructor(private readonly campaigns: CampaignsService) {}
 
   @ApiOperation({ summary: 'List campaigns with optional status filter' })
+  @Roles('viewer')
   @Get()
   list(@Query('status') status?: string) {
     return this.campaigns.list(status);
@@ -34,6 +35,7 @@ export class CampaignsController {
   }
 
   @ApiOperation({ summary: 'Get a campaign by ID' })
+  @Roles('viewer')
   @Get(':id')
   get(@Param('id') id: string) {
     return this.campaigns.get(id);

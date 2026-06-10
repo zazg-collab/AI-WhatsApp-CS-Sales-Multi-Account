@@ -17,6 +17,7 @@ describe('CampaignsService', () => {
     prisma = {
       campaign: {
         findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
         findUnique: jest.fn(),
         create: jest.fn().mockResolvedValue({ id: 'cmp1', name: 'C' }),
         update: jest.fn().mockResolvedValue({ id: 'cmp1', name: 'C' }),
@@ -39,9 +40,10 @@ describe('CampaignsService', () => {
     };
     audit = { log: jest.fn().mockResolvedValue({}) };
     wa = { sendText: jest.fn().mockResolvedValue('ext1') };
-    events = { emit: jest.fn() };
+    events = { emit: jest.fn(), emitToAccount: jest.fn() };
     queue = { add: jest.fn().mockResolvedValue({}), getJob: jest.fn() };
-    service = new CampaignsService(prisma, audit, wa, events, queue);
+    const config = { get: jest.fn().mockReturnValue(undefined) };
+    service = new CampaignsService(prisma, audit, wa, events, queue, config as any);
   });
 
   describe('list', () => {
@@ -124,6 +126,22 @@ describe('CampaignsService', () => {
       await service.start('cmp1', 'u1');
       expect(queue.add).toHaveBeenCalledTimes(2);
       expect(prisma.campaign.update.mock.calls[0][0].data.status).toBe(CampaignStatus.running);
+    });
+    it('rejects a concurrent campaign on the same account (M8)', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({
+        id: 'cmp1', status: CampaignStatus.approved, whatsappAccountId: 'a1',
+      });
+      prisma.campaign.findFirst.mockResolvedValue({ id: 'cmp2', name: 'Other' });
+      await expect(service.start('cmp1', 'u1')).rejects.toThrow(/running\/scheduled campaign/);
+    });
+    it('enforces the env-configured daily send cap (M8)', async () => {
+      const config = { get: (k: string) => (k === 'CAMPAIGN_MAX_DAILY_SENDS' ? '2' : undefined) };
+      const capped = new CampaignsService(prisma, audit, wa, events, queue, config as any);
+      prisma.campaign.findUnique.mockResolvedValue({
+        id: 'cmp1', status: CampaignStatus.approved, whatsappAccountId: 'a1',
+      });
+      prisma.campaignRecipient.count.mockResolvedValue(2);
+      await expect(capped.start('cmp1', 'u1')).rejects.toThrow(/Daily send cap reached.*\(2\/24h\)/);
     });
   });
 

@@ -63,6 +63,8 @@ export default function CustomersPage() {
   const [admins, setAdmins] = useState<User[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [search, setSearch] = useState('');
+  // M7: debounced copy of `search` so typing doesn't fire a request per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
   const [bulkStage, setBulkStage] = useState('');
@@ -85,7 +87,7 @@ export default function CustomersPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (search.trim()) params.set('search', search.trim());
+      if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (stageFilter) params.set('stage', stageFilter);
       if (tagFilter.trim()) params.set('tag', tagFilter.trim());
       const query = params.toString();
@@ -97,12 +99,18 @@ export default function CustomersPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, stageFilter, tagFilter]);
+  }, [debouncedSearch, stageFilter, tagFilter]);
 
   useEffect(() => {
     const currentRole = getRoleFromToken();
     setRole(currentRole);
   }, []);
+
+  // M7: debounce search input — only query 300ms after the user stops typing.
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(handle);
+  }, [search]);
 
   useEffect(() => {
     loadCustomers();
