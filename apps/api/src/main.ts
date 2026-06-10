@@ -16,7 +16,14 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  app.enableCors({ origin: true, credentials: true });
+  // CORS (H9): never reflect arbitrary origins while allowing credentials.
+  // Allow an explicit comma-separated allowlist via CORS_ORIGINS, falling back
+  // to the configured web origin.
+  const corsOrigins = (process.env.CORS_ORIGINS ?? process.env.WEB_ORIGIN ?? 'http://localhost:3000')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  app.enableCors({ origin: corsOrigins, credentials: true });
   app.enableShutdownHooks();
 
   const config = new DocumentBuilder()

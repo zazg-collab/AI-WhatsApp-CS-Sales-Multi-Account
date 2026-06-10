@@ -198,12 +198,26 @@ export class WaService implements OnModuleInit {
     const { text } = await this.ai.generateReply(conversationId);
     if (!text) return;
 
-    if (convo.aiMode === AiMode.ai_draft) {
+    // TOCTOU guard (H2): generateReply can take >10s. An admin may have taken
+    // over, paused, or switched the AI mode meanwhile. Re-read the conversation
+    // and abort if the world changed under us, then honour the *current* mode.
+    const fresh = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { aiMode: true, takeoverStatus: true },
+    });
+    if (!fresh) return;
+    if (fresh.takeoverStatus === TakeoverStatus.admin_takeover) return;
+    if (fresh.aiMode === AiMode.ai_off || fresh.aiMode === AiMode.ai_paused) {
+      return;
+    }
+    const effectiveMode = fresh.aiMode;
+
+    if (effectiveMode === AiMode.ai_draft) {
       await this.storeDraft(conversationId, text);
       return;
     }
 
-    if (convo.aiMode === AiMode.ai_supervised) {
+    if (effectiveMode === AiMode.ai_supervised) {
       const review = await this.hermes.review(conversationId, text);
       if (review.decision === HermesDecision.approve) {
         await this.sendAndStore(convo, text, review.id);

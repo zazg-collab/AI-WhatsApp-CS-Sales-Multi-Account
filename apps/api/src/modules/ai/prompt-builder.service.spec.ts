@@ -45,6 +45,8 @@ describe('PromptBuilderService', () => {
     expect(msgs[0].content).toContain('Saya ramah');
     expect(msgs[0].content).toContain('Paket A');
     expect(msgs[0].content).toContain('Budi');
+    // Internal admin notes must never leak into the bot prompt (M6).
+    expect(msgs[0].content).not.toContain('pelanggan lama');
     // history reversed: customer first then ai
     expect(msgs[1]).toEqual({ role: 'user', content: 'Berapa harga?' });
     expect(msgs[2]).toEqual({ role: 'assistant', content: 'Halo kak' });

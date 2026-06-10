@@ -25,6 +25,7 @@ export class HermesController {
   constructor(private readonly hermes: HermesService) {}
 
   @ApiOperation({ summary: 'Review a draft reply through Hermes supervisor' })
+  @Roles('admin', 'supervisor', 'owner')
   @Post('review-reply')
   reviewReply(@Body() dto: ReviewReplyDto) {
     return this.hermes.review(dto.conversationId, dto.draftText);
@@ -55,6 +56,7 @@ export class HermesController {
   }
 
   @ApiOperation({ summary: 'Ask Hermes supervisor about chatbot performance' })
+  @Roles('admin', 'supervisor', 'owner')
   @Post('ask')
   ask(@Body() dto: AskDto) {
     return this.hermes.ask(dto.question);

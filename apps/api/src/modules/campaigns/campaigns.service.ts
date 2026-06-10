@@ -176,10 +176,22 @@ export class CampaignsService {
     if (campaign.status !== CampaignStatus.pending_approval) {
       throw new BadRequestException('Only pending approval campaigns can be approved');
     }
-    const approved = await this.prisma.campaign.update({
-      where: { id },
+    // Separation of duties (H4): the creator cannot approve their own campaign.
+    if (campaign.createdById && campaign.createdById === userId) {
+      throw new BadRequestException(
+        'You cannot approve a campaign you created; a different reviewer must approve it',
+      );
+    }
+    // Atomic guard (H4): only flip from pending_approval, so two concurrent
+    // approvals cannot both succeed.
+    const result = await this.prisma.campaign.updateMany({
+      where: { id, status: CampaignStatus.pending_approval },
       data: { status: CampaignStatus.approved, approvedById: userId },
     });
+    if (result.count === 0) {
+      throw new BadRequestException('Campaign is no longer pending approval');
+    }
+    const approved = await this.findCampaign(id);
     await this.audit.log(userId, 'campaign_approved', 'Campaign', id, { name: approved.name });
     return approved;
   }
@@ -297,22 +309,77 @@ export class CampaignsService {
       return;
     }
 
+    // Opt-out re-check (H5): tags/state may have changed between approval and
+    // send. Never message a customer who opted out after the campaign snapshot.
+    const normalizedTags = (recipient.customer.tags ?? []).map((tag) => tag.toLowerCase());
+    const customerOptedOut =
+      BLOCKED_TAGS.some((tag) => normalizedTags.includes(tag)) ||
+      BLOCKED_TAGS.includes((recipient.customer.status ?? '').toLowerCase());
+    if (customerOptedOut) {
+      await this.prisma.campaignRecipient.update({
+        where: { id: recipient.id },
+        data: { status: CampaignRecipientStatus.skipped, error: 'Customer opted out before send' },
+      });
+      await this.refreshCampaignCompletion(recipient.campaignId);
+      return;
+    }
+    // Don't fire into a conversation that an admin is actively handling.
+    if (
+      recipient.conversation &&
+      (recipient.conversation.takeoverStatus === TakeoverStatus.waiting_admin ||
+        recipient.conversation.takeoverStatus === TakeoverStatus.admin_takeover)
+    ) {
+      await this.prisma.campaignRecipient.update({
+        where: { id: recipient.id },
+        data: { status: CampaignRecipientStatus.skipped, error: 'Conversation under admin handling' },
+      });
+      await this.refreshCampaignCompletion(recipient.campaignId);
+      return;
+    }
+
+    // Atomic claim (H3): flip queued→sending in one statement so a duplicate
+    // or stalled-recovery job can never double-claim the same recipient.
+    const claim = await this.prisma.campaignRecipient.updateMany({
+      where: { id: recipient.id, status: CampaignRecipientStatus.queued },
+      data: { status: CampaignRecipientStatus.sending, error: null },
+    });
+    if (claim.count === 0) {
+      this.logger.warn(`Campaign recipient ${recipient.id} already claimed, skipping`);
+      return;
+    }
     await this.prisma.campaign.update({
       where: { id: recipient.campaignId },
       data: { status: CampaignStatus.running },
     });
-    await this.prisma.campaignRecipient.update({
-      where: { id: recipient.id },
-      data: { status: CampaignRecipientStatus.sending, error: null },
-    });
 
+    // Phase 1: the actual send. A failure here is safe to retry — nothing
+    // reached the customer — so mark failed and rethrow.
+    let sentMessageId: string | null;
     try {
-      const sentMessageId = await this.wa.sendText(
+      sentMessageId = await this.wa.sendText(
         recipient.campaign.whatsappAccountId,
         recipient.phoneNumber,
         recipient.campaign.messageTemplate,
       );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Campaign recipient ${recipient.id} failed: ${message}`);
+      await this.prisma.campaignRecipient.update({
+        where: { id: recipient.id },
+        data: { status: CampaignRecipientStatus.failed, error: message },
+      });
+      await this.audit.log(recipient.campaign.createdById ?? undefined, 'campaign_recipient_failed', 'CampaignRecipient', recipient.id, {
+        campaignId: recipient.campaignId,
+        error: message,
+      });
+      await this.refreshCampaignCompletion(recipient.campaignId);
+      throw err;
+    }
 
+    // Phase 2 (H3): the message HAS been delivered. From here on we must never
+    // mark the recipient failed or rethrow — either would let a retry re-send
+    // the same message to the customer. Persistence is best-effort.
+    try {
       if (recipient.conversationId) {
         const message = await this.prisma.message.create({
           data: {
@@ -333,29 +400,48 @@ export class CampaignsService {
         });
         this.events.emit('message:new', { conversationId: recipient.conversationId, message });
       }
-
-      await this.prisma.campaignRecipient.update({
-        where: { id: recipient.id },
-        data: {
-          status: CampaignRecipientStatus.sent,
-          sentMessageId,
-          sentAt: new Date(),
-        },
-      });
-      await this.refreshCampaignCompletion(recipient.campaignId);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Campaign recipient ${recipient.id} failed: ${message}`);
-      await this.prisma.campaignRecipient.update({
-        where: { id: recipient.id },
-        data: { status: CampaignRecipientStatus.failed, error: message },
-      });
-      await this.audit.log(recipient.campaign.createdById ?? undefined, 'campaign_recipient_failed', 'CampaignRecipient', recipient.id, {
-        campaignId: recipient.campaignId,
-        error: message,
-      });
-      await this.refreshCampaignCompletion(recipient.campaignId);
-      throw err;
+      this.logger.error(
+        `Campaign recipient ${recipient.id} sent but message persistence failed: ${err}`,
+      );
+    }
+
+    await this.markRecipientSent(recipient.id, recipient.campaignId, sentMessageId);
+  }
+
+  /**
+   * Record a successful delivery (H3). Retries the status write a few times;
+   * if it still fails the recipient stays in `sending`, which is treated as
+   * "possibly delivered" and is never auto-retried — duplicating a customer
+   * message is worse than a stale status row.
+   */
+  private async markRecipientSent(
+    recipientId: string,
+    campaignId: string,
+    sentMessageId: string | null,
+  ) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await this.prisma.campaignRecipient.update({
+          where: { id: recipientId },
+          data: {
+            status: CampaignRecipientStatus.sent,
+            sentMessageId,
+            sentAt: new Date(),
+          },
+        });
+        await this.refreshCampaignCompletion(campaignId);
+        return;
+      } catch (err) {
+        if (attempt === 3) {
+          this.logger.error(
+            `Campaign recipient ${recipientId} DELIVERED but could not be marked sent after ${attempt} attempts: ${err}. ` +
+              'Recipient remains in `sending`; do NOT re-send it.',
+          );
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      }
     }
   }
 

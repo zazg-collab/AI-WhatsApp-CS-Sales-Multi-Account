@@ -78,7 +78,7 @@ describe('ConversationsService', () => {
     });
     it('throws when missing', async () => {
       prisma.conversation.findUnique.mockResolvedValue(null);
-      await expect(service.sendMedia('c1', 'a', 'image', 'u')).rejects.toThrow(NotFoundException);
+      await expect(service.sendMedia('c1', 'a', 'image', 'https://cdn.example.com/u.png')).rejects.toThrow(NotFoundException);
     });
   });
 

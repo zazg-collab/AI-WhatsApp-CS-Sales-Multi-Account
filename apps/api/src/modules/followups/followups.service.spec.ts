@@ -19,13 +19,17 @@ describe('FollowUpsService', () => {
         findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn(),
         update: jest.fn().mockResolvedValue({ id: 'f1' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
     queue = {
       add: jest.fn().mockResolvedValue({ id: 'job1' }),
       getJob: jest.fn(),
     };
-    wa = { sendText: jest.fn().mockResolvedValue(undefined) };
+    wa = {
+      sendText: jest.fn().mockResolvedValue(undefined),
+      isConnected: jest.fn().mockReturnValue(true),
+    };
     service = new FollowUpsService(prisma, queue, wa);
   });
 
@@ -87,32 +91,76 @@ describe('FollowUpsService', () => {
       await service.processJob('f1');
       expect(wa.sendText).not.toHaveBeenCalled();
     });
-    it('sends and marks sent', async () => {
+    it('sends and claims via updateMany', async () => {
       prisma.followUp.findUnique.mockResolvedValue({
         id: 'f1',
         status: 'scheduled',
         messageTemplate: 'hello',
         conversation: {
+          takeoverStatus: 'ai_active',
           whatsappAccount: { id: 'acc1' },
-          customer: { phoneNumber: '628' },
+          customer: { phoneNumber: '628', tags: [], status: null },
         },
       });
       await service.processJob('f1');
       expect(wa.sendText).toHaveBeenCalledWith('acc1', '628', 'hello');
-      expect(prisma.followUp.update).toHaveBeenCalledWith({
-        where: { id: 'f1' },
+      // Claims the follow-up atomically before sending.
+      expect(prisma.followUp.updateMany).toHaveBeenCalledWith({
+        where: { id: 'f1', status: 'scheduled' },
         data: { status: 'sent' },
       });
     });
-    it('rethrows on send failure', async () => {
+    it('skips opted-out customers', async () => {
+      prisma.followUp.findUnique.mockResolvedValue({
+        id: 'f1',
+        status: 'scheduled',
+        messageTemplate: 'hello',
+        conversation: {
+          takeoverStatus: 'ai_active',
+          whatsappAccount: { id: 'acc1' },
+          customer: { phoneNumber: '628', tags: ['opt_out'], status: null },
+        },
+      });
+      await service.processJob('f1');
+      expect(wa.sendText).not.toHaveBeenCalled();
+      expect(prisma.followUp.update).toHaveBeenCalledWith({
+        where: { id: 'f1' },
+        data: { status: 'cancelled' },
+      });
+    });
+    it('retries when account not connected', async () => {
+      wa.isConnected.mockReturnValue(false);
+      prisma.followUp.findUnique.mockResolvedValue({
+        id: 'f1',
+        status: 'scheduled',
+        messageTemplate: 'hello',
+        conversation: {
+          takeoverStatus: 'ai_active',
+          whatsappAccount: { id: 'acc1' },
+          customer: { phoneNumber: '628', tags: [], status: null },
+        },
+      });
+      await expect(service.processJob('f1')).rejects.toThrow('not connected');
+      expect(wa.sendText).not.toHaveBeenCalled();
+    });
+    it('rolls back claim and rethrows on send failure', async () => {
       prisma.followUp.findUnique.mockResolvedValue({
         id: 'f1',
         status: 'scheduled',
         messageTemplate: 'x',
-        conversation: { whatsappAccount: { id: 'a' }, customer: { phoneNumber: '6' } },
+        conversation: {
+          takeoverStatus: 'ai_active',
+          whatsappAccount: { id: 'a' },
+          customer: { phoneNumber: '6', tags: [], status: null },
+        },
       });
       wa.sendText.mockRejectedValue(new Error('boom'));
       await expect(service.processJob('f1')).rejects.toThrow('boom');
+      // Claim rolled back to scheduled so a retry can re-attempt.
+      expect(prisma.followUp.update).toHaveBeenCalledWith({
+        where: { id: 'f1' },
+        data: { status: 'scheduled' },
+      });
     });
   });
 });

@@ -1,14 +1,20 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { access, mkdir } from 'fs/promises';
 import { constants } from 'fs';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { PrismaService } from './prisma/prisma.service';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { Roles, RolesGuard } from './auth/roles';
 
 @Controller('health')
 export class HealthController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    @InjectQueue('health') private readonly healthQueue: Queue,
   ) {}
 
   @Get()
@@ -20,6 +26,7 @@ export class HealthController {
   async ready() {
     const checks = await Promise.all([
       this.checkDatabase(),
+      this.checkRedis(),
       this.checkSessionDirectory(),
       this.checkRequiredConfig(),
     ]);
@@ -32,6 +39,11 @@ export class HealthController {
     };
   }
 
+  // Config summary leaks recon-useful detail (M5): require an authenticated
+  // owner/supervisor rather than exposing it publicly.
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('owner', 'supervisor')
   @Get('config')
   configSummary() {
     const aiBaseUrl = this.config.get<string>('AI_BASE_URL') ?? 'https://api.openai.com/v1';
@@ -63,6 +75,24 @@ export class HealthController {
     } catch (error) {
       return {
         name: 'database',
+        status: 'error' as const,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  private async checkRedis() {
+    try {
+      const client = await this.healthQueue.client;
+      // bullmq's client type doesn't surface ping(), but ioredis provides it.
+      const pong = await (client as unknown as { ping(): Promise<string> }).ping();
+      return {
+        name: 'redis',
+        status: pong === 'PONG' ? ('ok' as const) : ('error' as const),
+      };
+    } catch (error) {
+      return {
+        name: 'redis',
         status: 'error' as const,
         message: error instanceof Error ? error.message : String(error),
       };

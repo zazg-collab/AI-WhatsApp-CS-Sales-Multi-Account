@@ -339,6 +339,7 @@ model Message {
   conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   hermesReview HermesReview? @relation(fields: [hermesReviewId], references: [id])
 
+  @@unique([conversationId, externalId])
   @@index([conversationId])
   @@map("messages")
 }
