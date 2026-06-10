@@ -4,6 +4,7 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WaService } from '../wa/wa.service';
 import { CreateFollowUpDto } from './dto/create-followup.dto';
+import { convertToUTC } from '../../common/timezone.util';
 
 @Injectable()
 export class FollowUpsService {
@@ -22,7 +23,10 @@ export class FollowUpsService {
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
 
-    const scheduledAt = new Date(dto.scheduledAt);
+    let scheduledAt = new Date(dto.scheduledAt);
+    if (dto.timezone) {
+      scheduledAt = convertToUTC(dto.scheduledAt, dto.timezone);
+    }
     const delay = Math.max(0, scheduledAt.getTime() - Date.now());
 
     const followUp = await this.prisma.followUp.create({

@@ -6,11 +6,16 @@ describe('DashboardService', () => {
 
   beforeEach(() => {
     prisma = {
-      conversation: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
+      conversation: {
+        count: jest.fn().mockResolvedValue(0),
+        findMany: jest.fn().mockResolvedValue([]),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
       followUp: { count: jest.fn().mockResolvedValue(0) },
       message: {
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       customer: { count: jest.fn().mockResolvedValue(0), groupBy: jest.fn().mockResolvedValue([]) },
     };
@@ -29,27 +34,33 @@ describe('DashboardService', () => {
   });
 
   describe('getLeadFunnel', () => {
-    it('returns count per stage', async () => {
-      prisma.customer.count.mockResolvedValue(3);
+    it('returns count per stage via groupBy', async () => {
+      prisma.customer.groupBy.mockResolvedValue([
+        { leadStage: 'hot', _count: { _all: 3 } },
+        { leadStage: 'warm', _count: { _all: 2 } },
+      ]);
       const r = await service.getLeadFunnel();
-      expect(r.length).toBeGreaterThan(0);
-      expect(r[0]).toHaveProperty('stage');
-      expect(r[0]).toHaveProperty('count', 3);
+      expect(r).toHaveLength(2);
+      expect(r[0]).toEqual({ stage: 'hot', count: 3 });
+      expect(r[1]).toEqual({ stage: 'warm', count: 2 });
     });
   });
 
   describe('getAiModeBreakdown', () => {
     it('computes percentages, 0 when no data', async () => {
-      prisma.conversation.count.mockResolvedValue(0);
+      prisma.conversation.groupBy.mockResolvedValue([]);
       const r = await service.getAiModeBreakdown();
-      expect(r).toHaveLength(5);
-      expect(r.every((c) => c.percentage === 0)).toBe(true);
+      expect(r).toHaveLength(0);
     });
-    it('computes percentages with data', async () => {
-      prisma.conversation.count.mockResolvedValue(10);
+    it('computes percentages with data via groupBy', async () => {
+      prisma.conversation.groupBy.mockResolvedValue([
+        { aiMode: 'ai_on', _count: { _all: 10 } },
+        { aiMode: 'ai_off', _count: { _all: 10 } },
+      ]);
       const r = await service.getAiModeBreakdown();
-      // 5 modes x 10 = 50 total, each 20%
-      expect(r[0].percentage).toBe(20);
+      expect(r).toHaveLength(2);
+      expect(r[0]).toEqual({ mode: 'ai_on', count: 10, percentage: 50 });
+      expect(r[1]).toEqual({ mode: 'ai_off', count: 10, percentage: 50 });
     });
   });
 

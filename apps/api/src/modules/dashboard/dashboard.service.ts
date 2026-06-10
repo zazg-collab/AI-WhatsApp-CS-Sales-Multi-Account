@@ -58,44 +58,52 @@ export class DashboardService {
   }
 
   async getLeadFunnel() {
-    const stages = Object.values(LeadStage);
-    const counts = await Promise.all(
-      stages.map((stage) =>
-        this.prisma.customer.count({ where: { leadStage: stage } }).then((count) => ({ stage, count })),
-      ),
-    );
-    return counts;
+    const counts = await this.prisma.customer.groupBy({
+      by: ['leadStage'],
+      _count: { _all: true },
+    });
+    return counts.map((row) => ({ stage: row.leadStage, count: row._count._all }));
   }
 
   async getMessageVolume(days: number) {
     const safeDays = this.normalizeDays(days);
+    const since = this.daysAgo(safeDays);
+
+    const messages = await this.prisma.message.findMany({
+      where: { createdAt: { gte: since } },
+      select: { createdAt: true },
+    });
+
+    const byDate = new Map<string, number>();
+    for (const msg of messages) {
+      const date = msg.createdAt.toISOString().slice(0, 10);
+      byDate.set(date, (byDate.get(date) ?? 0) + 1);
+    }
+
     const result: { date: string; count: number }[] = [];
     const now = new Date();
 
     for (let i = safeDays - 1; i >= 0; i--) {
-      const start = new Date(now);
-      start.setDate(start.getDate() - i);
-      start.setHours(0, 0, 0, 0);
-
-      const end = new Date(start);
-      end.setHours(23, 59, 59, 999);
-
-      const count = await this.prisma.message.count({ where: { createdAt: { gte: start, lte: end } } });
-      result.push({ date: start.toISOString().slice(0, 10), count });
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().slice(0, 10);
+      result.push({ date: dateStr, count: byDate.get(dateStr) ?? 0 });
     }
 
     return result;
   }
 
   async getAiModeBreakdown() {
-    const modes = ['ai_on', 'ai_off', 'ai_draft', 'ai_supervised', 'ai_paused'];
-    const counts = await Promise.all(
-      modes.map((mode) =>
-        this.prisma.conversation.count({ where: { aiMode: mode as never } }).then((count) => ({ mode, count })),
-      ),
-    );
-    const total = counts.reduce((sum, c) => sum + c.count, 0);
-    return counts.map((c) => ({ ...c, percentage: total > 0 ? Math.round((c.count / total) * 100) : 0 }));
+    const counts = await this.prisma.conversation.groupBy({
+      by: ['aiMode'],
+      _count: { _all: true },
+    });
+    const total = counts.reduce((sum, c) => sum + c._count._all, 0);
+    return counts.map((c) => ({
+      mode: c.aiMode,
+      count: c._count._all,
+      percentage: total > 0 ? Math.round((c._count._all / total) * 100) : 0,
+    }));
   }
 
   async getPerformanceOverview(days: number) {
@@ -212,29 +220,27 @@ export class DashboardService {
 
   private async getTopAccounts(days: number) {
     const since = this.daysAgo(days);
-    const topAccountsRaw = await this.prisma.message.groupBy({
-      by: ['conversationId'],
+    const messages = await this.prisma.message.findMany({
       where: { createdAt: { gte: since } },
-      _count: { id: true },
-      orderBy: { _count: { id: 'desc' } },
-      take: 10,
+      select: { conversation: { select: { whatsappAccount: { select: { id: true, accountName: true } } } } },
     });
-    const convIds = topAccountsRaw.map((r) => r.conversationId);
-    const convs = await this.prisma.conversation.findMany({
-      where: { id: { in: convIds } },
-      include: { whatsappAccount: true },
-    });
-    const convMap = new Map(convs.map((c) => [c.id, c]));
-    const topAccountsMap = new Map<string, { id: string; name: string; messageCount: number }>();
-    for (const r of topAccountsRaw) {
-      const conv = convMap.get(r.conversationId);
-      if (!conv) continue;
-      const accId = conv.whatsappAccount.id;
-      const existing = topAccountsMap.get(accId);
-      if (existing) existing.messageCount += r._count.id;
-      else topAccountsMap.set(accId, { id: accId, name: conv.whatsappAccount.accountName, messageCount: r._count.id });
+
+    const accountMap = new Map<string, { id: string; name: string; messageCount: number }>();
+    for (const msg of messages) {
+      const accId = msg.conversation.whatsappAccount.id;
+      const existing = accountMap.get(accId);
+      if (existing) {
+        existing.messageCount += 1;
+      } else {
+        accountMap.set(accId, {
+          id: accId,
+          name: msg.conversation.whatsappAccount.accountName,
+          messageCount: 1,
+        });
+      }
     }
-    return [...topAccountsMap.values()].sort((a, b) => b.messageCount - a.messageCount).slice(0, 5);
+
+    return [...accountMap.values()].sort((a, b) => b.messageCount - a.messageCount).slice(0, 5);
   }
 
   private async calculateResponseMetrics(since: Date) {
