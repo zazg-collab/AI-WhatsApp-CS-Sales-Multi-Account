@@ -109,12 +109,13 @@ export class DashboardService {
   async getPerformanceOverview(days: number) {
     const safeDays = this.normalizeDays(days);
     const since = this.daysAgo(safeDays);
-    const [response, aiQuality, campaign, messageVolume, topAccounts] = await Promise.all([
+    const [response, aiQuality, campaign, messageVolume, topAccounts, csat] = await Promise.all([
       this.calculateResponseMetrics(since),
       this.getAiQuality(safeDays),
       this.getCampaignPerformance(safeDays),
       this.getMessageVolume(safeDays),
       this.getTopAccounts(safeDays),
+      this.getCsat(safeDays),
     ]);
 
     const [messages, conversations, customers] = await Promise.all([
@@ -132,6 +133,37 @@ export class DashboardService {
       campaign,
       messageVolume,
       topAccounts,
+      csat,
+    };
+  }
+
+  /** Customer satisfaction (CSAT) aggregate over conversations rated in range. */
+  async getCsat(days: number) {
+    const since = this.daysAgo(this.normalizeDays(days));
+    const rated = await this.prisma.conversation.findMany({
+      where: { csatRespondedAt: { gte: since }, csatScore: { not: null } },
+      select: { csatScore: true },
+      take: 5000,
+    });
+    const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    let total = 0;
+    for (const r of rated) {
+      const s = r.csatScore as number;
+      if (s >= 1 && s <= 5) {
+        distribution[s] += 1;
+        total += s;
+      }
+    }
+    const responses = rated.length;
+    const requested = await this.prisma.conversation.count({
+      where: { csatRequestedAt: { gte: since } },
+    });
+    return {
+      responses,
+      requested,
+      responseRate: requested > 0 ? Math.round((responses / requested) * 100) : 0,
+      avgScore: responses > 0 ? Math.round((total / responses) * 10) / 10 : 0,
+      distribution,
     };
   }
 

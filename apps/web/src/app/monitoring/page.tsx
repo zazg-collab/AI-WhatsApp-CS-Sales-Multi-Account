@@ -29,6 +29,13 @@ interface PerformanceOverview {
   };
   messageVolume: { date: string; count: number }[];
   topAccounts: { id: string; name: string; messageCount: number }[];
+  csat?: {
+    responses: number;
+    requested: number;
+    responseRate: number;
+    avgScore: number;
+    distribution: Record<string, number>;
+  };
 }
 
 interface AdminWorkload {
@@ -191,6 +198,32 @@ export default function MonitoringPage() {
                     ))}
                   </div>
                 </div>
+
+                {data.csat && (
+                  <div className="rounded-lg border border-gray-700 bg-gray-800 p-5">
+                    <h2 className="mb-4 font-semibold text-gray-100">Customer Satisfaction (CSAT)</h2>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <MetricCard label="Avg score" value={`${data.csat.avgScore} / 5`} hint={`${data.csat.responses} respon`} />
+                      <MetricCard label="Response rate" value={`${data.csat.responseRate}%`} hint={`${data.csat.requested} diminta`} />
+                      <MetricCard label="Responses" value={data.csat.responses} />
+                    </div>
+                    <div className="mt-4 space-y-1">
+                      {[5, 4, 3, 2, 1].map((score) => {
+                        const count = data.csat!.distribution[String(score)] ?? 0;
+                        const pct = data.csat!.responses > 0 ? Math.round((count / data.csat!.responses) * 100) : 0;
+                        return (
+                          <div key={score} className="flex items-center gap-2 text-sm">
+                            <span className="w-10 text-gray-400">{score}★</span>
+                            <div className="h-2 flex-1 overflow-hidden rounded bg-gray-900">
+                              <div className="h-full bg-emerald-500/80" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="w-10 text-right text-gray-400">{count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <div className="rounded-lg border border-gray-700 bg-gray-800 p-5">
                   <h2 className="mb-4 font-semibold text-gray-100">Top Accounts</h2>

@@ -11,6 +11,7 @@ describe('ConversationsService', () => {
   let wa: any;
   let events: any;
   let storage: any;
+  let config: any;
 
   beforeEach(() => {
     prisma = {
@@ -39,7 +40,8 @@ describe('ConversationsService', () => {
     };
     events = { emit: jest.fn(), emitToAccount: jest.fn() };
     storage = { save: jest.fn().mockResolvedValue({ key: 'k.png', url: '/media/k.png' }), read: jest.fn() };
-    service = new ConversationsService(prisma, wa, events, storage);
+    config = { get: jest.fn((k: string) => (k === 'CSAT_ENABLED' ? 'true' : undefined)) };
+    service = new ConversationsService(prisma, wa, events, storage, config);
   });
 
   describe('list', () => {
@@ -135,15 +137,42 @@ describe('ConversationsService', () => {
 
   describe('setStatus', () => {
     it('updates status and emits conversation:updated', async () => {
-      prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1' });
-      prisma.conversation.update.mockResolvedValue({ id: 'c1', status: 'resolved', assignedAdmin: null });
-      await service.setStatus('c1', ConversationStatus.resolved);
-      expect(prisma.conversation.update.mock.calls[0][0].data.status).toBe(ConversationStatus.resolved);
+      prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1', status: 'open' });
+      prisma.conversation.update.mockResolvedValue({ id: 'c1', status: 'pending', assignedAdmin: null, customer: { phoneNumber: '628' } });
+      await service.setStatus('c1', ConversationStatus.pending);
+      expect(prisma.conversation.update.mock.calls[0][0].data.status).toBe(ConversationStatus.pending);
       expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'conversation:updated', expect.objectContaining({ conversationId: 'c1' }));
+    });
+    it('sends a CSAT request when first resolved (CSAT enabled)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1', status: 'open', csatRequestedAt: null });
+      prisma.conversation.update.mockResolvedValue({ id: 'c1', status: 'resolved', whatsappAccountId: 'a1', assignedAdmin: null, customer: { phoneNumber: '628' } });
+      await service.setStatus('c1', ConversationStatus.resolved);
+      expect(prisma.conversation.update.mock.calls[0][0].data.csatRequestedAt).toBeInstanceOf(Date);
+      expect(wa.sendText).toHaveBeenCalledWith('a1', '628', expect.stringContaining('1'));
+    });
+    it('does not re-request CSAT when already resolved', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1', status: 'resolved', csatRequestedAt: new Date() });
+      prisma.conversation.update.mockResolvedValue({ id: 'c1', status: 'resolved', whatsappAccountId: 'a1', assignedAdmin: null, customer: { phoneNumber: '628' } });
+      await service.setStatus('c1', ConversationStatus.resolved);
+      expect(wa.sendText).not.toHaveBeenCalled();
     });
     it('throws when missing', async () => {
       prisma.conversation.findUnique.mockResolvedValue(null);
       await expect(service.setStatus('c1', ConversationStatus.open)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('setLabels', () => {
+    it('dedupes, trims, and persists labels + emits', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1' });
+      prisma.conversation.update.mockResolvedValue({ id: 'c1', labels: ['vip', 'refund'] });
+      await service.setLabels('c1', [' vip ', 'vip', 'refund', '']);
+      expect(prisma.conversation.update.mock.calls[0][0].data.labels).toEqual(['vip', 'refund']);
+      expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'conversation:updated', expect.objectContaining({ labels: ['vip', 'refund'] }));
+    });
+    it('throws when missing', async () => {
+      prisma.conversation.findUnique.mockResolvedValue(null);
+      await expect(service.setLabels('c1', ['x'])).rejects.toThrow(NotFoundException);
     });
   });
 

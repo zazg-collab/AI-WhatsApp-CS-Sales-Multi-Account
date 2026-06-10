@@ -24,12 +24,18 @@ describe('ConversationsController', () => {
   });
 
   it('list parses query params', () => {
-    controller.list('a1', AiMode.ai_on, ConversationStatus.open, 'u1', 'budi', 'true', '2', '10');
+    controller.list('a1', AiMode.ai_on, ConversationStatus.open, 'u1', 'vip', 'budi', 'true', '2', '10');
     expect(svc.list).toHaveBeenCalledWith({
       accountId: 'a1', aiMode: AiMode.ai_on, status: ConversationStatus.open,
-      assignedAdminId: 'u1', search: 'budi',
+      assignedAdminId: 'u1', label: 'vip', search: 'budi',
       needsAttention: true, page: 2, limit: 10,
     });
+  });
+
+  it('setLabels delegates', () => {
+    svc.setLabels = jest.fn().mockResolvedValue({});
+    controller.setLabels('c1', { labels: ['vip', 'refund'] });
+    expect(svc.setLabels).toHaveBeenCalledWith('c1', ['vip', 'refund']);
   });
 
   it('list rejects an invalid status', () => {

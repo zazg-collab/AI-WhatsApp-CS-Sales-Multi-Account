@@ -16,6 +16,7 @@ const data = {
   campaign: { campaignCount: 1, totalRecipients: 10, sent: 9, failed: 1, successRate: 0.9, failureRate: 0.1, byStatus: { completed: 1 }, recentCampaigns: [] },
   messageVolume: [{ date: '2026-06-01', count: 5 }],
   topAccounts: [{ id: 'a1', name: 'Sales', messageCount: 5 }],
+  csat: { responses: 4, requested: 8, responseRate: 50, avgScore: 4.5, distribution: { '1': 0, '2': 0, '3': 1, '4': 0, '5': 3 } },
 };
 
 const workload = {
@@ -46,6 +47,13 @@ describe('MonitoringPage', () => {
     render(<MonitoringPage />);
     expect(await screen.findByText('Beban Kerja Admin')).toBeInTheDocument();
     expect(await screen.findByText('Ani')).toBeInTheDocument();
+  });
+
+  it('renders the CSAT card', async () => {
+    apiMock.mockImplementation(routed);
+    render(<MonitoringPage />);
+    expect(await screen.findByText('Customer Satisfaction (CSAT)')).toBeInTheDocument();
+    expect(await screen.findByText('4.5 / 5')).toBeInTheDocument();
   });
 
   it('shows error on failure', async () => {

@@ -65,6 +65,7 @@ interface ConvSummary {
   takeoverStatus: string;
   status: string;
   slaBreachedAt?: string | null;
+  labels?: string[];
   lastMessage: string | null;
   lastMessageAt: string | null;
   unreadCount?: number;
@@ -80,6 +81,8 @@ interface ConvDetail {
   takeoverStatus: string;
   status: string;
   slaBreachedAt?: string | null;
+  labels?: string[];
+  csatScore?: number | null;
   customer: Customer & { status: string | null };
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
   bot: { id: string; botName: string } | null;
@@ -249,6 +252,8 @@ function LeftPanel({
   onAccountChange,
   statusFilter,
   onStatusFilterChange,
+  labelFilter,
+  onLabelFilterChange,
 }: {
   conversations: ConvSummary[];
   selectedId: string | null;
@@ -262,6 +267,8 @@ function LeftPanel({
   onAccountChange: (id: string) => void;
   statusFilter: string;
   onStatusFilterChange: (s: string) => void;
+  labelFilter: string;
+  onLabelFilterChange: (s: string) => void;
 }) {
   const tabs: { key: FilterTab; label: string }[] = [
     { key: 'all', label: 'Semua' },
@@ -302,6 +309,13 @@ function LeftPanel({
           <option value="pending">Pending</option>
           <option value="resolved">Resolved</option>
         </select>
+        <input
+          type="text"
+          placeholder="Filter label (mis. refund)"
+          value={labelFilter}
+          onChange={(e) => onLabelFilterChange(e.target.value)}
+          className="mb-2 w-full rounded bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
+        />
         <input
           type="text"
           placeholder="Cari nama / nomor..."
@@ -369,6 +383,15 @@ function LeftPanel({
                       </span>
                     )}
                   </div>
+                  {c.labels && c.labels.length > 0 && (
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      {c.labels.map((l) => (
+                        <span key={l} className="rounded bg-indigo-900 px-1.5 py-0.5 text-[10px] text-indigo-200">
+                          {l}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   {!accountId && (
                     <p className="mt-0.5 truncate text-[10px] text-wa-accent/70">
                       via {c.whatsappAccount.accountName}
@@ -1078,6 +1101,7 @@ function RightPanel({
   onAddNote,
   onStatusChange,
   onAssign,
+  onSetLabels,
 }: {
   conv: ConvDetail | null;
   admins: AdminUser[];
@@ -1085,8 +1109,10 @@ function RightPanel({
   onAddNote: (note: string) => void;
   onStatusChange: (status: string) => void;
   onAssign: (adminId: string | null) => void;
+  onSetLabels: (labels: string[]) => void;
 }) {
   const [note, setNote] = useState('');
+  const [newLabel, setNewLabel] = useState('');
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [showFollowUpForm, setShowFollowUpForm] = useState(false);
   const [fuMessage, setFuMessage] = useState('');
@@ -1235,6 +1261,57 @@ function RightPanel({
           )}
         </div>
       </div>
+
+      {/* Labels */}
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+          Label
+        </h3>
+        <div className="mb-2 flex flex-wrap gap-1">
+          {(conv.labels ?? []).length === 0 && (
+            <span className="text-xs text-gray-600">Belum ada label.</span>
+          )}
+          {(conv.labels ?? []).map((l) => (
+            <span key={l} className="flex items-center gap-1 rounded bg-indigo-900 px-1.5 py-0.5 text-xs text-indigo-200">
+              {l}
+              <button
+                onClick={() => onSetLabels((conv.labels ?? []).filter((x) => x !== l))}
+                className="text-indigo-300 hover:text-white"
+                title="Hapus label"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+        <input
+          type="text"
+          value={newLabel}
+          onChange={(e) => setNewLabel(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && newLabel.trim()) {
+              const next = Array.from(new Set([...(conv.labels ?? []), newLabel.trim()]));
+              onSetLabels(next);
+              setNewLabel('');
+            }
+          }}
+          placeholder="Tambah label + Enter"
+          className="w-full rounded bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-600"
+        />
+      </div>
+
+      {/* CSAT result */}
+      {typeof conv.csatScore === 'number' && (
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+            Rating Customer (CSAT)
+          </h3>
+          <p className="text-lg">
+            {'★'.repeat(conv.csatScore)}<span className="text-gray-600">{'★'.repeat(5 - conv.csatScore)}</span>
+            <span className="ml-2 text-sm text-gray-400">{conv.csatScore}/5</span>
+          </p>
+        </div>
+      )}
 
       {/* AI Mode Selector */}
       <div>
@@ -1416,6 +1493,7 @@ export default function DashboardPage() {
   const [conv, setConv] = useState<ConvDetail | null>(null);
   const [filter, setFilter] = useState<FilterTab>('all');
   const [statusFilter, setStatusFilter] = useState('');
+  const [labelFilter, setLabelFilter] = useState('');
   const [search, setSearch] = useState('');
   const [sending, setSending] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
@@ -1448,6 +1526,7 @@ export default function DashboardPage() {
       if (filter === 'needs_attention') params.set('needsAttention', 'true');
       else if (filter !== 'all') params.set('aiMode', filter);
       if (statusFilter) params.set('status', statusFilter);
+      if (labelFilter.trim()) params.set('label', labelFilter.trim());
       if (search) params.set('search', search);
       if (accountId) params.set('accountId', accountId);
       params.set('limit', '100');
@@ -1456,7 +1535,7 @@ export default function DashboardPage() {
     } catch {
       // silently fail on list
     }
-  }, [filter, statusFilter, search, accountId]);
+  }, [filter, statusFilter, labelFilter, search, accountId]);
 
   useEffect(() => {
     loadList();
@@ -1575,11 +1654,17 @@ export default function DashboardPage() {
       }
     });
 
-    // Status / assignment changed (possibly by another admin) → live-sync.
-    socket.on('conversation:updated', ({ conversationId, status, assignedAdmin }: { conversationId: string; status: string; assignedAdmin: AdminUser | null }) => {
+    // Status / assignment / labels / CSAT changed (possibly by another admin
+    // or the SLA/CSAT automation) → live-sync only the provided fields.
+    socket.on('conversation:updated', (payload: { conversationId: string; status?: string; assignedAdmin?: AdminUser | null; labels?: string[]; csatScore?: number }) => {
       setConv((prev) => {
-        if (!prev || prev.id !== conversationId) return prev;
-        return { ...prev, status, assignedAdmin };
+        if (!prev || prev.id !== payload.conversationId) return prev;
+        const next = { ...prev };
+        if (payload.status !== undefined) next.status = payload.status;
+        if (payload.assignedAdmin !== undefined) next.assignedAdmin = payload.assignedAdmin;
+        if (payload.labels !== undefined) next.labels = payload.labels;
+        if (payload.csatScore !== undefined) next.csatScore = payload.csatScore;
+        return next;
       });
       loadList();
     });
@@ -1669,6 +1754,23 @@ export default function DashboardPage() {
       loadList();
     } catch (e) {
       setToast(e instanceof Error ? e.message : 'Gagal mengubah status');
+    }
+  }
+
+  // Replace the conversation's custom labels.
+  async function handleSetLabels(labels: string[]) {
+    if (!conv) return;
+    // Optimistic update so chips appear instantly.
+    setConv((prev) => (prev ? { ...prev, labels } : prev));
+    try {
+      await api(`/conversations/${conv.id}/labels`, {
+        method: 'PATCH',
+        body: JSON.stringify({ labels }),
+      });
+      loadList();
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal menyimpan label');
+      loadConv(conv.id); // revert to server truth
     }
   }
 
@@ -1795,6 +1897,8 @@ export default function DashboardPage() {
         onAccountChange={setAccountId}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
+        labelFilter={labelFilter}
+        onLabelFilterChange={setLabelFilter}
       />
       <CenterPanel
         conv={conv}
@@ -1820,6 +1924,7 @@ export default function DashboardPage() {
         onAddNote={handleAddNote}
         onStatusChange={handleStatusChange}
         onAssign={handleAssign}
+        onSetLabels={handleSetLabels}
       />
       {toast && <Toast msg={toast} onDismiss={() => setToast(null)} />}
       </div>

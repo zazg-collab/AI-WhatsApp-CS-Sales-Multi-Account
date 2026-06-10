@@ -34,6 +34,7 @@ import { HermesService } from '../hermes/hermes.service';
 import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, extForMimetype } from './wa.util';
 import { MediaStorageService } from '../media/media-storage.service';
 import { logAudit } from '../../common/audit.util';
+import { isWithinBusinessHours } from '../../common/business-hours.util';
 
 interface Session {
   sock: WASocket;
@@ -51,6 +52,7 @@ export class WaService implements OnModuleInit {
   private readonly sessions = new Map<string, Session>();
   private readonly sessionDir: string;
   private readonly mediaMaxBytes: number;
+  private readonly awayCooldownMs: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -66,6 +68,8 @@ export class WaService implements OnModuleInit {
     this.mediaMaxBytes = Number(
       config.get<string>('WA_MEDIA_MAX_BYTES') ?? 25 * 1024 * 1024,
     );
+    const cooldown = Number(config.get('AUTO_AWAY_COOLDOWN_MS'));
+    this.awayCooldownMs = Number.isFinite(cooldown) && cooldown > 0 ? cooldown : 12 * 60 * 60 * 1000;
   }
 
   /** Reconnect every active account on boot. */
@@ -261,10 +265,59 @@ export class WaService implements OnModuleInit {
     });
 
     if (result) {
+      await this.maybeAutoAway(result).catch((err) =>
+        this.logger.warn(`Auto-away failed: ${err}`),
+      );
       await this.maybeAutoReply(result.conversation.id).catch((err) =>
         this.logger.error(`Auto-reply failed: ${err}`),
       );
     }
+  }
+
+  /**
+   * Send a configured away message when an inbound arrives outside the
+   * account's business hours and the bot isn't handling it (ai_on). Throttled
+   * per conversation by AUTO_AWAY_COOLDOWN_MS so the customer isn't spammed.
+   */
+  private async maybeAutoAway(result: {
+    conversation: { id: string; aiMode: AiMode; lastAwayAt: Date | null };
+    customer: { phoneNumber: string };
+    account: {
+      id: string;
+      awayMessage: string | null;
+      businessHoursEnabled: boolean;
+      businessHoursStart: string | null;
+      businessHoursEnd: string | null;
+      businessDays: number[];
+      businessTimezone: string | null;
+    };
+  }) {
+    const { conversation, customer, account } = result;
+    if (!account.businessHoursEnabled || !account.awayMessage) return;
+    if (conversation.aiMode === AiMode.ai_on) return; // bot replies 24/7
+    if (isWithinBusinessHours(account)) return;
+    if (
+      conversation.lastAwayAt &&
+      Date.now() - conversation.lastAwayAt.getTime() < this.awayCooldownMs
+    ) {
+      return;
+    }
+
+    const externalId = await this.sendText(account.id, customer.phoneNumber, account.awayMessage);
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        senderType: SenderType.system,
+        content: account.awayMessage,
+        status: MessageStatus.sent,
+        externalId,
+      },
+    });
+    await this.prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastAwayAt: new Date(), lastMessage: account.awayMessage, lastMessageAt: new Date() },
+    });
+    this.events.emitToAccount(account.id, 'message:new', { conversationId: conversation.id, message });
   }
 
   /**

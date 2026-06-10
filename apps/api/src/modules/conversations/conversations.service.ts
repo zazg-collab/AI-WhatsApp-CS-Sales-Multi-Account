@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   AiMode,
   ConversationStatus,
@@ -14,6 +15,9 @@ import { MediaStorageService } from '../media/media-storage.service';
 import { extForMimetype } from '../wa/wa.util';
 import { assertSafeMediaUrl } from '../../common/media-url.util';
 
+const DEFAULT_CSAT_MESSAGE =
+  'Terima kasih sudah menghubungi kami 🙏 Boleh bantu beri nilai layanan kami? Balas angka 1–5 (1 = kurang, 5 = sangat puas).';
+
 /** Map an upload mimetype to a WhatsApp media category. */
 function mediaTypeForMime(mime: string): 'image' | 'document' | 'audio' | 'video' {
   if (mime.startsWith('image/')) return 'image';
@@ -27,6 +31,7 @@ interface ListFilters {
   aiMode?: AiMode;
   status?: ConversationStatus;
   assignedAdminId?: string;
+  label?: string;
   search?: string;
   needsAttention?: boolean;
   page?: number;
@@ -35,21 +40,29 @@ interface ListFilters {
 
 @Injectable()
 export class ConversationsService {
+  private readonly csatEnabled: boolean;
+  private readonly csatMessage: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly wa: WaService,
     private readonly events: EventsGateway,
     private readonly storage: MediaStorageService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.csatEnabled = String(config.get('CSAT_ENABLED') ?? '').toLowerCase() === 'true';
+    this.csatMessage = config.get<string>('CSAT_MESSAGE') || DEFAULT_CSAT_MESSAGE;
+  }
 
   async list(filters: ListFilters) {
-    const { accountId, aiMode, status, assignedAdminId, search, needsAttention, page = 1, limit = 50 } = filters;
+    const { accountId, aiMode, status, assignedAdminId, label, search, needsAttention, page = 1, limit = 50 } = filters;
     const where: Prisma.ConversationWhereInput = {};
 
     if (accountId) where.whatsappAccountId = accountId;
     if (aiMode) where.aiMode = aiMode;
     if (status) where.status = status;
     if (assignedAdminId) where.assignedAdminId = assignedAdminId;
+    if (label) where.labels = { has: label };
     if (needsAttention) {
       where.OR = [
         { takeoverStatus: TakeoverStatus.waiting_admin },
@@ -305,18 +318,66 @@ export class ConversationsService {
   async setStatus(id: string, status: ConversationStatus) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
-      select: { whatsappAccountId: true },
+      select: { whatsappAccountId: true, status: true, csatRequestedAt: true },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
+
+    // CSAT: when a chat first transitions to resolved, ask the customer to rate.
+    const justResolved = status === ConversationStatus.resolved && conversation.status !== ConversationStatus.resolved;
+    const data: Prisma.ConversationUpdateInput = { status };
+    if (justResolved && this.csatEnabled) {
+      data.csatRequestedAt = new Date();
+      data.csatRespondedAt = null;
+      data.csatScore = null;
+    }
+
     const updated = await this.prisma.conversation.update({
       where: { id },
-      data: { status },
-      include: { assignedAdmin: { select: { id: true, name: true } } },
+      data,
+      include: {
+        assignedAdmin: { select: { id: true, name: true } },
+        customer: { select: { phoneNumber: true } },
+      },
     });
+
+    if (justResolved && this.csatEnabled) {
+      // Fire-and-forget: a disconnected account shouldn't block resolving.
+      this.wa
+        .sendText(updated.whatsappAccountId, updated.customer.phoneNumber, this.csatMessage)
+        .catch(() => undefined);
+    }
+
     this.events.emitToAccount(conversation.whatsappAccountId, 'conversation:updated', {
       conversationId: id,
       status: updated.status,
       assignedAdmin: updated.assignedAdmin,
+    });
+    return updated;
+  }
+
+  /** Replace a conversation's custom labels (deduped, trimmed, capped). */
+  async setLabels(id: string, labels: string[]) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      select: { whatsappAccountId: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const clean = Array.from(
+      new Set(
+        (labels ?? [])
+          .map((l) => l.trim())
+          .filter((l) => l.length > 0 && l.length <= 40),
+      ),
+    ).slice(0, 20);
+
+    const updated = await this.prisma.conversation.update({
+      where: { id },
+      data: { labels: clean },
+    });
+    this.events.emitToAccount(conversation.whatsappAccountId, 'conversation:updated', {
+      conversationId: id,
+      labels: updated.labels,
     });
     return updated;
   }

@@ -106,6 +106,19 @@ describe('DashboardPage', () => {
     expect(await screen.findByText('⏰ SLA')).toBeInTheDocument();
   });
 
+  it('filters by label', async () => {
+    apiMock.mockImplementation((path: string = '') => {
+      if (path === '/wa/accounts') return Promise.resolve(accounts);
+      return path.startsWith('/conversations?') ? Promise.resolve(convList) : Promise.resolve(convDetail);
+    });
+    render(<DashboardPage />);
+    await screen.findByText('Percakapan');
+    await userEvent.type(screen.getByPlaceholderText('Filter label (mis. refund)'), 'refund');
+    await waitFor(() =>
+      expect(apiMock).toHaveBeenCalledWith(expect.stringContaining('label=refund')),
+    );
+  });
+
   it('filters by search input', async () => {
     apiMock.mockImplementation((path: string = '') => {
       if (path === '/wa/accounts') return Promise.resolve(accounts);

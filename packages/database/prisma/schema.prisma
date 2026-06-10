@@ -192,6 +192,14 @@ model WhatsappAccount {
   assignedAdminId String?       @map("assigned_admin_id")
   aiMode          AiMode        @default(ai_draft) @map("ai_mode")
   isActive        Boolean       @default(true) @map("is_active")
+  // Business hours + auto-away (outside hours): SLA pauses, an away message
+  // is sent (when the bot isn't on ai_on).
+  businessHoursEnabled Boolean  @default(false) @map("business_hours_enabled")
+  businessHoursStart   String?  @map("business_hours_start") // "HH:MM"
+  businessHoursEnd     String?  @map("business_hours_end")   // "HH:MM"
+  businessDays         Int[]    @default([1, 2, 3, 4, 5]) @map("business_days") // 0=Sun..6=Sat
+  businessTimezone     String?  @map("business_timezone")
+  awayMessage          String?  @map("away_message")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
@@ -316,6 +324,11 @@ model Conversation {
   status            ConversationStatus @default(open)
   unreadCount       Int            @default(0) @map("unread_count")
   slaBreachedAt     DateTime?      @map("sla_breached_at")
+  labels            String[]       @default([])
+  lastAwayAt        DateTime?      @map("last_away_at")
+  csatScore         Int?           @map("csat_score")
+  csatRequestedAt   DateTime?      @map("csat_requested_at")
+  csatRespondedAt   DateTime?      @map("csat_responded_at")
   assignedAdminId   String?        @map("assigned_admin_id")
   lastMessage       String?        @map("last_message")
   lastMessageAt     DateTime?      @map("last_message_at")

@@ -6,6 +6,7 @@ import { ConversationStatus, SenderType } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { isWithinBusinessHours } from '../../common/business-hours.util';
 
 /**
  * SLA monitor for "stale" chats: a conversation whose most recent message is
@@ -75,7 +76,17 @@ export class SlaService implements OnModuleInit {
           select: { senderType: true, createdAt: true },
         },
         customer: { select: { name: true, phoneNumber: true } },
-        whatsappAccount: { select: { id: true, accountName: true } },
+        whatsappAccount: {
+          select: {
+            id: true,
+            accountName: true,
+            businessHoursEnabled: true,
+            businessHoursStart: true,
+            businessHoursEnd: true,
+            businessDays: true,
+            businessTimezone: true,
+          },
+        },
       },
     });
 
@@ -88,7 +99,10 @@ export class SlaService implements OnModuleInit {
         !!last &&
         last.senderType === SenderType.customer &&
         c.status !== ConversationStatus.resolved;
-      const overdue = awaiting && last.createdAt < cutoff;
+      // Don't accrue SLA breaches while the account is outside business hours
+      // (nobody's expected to reply). Clearing still proceeds normally.
+      const overdue =
+        awaiting && last.createdAt < cutoff && isWithinBusinessHours(c.whatsappAccount);
 
       if (overdue && !c.slaBreachedAt) {
         await this.prisma.conversation.update({

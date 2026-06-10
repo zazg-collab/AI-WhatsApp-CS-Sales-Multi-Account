@@ -97,6 +97,10 @@ All defaults are conservative; override via env only with a clear reason:
 | `CAMPAIGN_MAX_DAILY_SENDS` | `500` | campaign sends per WhatsApp account per 24h (ban mitigation) |
 | `SLA_RESPONSE_MINUTES` | `15` | minutes a customer message may go unanswered before the chat is flagged |
 | `SLA_SCAN_INTERVAL_MS` | `60000` (1 min) | how often the SLA scanner runs |
+| `AUTO_ASSIGN_STRATEGY` | `off` | new-chat routing: `off` / `round_robin` / `least_busy` |
+| `AUTO_AWAY_COOLDOWN_MS` | `43200000` (12h) | min gap between auto-away messages to the same customer |
+| `CSAT_ENABLED` | `false` | send a 1–5 rating request when a chat is resolved |
+| `CSAT_WINDOW_HOURS` | `24` | how long after the request a numeric reply counts as the rating |
 
 ## 7. Operational checks before pilot
 

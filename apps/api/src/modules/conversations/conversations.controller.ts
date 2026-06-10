@@ -25,6 +25,7 @@ import { ApproveDraftDto } from './dto/approve-draft.dto';
 import { AiModeDto } from './dto/ai-mode.dto';
 import { ConversationStatusDto } from './dto/conversation-status.dto';
 import { AssignConversationDto } from './dto/assign-conversation.dto';
+import { LabelsDto } from './dto/labels.dto';
 import { AiMode, ConversationStatus } from '@hermes/database';
 import { csvRow } from '../../common/csv.util';
 
@@ -71,6 +72,7 @@ export class ConversationsController {
     @Query('aiMode') aiMode?: AiMode,
     @Query('status') status?: ConversationStatus,
     @Query('assignedAdminId') assignedAdminId?: string,
+    @Query('label') label?: string,
     @Query('search') search?: string,
     @Query('needsAttention') needsAttention?: string,
     @Query('page') page?: string,
@@ -84,6 +86,7 @@ export class ConversationsController {
       aiMode,
       status,
       assignedAdminId,
+      label,
       search,
       needsAttention: needsAttention === 'true',
       page: page ? parseInt(page, 10) : 1,
@@ -205,6 +208,13 @@ export class ConversationsController {
   @Patch(':id/assign')
   assign(@Param('id') id: string, @Body() dto: AssignConversationDto) {
     return this.conversations.assign(id, dto.adminId ?? null);
+  }
+
+  @ApiOperation({ summary: 'Replace a conversation\'s custom labels' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Patch(':id/labels')
+  setLabels(@Param('id') id: string, @Body() dto: LabelsDto) {
+    return this.conversations.setLabels(id, dto.labels);
   }
 
   @Roles('admin', 'supervisor', 'owner')
