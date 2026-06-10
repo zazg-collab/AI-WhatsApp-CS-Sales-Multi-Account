@@ -18,25 +18,45 @@ const data = {
   topAccounts: [{ id: 'a1', name: 'Sales', messageCount: 5 }],
 };
 
+const workload = {
+  rangeDays: 7,
+  admins: [
+    { id: 'u1', name: 'Ani', role: 'admin', assigned: 3, resolved: 2, messagesSent: 40, avgResponseSeconds: 90, responseSamples: 10 },
+  ],
+};
+
+// Route the mock by path so performance and workload return their own shapes.
+function routed(path?: string) {
+  if ((path ?? '').includes('admin-workload')) return Promise.resolve(workload);
+  return Promise.resolve(data);
+}
+
 describe('MonitoringPage', () => {
   beforeEach(() => apiMock.mockReset());
 
   it('renders performance metrics', async () => {
-    apiMock.mockResolvedValue(data);
+    apiMock.mockImplementation(routed);
     render(<MonitoringPage />);
     expect(await screen.findByText('Performance Monitoring')).toBeInTheDocument();
     expect(await screen.findByText('Messages')).toBeInTheDocument();
   });
 
+  it('renders the admin workload report', async () => {
+    apiMock.mockImplementation(routed);
+    render(<MonitoringPage />);
+    expect(await screen.findByText('Beban Kerja Admin')).toBeInTheDocument();
+    expect(await screen.findByText('Ani')).toBeInTheDocument();
+  });
+
   it('shows error on failure', async () => {
     apiMock.mockImplementationOnce(() => Promise.reject(new Error('metrics down')));
-    apiMock.mockResolvedValue(data);
+    apiMock.mockImplementation(routed);
     render(<MonitoringPage />);
     expect(await screen.findByText('metrics down')).toBeInTheDocument();
   });
 
   it('reloads when range changes', async () => {
-    apiMock.mockResolvedValue(data);
+    apiMock.mockImplementation(routed);
     render(<MonitoringPage />);
     await screen.findByText('Performance Monitoring');
     await userEvent.selectOptions(screen.getByRole('combobox'), '30');

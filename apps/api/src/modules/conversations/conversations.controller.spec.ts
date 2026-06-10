@@ -59,9 +59,15 @@ describe('ConversationsController', () => {
     expect(svc.list.mock.calls[0][0].limit).toBe(50);
   });
 
-  it('get parses message paging', () => {
-    controller.get('c1', '2', '20');
-    expect(svc.get).toHaveBeenCalledWith('c1', 2, 20);
+  it('get parses message limit', () => {
+    controller.get('c1', '20');
+    expect(svc.get).toHaveBeenCalledWith('c1', 20);
+  });
+
+  it('getMessages forwards the cursor + limit', () => {
+    svc.getMessages = jest.fn().mockResolvedValue({ messages: [] });
+    controller.getMessages('c1', '2024-06-01T00:00:00.000Z', '30');
+    expect(svc.getMessages).toHaveBeenCalledWith('c1', { before: '2024-06-01T00:00:00.000Z', limit: 30 });
   });
 
   it('send + sendLegacy delegate', () => {

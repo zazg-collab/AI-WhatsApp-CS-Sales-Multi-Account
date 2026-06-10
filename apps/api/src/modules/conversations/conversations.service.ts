@@ -84,7 +84,7 @@ export class ConversationsService {
     return { total, page, limit, items };
   }
 
-  async get(id: string, messagePage = 1, messageLimit = 100) {
+  async get(id: string, messageLimit = 100) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: {
@@ -92,14 +92,6 @@ export class ConversationsService {
         whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true } },
         bot: { select: { id: true, botName: true, defaultAiMode: true } },
         assignedAdmin: { select: { id: true, name: true } },
-        messages: {
-          orderBy: { createdAt: 'asc' },
-          skip: (messagePage - 1) * messageLimit,
-          take: messageLimit,
-          include: {
-            quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } },
-          },
-        },
         hermesReviews: {
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -107,7 +99,38 @@ export class ConversationsService {
       },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
-    return conversation;
+
+    // Load the *most recent* page of messages (chat opens at the bottom).
+    // Older messages are fetched on demand via getMessages (infinite scroll).
+    const { messages, hasMore, oldestCursor } = await this.getMessages(id, { limit: messageLimit });
+    return { ...conversation, messages, hasMoreMessages: hasMore, oldestCursor };
+  }
+
+  /**
+   * Cursor-paginated message history, newest-first window returned in
+   * chronological order. Pass `before` (an ISO timestamp, the previous page's
+   * oldestCursor) to load older messages for infinite scroll.
+   */
+  async getMessages(id: string, opts: { before?: string; limit?: number } = {}) {
+    const take = Math.min(Math.max(opts.limit ?? 50, 1), 100);
+    const before = opts.before ? new Date(opts.before) : null;
+
+    const rows = await this.prisma.message.findMany({
+      where: {
+        conversationId: id,
+        ...(before && !Number.isNaN(before.getTime()) ? { createdAt: { lt: before } } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: take + 1, // one extra row tells us whether an older page exists
+      include: {
+        quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } },
+      },
+    });
+
+    const hasMore = rows.length > take;
+    const page = rows.slice(0, take).reverse(); // chronological (asc) for display
+    const oldestCursor = page.length ? page[0].createdAt : null;
+    return { messages: page, hasMore, oldestCursor };
   }
 
   /** Manual reply sent by an admin through the account's WhatsApp connection. */

@@ -31,6 +31,20 @@ interface PerformanceOverview {
   topAccounts: { id: string; name: string; messageCount: number }[];
 }
 
+interface AdminWorkload {
+  rangeDays: number;
+  admins: {
+    id: string;
+    name: string;
+    role: string;
+    assigned: number;
+    resolved: number;
+    messagesSent: number;
+    avgResponseSeconds: number;
+    responseSamples: number;
+  }[];
+}
+
 function formatDuration(seconds: number) {
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
@@ -51,6 +65,7 @@ function MetricCard({ label, value, hint }: { label: string; value: string | num
 export default function MonitoringPage() {
   const [days, setDays] = useState(7);
   const [data, setData] = useState<PerformanceOverview | null>(null);
+  const [workload, setWorkload] = useState<AdminWorkload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +79,12 @@ export default function MonitoringPage() {
         setError(err instanceof Error ? err.message : 'Failed to load performance metrics');
       } finally {
         setLoading(false);
+      }
+      // Workload is supervisor/owner-only; ignore a 403 for lesser roles.
+      try {
+        setWorkload(await api<AdminWorkload>(`/dashboard/admin-workload?days=${days}`));
+      } catch {
+        setWorkload(null);
       }
     }
     load();
@@ -192,6 +213,48 @@ export default function MonitoringPage() {
                   </div>
                 ))}
               </section>
+
+              {Array.isArray(workload?.admins) && (
+                <section className="rounded-lg border border-gray-700 bg-gray-800 p-5">
+                  <h2 className="mb-1 font-semibold text-gray-100">Beban Kerja Admin</h2>
+                  <p className="mb-4 text-xs text-gray-500">
+                    Penugasan, penyelesaian, dan kecepatan balas per admin ({workload.rangeDays} hari).
+                  </p>
+                  {workload.admins.length === 0 ? (
+                    <p className="text-sm text-gray-500">Belum ada admin.</p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-700 text-left text-xs uppercase tracking-wide text-gray-500">
+                            <th className="py-2 pr-3">Admin</th>
+                            <th className="py-2 pr-3 text-right">Ditugaskan</th>
+                            <th className="py-2 pr-3 text-right">Resolved</th>
+                            <th className="py-2 pr-3 text-right">Pesan Dikirim</th>
+                            <th className="py-2 text-right">Avg Balas</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {workload.admins.map((a) => (
+                            <tr key={a.id} className="border-b border-gray-700/60">
+                              <td className="py-2 pr-3">
+                                <span className="text-gray-200">{a.name}</span>
+                                <span className="ml-2 text-xs text-gray-500">{a.role}</span>
+                              </td>
+                              <td className="py-2 pr-3 text-right text-gray-300">{a.assigned}</td>
+                              <td className="py-2 pr-3 text-right text-gray-300">{a.resolved}</td>
+                              <td className="py-2 pr-3 text-right text-gray-300">{a.messagesSent}</td>
+                              <td className="py-2 text-right text-gray-300">
+                                {a.responseSamples > 0 ? formatDuration(a.avgResponseSeconds) : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
+              )}
             </div>
           )}
         </main>

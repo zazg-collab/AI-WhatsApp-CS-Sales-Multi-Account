@@ -218,6 +218,100 @@ export class DashboardService {
     };
   }
 
+  /**
+   * Per-admin workload report (extends the assignment feature): for each
+   * non-viewer user, how many conversations are assigned to them, how many they
+   * resolved in range, how many messages they sent, and their average reply
+   * time. Sorted by messages sent.
+   */
+  async getAdminWorkload(days: number) {
+    const safeDays = this.normalizeDays(days);
+    const since = this.daysAgo(safeDays);
+
+    const [admins, sentGroups, assignedGroups, resolvedGroups, responseByAdmin] =
+      await Promise.all([
+        this.prisma.user.findMany({
+          where: { deletedAt: null, role: { not: 'viewer' } },
+          select: { id: true, name: true, role: true },
+        }),
+        this.prisma.message.groupBy({
+          by: ['senderId'],
+          where: { senderType: SenderType.admin, senderId: { not: null }, createdAt: { gte: since } },
+          _count: { _all: true },
+        }),
+        this.prisma.conversation.groupBy({
+          by: ['assignedAdminId'],
+          where: { assignedAdminId: { not: null } },
+          _count: { _all: true },
+        }),
+        this.prisma.conversation.groupBy({
+          by: ['assignedAdminId'],
+          where: { assignedAdminId: { not: null }, status: 'resolved', updatedAt: { gte: since } },
+          _count: { _all: true },
+        }),
+        this.adminResponseTimes(since),
+      ]);
+
+    const sentByAdmin = Object.fromEntries(sentGroups.map((g) => [g.senderId, g._count._all]));
+    const assignedByAdmin = Object.fromEntries(assignedGroups.map((g) => [g.assignedAdminId, g._count._all]));
+    const resolvedByAdmin = Object.fromEntries(resolvedGroups.map((g) => [g.assignedAdminId, g._count._all]));
+
+    const rows = admins
+      .map((admin) => ({
+        id: admin.id,
+        name: admin.name,
+        role: admin.role,
+        assigned: assignedByAdmin[admin.id] ?? 0,
+        resolved: resolvedByAdmin[admin.id] ?? 0,
+        messagesSent: sentByAdmin[admin.id] ?? 0,
+        avgResponseSeconds: responseByAdmin[admin.id]?.avg ?? 0,
+        responseSamples: responseByAdmin[admin.id]?.count ?? 0,
+      }))
+      .sort((a, b) => b.messagesSent - a.messagesSent);
+
+    return { rangeDays: safeDays, since, admins: rows };
+  }
+
+  /** Average reply time (seconds) per admin who answered a customer in range. */
+  private async adminResponseTimes(since: Date) {
+    const conversations = await this.prisma.conversation.findMany({
+      where: { messages: { some: { senderType: SenderType.admin, createdAt: { gte: since } } } },
+      select: {
+        messages: {
+          where: { createdAt: { gte: since } },
+          orderBy: { createdAt: 'asc' },
+          select: { senderType: true, senderId: true, createdAt: true },
+        },
+      },
+      take: 500,
+    });
+
+    const acc: Record<string, { total: number; count: number }> = {};
+    for (const conversation of conversations) {
+      const messages = conversation.messages;
+      for (let i = 0; i < messages.length; i++) {
+        const message = messages[i];
+        if (message.senderType !== SenderType.customer) continue;
+        const response = messages.slice(i + 1).find((candidate) => (
+          candidate.senderType === SenderType.admin || candidate.senderType === SenderType.ai
+        ));
+        // Only attribute when an admin (not the AI) answered first.
+        if (!response || response.senderType !== SenderType.admin || !response.senderId) continue;
+        const seconds = Math.max(0, (response.createdAt.getTime() - message.createdAt.getTime()) / 1000);
+        const entry = (acc[response.senderId] ??= { total: 0, count: 0 });
+        entry.total += seconds;
+        entry.count += 1;
+      }
+    }
+
+    return Object.fromEntries(
+      Object.entries(acc).map(([id, value]) => [
+        id,
+        { avg: Math.round(value.total / value.count), count: value.count },
+      ]),
+    );
+  }
+
   private async getTopAccounts(days: number) {
     const since = this.daysAgo(days);
     const messages = await this.prisma.message.findMany({

@@ -1,6 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { Roles, RolesGuard } from '../../auth/roles';
 import { DashboardService } from './dashboard.service';
 
 @ApiTags('dashboard')
@@ -56,5 +57,13 @@ export class DashboardController {
   @Get('performance/campaigns')
   getCampaignPerformance(@Query('days') days = '7') {
     return this.dashboardService.getCampaignPerformance(parseInt(days, 10));
+  }
+
+  @ApiOperation({ summary: 'Get per-admin workload report (supervisor/owner only)' })
+  @UseGuards(RolesGuard)
+  @Roles('supervisor', 'owner')
+  @Get('admin-workload')
+  getAdminWorkload(@Query('days') days = '7') {
+    return this.dashboardService.getAdminWorkload(parseInt(days, 10));
   }
 }

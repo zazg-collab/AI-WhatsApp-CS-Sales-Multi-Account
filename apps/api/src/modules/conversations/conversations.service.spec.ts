@@ -58,9 +58,41 @@ describe('ConversationsService', () => {
       prisma.conversation.findUnique.mockResolvedValue(null);
       await expect(service.get('c1')).rejects.toThrow(NotFoundException);
     });
-    it('returns conversation', async () => {
+    it('returns the conversation with its most recent message page + cursor', async () => {
       prisma.conversation.findUnique.mockResolvedValue({ id: 'c1' });
-      expect(await service.get('c1')).toEqual({ id: 'c1' });
+      prisma.message.findMany.mockResolvedValue([
+        { id: 'm2', createdAt: new Date('2024-01-02') },
+        { id: 'm1', createdAt: new Date('2024-01-01') },
+      ]);
+      const r: any = await service.get('c1', 50);
+      expect(r.id).toBe('c1');
+      // newest-first query result reversed to chronological order
+      expect(r.messages.map((m: any) => m.id)).toEqual(['m1', 'm2']);
+      expect(r.hasMoreMessages).toBe(false);
+      expect(r.oldestCursor).toEqual(new Date('2024-01-01'));
+    });
+  });
+
+  describe('getMessages', () => {
+    it('reverses the newest-first window and flags more pages', async () => {
+      // take=2 → service fetches 3 rows; extra row means hasMore=true
+      prisma.message.findMany.mockResolvedValue([
+        { id: 'm3', createdAt: new Date('2024-01-03') },
+        { id: 'm2', createdAt: new Date('2024-01-02') },
+        { id: 'm1', createdAt: new Date('2024-01-01') },
+      ]);
+      const r = await service.getMessages('c1', { limit: 2 });
+      expect(prisma.message.findMany.mock.calls[0][0].take).toBe(3);
+      expect(r.messages.map((m: any) => m.id)).toEqual(['m2', 'm3']);
+      expect(r.hasMore).toBe(true);
+      expect(r.oldestCursor).toEqual(new Date('2024-01-02'));
+    });
+    it('applies the before cursor and caps the limit at 100', async () => {
+      prisma.message.findMany.mockResolvedValue([]);
+      await service.getMessages('c1', { before: '2024-06-01T00:00:00.000Z', limit: 5000 });
+      const args = prisma.message.findMany.mock.calls[0][0];
+      expect(args.take).toBe(101);
+      expect(args.where.createdAt).toEqual({ lt: new Date('2024-06-01T00:00:00.000Z') });
     });
   });
 

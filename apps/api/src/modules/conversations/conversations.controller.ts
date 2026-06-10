@@ -102,19 +102,31 @@ export class ConversationsController {
     return this.conversations.searchMessages(id, q ?? '', limit ? parseInt(limit, 10) : 50);
   }
 
-  @ApiOperation({ summary: 'Get a conversation with its messages' })
+  @ApiOperation({ summary: 'Get a conversation with its most recent messages' })
   @Roles('viewer')
   @Get(':id')
   get(
     @Param('id') id: string,
-    @Query('messagePage') messagePage?: string,
     @Query('messageLimit') messageLimit?: string,
   ) {
     return this.conversations.get(
       id,
-      messagePage ? parseInt(messagePage, 10) : 1,
       messageLimit ? parseInt(messageLimit, 10) : 100,
     );
+  }
+
+  @ApiOperation({ summary: 'Load older messages (cursor-based, for infinite scroll)' })
+  @Roles('viewer')
+  @Get(':id/messages')
+  getMessages(
+    @Param('id') id: string,
+    @Query('before') before?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.conversations.getMessages(id, {
+      before,
+      limit: limit ? parseInt(limit, 10) : 50,
+    });
   }
 
   @Roles('admin', 'supervisor', 'owner')

@@ -52,11 +52,19 @@ interface AdminUser {
   name: string;
 }
 
+interface QuickReply {
+  id: string;
+  title: string;
+  content: string;
+  shortcut: string | null;
+}
+
 interface ConvSummary {
   id: string;
   aiMode: string;
   takeoverStatus: string;
   status: string;
+  slaBreachedAt?: string | null;
   lastMessage: string | null;
   lastMessageAt: string | null;
   unreadCount?: number;
@@ -71,12 +79,15 @@ interface ConvDetail {
   aiMode: string;
   takeoverStatus: string;
   status: string;
+  slaBreachedAt?: string | null;
   customer: Customer & { status: string | null };
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
   bot: { id: string; botName: string } | null;
   assignedAdmin?: AdminUser | null;
   messages: Message[];
   hermesReviews: HermesReview[];
+  hasMoreMessages?: boolean;
+  oldestCursor?: string | null;
 }
 
 type FilterTab = 'all' | 'ai_on' | 'ai_off' | 'ai_supervised' | 'needs_attention';
@@ -323,7 +334,7 @@ function LeftPanel({
         {conversations.map((c) => {
           const lastMsg = c.messages[0];
           const needsAttention =
-            c.takeoverStatus === 'waiting_admin' || c.aiMode === 'ai_paused';
+            c.takeoverStatus === 'waiting_admin' || c.aiMode === 'ai_paused' || !!c.slaBreachedAt;
           return (
             <button
               key={c.id}
@@ -347,6 +358,11 @@ function LeftPanel({
                   </p>
                   <div className="mt-0.5 flex items-center gap-1.5">
                     {statusBadge(c.status)}
+                    {c.slaBreachedAt && (
+                      <span className="rounded bg-red-800 px-1.5 py-0.5 text-[10px] font-medium text-red-100" title="Belum dibalas melewati batas SLA">
+                        ⏰ SLA
+                      </span>
+                    )}
                     {c.assignedAdmin && (
                       <span className="truncate text-[10px] text-gray-500" title="Ditugaskan ke">
                         👤 {c.assignedAdmin.name}
@@ -595,6 +611,8 @@ function CenterPanel({
   suggesting,
   sending,
   typing,
+  quickReplies,
+  onLoadOlder,
 }: {
   conv: ConvDetail | null;
   onSend: (text: string, quotedMessageId?: string) => void;
@@ -609,6 +627,8 @@ function CenterPanel({
   suggesting: boolean;
   sending: boolean;
   typing: boolean;
+  quickReplies: QuickReply[];
+  onLoadOlder: () => Promise<void>;
 }) {
   const [text, setText] = useState('');
   const [showMediaModal, setShowMediaModal] = useState(false);
@@ -617,8 +637,27 @@ function CenterPanel({
   const [searchQ, setSearchQ] = useState('');
   const [searchResults, setSearchResults] = useState<(QuotedMessage & { createdAt: string })[]>([]);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // When set, the next messages render is an older-page prepend → restore the
+  // prior scroll position instead of jumping to the bottom.
+  const olderRestore = useRef<number | null>(null);
+
+  // Quick-reply picker: typing "/foo" filters templates by shortcut or title.
+  const slashQuery = text.startsWith('/') ? text.slice(1).toLowerCase() : null;
+  const qrMatches =
+    slashQuery !== null
+      ? quickReplies
+          .filter(
+            (q) =>
+              (q.shortcut ?? '').toLowerCase().includes(slashQuery) ||
+              q.title.toLowerCase().includes(slashQuery),
+          )
+          .slice(0, 6)
+      : [];
+  const showQuickReplies = slashQuery !== null && qrMatches.length > 0;
 
   async function handleSuggest() {
     const suggestion = await onSuggest();
@@ -626,8 +665,29 @@ function CenterPanel({
   }
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = scrollRef.current;
+    if (olderRestore.current !== null && el) {
+      // Older messages were prepended — keep the viewport anchored.
+      el.scrollTop = el.scrollHeight - olderRestore.current;
+      olderRestore.current = null;
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [conv?.messages]);
+
+  async function handleScroll() {
+    const el = scrollRef.current;
+    if (!el || loadingOlder || !conv?.hasMoreMessages) return;
+    if (el.scrollTop < 80) {
+      setLoadingOlder(true);
+      olderRestore.current = el.scrollHeight;
+      try {
+        await onLoadOlder();
+      } finally {
+        setLoadingOlder(false);
+      }
+    }
+  }
 
   // Reset chat-local state when switching conversations.
   useEffect(() => {
@@ -778,7 +838,10 @@ function CenterPanel({
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-2">
+        {loadingOlder && (
+          <p className="py-1 text-center text-xs text-gray-500">Memuat pesan lama…</p>
+        )}
         {conv.messages.map((m) => {
           const isCustomer = m.senderType === 'customer';
           const isDraft = m.senderType === 'ai' && m.status === 'pending';
@@ -901,7 +964,32 @@ function CenterPanel({
 
       {/* Input */}
       {canSend && (
-        <div className="border-t border-black/40 bg-wa-panel px-4 py-3">
+        <div className="relative border-t border-black/40 bg-wa-panel px-4 py-3">
+          {/* Quick-reply picker (triggered by typing "/") */}
+          {showQuickReplies && (
+            <div className="absolute bottom-full left-4 right-4 mb-1 max-h-56 overflow-y-auto rounded-lg border border-gray-700 bg-gray-800 shadow-lg">
+              <p className="border-b border-black/30 px-3 py-1 text-[10px] uppercase tracking-wide text-gray-500">
+                Template — pilih untuk menyisipkan
+              </p>
+              {qrMatches.map((q) => (
+                <button
+                  key={q.id}
+                  onClick={() => setText(q.content)}
+                  className="block w-full border-b border-black/20 px-3 py-2 text-left hover:bg-black/30"
+                >
+                  <div className="flex items-center gap-2">
+                    {q.shortcut && (
+                      <span className="rounded bg-emerald-900 px-1.5 py-0.5 text-[10px] text-emerald-200">
+                        /{q.shortcut}
+                      </span>
+                    )}
+                    <span className="text-sm font-medium text-gray-100">{q.title}</span>
+                  </div>
+                  <p className="truncate text-xs text-gray-400">{q.content}</p>
+                </button>
+              ))}
+            </div>
+          )}
           {/* Quoted reply preview */}
           {replyTo && (
             <div className="mb-2 flex items-start gap-2 rounded border-l-2 border-wa-accent bg-black/20 px-2 py-1.5">
@@ -1322,6 +1410,7 @@ export default function DashboardPage() {
   const [conversations, setConversations] = useState<ConvSummary[]>([]);
   const [accounts, setAccounts] = useState<WaAccount[]>([]);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [accountId, setAccountId] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [conv, setConv] = useState<ConvDetail | null>(null);
@@ -1374,6 +1463,39 @@ export default function DashboardPage() {
     const t = setInterval(loadList, 30_000);
     return () => clearInterval(t);
   }, [loadList]);
+
+  // Quick replies available for the open conversation's account (+ global).
+  useEffect(() => {
+    const accId = conv?.whatsappAccount.id;
+    const path = accId ? `/quick-replies?accountId=${accId}` : '/quick-replies';
+    api<QuickReply[]>(path)
+      .then(setQuickReplies)
+      .catch(() => setQuickReplies([]));
+  }, [conv?.whatsappAccount.id]);
+
+  // Load an older page of messages (infinite scroll, prepended to the top).
+  const handleLoadOlder = useCallback(async () => {
+    const current = convRef.current;
+    if (!current || !current.hasMoreMessages || !current.oldestCursor) return;
+    try {
+      const r = await api<{ messages: Message[]; hasMore: boolean; oldestCursor: string | null }>(
+        `/conversations/${current.id}/messages?before=${encodeURIComponent(current.oldestCursor)}`,
+      );
+      setConv((prev) => {
+        if (!prev || prev.id !== current.id) return prev;
+        const seen = new Set(prev.messages.map((m) => m.id));
+        const older = r.messages.filter((m) => !seen.has(m.id));
+        return {
+          ...prev,
+          messages: [...older, ...prev.messages],
+          hasMoreMessages: r.hasMore,
+          oldestCursor: r.oldestCursor,
+        };
+      });
+    } catch {
+      // ignore — the scroll handler will allow a retry
+    }
+  }, []);
 
   // load selected conversation detail
   const loadConv = useCallback(async (id: string) => {
@@ -1462,6 +1584,18 @@ export default function DashboardPage() {
       loadList();
     });
 
+    // SLA monitor flagged / cleared a stale chat → update badge + list live.
+    socket.on('conversation:sla-breach', ({ conversationId }: { conversationId: string }) => {
+      setConv((prev) =>
+        prev && prev.id === conversationId ? { ...prev, slaBreachedAt: new Date().toISOString() } : prev,
+      );
+      loadList();
+    });
+    socket.on('conversation:sla-cleared', ({ conversationId }: { conversationId: string }) => {
+      setConv((prev) => (prev && prev.id === conversationId ? { ...prev, slaBreachedAt: null } : prev));
+      loadList();
+    });
+
     socket.on('hermes:alert', ({ decision, reason }: { decision: string; reason: string }) => {
       setToast(`Hermes Alert: ${decision} — ${reason ?? ''}`);
     });
@@ -1473,6 +1607,8 @@ export default function DashboardPage() {
       socket.off('message:draft');
       socket.off('message:draft-removed');
       socket.off('conversation:updated');
+      socket.off('conversation:sla-breach');
+      socket.off('conversation:sla-cleared');
       socket.off('hermes:alert');
     };
   }, [loadList]);
@@ -1674,6 +1810,8 @@ export default function DashboardPage() {
         suggesting={suggesting}
         sending={sending}
         typing={typing}
+        quickReplies={quickReplies}
+        onLoadOlder={handleLoadOlder}
       />
       <RightPanel
         conv={conv}

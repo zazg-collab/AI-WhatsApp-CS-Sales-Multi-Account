@@ -177,6 +177,7 @@ model User {
   approvedCampaigns Campaign[]      @relation("CampaignApprovedBy")
   createdKnowledge KnowledgeBase[]   @relation("KnowledgeCreatedBy")
   approvedKnowledge KnowledgeBase[]  @relation("KnowledgeApprovedBy")
+  quickReplies     QuickReply[]
 
   @@map("users")
 }
@@ -199,6 +200,7 @@ model WhatsappAccount {
   customers     Customer[]
   conversations Conversation[]
   campaigns     Campaign[]
+  quickReplies  QuickReply[]
 
   @@map("whatsapp_accounts")
 }
@@ -313,6 +315,7 @@ model Conversation {
   takeoverStatus    TakeoverStatus @default(ai_active) @map("takeover_status")
   status            ConversationStatus @default(open)
   unreadCount       Int            @default(0) @map("unread_count")
+  slaBreachedAt     DateTime?      @map("sla_breached_at")
   assignedAdminId   String?        @map("assigned_admin_id")
   lastMessage       String?        @map("last_message")
   lastMessageAt     DateTime?      @map("last_message_at")
@@ -450,6 +453,25 @@ model CampaignRecipient {
   @@index([campaignId, status])
   @@index([customerId])
   @@map("campaign_recipients")
+}
+
+/// Canned reply / message template. Scoped to one WhatsApp account, or global
+/// when whatsappAccountId is null. Optionally triggered by a "/shortcut".
+model QuickReply {
+  id                String   @id @default(uuid())
+  title             String
+  content           String
+  shortcut          String?
+  whatsappAccountId String?  @map("whatsapp_account_id")
+  createdById       String?  @map("created_by_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  whatsappAccount WhatsappAccount? @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  createdBy       User?            @relation(fields: [createdById], references: [id])
+
+  @@index([whatsappAccountId])
+  @@map("quick_replies")
 }
 
 model AuditLog {

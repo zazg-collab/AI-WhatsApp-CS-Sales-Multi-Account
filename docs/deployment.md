@@ -95,6 +95,8 @@ All defaults are conservative; override via env only with a clear reason:
 | `AI_TIMEOUT_MS` | `30000` | upper bound on every AI provider / sidecar HTTP call |
 | `CAMPAIGN_MAX_RECIPIENTS` | `1000` | max targets per campaign |
 | `CAMPAIGN_MAX_DAILY_SENDS` | `500` | campaign sends per WhatsApp account per 24h (ban mitigation) |
+| `SLA_RESPONSE_MINUTES` | `15` | minutes a customer message may go unanswered before the chat is flagged |
+| `SLA_SCAN_INTERVAL_MS` | `60000` (1 min) | how often the SLA scanner runs |
 
 ## 7. Operational checks before pilot
 

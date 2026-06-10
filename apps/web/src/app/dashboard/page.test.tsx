@@ -94,6 +94,18 @@ describe('DashboardPage', () => {
     expect(await screen.findByText('Open')).toBeInTheDocument();
   });
 
+  it('shows an SLA badge for an overdue conversation', async () => {
+    const breached = {
+      items: [{ ...convList.items[0], slaBreachedAt: '2026-06-01T00:00:00.000Z' }],
+    };
+    apiMock.mockImplementation((path: string = '') => {
+      if (path === '/wa/accounts') return Promise.resolve(accounts);
+      return path.startsWith('/conversations?') ? Promise.resolve(breached) : Promise.resolve(convDetail);
+    });
+    render(<DashboardPage />);
+    expect(await screen.findByText('⏰ SLA')).toBeInTheDocument();
+  });
+
   it('filters by search input', async () => {
     apiMock.mockImplementation((path: string = '') => {
       if (path === '/wa/accounts') return Promise.resolve(accounts);

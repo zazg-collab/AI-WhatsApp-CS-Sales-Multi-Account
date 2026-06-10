@@ -19,6 +19,8 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { UsersModule } from './modules/users/users.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
+import { SlaModule } from './modules/sla/sla.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { RateLimitGuard } from './common/rate-limit.guard';
 import { RequestIdMiddleware } from './common/request-id.middleware';
@@ -61,6 +63,8 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
     AuditModule,
     UsersModule,
     CampaignsModule,
+    QuickRepliesModule,
+    SlaModule,
   ],
   controllers: [HealthController],
   providers: [
