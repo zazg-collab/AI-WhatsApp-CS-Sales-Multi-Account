@@ -3,7 +3,12 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const apiMock = vi.fn();
-vi.mock('@/lib/api', () => ({ api: (...a: any[]) => apiMock(...a), getToken: () => 't' }));
+vi.mock('@/lib/api', () => ({
+  api: (...a: any[]) => apiMock(...a),
+  getToken: () => 't',
+  resolveMediaUrl: (u: string | null) =>
+    u && (u.startsWith('/media/') || u.startsWith('http')) ? u : null,
+}));
 const handlers: Record<string, Function> = {};
 const fakeSocket = {
   on: (e: string, cb: Function) => { handlers[e] = cb; },

@@ -1,6 +1,19 @@
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
+/**
+ * Resolve a stored message mediaUrl to something a media tag can load.
+ * `/media/<file>` (inbound media saved by the gateway) is served by the API;
+ * absolute http(s) URLs (admin-sent media) pass through; anything else —
+ * including legacy WhatsApp key-id placeholders — is not renderable.
+ */
+export function resolveMediaUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith('/media/')) return `${API_URL}${url}`;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return null;
+}
+
 const TOKEN_KEY = 'hermes_token';
 
 export function getToken(): string | null {

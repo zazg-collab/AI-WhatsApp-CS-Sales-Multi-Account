@@ -125,6 +125,7 @@ Then verify manually:
 |---|---|---|
 | PostgreSQL database | all CRM/chat/campaign data | total data loss |
 | `WA_SESSION_DIR` | Baileys auth state | every account must re-scan QR |
+| `WA_MEDIA_DIR` | inbound chat media files | media bubbles show "file tidak tersedia" |
 | Redis AOF (`hermes_redisdata` volume) | queued campaign/follow-up jobs | queued sends lost (DB rows remain `queued`) |
 | `.env` (stored in a secrets manager, not in the repo) | JWT secret, DB creds, AI keys | sessions invalidated, manual reconfiguration |
 | Hermes Agent config | outbound notification credentials | alerts silently disabled |

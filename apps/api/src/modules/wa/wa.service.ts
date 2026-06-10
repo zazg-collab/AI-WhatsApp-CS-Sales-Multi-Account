@@ -6,12 +6,15 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { join } from 'path';
+import { randomUUID } from 'crypto';
+import { mkdir, writeFile } from 'fs/promises';
 import * as QRCode from 'qrcode';
 import pino from 'pino';
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
   type WASocket,
   type proto,
 } from '@whiskeysockets/baileys';
@@ -30,7 +33,7 @@ import { MessageIngestService } from './message-ingest.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { AiService } from '../ai/ai.service';
 import { HermesService } from '../hermes/hermes.service';
-import { phoneToJid, humanDelay, isDirectChatJid } from './wa.util';
+import { phoneToJid, humanDelay, isDirectChatJid, extForMimetype } from './wa.util';
 import { logAudit } from '../../common/audit.util';
 
 interface Session {
@@ -48,6 +51,8 @@ export class WaService implements OnModuleInit {
   private readonly logger = new Logger(WaService.name);
   private readonly sessions = new Map<string, Session>();
   private readonly sessionDir: string;
+  private readonly mediaDir: string;
+  private readonly mediaMaxBytes: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -59,6 +64,10 @@ export class WaService implements OnModuleInit {
     config: ConfigService,
   ) {
     this.sessionDir = config.get<string>('WA_SESSION_DIR') ?? './.wa-sessions';
+    this.mediaDir = config.get<string>('WA_MEDIA_DIR') ?? './.wa-media';
+    this.mediaMaxBytes = Number(
+      config.get<string>('WA_MEDIA_MAX_BYTES') ?? 25 * 1024 * 1024,
+    );
   }
 
   /** Reconnect every active account on boot. */
@@ -153,11 +162,15 @@ export class WaService implements OnModuleInit {
 
     const type = this.resolveType(m);
 
-    // Capture media reference (use message key id as placeholder; actual download optional)
+    // Download inbound media to WA_MEDIA_DIR and reference it as /media/<file>.
+    // Failure is non-fatal: the message is still ingested, just without media.
     let mediaUrl: string | undefined;
     if (type === MessageType.image || type === MessageType.video ||
         type === MessageType.audio || type === MessageType.document) {
-      mediaUrl = m.key.id ?? undefined;
+      mediaUrl = await this.downloadInboundMedia(m).catch((err) => {
+        this.logger.warn(`Media download failed for ${m.key.id}: ${err}`);
+        return undefined;
+      });
     }
 
     const result = await this.ingest.ingest({
@@ -298,6 +311,33 @@ export class WaService implements OnModuleInit {
     });
     this.events.emitToAccount(accountId, 'message:draft', { conversationId, message });
     return message;
+  }
+
+  /**
+   * Download an inbound media message's bytes and persist them under
+   * WA_MEDIA_DIR as <uuid>.<ext>. Returns a `/media/<file>` path served by
+   * MediaController, or undefined when the payload is empty/oversized.
+   */
+  private async downloadInboundMedia(
+    m: proto.IWebMessageInfo,
+  ): Promise<string | undefined> {
+    const buffer = await downloadMediaMessage(m as never, 'buffer', {});
+    if (!buffer || buffer.length === 0) return undefined;
+    if (buffer.length > this.mediaMaxBytes) {
+      this.logger.warn(
+        `Media ${m.key.id} is ${buffer.length}B > cap ${this.mediaMaxBytes}B, skipping`,
+      );
+      return undefined;
+    }
+    const mime =
+      m.message?.imageMessage?.mimetype ??
+      m.message?.videoMessage?.mimetype ??
+      m.message?.audioMessage?.mimetype ??
+      m.message?.documentMessage?.mimetype;
+    const filename = `${randomUUID()}.${extForMimetype(mime)}`;
+    await mkdir(this.mediaDir, { recursive: true });
+    await writeFile(join(this.mediaDir, filename), buffer);
+    return `/media/${filename}`;
   }
 
   private resolveType(m: proto.IWebMessageInfo): MessageType {

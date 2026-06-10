@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { api } from '@/lib/api';
+import { api, resolveMediaUrl } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { Sidebar } from '@/components/Sidebar';
 
@@ -340,31 +340,47 @@ function MediaModal({
 }
 
 function MessageMedia({ msg }: { msg: Message }) {
-  if (msg.messageType === 'image' && msg.mediaUrl) {
+  const src = resolveMediaUrl(msg.mediaUrl);
+  const typeLabel: Record<string, string> = {
+    image: '📷 Gambar', video: '🎬 Video', audio: '🎵 Audio', document: '📄 Dokumen',
+  };
+
+  // Media message whose file isn't available (download failed / legacy rows).
+  if (!src && typeLabel[msg.messageType]) {
     return (
       <div>
-        <img src={msg.mediaUrl} alt={msg.content ?? 'image'} className="max-w-full rounded" />
+        <p className="text-xs italic text-gray-400">
+          {typeLabel[msg.messageType]} (file tidak tersedia)
+        </p>
+        {msg.content && <p className="mt-1 whitespace-pre-wrap">{msg.content}</p>}
+      </div>
+    );
+  }
+  if (msg.messageType === 'image' && src) {
+    return (
+      <div>
+        <img src={src} alt={msg.content ?? 'image'} className="max-w-full rounded" />
         {msg.content && <p className="mt-1 text-xs text-gray-300">{msg.content}</p>}
       </div>
     );
   }
-  if (msg.messageType === 'document' && msg.mediaUrl) {
+  if (msg.messageType === 'document' && src) {
     return (
       <div className="flex items-center gap-2">
         <span className="text-lg">📄</span>
-        <a href={msg.mediaUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-300 underline">
+        <a href={src} target="_blank" rel="noreferrer" className="text-xs text-blue-300 underline">
           {msg.content ?? 'Dokumen'}
         </a>
       </div>
     );
   }
-  if (msg.messageType === 'audio' && msg.mediaUrl) {
-    return <audio controls src={msg.mediaUrl} className="w-full" />;
+  if (msg.messageType === 'audio' && src) {
+    return <audio controls src={src} className="w-full" />;
   }
-  if (msg.messageType === 'video' && msg.mediaUrl) {
+  if (msg.messageType === 'video' && src) {
     return (
       <div>
-        <video controls src={msg.mediaUrl} className="max-w-full rounded" />
+        <video controls src={src} className="max-w-full rounded" />
         {msg.content && <p className="mt-1 text-xs text-gray-300">{msg.content}</p>}
       </div>
     );
