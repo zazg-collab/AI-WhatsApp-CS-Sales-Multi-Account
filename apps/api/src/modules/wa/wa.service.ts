@@ -31,7 +31,7 @@ import { MessageIngestService } from './message-ingest.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { AiService } from '../ai/ai.service';
 import { HermesService } from '../hermes/hermes.service';
-import { phoneToJid, humanDelay, isDirectChatJid, extForMimetype } from './wa.util';
+import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, extForMimetype } from './wa.util';
 import { MediaStorageService } from '../media/media-storage.service';
 import { logAudit } from '../../common/audit.util';
 
@@ -143,6 +143,76 @@ export class WaService implements OnModuleInit {
         await this.handleIncoming(accountId, m);
       }
     });
+
+    // Customer typing/online indicator → live to the dashboard (scoped to account).
+    sock.ev.on('presence.update', ({ id, presences }) => {
+      if (!isDirectChatJid(id)) return;
+      const state = presences?.[id]?.lastKnownPresence;
+      const typing = state === 'composing' || state === 'recording';
+      this.events.emitToAccount(accountId, 'wa:presence', {
+        accountId,
+        phone: jidToPhone(id),
+        typing,
+        presence: state ?? 'unavailable',
+      });
+    });
+
+    // Delivery/read receipts for messages WE sent → update status + checkmarks.
+    sock.ev.on('messages.update', async (updates) => {
+      for (const u of updates) {
+        const status = u.update?.status;
+        if (status === undefined || status === null || !u.key?.id) continue;
+        await this.applyReceipt(accountId, u.key.id, status).catch((err) =>
+          this.logger.warn(`Receipt update failed for ${u.key?.id}: ${err}`),
+        );
+      }
+    });
+  }
+
+  /** Map a Baileys numeric status to our MessageStatus and persist + emit it. */
+  private async applyReceipt(
+    accountId: string,
+    externalId: string,
+    waStatus: number | string,
+  ) {
+    // Baileys WAMessageStatus: 2 = DELIVERY_ACK, 3 = READ, 4 = PLAYED.
+    const code = Number(waStatus);
+    let status: MessageStatus | undefined;
+    if (code >= 4) status = MessageStatus.read;
+    else if (code === 3) status = MessageStatus.read;
+    else if (code === 2) status = MessageStatus.delivered;
+    if (!status) return;
+
+    const message = await this.prisma.message.findFirst({
+      where: { externalId },
+      select: { id: true, conversationId: true, status: true },
+    });
+    if (!message) return;
+    // Never downgrade (read → delivered).
+    if (message.status === MessageStatus.read) return;
+
+    await this.prisma.message.update({ where: { id: message.id }, data: { status } });
+    this.events.emitToAccount(accountId, 'message:status', {
+      conversationId: message.conversationId,
+      messageId: message.id,
+      status,
+    });
+  }
+
+  /**
+   * Mark the customer's recent inbound messages as read in WhatsApp (blue
+   * ticks) when an admin opens the chat. Best-effort; never throws to caller.
+   */
+  async markRead(accountId: string, phone: string, externalIds: string[]) {
+    const session = this.sessions.get(accountId);
+    if (!session || externalIds.length === 0) return;
+    const remoteJid = phoneToJid(phone);
+    const keys = externalIds.map((id) => ({ remoteJid, id, fromMe: false }));
+    try {
+      await session.sock.readMessages(keys as never);
+    } catch (err) {
+      this.logger.warn(`markRead failed for ${remoteJid}: ${err}`);
+    }
   }
 
   private async handleIncoming(accountId: string, m: proto.IWebMessageInfo) {

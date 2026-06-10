@@ -379,6 +379,29 @@ export class ConversationsService {
     return message;
   }
 
+  /**
+   * Mark the customer's recent inbound messages as read in WhatsApp when an
+   * admin opens the chat. Sends blue ticks for the most recent customer
+   * messages that have an external id.
+   */
+  async markRead(id: string) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      include: { customer: { select: { phoneNumber: true } } },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const inbound = await this.prisma.message.findMany({
+      where: { conversationId: id, senderType: SenderType.customer, externalId: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { externalId: true },
+    });
+    const externalIds = inbound.map((m) => m.externalId!).filter(Boolean);
+    await this.wa.markRead(conversation.whatsappAccountId, conversation.customer.phoneNumber, externalIds);
+    return { marked: externalIds.length };
+  }
+
   async update(id: string, data: { aiMode?: AiMode; takeoverStatus?: TakeoverStatus }) {
     const conversation = await this.prisma.conversation.findUnique({ where: { id } });
     if (!conversation) throw new NotFoundException('Conversation not found');

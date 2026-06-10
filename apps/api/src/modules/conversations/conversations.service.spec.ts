@@ -23,6 +23,7 @@ describe('ConversationsService', () => {
       message: {
         create: jest.fn().mockResolvedValue({ id: 'm1' }),
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         update: jest.fn().mockResolvedValue({ id: 'm1', status: 'sent' }),
       },
     };
@@ -30,6 +31,7 @@ describe('ConversationsService', () => {
       sendText: jest.fn().mockResolvedValue('ext1'),
       sendMedia: jest.fn().mockResolvedValue('ext2'),
       sendMediaBuffer: jest.fn().mockResolvedValue('ext3'),
+      markRead: jest.fn().mockResolvedValue(undefined),
     };
     events = { emit: jest.fn(), emitToAccount: jest.fn() };
     storage = { save: jest.fn().mockResolvedValue({ key: 'k.png', url: '/media/k.png' }), read: jest.fn() };
@@ -116,6 +118,22 @@ describe('ConversationsService', () => {
       prisma.conversation.findUnique.mockResolvedValue({ id: 'c1', whatsappAccountId: 'a1' });
       prisma.message.findFirst.mockResolvedValue(null);
       await expect(service.blockDraft('c1', 'd1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('markRead', () => {
+    it('forwards recent inbound external ids to the gateway', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
+      });
+      prisma.message.findMany.mockResolvedValue([{ externalId: 'x1' }, { externalId: 'x2' }]);
+      const r = await service.markRead('c1');
+      expect(wa.markRead).toHaveBeenCalledWith('a1', '628', ['x1', 'x2']);
+      expect(r).toEqual({ marked: 2 });
+    });
+    it('throws when conversation missing', async () => {
+      prisma.conversation.findUnique.mockResolvedValue(null);
+      await expect(service.markRead('c1')).rejects.toThrow(NotFoundException);
     });
   });
 

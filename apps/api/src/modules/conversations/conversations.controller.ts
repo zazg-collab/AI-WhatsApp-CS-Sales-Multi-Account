@@ -136,6 +136,13 @@ export class ConversationsController {
     return this.conversations.blockDraft(id, messageId);
   }
 
+  @ApiOperation({ summary: 'Mark customer messages as read (WhatsApp blue ticks)' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Post(':id/read')
+  markRead(@Param('id') id: string) {
+    return this.conversations.markRead(id);
+  }
+
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/takeover')
   takeover(@Param('id') id: string, @CurrentUser() user: AuthUser) {

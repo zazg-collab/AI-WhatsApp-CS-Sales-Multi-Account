@@ -108,6 +108,15 @@ function decisionBadge(decision: string) {
   );
 }
 
+/** WhatsApp-style delivery ticks for an outgoing message. */
+function StatusTicks({ status }: { status: string }) {
+  if (status === 'read') return <span className="text-sky-400" title="Dibaca">✓✓</span>;
+  if (status === 'delivered') return <span className="opacity-60" title="Terkirim ke device">✓✓</span>;
+  if (status === 'sent') return <span className="opacity-60" title="Terkirim">✓</span>;
+  if (status === 'failed') return <span className="text-red-400" title="Gagal">!</span>;
+  return <span className="opacity-40" title="Menunggu">🕓</span>;
+}
+
 function fmtTime(iso: string | null) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -484,6 +493,7 @@ function CenterPanel({
   onSuggest,
   suggesting,
   sending,
+  typing,
 }: {
   conv: ConvDetail | null;
   onSend: (text: string) => void;
@@ -497,6 +507,7 @@ function CenterPanel({
   onSuggest: () => Promise<string | null>;
   suggesting: boolean;
   sending: boolean;
+  typing: boolean;
 }) {
   const [text, setText] = useState('');
   const [showMediaModal, setShowMediaModal] = useState(false);
@@ -540,7 +551,13 @@ function CenterPanel({
               </span>
               {aiModeBadge(conv.aiMode)}
             </div>
-            <p className="text-xs text-gray-400">{conv.customer.phoneNumber}</p>
+            <p className="text-xs text-gray-400">
+              {typing ? (
+                <span className="text-wa-accent">sedang mengetik…</span>
+              ) : (
+                conv.customer.phoneNumber
+              )}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -609,6 +626,10 @@ function CenterPanel({
                   <span className="text-xs opacity-50">{fmtTime(m.createdAt)}</span>
                   {m.aiGenerated && !isCustomer && (
                     <span className="text-xs opacity-50">🤖</span>
+                  )}
+                  {/* Delivery ticks only on our outgoing (non-draft) messages. */}
+                  {!isCustomer && !isDraft && (
+                    <span className="text-xs"><StatusTicks status={m.status} /></span>
                   )}
                 </div>
                 {/* Approve (send) / Block (discard) for any pending AI draft —
@@ -992,7 +1013,11 @@ export default function DashboardPage() {
   const [search, setSearch] = useState('');
   const [sending, setSending] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  const [typing, setTyping] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const convRef = useRef<ConvDetail | null>(null);
+  convRef.current = conv;
 
   // load WhatsApp accounts once for the switcher
   useEffect(() => {
@@ -1034,8 +1059,14 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedId) loadConv(selectedId);
-    else setConv(null);
+    setTyping(false);
+    if (selectedId) {
+      loadConv(selectedId);
+      // Send blue ticks for the customer's messages now that an admin is here.
+      api(`/conversations/${selectedId}/read`, { method: 'POST' }).catch(() => {});
+    } else {
+      setConv(null);
+    }
   }, [selectedId, loadConv]);
 
   // socket
@@ -1066,12 +1097,34 @@ export default function DashboardPage() {
       });
     });
 
+    // Delivery/read receipt for one of our sent messages → update checkmark.
+    socket.on('message:status', ({ conversationId, messageId, status }: { conversationId: string; messageId: string; status: string }) => {
+      setConv((prev) => {
+        if (!prev || prev.id !== conversationId) return prev;
+        return { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, status } : m)) };
+      });
+    });
+
+    // Customer typing/recording indicator for the open conversation.
+    socket.on('wa:presence', ({ accountId, phone, typing: isTyping }: { accountId: string; phone: string; typing: boolean }) => {
+      const c = convRef.current;
+      if (!c || c.whatsappAccount.id !== accountId || c.customer.phoneNumber !== phone) return;
+      setTyping(isTyping);
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+      if (isTyping) {
+        // Auto-clear if no further presence arrives (WhatsApp stops sending).
+        typingTimer.current = setTimeout(() => setTyping(false), 6000);
+      }
+    });
+
     socket.on('hermes:alert', ({ decision, reason }: { decision: string; reason: string }) => {
       setToast(`Hermes Alert: ${decision} — ${reason ?? ''}`);
     });
 
     return () => {
       socket.off('message:new');
+      socket.off('message:status');
+      socket.off('wa:presence');
       socket.off('message:draft');
       socket.off('message:draft-removed');
       socket.off('hermes:alert');
@@ -1242,6 +1295,7 @@ export default function DashboardPage() {
         onSuggest={handleSuggest}
         suggesting={suggesting}
         sending={sending}
+        typing={typing}
       />
       <RightPanel
         conv={conv}
