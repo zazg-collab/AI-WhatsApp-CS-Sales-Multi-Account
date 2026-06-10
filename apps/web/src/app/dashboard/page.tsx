@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { api, resolveMediaUrl } from '@/lib/api';
+import { api, uploadFile, resolveMediaUrl } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { Sidebar } from '@/components/Sidebar';
 
@@ -272,34 +272,123 @@ function LeftPanel({
 function MediaModal({
   onClose,
   onSend,
+  onUpload,
 }: {
   onClose: () => void;
   onSend: (mediaType: string, url: string, caption: string) => void;
+  onUpload: (file: File, caption: string) => Promise<void>;
 }) {
+  const [tab, setTab] = useState<'upload' | 'url'>('upload');
   const [url, setUrl] = useState('');
   const [mediaType, setMediaType] = useState('image');
   const [caption, setCaption] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function handleUpload() {
+    if (!file || busy) return;
+    setBusy(true);
+    try {
+      await onUpload(file, caption);
+      onClose();
+    } catch {
+      // error toast is surfaced by the caller; keep the modal open to retry
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="w-96 rounded-lg border border-gray-700 bg-gray-800 p-5">
-        <h3 className="mb-4 text-sm font-semibold text-gray-100">Kirim Media</h3>
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-xs text-gray-400">Tipe Media</label>
-            <select
-              value={mediaType}
-              onChange={(e) => setMediaType(e.target.value)}
-              className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none"
+        <h3 className="mb-3 text-sm font-semibold text-gray-100">Kirim Media</h3>
+
+        {/* Tabs */}
+        <div className="mb-3 flex gap-1 rounded bg-gray-900 p-1 text-xs">
+          {(['upload', 'url'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`flex-1 rounded px-2 py-1 font-medium ${
+                tab === t ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-gray-200'
+              }`}
             >
-              <option value="image">Gambar</option>
-              <option value="document">Dokumen</option>
-              <option value="audio">Audio</option>
-              <option value="video">Video</option>
-            </select>
+              {t === 'upload' ? 'Upload dari device' : 'Dari URL'}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'upload' ? (
+          <div className="space-y-3">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+              }}
+              className={`rounded border-2 border-dashed p-6 text-center text-xs ${
+                dragOver ? 'border-emerald-500 bg-emerald-950/30' : 'border-gray-600'
+              }`}
+            >
+              {file ? (
+                <div className="text-gray-200">
+                  <p className="font-medium">{file.name}</p>
+                  <p className="text-gray-500">{(file.size / 1024).toFixed(0)} KB</p>
+                  <button onClick={() => setFile(null)} className="mt-1 text-red-400 hover:text-red-300">
+                    Hapus
+                  </button>
+                </div>
+              ) : (
+                <p className="text-gray-500">Tarik file ke sini, atau</p>
+              )}
+              <label className="mt-2 inline-block cursor-pointer rounded bg-gray-700 px-3 py-1 text-gray-100 hover:bg-gray-600">
+                Pilih file
+                <input
+                  type="file"
+                  className="hidden"
+                  accept="image/*,video/*,audio/*,application/pdf"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </div>
+            <input
+              type="text"
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder="Caption (opsional)"
+              className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600"
+            />
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleUpload}
+                disabled={!file || busy}
+                className="flex-1 rounded bg-emerald-600 py-1.5 text-sm font-medium text-white disabled:opacity-50 hover:bg-emerald-500"
+              >
+                {busy ? 'Mengirim...' : 'Kirim'}
+              </button>
+              <button onClick={onClose} className="flex-1 rounded bg-gray-700 py-1.5 text-sm font-medium text-gray-100 hover:bg-gray-600">
+                Batal
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs text-gray-400">URL</label>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs text-gray-400">Tipe Media</label>
+              <select
+                value={mediaType}
+                onChange={(e) => setMediaType(e.target.value)}
+                className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none"
+              >
+                <option value="image">Gambar</option>
+                <option value="document">Dokumen</option>
+                <option value="audio">Audio</option>
+                <option value="video">Video</option>
+              </select>
+            </div>
             <input
               type="url"
               value={url}
@@ -307,33 +396,27 @@ function MediaModal({
               placeholder="https://..."
               className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600"
             />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-gray-400">Caption (opsional)</label>
             <input
               type="text"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
-              placeholder="Keterangan..."
+              placeholder="Caption (opsional)"
               className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600"
             />
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => { if (url.trim()) { onSend(mediaType, url.trim(), caption); onClose(); } }}
+                disabled={!url.trim()}
+                className="flex-1 rounded bg-emerald-600 py-1.5 text-sm font-medium text-white disabled:opacity-50 hover:bg-emerald-500"
+              >
+                Kirim
+              </button>
+              <button onClick={onClose} className="flex-1 rounded bg-gray-700 py-1.5 text-sm font-medium text-gray-100 hover:bg-gray-600">
+                Batal
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={() => { if (url.trim()) { onSend(mediaType, url.trim(), caption); onClose(); } }}
-              disabled={!url.trim()}
-              className="flex-1 rounded bg-emerald-600 py-1.5 text-sm font-medium text-white disabled:opacity-50 hover:bg-emerald-500"
-            >
-              Kirim
-            </button>
-            <button
-              onClick={onClose}
-              className="flex-1 rounded bg-gray-700 py-1.5 text-sm font-medium text-gray-100 hover:bg-gray-600"
-            >
-              Batal
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -392,6 +475,7 @@ function CenterPanel({
   conv,
   onSend,
   onSendMedia,
+  onUploadMedia,
   onTakeover,
   onReturnToAi,
   onToggleAi,
@@ -404,6 +488,7 @@ function CenterPanel({
   conv: ConvDetail | null;
   onSend: (text: string) => void;
   onSendMedia: (mediaType: string, url: string, caption: string) => void;
+  onUploadMedia: (file: File, caption: string) => Promise<void>;
   onTakeover: () => void;
   onReturnToAi: () => void;
   onToggleAi: () => void;
@@ -556,6 +641,7 @@ function CenterPanel({
         <MediaModal
           onClose={() => setShowMediaModal(false)}
           onSend={onSendMedia}
+          onUpload={onUploadMedia}
         />
       )}
 
@@ -1005,6 +1091,21 @@ export default function DashboardPage() {
     }
   }
 
+  // Upload a file from the admin's device (multipart) and send it.
+  async function handleUploadMedia(file: File, caption: string) {
+    if (!selectedId) return;
+    const form = new FormData();
+    form.append('file', file);
+    if (caption) form.append('caption', caption);
+    try {
+      await uploadFile(`/conversations/${selectedId}/media/upload`, form);
+      await loadConv(selectedId);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal upload media');
+      throw e; // let the modal keep itself open on failure
+    }
+  }
+
   async function handleSend(text: string) {
     if (!selectedId) return;
     setSending(true);
@@ -1132,6 +1233,7 @@ export default function DashboardPage() {
         conv={conv}
         onSend={handleSend}
         onSendMedia={handleSendMedia}
+        onUploadMedia={handleUploadMedia}
         onTakeover={handleTakeover}
         onReturnToAi={handleReturnToAi}
         onToggleAi={handleToggleAi}

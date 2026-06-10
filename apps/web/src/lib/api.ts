@@ -56,6 +56,27 @@ export function hasRole(required: string): boolean {
   return (roleHierarchy[role] ?? 0) >= (roleHierarchy[required] ?? 0);
 }
 
+/**
+ * Multipart upload helper. Sends FormData (browser sets the multipart
+ * Content-Type/boundary) with the JWT attached — used for device file uploads.
+ */
+export async function uploadFile<T>(
+  path: string,
+  form: FormData,
+): Promise<T> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? `Upload failed: ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 export async function api<T>(
   path: string,
   options: RequestInit = {},

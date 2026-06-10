@@ -10,6 +10,7 @@ describe('ConversationsService', () => {
   let prisma: any;
   let wa: any;
   let events: any;
+  let storage: any;
 
   beforeEach(() => {
     prisma = {
@@ -28,9 +29,11 @@ describe('ConversationsService', () => {
     wa = {
       sendText: jest.fn().mockResolvedValue('ext1'),
       sendMedia: jest.fn().mockResolvedValue('ext2'),
+      sendMediaBuffer: jest.fn().mockResolvedValue('ext3'),
     };
     events = { emit: jest.fn(), emitToAccount: jest.fn() };
-    service = new ConversationsService(prisma, wa, events);
+    storage = { save: jest.fn().mockResolvedValue({ key: 'k.png', url: '/media/k.png' }), read: jest.fn() };
+    service = new ConversationsService(prisma, wa, events, storage);
   });
 
   describe('list', () => {
@@ -113,6 +116,33 @@ describe('ConversationsService', () => {
       prisma.conversation.findUnique.mockResolvedValue({ id: 'c1', whatsappAccountId: 'a1' });
       prisma.message.findFirst.mockResolvedValue(null);
       await expect(service.blockDraft('c1', 'd1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('sendUploadedMedia', () => {
+    it('stores bytes, sends via buffer, persists with the storage url', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
+      });
+      const file = { buffer: Buffer.from('img'), mimetype: 'image/png', originalname: 'p.png' };
+      await service.sendUploadedMedia('c1', 'admin', file, 'hi');
+      expect(storage.save).toHaveBeenCalledWith(file.buffer, 'png');
+      expect(wa.sendMediaBuffer).toHaveBeenCalledWith('a1', '628', 'image', file.buffer, 'image/png', 'hi', 'p.png');
+      expect(prisma.message.create.mock.calls[0][0].data.mediaUrl).toBe('/media/k.png');
+      expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'message:new', expect.anything());
+    });
+    it('maps mimetype to the right media category', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
+      });
+      await service.sendUploadedMedia('c1', 'admin', { buffer: Buffer.from('d'), mimetype: 'application/pdf', originalname: 'f.pdf' });
+      expect(wa.sendMediaBuffer.mock.calls[0][2]).toBe('document');
+    });
+    it('throws when conversation missing', async () => {
+      prisma.conversation.findUnique.mockResolvedValue(null);
+      await expect(
+        service.sendUploadedMedia('c1', 'admin', { buffer: Buffer.from('x'), mimetype: 'image/png' }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

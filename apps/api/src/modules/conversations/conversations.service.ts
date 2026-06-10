@@ -9,7 +9,17 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { WaService } from '../wa/wa.service';
+import { MediaStorageService } from '../media/media-storage.service';
+import { extForMimetype } from '../wa/wa.util';
 import { assertSafeMediaUrl } from '../../common/media-url.util';
+
+/** Map an upload mimetype to a WhatsApp media category. */
+function mediaTypeForMime(mime: string): 'image' | 'document' | 'audio' | 'video' {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+  return 'document';
+}
 
 interface ListFilters {
   accountId?: string;
@@ -26,6 +36,7 @@ export class ConversationsService {
     private readonly prisma: PrismaService,
     private readonly wa: WaService,
     private readonly events: EventsGateway,
+    private readonly storage: MediaStorageService,
   ) {}
 
   async list(filters: ListFilters) {
@@ -278,6 +289,65 @@ export class ConversationsService {
       mediaType,
       url,
       caption,
+    );
+
+    const typeMap: Record<string, MessageType> = {
+      image: MessageType.image,
+      document: MessageType.document,
+      audio: MessageType.audio,
+      video: MessageType.video,
+    };
+
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId: id,
+        senderType: SenderType.admin,
+        senderId: adminId,
+        messageType: typeMap[mediaType] ?? MessageType.document,
+        content: caption ?? null,
+        mediaUrl: url,
+        status: 'sent',
+        externalId,
+      },
+    });
+
+    await this.prisma.conversation.update({
+      where: { id },
+      data: { lastMessage: `[${mediaType}] ${caption ?? ''}`, lastMessageAt: new Date() },
+    });
+
+    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message });
+    return message;
+  }
+
+  /**
+   * Send a media file uploaded from the admin's device. The bytes are sent
+   * straight to WhatsApp and stored (so they re-render in the UI); no
+   * admin-supplied URL is involved, so this path needs no SSRF guard.
+   */
+  async sendUploadedMedia(
+    id: string,
+    adminId: string,
+    file: { buffer: Buffer; mimetype: string; originalname?: string },
+    caption?: string,
+  ) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      include: { customer: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const mediaType = mediaTypeForMime(file.mimetype);
+    const { url } = await this.storage.save(file.buffer, extForMimetype(file.mimetype));
+
+    const externalId = await this.wa.sendMediaBuffer(
+      conversation.whatsappAccountId,
+      conversation.customer.phoneNumber,
+      mediaType,
+      file.buffer,
+      file.mimetype,
+      caption,
+      file.originalname,
     );
 
     const typeMap: Record<string, MessageType> = {

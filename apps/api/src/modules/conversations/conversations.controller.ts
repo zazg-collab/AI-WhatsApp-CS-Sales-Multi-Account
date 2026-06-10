@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -7,8 +8,12 @@ import {
   Post,
   Query,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiConsumes } from '@nestjs/swagger';
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
@@ -163,5 +168,24 @@ export class ConversationsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.conversations.sendMedia(id, user.id, dto.mediaType, dto.url, dto.caption);
+  }
+
+  @ApiOperation({ summary: 'Upload & send a media file from the admin device' })
+  @ApiConsumes('multipart/form-data')
+  @Roles('admin', 'supervisor', 'owner')
+  @Post(':id/media/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 25 * 1024 * 1024 }, // 25MB, mirrors WA_MEDIA_MAX_BYTES
+    }),
+  )
+  uploadMedia(
+    @Param('id') id: string,
+    @UploadedFile() file: { buffer: Buffer; mimetype: string; originalname?: string } | undefined,
+    @Body('caption') caption: string | undefined,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!file?.buffer?.length) throw new BadRequestException('No file uploaded');
+    return this.conversations.sendUploadedMedia(id, user.id, file, caption);
   }
 }

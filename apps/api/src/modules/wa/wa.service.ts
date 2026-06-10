@@ -399,6 +399,46 @@ export class WaService implements OnModuleInit {
     return sent?.key.id ?? null;
   }
 
+  /**
+   * Send media from raw bytes (admin upload). Bytes go straight to Baileys —
+   * no URL round-trip — so the gateway never has to fetch from our own API and
+   * private object storage stays private.
+   */
+  async sendMediaBuffer(
+    accountId: string,
+    phone: string,
+    mediaType: 'image' | 'document' | 'audio' | 'video',
+    buffer: Buffer,
+    mimetype: string,
+    caption?: string,
+    fileName?: string,
+  ): Promise<string | null> {
+    const session = this.sessions.get(accountId);
+    if (!session) {
+      throw new NotFoundException(`Account ${accountId} is not connected`);
+    }
+    const jid = phoneToJid(phone);
+    await humanDelay();
+
+    let content: Record<string, unknown>;
+    if (mediaType === 'image') {
+      content = { image: buffer, caption: caption ?? '' };
+    } else if (mediaType === 'document') {
+      content = {
+        document: buffer,
+        mimetype: mimetype || 'application/octet-stream',
+        fileName: fileName ?? caption ?? 'file',
+      };
+    } else if (mediaType === 'audio') {
+      content = { audio: buffer, mimetype: mimetype || 'audio/mpeg' };
+    } else {
+      content = { video: buffer, caption: caption ?? '' };
+    }
+
+    const sent = await session.sock.sendMessage(jid, content as never);
+    return sent?.key.id ?? null;
+  }
+
   /** Log AI mode change to audit trail. */
   async logAiModeChange(
     conversationId: string,

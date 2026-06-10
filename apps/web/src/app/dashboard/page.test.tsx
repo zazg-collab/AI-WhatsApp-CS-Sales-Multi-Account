@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 const apiMock = vi.fn();
 vi.mock('@/lib/api', () => ({
   api: (...a: any[]) => apiMock(...a),
+  uploadFile: vi.fn(),
   getToken: () => 't',
   resolveMediaUrl: (u: string | null) =>
     u && (u.startsWith('/media/') || u.startsWith('http')) ? u : null,
