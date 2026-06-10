@@ -20,6 +20,7 @@ describe('CampaignsService', () => {
         findUnique: jest.fn(),
         create: jest.fn().mockResolvedValue({ id: 'cmp1', name: 'C' }),
         update: jest.fn().mockResolvedValue({ id: 'cmp1', name: 'C' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         count: jest.fn().mockResolvedValue(0),
       },
       campaignRecipient: {
@@ -86,10 +87,21 @@ describe('CampaignsService', () => {
       prisma.campaign.findUnique.mockResolvedValue({ id: 'cmp1', status: CampaignStatus.draft });
       await expect(service.approve('cmp1', 'u1')).rejects.toThrow(BadRequestException);
     });
-    it('approves pending campaign', async () => {
-      prisma.campaign.findUnique.mockResolvedValue({ id: 'cmp1', status: CampaignStatus.pending_approval });
+    it('approves pending campaign atomically', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({
+        id: 'cmp1', status: CampaignStatus.pending_approval, createdById: 'creator',
+      });
       await service.approve('cmp1', 'u1');
-      expect(prisma.campaign.update.mock.calls[0][0].data.status).toBe(CampaignStatus.approved);
+      expect(prisma.campaign.updateMany).toHaveBeenCalledWith({
+        where: { id: 'cmp1', status: CampaignStatus.pending_approval },
+        data: { status: CampaignStatus.approved, approvedById: 'u1' },
+      });
+    });
+    it('rejects self-approval by the creator', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({
+        id: 'cmp1', status: CampaignStatus.pending_approval, createdById: 'u1',
+      });
+      await expect(service.approve('cmp1', 'u1')).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -145,12 +157,28 @@ describe('CampaignsService', () => {
       prisma.campaignRecipient.findUnique.mockResolvedValue({
         id: 'r1', status: CampaignRecipientStatus.queued, campaignId: 'cmp1',
         phoneNumber: '628', conversationId: 'conv1',
+        customer: { tags: [], status: 'active' },
+        conversation: { takeoverStatus: 'ai_active' },
         campaign: { status: CampaignStatus.running, whatsappAccountId: 'a1', messageTemplate: 'hi', createdById: 'u1' },
       });
       prisma.message = { create: jest.fn().mockResolvedValue({ id: 'm1' }) };
       prisma.conversation = { update: jest.fn().mockResolvedValue({}) };
       await service.processRecipient('r1');
       expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'hi');
+    });
+    it('skips a recipient who opted out after approval', async () => {
+      prisma.campaignRecipient.findUnique.mockResolvedValue({
+        id: 'r1', status: CampaignRecipientStatus.queued, campaignId: 'cmp1',
+        phoneNumber: '628', conversationId: 'conv1',
+        customer: { tags: ['opt_out'], status: 'active' },
+        conversation: { takeoverStatus: 'ai_active' },
+        campaign: { status: CampaignStatus.running, whatsappAccountId: 'a1', messageTemplate: 'hi', createdById: 'u1' },
+      });
+      await service.processRecipient('r1');
+      expect(wa.sendText).not.toHaveBeenCalled();
+      expect(prisma.campaignRecipient.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: CampaignRecipientStatus.skipped }) }),
+      );
     });
   });
 

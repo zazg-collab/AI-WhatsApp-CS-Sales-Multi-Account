@@ -17,6 +17,7 @@ import { Roles, RolesGuard } from '../../auth/roles';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CustomersService } from './customers.service';
 import { UpdateCustomerDto, AddNoteDto, BulkCustomerActionDto } from './dto/customers.dto';
+import { csvRow } from '../../common/csv.util';
 
 // PRD 14.7 — Customers / CRM.
 @ApiTags('customers')
@@ -36,18 +37,18 @@ export class CustomersController {
   ) {
     const items = await this.customers.exportList({ stage, tag, search });
     const header = 'id,name,phone,email,leadStage,leadScore,tags,lastContactAt,notes,createdAt\n';
-    const rows = items.map((c) => [
+    const rows = items.map((c) => csvRow([
       c.id,
-      `"${(c.name ?? '').replace(/"/g, '""')}"`,
+      c.name ?? '',
       c.phoneNumber,
       '',
       c.leadStage,
       c.leadScore,
-      `"${c.tags.join(';')}"`,
+      c.tags.join(';'),
       c.lastMessageAt?.toISOString() ?? '',
-      `"${(c.notes ?? '').replace(/"/g, '""')}"`,
+      c.notes ?? '',
       c.createdAt.toISOString(),
-    ].join(',')).join('\n');
+    ])).join('\n');
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="customers.csv"');
     res.send(header + rows);

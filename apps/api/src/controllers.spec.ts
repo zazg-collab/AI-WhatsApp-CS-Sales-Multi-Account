@@ -31,7 +31,7 @@ describe('AuthController', () => {
 
 describe('HealthController', () => {
   it('check returns ok', () => {
-    const c = new HealthController({} as any, { get: () => undefined } as any);
+    const c = new HealthController({} as any, { get: () => undefined } as any, {} as any);
     expect(c.check().status).toBe('ok');
   });
 });

@@ -176,10 +176,22 @@ export class CampaignsService {
     if (campaign.status !== CampaignStatus.pending_approval) {
       throw new BadRequestException('Only pending approval campaigns can be approved');
     }
-    const approved = await this.prisma.campaign.update({
-      where: { id },
+    // Separation of duties (H4): the creator cannot approve their own campaign.
+    if (campaign.createdById && campaign.createdById === userId) {
+      throw new BadRequestException(
+        'You cannot approve a campaign you created; a different reviewer must approve it',
+      );
+    }
+    // Atomic guard (H4): only flip from pending_approval, so two concurrent
+    // approvals cannot both succeed.
+    const result = await this.prisma.campaign.updateMany({
+      where: { id, status: CampaignStatus.pending_approval },
       data: { status: CampaignStatus.approved, approvedById: userId },
     });
+    if (result.count === 0) {
+      throw new BadRequestException('Campaign is no longer pending approval');
+    }
+    const approved = await this.findCampaign(id);
     await this.audit.log(userId, 'campaign_approved', 'Campaign', id, { name: approved.name });
     return approved;
   }
@@ -294,6 +306,34 @@ export class CampaignsService {
           data: { status: CampaignRecipientStatus.pending },
         });
       }
+      return;
+    }
+
+    // Opt-out re-check (H5): tags/state may have changed between approval and
+    // send. Never message a customer who opted out after the campaign snapshot.
+    const normalizedTags = (recipient.customer.tags ?? []).map((tag) => tag.toLowerCase());
+    const customerOptedOut =
+      BLOCKED_TAGS.some((tag) => normalizedTags.includes(tag)) ||
+      BLOCKED_TAGS.includes((recipient.customer.status ?? '').toLowerCase());
+    if (customerOptedOut) {
+      await this.prisma.campaignRecipient.update({
+        where: { id: recipient.id },
+        data: { status: CampaignRecipientStatus.skipped, error: 'Customer opted out before send' },
+      });
+      await this.refreshCampaignCompletion(recipient.campaignId);
+      return;
+    }
+    // Don't fire into a conversation that an admin is actively handling.
+    if (
+      recipient.conversation &&
+      (recipient.conversation.takeoverStatus === TakeoverStatus.waiting_admin ||
+        recipient.conversation.takeoverStatus === TakeoverStatus.admin_takeover)
+    ) {
+      await this.prisma.campaignRecipient.update({
+        where: { id: recipient.id },
+        data: { status: CampaignRecipientStatus.skipped, error: 'Conversation under admin handling' },
+      });
+      await this.refreshCampaignCompletion(recipient.campaignId);
       return;
     }
 

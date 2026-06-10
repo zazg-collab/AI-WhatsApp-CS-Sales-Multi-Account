@@ -34,6 +34,8 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
       }),
       inject: [ConfigService],
     }),
+    // Lightweight queue used only by the health controller to ping Redis (M5).
+    BullModule.registerQueue({ name: 'health' }),
     PrismaModule,
     RealtimeModule,
     NotificationsModule,

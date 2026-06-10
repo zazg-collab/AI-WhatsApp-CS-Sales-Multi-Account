@@ -11,7 +11,7 @@ import { ConfigService } from '@nestjs/config';
 interface AuthenticatedSocket extends Socket {
   data: {
     userId?: string;
-    accountIds?: string[];
+    role?: string;
   };
 }
 
@@ -19,8 +19,10 @@ interface AuthenticatedSocket extends Socket {
  * Single Socket.IO hub for pushing live updates to the dashboard
  * (PRD performance target: incoming message visible in < 2s).
  *
- * Requires JWT authentication. Events are scoped by room to prevent
- * cross-tenant leakage. Clients join rooms for accounts they have access to.
+ * Authentication (C1): every connection must present a valid JWT (via
+ * `auth.token` in the handshake, or an Authorization bearer header).
+ * Unauthenticated sockets are disconnected immediately, closing the
+ * previously-open leak of messages, drafts, QR codes, and alerts.
  *
  * Events emitted:
  *   wa:status   { accountId, status }
@@ -28,7 +30,13 @@ interface AuthenticatedSocket extends Socket {
  *   message:new { conversationId, message }
  */
 @WebSocketGateway({
-  cors: { origin: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000', credentials: true },
+  cors: {
+    origin: (process.env.CORS_ORIGINS ?? process.env.WEB_ORIGIN ?? 'http://localhost:3000')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+    credentials: true,
+  },
   namespace: '/events',
 })
 export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -40,8 +48,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly config: ConfigService,
   ) {}
 
-  async handleConnection(socket: AuthenticatedSocket) {
-    const token = socket.handshake.auth.token ?? socket.handshake.headers.authorization?.split(' ')[1];
+  handleConnection(socket: AuthenticatedSocket) {
+    const token =
+      socket.handshake.auth?.token ??
+      socket.handshake.headers.authorization?.split(' ')[1];
     if (!token) {
       socket.disconnect();
       return;
@@ -55,21 +65,17 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
       const payload = this.jwt.verify(token, { secret });
       socket.data.userId = payload.sub;
-      socket.data.accountIds = payload.accountIds || [];
+      socket.data.role = payload.role;
     } catch {
       socket.disconnect();
     }
   }
 
-  handleDisconnect(socket: Socket) {
-    // Cleanup handled by Socket.IO
+  handleDisconnect() {
+    // Cleanup handled by Socket.IO.
   }
 
   emit(event: string, payload: unknown) {
     this.server?.emit(event, payload);
-  }
-
-  emitToAccount(accountId: string, event: string, payload: unknown) {
-    this.server?.to(`account:${accountId}`).emit(event, payload);
   }
 }

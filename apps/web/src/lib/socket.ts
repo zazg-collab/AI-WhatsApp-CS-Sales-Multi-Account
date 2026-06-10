@@ -1,6 +1,7 @@
 'use client';
 
 import { io, type Socket } from 'socket.io-client';
+import { getToken } from './api';
 
 let socket: Socket | null = null;
 
@@ -13,7 +14,19 @@ function baseUrl(): string {
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io(`${baseUrl()}/events`, { transports: ['websocket'] });
+    // The gateway now requires a JWT (C1) — pass it in the handshake auth.
+    socket = io(`${baseUrl()}/events`, {
+      transports: ['websocket'],
+      auth: { token: getToken() ?? '' },
+    });
   }
   return socket;
+}
+
+/** Drop the authenticated socket (e.g. on logout) so a fresh token is used. */
+export function resetSocket(): void {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
 }

@@ -18,6 +18,7 @@ import { ConversationsService } from './conversations.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { AiModeDto } from './dto/ai-mode.dto';
 import { AiMode } from '@hermes/database';
+import { csvRow } from '../../common/csv.util';
 
 // PRD 14.3 — Conversations.
 @ApiTags('conversations')
@@ -38,16 +39,16 @@ export class ConversationsController {
   ) {
     const items = await this.conversations.exportList({ accountId, aiMode, from, to });
     const header = 'id,customerName,customerPhone,aiMode,status,messageCount,lastMessageAt,leadStage\n';
-    const rows = items.map((c) => [
+    const rows = items.map((c) => csvRow([
       c.id,
-      `"${(c.customer?.name ?? '').replace(/"/g, '""')}"`,
+      c.customer?.name ?? '',
       c.customer?.phoneNumber ?? '',
       c.aiMode,
       c.takeoverStatus,
       c._count?.messages ?? 0,
       c.lastMessageAt?.toISOString() ?? '',
       c.customer?.leadStage ?? '',
-    ].join(',')).join('\n');
+    ])).join('\n');
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="conversations.csv"');
     res.send(header + rows);

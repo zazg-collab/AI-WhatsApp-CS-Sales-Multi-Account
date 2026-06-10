@@ -33,13 +33,13 @@ describe('CampaignsProcessor', () => {
 
 describe('EventsGateway', () => {
   it('emits through socket server when present', () => {
-    const g = new EventsGateway();
+    const g = new EventsGateway({} as any, { get: () => 'secret' } as any);
     g.server = { emit: jest.fn() } as any;
     g.emit('wa:status', { a: 1 });
     expect(g.server.emit).toHaveBeenCalledWith('wa:status', { a: 1 });
   });
   it('no-ops when server undefined', () => {
-    const g = new EventsGateway();
+    const g = new EventsGateway({} as any, { get: () => 'secret' } as any);
     expect(() => g.emit('x', {})).not.toThrow();
   });
 });
