@@ -60,11 +60,11 @@ interface PersonaFormData {
 function statusBadge(status: string) {
   const map: Record<string, string> = {
     active: 'bg-green-700 text-green-100',
-    inactive: 'bg-gray-700 text-gray-100',
+    inactive: 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100',
     draft: 'bg-yellow-800 text-yellow-100',
   };
   return (
-    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${map[status] ?? 'bg-gray-700'}`}>
+    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${map[status] ?? 'bg-gray-200 dark:bg-gray-700'}`}>
       {status}
     </span>
   );
@@ -73,12 +73,12 @@ function statusBadge(status: string) {
 function sessionDot(status: string) {
   const map: Record<string, string> = {
     connected: 'bg-green-400',
-    disconnected: 'bg-gray-500',
+    disconnected: 'bg-gray-300 dark:bg-gray-500',
     qr_required: 'bg-yellow-400',
     banned: 'bg-red-500',
     reconnecting: 'bg-blue-400',
   };
-  return <span className={`inline-block h-2 w-2 rounded-full ${map[status] ?? 'bg-gray-500'}`} />;
+  return <span className={`inline-block h-2 w-2 rounded-full ${map[status] ?? 'bg-gray-300 dark:bg-gray-500'}`} />;
 }
 
 // ── PersonaModal ───────────────────────────────────────────────────────────────
@@ -124,64 +124,64 @@ function PersonaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-full max-w-lg rounded-xl bg-wa-panel p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60">
+      <div className="w-full max-w-lg rounded-xl bg-white dark:bg-wa-panel p-6 shadow-2xl">
         <h2 className="mb-4 text-lg font-semibold">Buat Persona Baru</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="mb-1 block text-xs text-gray-400">Nama Persona</label>
+            <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Nama Persona</label>
             <input
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full rounded bg-black/30 px-3 py-2 text-sm outline-none"
+              className="w-full rounded bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none"
               placeholder="mis. Sales Bot Ceria"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-gray-400">Soul.md (kepribadian)</label>
+            <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Soul.md (kepribadian)</label>
             <textarea
               required
               rows={5}
               value={form.soulMd}
               onChange={(e) => setForm({ ...form, soulMd: e.target.value })}
-              className="w-full resize-none rounded bg-black/30 px-3 py-2 text-sm outline-none"
+              className="w-full resize-none rounded bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none"
               placeholder="Kamu adalah asisten penjualan yang ramah..."
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-xs text-gray-400">Tone</label>
+              <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Tone</label>
               <input
                 value={form.tone}
                 onChange={(e) => setForm({ ...form, tone: e.target.value })}
-                className="w-full rounded bg-black/30 px-3 py-2 text-sm outline-none"
+                className="w-full rounded bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none"
                 placeholder="friendly, formal..."
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs text-gray-400">Style</label>
+              <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Style</label>
               <input
                 value={form.style}
                 onChange={(e) => setForm({ ...form, style: e.target.value })}
-                className="w-full rounded bg-black/30 px-3 py-2 text-sm outline-none"
+                className="w-full rounded bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none"
                 placeholder="concise, detailed..."
               />
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-gray-400">Rules (aturan)</label>
+            <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Rules (aturan)</label>
             <textarea
               rows={2}
               value={form.rules}
               onChange={(e) => setForm({ ...form, rules: e.target.value })}
-              className="w-full resize-none rounded bg-black/30 px-3 py-2 text-sm outline-none"
+              className="w-full resize-none rounded bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none"
               placeholder="Jangan berikan harga tanpa persetujuan..."
             />
           </div>
           {error && <p className="text-xs text-red-400">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="rounded px-4 py-2 text-sm text-gray-400 hover:text-gray-200">
+            <button type="button" onClick={onClose} className="rounded px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
               Batal
             </button>
             <button type="submit" disabled={loading} className="rounded bg-wa-accent px-4 py-2 text-sm font-medium text-black disabled:opacity-50">
@@ -275,27 +275,27 @@ function BotModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60">
-        <div className="w-full max-w-xl rounded-xl bg-wa-panel p-6 shadow-2xl">
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 dark:bg-black/60">
+        <div className="w-full max-w-xl rounded-xl bg-white dark:bg-wa-panel p-6 shadow-2xl">
           <h2 className="mb-4 text-lg font-semibold">
             {bot ? `Edit Bot: ${bot.botName}` : 'Buat Bot Baru'}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className="mb-1 block text-xs text-gray-400">Nama Bot</label>
+              <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Nama Bot</label>
               <input
                 required
                 value={form.botName}
                 onChange={(e) => setForm({ ...form, botName: e.target.value })}
-                className="w-full rounded bg-black/30 px-3 py-2 text-sm outline-none"
+                className="w-full rounded bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none"
                 placeholder="mis. Hermes Sales Bot"
               />
             </div>
 
             <div>
               <div className="mb-1 flex items-center justify-between">
-                <label className="text-xs text-gray-400">Persona</label>
+                <label className="text-xs text-gray-600 dark:text-gray-400">Persona</label>
                 <button
                   type="button"
                   onClick={() => setShowPersonaModal(true)}
@@ -307,7 +307,7 @@ function BotModal({
               <select
                 value={form.personaId}
                 onChange={(e) => setForm({ ...form, personaId: e.target.value })}
-                className="w-full rounded bg-black/30 px-3 py-2 text-sm outline-none"
+                className="w-full rounded bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none"
               >
                 <option value="">-- Pilih Persona --</option>
                 {localPersonas.map((p) => (
@@ -317,11 +317,11 @@ function BotModal({
             </div>
 
             <div>
-              <label className="mb-1 block text-xs text-gray-400">Knowledge Base</label>
+              <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Knowledge Base</label>
               <select
                 value={form.knowledgeBaseId}
                 onChange={(e) => setForm({ ...form, knowledgeBaseId: e.target.value })}
-                className="w-full rounded bg-black/30 px-3 py-2 text-sm outline-none"
+                className="w-full rounded bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none"
               >
                 <option value="">-- Pilih Knowledge Base --</option>
                 {knowledgeBases.map((kb) => (
@@ -332,11 +332,11 @@ function BotModal({
 
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="mb-1 block text-xs text-gray-400">Default AI Mode</label>
+                <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Default AI Mode</label>
                 <select
                   value={form.defaultAiMode}
                   onChange={(e) => setForm({ ...form, defaultAiMode: e.target.value })}
-                  className="w-full rounded bg-black/30 px-2 py-2 text-sm outline-none"
+                  className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-2 text-sm outline-none"
                 >
                   {aiModes.map((m) => (
                     <option key={m.value} value={m.value}>{m.label}</option>
@@ -344,22 +344,22 @@ function BotModal({
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-gray-400">Bahasa</label>
+                <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Bahasa</label>
                 <select
                   value={form.language}
                   onChange={(e) => setForm({ ...form, language: e.target.value })}
-                  className="w-full rounded bg-black/30 px-2 py-2 text-sm outline-none"
+                  className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-2 text-sm outline-none"
                 >
                   <option value="id">Indonesia</option>
                   <option value="en">English</option>
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-gray-400">Status</label>
+                <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Status</label>
                 <select
                   value={form.status}
                   onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  className="w-full rounded bg-black/30 px-2 py-2 text-sm outline-none"
+                  className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-2 text-sm outline-none"
                 >
                   <option value="draft">Draft</option>
                   <option value="active">Active</option>
@@ -371,7 +371,7 @@ function BotModal({
             {error && <p className="text-xs text-red-400">{error}</p>}
 
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={onClose} className="rounded px-4 py-2 text-sm text-gray-400 hover:text-gray-200">
+              <button type="button" onClick={onClose} className="rounded px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
                 Batal
               </button>
               <button type="submit" disabled={loading} className="rounded bg-wa-accent px-4 py-2 text-sm font-medium text-black disabled:opacity-50">
@@ -380,19 +380,19 @@ function BotModal({
             </div>
           </form>
 
-          {/* Assign accounts - only when editing */}
+          {/* Assign accounts — only when editing */}
           {bot && (
-            <div className="mt-4 border-t border-black/30 pt-4">
-              <h3 className="mb-2 text-xs font-semibold text-gray-400">Assign ke Akun WhatsApp</h3>
+            <div className="mt-4 border-t border-gray-200 dark:border-black/30 pt-4">
+              <h3 className="mb-2 text-xs font-semibold text-gray-600 dark:text-gray-400">Assign ke Akun WhatsApp</h3>
               <div className="space-y-1">
                 {accounts.map((a) => {
                   const assigned = bot.accounts.some((ba) => ba.id === a.id);
                   return (
-                    <div key={a.id} className="flex items-center justify-between rounded bg-black/20 px-3 py-2">
+                    <div key={a.id} className="flex items-center justify-between rounded bg-black/5 dark:bg-black/20 px-3 py-2">
                       <div className="flex items-center gap-2">
                         {sessionDot(a.sessionStatus)}
                         <span className="text-sm">{a.accountName}</span>
-                        <span className="text-xs text-gray-400">{a.phoneNumber}</span>
+                        <span className="text-xs text-gray-600 dark:text-gray-400">{a.phoneNumber}</span>
                       </div>
                       {assigned ? (
                         <span className="text-xs text-green-400">Assigned</span>
@@ -442,14 +442,14 @@ function BotCard({
   onDelete: () => void;
 }) {
   return (
-    <div className="rounded-xl bg-wa-panel p-4">
+    <div className="rounded-xl bg-white dark:bg-wa-panel p-4">
       <div className="mb-3 flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
             <h3 className="font-semibold">{bot.botName}</h3>
             {statusBadge(bot.status)}
           </div>
-          <p className="mt-0.5 text-xs text-gray-400">
+          <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
             {bot.persona?.name ?? 'No persona'} •{' '}
             {bot.knowledgeBase?.name ?? 'No KB'} •{' '}
             Lang: {bot.language.toUpperCase()}
@@ -458,7 +458,7 @@ function BotCard({
         <div className="flex gap-2">
           <button
             onClick={onEdit}
-            className="rounded bg-black/30 px-3 py-1 text-xs text-gray-300 hover:bg-black/50"
+            className="rounded bg-black/5 dark:bg-black/30 px-3 py-1 text-xs text-gray-700 dark:text-gray-300 hover:bg-black/40 dark:hover:bg-black/50"
           >
             Edit
           </button>
@@ -471,9 +471,9 @@ function BotCard({
         </div>
       </div>
 
-      <div className="mb-2 text-xs text-gray-400">
+      <div className="mb-2 text-xs text-gray-600 dark:text-gray-400">
         Default mode:{' '}
-        <span className="rounded bg-black/30 px-1.5 py-0.5">{bot.defaultAiMode}</span>
+        <span className="rounded bg-black/5 dark:bg-black/30 px-1.5 py-0.5">{bot.defaultAiMode}</span>
       </div>
 
       {bot.accounts.length > 0 ? (
@@ -483,7 +483,7 @@ function BotCard({
             {bot.accounts.map((a) => (
               <span
                 key={a.id}
-                className="flex items-center gap-1 rounded bg-black/30 px-2 py-0.5 text-xs"
+                className="flex items-center gap-1 rounded bg-black/5 dark:bg-black/30 px-2 py-0.5 text-xs"
               >
                 {sessionDot(a.sessionStatus)}
                 {a.accountName}
@@ -492,7 +492,7 @@ function BotCard({
           </div>
         </div>
       ) : (
-        <p className="text-xs text-gray-600">Belum ada akun yang di-assign</p>
+        <p className="text-xs text-gray-500 dark:text-gray-600">Belum ada akun yang di-assign</p>
       )}
     </div>
   );
@@ -564,7 +564,7 @@ export default function BotsPage() {
       {loading ? (
         <p className="text-sm text-gray-500">Memuat...</p>
       ) : bots.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-700 p-12 text-center">
+        <div className="rounded-xl border border-dashed border-gray-200 dark:border-gray-700 p-12 text-center">
           <p className="text-gray-500">Belum ada bot. Buat bot pertama Anda!</p>
         </div>
       ) : (
@@ -597,15 +597,15 @@ export default function BotsPage() {
 
       {/* Delete confirmation */}
       {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="rounded-xl bg-wa-panel p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60">
+          <div className="rounded-xl bg-white dark:bg-wa-panel p-6 shadow-2xl">
             <p className="mb-4 text-sm">
               Hapus bot <strong>{confirmDelete.botName}</strong>? Tindakan ini tidak bisa dibatalkan.
             </p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setConfirmDelete(null)}
-                className="rounded px-4 py-2 text-sm text-gray-400 hover:text-gray-200"
+                className="rounded px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               >
                 Batal
               </button>

@@ -33,14 +33,14 @@ interface PreviewResult {
 }
 
 const statusColors: Record<string, string> = {
-  draft: 'bg-gray-700 text-gray-100',
+  draft: 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100',
   pending_approval: 'bg-yellow-900/70 text-yellow-200',
   approved: 'bg-blue-900/70 text-blue-200',
   scheduled: 'bg-indigo-900/70 text-indigo-200',
   running: 'bg-emerald-900/70 text-emerald-200',
   paused: 'bg-orange-900/70 text-orange-200',
   completed: 'bg-green-900/70 text-green-200',
-  cancelled: 'bg-gray-800 text-gray-400',
+  cancelled: 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400',
   failed: 'bg-red-900/70 text-red-200',
 };
 
@@ -172,6 +172,15 @@ export default function CampaignsPage() {
 
   async function runAction(action: 'submit' | 'approve' | 'start' | 'pause' | 'cancel' | 'retry-failed') {
     if (!selectedCampaign) return;
+    // Confirm high-consequence actions (M7): approving or starting a campaign
+    // authorizes outbound messages to real customers.
+    const confirmMessages: Partial<Record<typeof action, string>> = {
+      approve: 'Approve this campaign? It will be cleared for sending to all recipients.',
+      start: 'Start sending this campaign to all queued recipients now?',
+      cancel: 'Cancel this campaign? Pending recipients will be skipped.',
+    };
+    const confirmMsg = confirmMessages[action];
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
     setSubmitting(true);
     try {
       await api(`/campaigns/${selectedCampaign.id}/${action}`, { method: 'POST' });
@@ -188,25 +197,25 @@ export default function CampaignsPage() {
   return (
     <AppLayout>
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-96 shrink-0 overflow-y-auto border-r border-gray-700 bg-gray-900 p-5">
+        <aside className="w-96 shrink-0 overflow-y-auto border-r border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-900 p-5">
           <div className="mb-5">
-            <h1 className="text-xl font-semibold text-gray-100">Campaigns</h1>
-            <p className="text-sm text-gray-400">Controlled messaging dengan approval, queue, rate limit, dan audit.</p>
+            <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Campaigns</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Controlled messaging dengan approval, queue, rate limit, dan audit.</p>
           </div>
 
           {canManage && (
-            <div className="mb-5 space-y-3 rounded-lg border border-gray-700 bg-gray-800 p-4">
+            <div className="mb-5 space-y-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
               <h2 className="font-medium text-emerald-300">Create Campaign Draft</h2>
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Nama campaign"
-                className="w-full rounded bg-gray-900 px-3 py-2 text-sm outline-none"
+                className="w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm outline-none"
               />
               <select
                 value={whatsappAccountId}
                 onChange={(event) => setWhatsappAccountId(event.target.value)}
-                className="w-full rounded bg-gray-900 px-3 py-2 text-sm outline-none"
+                className="w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm outline-none"
               >
                 <option value="">Pilih WhatsApp account</option>
                 {accounts.map((account) => (
@@ -217,13 +226,13 @@ export default function CampaignsPage() {
                 value={messageTemplate}
                 onChange={(event) => setMessageTemplate(event.target.value)}
                 placeholder="Tulis pesan campaign..."
-                className="h-28 w-full rounded bg-gray-900 px-3 py-2 text-sm outline-none"
+                className="h-28 w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm outline-none"
               />
               <div className="grid grid-cols-2 gap-2">
                 <select
                   value={leadStage}
                   onChange={(event) => setLeadStage(event.target.value)}
-                  className="rounded bg-gray-900 px-3 py-2 text-sm outline-none"
+                  className="rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm outline-none"
                 >
                   <option value="">Semua stage</option>
                   <option value="cold">Cold</option>
@@ -235,11 +244,11 @@ export default function CampaignsPage() {
                   value={tag}
                   onChange={(event) => setTag(event.target.value)}
                   placeholder="Filter tag"
-                  className="rounded bg-gray-900 px-3 py-2 text-sm outline-none"
+                  className="rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm outline-none"
                 />
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-xs text-gray-400">
+                <label className="text-xs text-gray-600 dark:text-gray-400">
                   Rate/min
                   <input
                     type="number"
@@ -247,16 +256,16 @@ export default function CampaignsPage() {
                     max={30}
                     value={rateLimitPerMinute}
                     onChange={(event) => setRateLimitPerMinute(Number(event.target.value))}
-                    className="mt-1 w-full rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none"
+                    className="mt-1 w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
                   />
                 </label>
-                <label className="text-xs text-gray-400">
+                <label className="text-xs text-gray-600 dark:text-gray-400">
                   Schedule
                   <input
                     type="datetime-local"
                     value={scheduledAt}
                     onChange={(event) => setScheduledAt(event.target.value)}
-                    className="mt-1 w-full rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none"
+                    className="mt-1 w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
                   />
                 </label>
               </div>
@@ -264,7 +273,7 @@ export default function CampaignsPage() {
                 <button
                   onClick={handlePreview}
                   disabled={submitting}
-                  className="flex-1 rounded border border-gray-600 py-2 text-sm text-gray-200 hover:bg-gray-700 disabled:opacity-50"
+                  className="flex-1 rounded border border-gray-300 dark:border-gray-600 py-2 text-sm text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50"
                 >
                   Preview
                 </button>
@@ -277,7 +286,7 @@ export default function CampaignsPage() {
                 </button>
               </div>
               {preview && (
-                <div className="rounded bg-gray-900 p-3 text-xs text-gray-300">
+                <div className="rounded bg-gray-100 dark:bg-gray-900 p-3 text-xs text-gray-700 dark:text-gray-300">
                   <div><span className="font-semibold text-emerald-300">{preview.eligibleCount}</span> eligible recipients</div>
                   <div className="mt-1 text-gray-500">Skipped: {Object.entries(preview.skipped).map(([key, value]) => `${key} ${value}`).join(', ')}</div>
                 </div>
@@ -286,15 +295,15 @@ export default function CampaignsPage() {
           )}
 
           <div className="space-y-2">
-            {loading ? <p className="text-sm text-gray-400">Loading...</p> : campaigns.map((campaign) => (
+            {loading ? <p className="text-sm text-gray-600 dark:text-gray-400">Loading...</p> : campaigns.map((campaign) => (
               <button
                 key={campaign.id}
                 onClick={() => setSelectedId(campaign.id)}
-                className={`w-full rounded-lg border px-3 py-3 text-left ${selectedId === campaign.id ? 'border-emerald-500 bg-emerald-950/30' : 'border-gray-700 bg-gray-800 hover:bg-gray-700/60'}`}
+                className={`w-full rounded-lg border px-3 py-3 text-left ${selectedId === campaign.id ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-200/60 dark:hover:bg-gray-700/60'}`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-gray-100">{campaign.name}</span>
-                  <span className={`rounded px-2 py-1 text-xs ${statusColors[campaign.status] ?? 'bg-gray-700'}`}>{campaign.status}</span>
+                  <span className="font-medium text-gray-900 dark:text-gray-100">{campaign.name}</span>
+                  <span className={`rounded px-2 py-1 text-xs ${statusColors[campaign.status] ?? 'bg-gray-200 dark:bg-gray-700'}`}>{campaign.status}</span>
                 </div>
                 <div className="mt-1 text-xs text-gray-500">{campaign.whatsappAccount?.accountName ?? 'No account'} · {campaign._count?.recipients ?? 0} recipients</div>
               </button>
@@ -313,15 +322,15 @@ export default function CampaignsPage() {
             <div className="flex h-full items-center justify-center text-gray-500">Pilih campaign untuk melihat detail.</div>
           ) : (
             <div className="space-y-5">
-              <section className="rounded-lg border border-gray-700 bg-gray-800 p-5">
+              <section className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-2xl font-semibold text-gray-100">{detail.name}</h2>
-                    <p className="mt-1 text-sm text-gray-400">{detail.whatsappAccount?.accountName} · rate {detail.rateLimitPerMinute}/min</p>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{detail.name}</h2>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">{detail.whatsappAccount?.accountName} · rate {detail.rateLimitPerMinute}/min</p>
                   </div>
-                  <span className={`rounded px-3 py-1 text-sm ${statusColors[detail.status] ?? 'bg-gray-700'}`}>{detail.status}</span>
+                  <span className={`rounded px-3 py-1 text-sm ${statusColors[detail.status] ?? 'bg-gray-200 dark:bg-gray-700'}`}>{detail.status}</span>
                 </div>
-                <pre className="mt-4 whitespace-pre-wrap rounded bg-gray-900 p-4 text-sm text-gray-200">{detail.messageTemplate}</pre>
+                <pre className="mt-4 whitespace-pre-wrap rounded bg-gray-100 dark:bg-gray-900 p-4 text-sm text-gray-800 dark:text-gray-200">{detail.messageTemplate}</pre>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {canManage && ['draft', 'pending_approval'].includes(detail.status) && (
                     <button onClick={() => runAction('submit')} disabled={submitting} className="rounded bg-yellow-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">Submit Approval</button>
@@ -346,23 +355,23 @@ export default function CampaignsPage() {
 
               <section className="grid gap-3 md:grid-cols-5">
                 {['pending', 'queued', 'sending', 'sent', 'failed'].map((status) => (
-                  <div key={status} className="rounded-lg border border-gray-700 bg-gray-800 p-4">
+                  <div key={status} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
                     <div className="text-xs uppercase tracking-wide text-gray-500">{status}</div>
-                    <div className="mt-1 text-2xl font-semibold text-gray-100">{detail.recipientStats?.[status] ?? 0}</div>
+                    <div className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">{detail.recipientStats?.[status] ?? 0}</div>
                   </div>
                 ))}
               </section>
 
-              <section className="rounded-lg border border-gray-700 bg-gray-800">
-                <div className="border-b border-gray-700 px-4 py-3 text-sm font-medium text-gray-200">Recipients sample</div>
+              <section className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <div className="border-b border-gray-200 dark:border-gray-700 px-4 py-3 text-sm font-medium text-gray-800 dark:text-gray-200">Recipients sample</div>
                 <div className="max-h-[420px] overflow-y-auto">
                   {(detail as any).recipients?.map((recipient: any) => (
-                    <div key={recipient.id} className="grid grid-cols-[1fr_120px] gap-3 border-b border-gray-700 px-4 py-3 text-sm">
+                    <div key={recipient.id} className="grid grid-cols-[1fr_120px] gap-3 border-b border-gray-200 dark:border-gray-700 px-4 py-3 text-sm">
                       <div>
-                        <div className="text-gray-100">{recipient.customer?.name || recipient.phoneNumber}</div>
+                        <div className="text-gray-900 dark:text-gray-100">{recipient.customer?.name || recipient.phoneNumber}</div>
                         <div className="text-xs text-gray-500">{recipient.phoneNumber} {recipient.error ? `· ${recipient.error}` : ''}</div>
                       </div>
-                      <span className="text-right text-gray-300">{recipient.status}</span>
+                      <span className="text-right text-gray-700 dark:text-gray-300">{recipient.status}</span>
                     </div>
                   ))}
                 </div>

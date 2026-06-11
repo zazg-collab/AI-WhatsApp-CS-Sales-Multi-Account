@@ -38,19 +38,32 @@ export class NotificationsService {
     if (!this.enabled) return;
     await new Promise<void>((resolve) => {
       let stderr = '';
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      };
       const child = spawn(this.bin, ['send', '--to', this.target], {
         stdio: ['pipe', 'ignore', 'pipe'],
       });
+      // Timeout guard (H8): never let a hung CLI block the caller indefinitely.
+      const timer = setTimeout(() => {
+        this.logger.warn('hermes send timed out, killing child process');
+        child.kill('SIGKILL');
+        finish();
+      }, 10_000);
       child.stderr?.on('data', (d) => (stderr += d));
       child.on('error', (err) => {
         this.logger.error(`hermes send unavailable: ${err.message}`);
-        resolve();
+        finish();
       });
       child.on('close', (code) => {
         if (code !== 0) {
           this.logger.warn(`hermes send exited ${code}: ${stderr.trim()}`);
         }
-        resolve();
+        finish();
       });
       child.stdin?.end(text);
     });

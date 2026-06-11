@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { logAudit } from '../common/audit.util';
 
 export interface JwtPayload {
   sub: string;
@@ -20,8 +21,17 @@ export class AuthService {
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        passwordHash: true,
+        deletedAt: true,
+      },
     });
-    if (!user || user.status !== 'active') {
+    if (!user || user.status !== 'active' || user.deletedAt) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -35,6 +45,13 @@ export class AuthService {
       email: user.email,
       role: user.role,
     };
+
+    await logAudit(this.prisma, {
+      userId: user.id,
+      action: 'login',
+      entityType: 'user',
+      entityId: user.id,
+    });
 
     return {
       accessToken: await this.jwt.signAsync(payload),
@@ -50,9 +67,10 @@ export class AuthService {
   async me(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, role: true, status: true },
+      select: { id: true, name: true, email: true, role: true, status: true, deletedAt: true },
     });
-    if (!user) throw new UnauthorizedException();
-    return user;
+    if (!user || user.deletedAt) throw new UnauthorizedException();
+    const { deletedAt: _deletedAt, ...result } = user;
+    return result;
   }
 }

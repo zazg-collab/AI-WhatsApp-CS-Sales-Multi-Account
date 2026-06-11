@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Interval } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import {
   CampaignRecipientStatus,
   CampaignStatus,
-  LeadStage,
   Prisma,
   SenderType,
   TakeoverStatus,
@@ -13,10 +14,15 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { AuditService } from '../audit/audit.service';
 import { WaService } from '../wa/wa.service';
+import { renderTemplate } from '../wa/wa.util';
 import { CreateCampaignDto, CampaignTargetFilterDto, UpdateCampaignDto } from './dto/campaigns.dto';
 
 const BLOCKED_TAGS = ['opt_out', 'blocked', 'do_not_contact'];
-const MAX_RECIPIENTS = 1000;
+// Defaults for env-tunable limits (see .env.example):
+//   CAMPAIGN_MAX_RECIPIENTS         max targets per campaign
+//   CAMPAIGN_MAX_DAILY_SENDS        per-account send cap per 24h (M8)
+const DEFAULT_MAX_RECIPIENTS = 1000;
+const DEFAULT_MAX_DAILY_SENDS_PER_ACCOUNT = 500;
 
 export interface CandidateTarget {
   customerId: string;
@@ -29,6 +35,8 @@ export interface CandidateTarget {
 @Injectable()
 export class CampaignsService {
   private readonly logger = new Logger(CampaignsService.name);
+  private readonly maxRecipients: number;
+  private readonly maxDailySendsPerAccount: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -36,7 +44,16 @@ export class CampaignsService {
     private readonly wa: WaService,
     private readonly events: EventsGateway,
     @InjectQueue('campaigns') private readonly campaignsQueue: Queue,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.maxRecipients = Number(
+      config.get<string>('CAMPAIGN_MAX_RECIPIENTS') ?? DEFAULT_MAX_RECIPIENTS,
+    );
+    this.maxDailySendsPerAccount = Number(
+      config.get<string>('CAMPAIGN_MAX_DAILY_SENDS') ??
+        DEFAULT_MAX_DAILY_SENDS_PER_ACCOUNT,
+    );
+  }
 
   async list(status?: string) {
     if (status && !this.isCampaignStatus(status)) {
@@ -176,18 +193,68 @@ export class CampaignsService {
     if (campaign.status !== CampaignStatus.pending_approval) {
       throw new BadRequestException('Only pending approval campaigns can be approved');
     }
-    const approved = await this.prisma.campaign.update({
-      where: { id },
-      data: { status: CampaignStatus.approved, approvedById: userId },
+    // Separation of duties: the creator cannot approve their own campaign.
+    if (campaign.createdById && campaign.createdById === userId) {
+      throw new BadRequestException(
+        'You cannot approve a campaign you created; a different reviewer must approve it',
+      );
+    }
+    // Atomic guard: only flip from pending_approval, so two concurrent approvals cannot both succeed.
+    const result = await this.prisma.campaign.updateMany({
+      where: { id, status: CampaignStatus.pending_approval },
+      data: {
+        status: campaign.scheduledAt != null && campaign.scheduledAt > new Date()
+          ? CampaignStatus.scheduled
+          : CampaignStatus.approved,
+        approvedById: userId,
+      },
     });
-    await this.audit.log(userId, 'campaign_approved', 'Campaign', id, { name: approved.name });
+    if (result.count === 0) {
+      throw new BadRequestException('Campaign is no longer pending approval');
+    }
+    const approved = await this.findCampaign(id);
+    await this.audit.log(userId, 'campaign_approved', 'Campaign', id, {
+      name: approved.name,
+      scheduledAt: campaign.scheduledAt,
+    });
     return approved;
   }
 
-  async start(id: string, userId: string) {
+  async start(id: string, userId?: string) {
     const campaign = await this.findCampaign(id);
     if (!([CampaignStatus.approved, CampaignStatus.paused, CampaignStatus.scheduled] as CampaignStatus[]).includes(campaign.status)) {
       throw new BadRequestException('Campaign must be approved, scheduled, or paused before start');
+    }
+
+    // M8: refuse to run two campaigns into the same WhatsApp account at once —
+    // concurrent sends multiply the per-minute rate and risk a ban.
+    const concurrent = await this.prisma.campaign.findFirst({
+      where: {
+        id: { not: id },
+        whatsappAccountId: campaign.whatsappAccountId,
+        status: { in: [CampaignStatus.running, CampaignStatus.scheduled] },
+      },
+      select: { id: true, name: true },
+    });
+    if (concurrent) {
+      throw new BadRequestException(
+        `Account already has a running/scheduled campaign ("${concurrent.name}"). Wait for it to finish or pause it first.`,
+      );
+    }
+
+    // M8: enforce a daily send cap per account across all campaigns.
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const sentToday = await this.prisma.campaignRecipient.count({
+      where: {
+        status: CampaignRecipientStatus.sent,
+        sentAt: { gte: since },
+        campaign: { whatsappAccountId: campaign.whatsappAccountId },
+      },
+    });
+    if (sentToday >= this.maxDailySendsPerAccount) {
+      throw new BadRequestException(
+        `Daily send cap reached for this account (${this.maxDailySendsPerAccount}/24h). Try again later.`,
+      );
     }
 
     const recipients = await this.prisma.campaignRecipient.findMany({
@@ -276,6 +343,82 @@ export class CampaignsService {
     return campaign;
   }
 
+  @Interval(60_000)
+  async runScheduledCampaigns() {
+    try {
+      const due = await this.prisma.campaign.findMany({
+        where: { status: CampaignStatus.scheduled, scheduledAt: { lte: new Date() } },
+        select: { id: true, createdById: true },
+      });
+      for (const campaign of due) {
+        try {
+          await this.start(campaign.id, campaign.createdById ?? undefined);
+        } catch (err) {
+          this.logger.warn(`Scheduled campaign ${campaign.id} failed to auto-start: ${err}`);
+        }
+      }
+    } catch (err) {
+      this.logger.error(`runScheduledCampaigns failed: ${err}`);
+    }
+  }
+
+  async duplicate(id: string, userId: string) {
+    const source = await this.findCampaign(id);
+    const copy = await this.prisma.campaign.create({
+      data: {
+        name: `${source.name} (copy)`,
+        messageTemplate: source.messageTemplate,
+        whatsappAccountId: source.whatsappAccountId,
+        targetFilter: (source.targetFilter ?? {}) as Prisma.InputJsonValue,
+        createdById: userId,
+        rateLimitPerMinute: source.rateLimitPerMinute,
+        humanDelayMinMs: source.humanDelayMinMs,
+        humanDelayMaxMs: source.humanDelayMaxMs,
+        status: CampaignStatus.draft,
+      },
+    });
+    await this.audit.log(userId, 'campaign_duplicated', 'Campaign', copy.id, { sourceId: id });
+    return copy;
+  }
+
+  async optOut(customerId: string, userId: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException('Customer not found');
+    const updated = await this.prisma.customer.update({
+      where: { id: customerId },
+      data: { optedOut: true, optedOutAt: new Date() },
+    });
+    await this.audit.log(userId, 'customer_opted_out', 'Customer', customerId, {});
+    return updated;
+  }
+
+  async optIn(customerId: string, userId: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException('Customer not found');
+    const updated = await this.prisma.customer.update({
+      where: { id: customerId },
+      data: { optedOut: false, optedOutAt: null },
+    });
+    await this.audit.log(userId, 'customer_opted_in', 'Customer', customerId, {});
+    return updated;
+  }
+
+  async listOptedOut(page = 1, pageSize = 50) {
+    const take = Math.min(Math.max(pageSize, 1), 200);
+    const skip = (Math.max(page, 1) - 1) * take;
+    const [items, total] = await Promise.all([
+      this.prisma.customer.findMany({
+        where: { optedOut: true },
+        orderBy: { optedOutAt: 'desc' },
+        select: { id: true, name: true, phoneNumber: true, optedOutAt: true, tags: true },
+        skip,
+        take,
+      }),
+      this.prisma.customer.count({ where: { optedOut: true } }),
+    ]);
+    return { items, total, page: Math.max(page, 1), pageSize: take };
+  }
+
   async processRecipient(recipientId: string) {
     const recipient = await this.prisma.campaignRecipient.findUnique({
       where: { id: recipientId },
@@ -297,52 +440,64 @@ export class CampaignsService {
       return;
     }
 
+    // Opt-out re-check (H5): tags/state may have changed between approval and
+    // send. Never message a customer who opted out after the campaign snapshot.
+    const normalizedTags = (recipient.customer.tags ?? []).map((tag) => tag.toLowerCase());
+    const customerOptedOut =
+      BLOCKED_TAGS.some((tag) => normalizedTags.includes(tag)) ||
+      BLOCKED_TAGS.includes((recipient.customer.status ?? '').toLowerCase());
+    if (customerOptedOut) {
+      await this.prisma.campaignRecipient.update({
+        where: { id: recipient.id },
+        data: { status: CampaignRecipientStatus.skipped, error: 'Customer opted out before send' },
+      });
+      await this.refreshCampaignCompletion(recipient.campaignId);
+      return;
+    }
+    // Don't fire into a conversation that an admin is actively handling.
+    if (
+      recipient.conversation &&
+      (recipient.conversation.takeoverStatus === TakeoverStatus.waiting_admin ||
+        recipient.conversation.takeoverStatus === TakeoverStatus.admin_takeover)
+    ) {
+      await this.prisma.campaignRecipient.update({
+        where: { id: recipient.id },
+        data: { status: CampaignRecipientStatus.skipped, error: 'Conversation under admin handling' },
+      });
+      await this.refreshCampaignCompletion(recipient.campaignId);
+      return;
+    }
+
+    // Atomic claim (H3): flip queued→sending in one statement so a duplicate
+    // or stalled-recovery job can never double-claim the same recipient.
+    const claim = await this.prisma.campaignRecipient.updateMany({
+      where: { id: recipient.id, status: CampaignRecipientStatus.queued },
+      data: { status: CampaignRecipientStatus.sending, error: null },
+    });
+    if (claim.count === 0) {
+      this.logger.warn(`Campaign recipient ${recipient.id} already claimed, skipping`);
+      return;
+    }
     await this.prisma.campaign.update({
       where: { id: recipient.campaignId },
       data: { status: CampaignStatus.running },
     });
-    await this.prisma.campaignRecipient.update({
-      where: { id: recipient.id },
-      data: { status: CampaignRecipientStatus.sending, error: null },
+
+    // Personalized message body (shared by send + persistence below).
+    const content = renderTemplate(recipient.campaign.messageTemplate, {
+      name: recipient.customer?.name,
+      phone: recipient.phoneNumber,
     });
 
+    // Phase 1: the actual send. A failure here is safe to retry — nothing
+    // reached the customer — so mark failed and rethrow.
+    let sentMessageId: string | null;
     try {
-      const sentMessageId = await this.wa.sendText(
+      sentMessageId = await this.wa.sendText(
         recipient.campaign.whatsappAccountId,
         recipient.phoneNumber,
-        recipient.campaign.messageTemplate,
+        content,
       );
-
-      if (recipient.conversationId) {
-        const message = await this.prisma.message.create({
-          data: {
-            conversationId: recipient.conversationId,
-            senderType: SenderType.admin,
-            senderId: recipient.campaign.createdById,
-            content: recipient.campaign.messageTemplate,
-            status: 'sent',
-            externalId: sentMessageId,
-          },
-        });
-        await this.prisma.conversation.update({
-          where: { id: recipient.conversationId },
-          data: {
-            lastMessage: recipient.campaign.messageTemplate,
-            lastMessageAt: new Date(),
-          },
-        });
-        this.events.emit('message:new', { conversationId: recipient.conversationId, message });
-      }
-
-      await this.prisma.campaignRecipient.update({
-        where: { id: recipient.id },
-        data: {
-          status: CampaignRecipientStatus.sent,
-          sentMessageId,
-          sentAt: new Date(),
-        },
-      });
-      await this.refreshCampaignCompletion(recipient.campaignId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`Campaign recipient ${recipient.id} failed: ${message}`);
@@ -357,10 +512,78 @@ export class CampaignsService {
       await this.refreshCampaignCompletion(recipient.campaignId);
       throw err;
     }
+
+    // Phase 2 (H3): the message HAS been delivered. From here on we must never
+    // mark the recipient failed or rethrow — either would let a retry re-send
+    // the same message to the customer. Persistence is best-effort.
+    try {
+      if (recipient.conversationId) {
+        const message = await this.prisma.message.create({
+          data: {
+            conversationId: recipient.conversationId,
+            senderType: SenderType.admin,
+            senderId: recipient.campaign.createdById,
+            content,
+            status: 'sent',
+            externalId: sentMessageId,
+          },
+        });
+        await this.prisma.conversation.update({
+          where: { id: recipient.conversationId },
+          data: {
+            lastMessage: content,
+            lastMessageAt: new Date(),
+          },
+        });
+        this.events.emitToAccount(recipient.campaign.whatsappAccountId, 'message:new', { conversationId: recipient.conversationId, message });
+      }
+    } catch (err) {
+      this.logger.error(
+        `Campaign recipient ${recipient.id} sent but message persistence failed: ${err}`,
+      );
+    }
+
+    await this.markRecipientSent(recipient.id, recipient.campaignId, sentMessageId);
+  }
+
+  /**
+   * Record a successful delivery (H3). Retries the status write a few times;
+   * if it still fails the recipient stays in `sending`, which is treated as
+   * "possibly delivered" and is never auto-retried — duplicating a customer
+   * message is worse than a stale status row.
+   */
+  private async markRecipientSent(
+    recipientId: string,
+    campaignId: string,
+    sentMessageId: string | null,
+  ) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await this.prisma.campaignRecipient.update({
+          where: { id: recipientId },
+          data: {
+            status: CampaignRecipientStatus.sent,
+            sentMessageId,
+            sentAt: new Date(),
+          },
+        });
+        await this.refreshCampaignCompletion(campaignId);
+        return;
+      } catch (err) {
+        if (attempt === 3) {
+          this.logger.error(
+            `Campaign recipient ${recipientId} DELIVERED but could not be marked sent after ${attempt} attempts: ${err}. ` +
+              'Recipient remains in `sending`; do NOT re-send it.',
+          );
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      }
+    }
   }
 
   private async buildTargets(whatsappAccountId: string, targetFilter: CampaignTargetFilterDto) {
-    const where: Prisma.CustomerWhereInput = {};
+    const where: Prisma.CustomerWhereInput = { optedOut: false };
     if (targetFilter.customerIds?.length) where.id = { in: targetFilter.customerIds };
     if (targetFilter.leadStage) where.leadStage = targetFilter.leadStage;
     if (targetFilter.tag) where.tags = { has: targetFilter.tag };
@@ -377,7 +600,7 @@ export class CampaignsService {
           take: 3,
         },
       },
-      take: MAX_RECIPIENTS,
+      take: this.maxRecipients,
     });
 
     const targets: CandidateTarget[] = [];

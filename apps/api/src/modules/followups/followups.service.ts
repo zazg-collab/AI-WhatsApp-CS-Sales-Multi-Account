@@ -4,6 +4,7 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WaService } from '../wa/wa.service';
 import { CreateFollowUpDto } from './dto/create-followup.dto';
+import { convertToUTC } from '../../common/timezone.util';
 
 @Injectable()
 export class FollowUpsService {
@@ -22,7 +23,10 @@ export class FollowUpsService {
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
 
-    const scheduledAt = new Date(dto.scheduledAt);
+    let scheduledAt = new Date(dto.scheduledAt);
+    if (dto.timezone) {
+      scheduledAt = convertToUTC(dto.scheduledAt, dto.timezone);
+    }
     const delay = Math.max(0, scheduledAt.getTime() - Date.now());
 
     const followUp = await this.prisma.followUp.create({
@@ -93,21 +97,74 @@ export class FollowUpsService {
       return;
     }
 
-    try {
-      const conv = followUp.conversation!;
-      await this.waService.sendText(
-        conv.whatsappAccount.id,
-        conv.customer.phoneNumber,
-        followUp.messageTemplate ?? '',
-      );
-
+    const conv = followUp.conversation;
+    if (!conv) {
+      this.logger.warn(`Follow-up ${followUpId} has no conversation, cancelling`);
       await this.prisma.followUp.update({
         where: { id: followUpId },
-        data: { status: 'sent' },
+        data: { status: 'cancelled' },
       });
+      return;
+    }
 
+    // State re-checks (H6): conditions may have changed between scheduling and
+    // firing. Don't message opted-out customers, conversations an admin has
+    // taken over, or accounts that aren't connected.
+    const customer = conv.customer;
+    const blockedTags = ['opt_out', 'blocked', 'do_not_contact'];
+    const normalizedTags = (customer.tags ?? []).map((tag) => tag.toLowerCase());
+    const optedOut =
+      blockedTags.some((tag) => normalizedTags.includes(tag)) ||
+      blockedTags.includes((customer.status ?? '').toLowerCase());
+    if (optedOut) {
+      this.logger.warn(`Follow-up ${followUpId} customer opted out, cancelling`);
+      await this.prisma.followUp.update({
+        where: { id: followUpId },
+        data: { status: 'cancelled' },
+      });
+      return;
+    }
+    if (
+      conv.takeoverStatus === 'admin_takeover' ||
+      conv.takeoverStatus === 'waiting_admin'
+    ) {
+      this.logger.warn(`Follow-up ${followUpId} conversation under admin handling, cancelling`);
+      await this.prisma.followUp.update({
+        where: { id: followUpId },
+        data: { status: 'cancelled' },
+      });
+      return;
+    }
+    if (!this.waService.isConnected(conv.whatsappAccount.id)) {
+      // Account offline — reschedule a short retry instead of dropping/duplicating.
+      this.logger.warn(`Follow-up ${followUpId} account not connected, will retry`);
+      throw new Error('WhatsApp account not connected; retrying follow-up later');
+    }
+
+    // Claim the follow-up atomically (H6): flip scheduled→sent before sending so
+    // a concurrent/stalled-recovery job cannot double-send.
+    const claim = await this.prisma.followUp.updateMany({
+      where: { id: followUpId, status: 'scheduled' },
+      data: { status: 'sent' },
+    });
+    if (claim.count === 0) {
+      this.logger.log(`Follow-up ${followUpId} already claimed, skipping`);
+      return;
+    }
+
+    try {
+      await this.waService.sendText(
+        conv.whatsappAccount.id,
+        customer.phoneNumber,
+        followUp.messageTemplate ?? '',
+      );
       this.logger.log(`Follow-up ${followUpId} sent successfully`);
     } catch (e) {
+      // Roll back the claim so a retry can re-attempt the send.
+      await this.prisma.followUp.update({
+        where: { id: followUpId },
+        data: { status: 'scheduled' },
+      });
       this.logger.error(`Failed to send follow-up ${followUpId}: ${e}`);
       throw e;
     }

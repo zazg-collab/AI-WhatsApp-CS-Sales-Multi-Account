@@ -13,17 +13,18 @@ falls back to the plain model. This service degrades gracefully: if
 hermes-agent isn't installed, /health reports it and /ask returns 503 so the
 caller can fall back.
 
-Run:
+Run (bind to loopback so the agent endpoint is never exposed to the network):
     pip install -r requirements.txt
     # hermes-agent must be installed so `run_agent` is importable
-    uvicorn main:app --host 0.0.0.0 --port 8675
+    export HERMES_SIDECAR_TOKEN=$(openssl rand -hex 32)
+    uvicorn main:app --host 127.0.0.1 --port 8675
 """
 from __future__ import annotations
 
 import os
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 # hermes-agent exposes the AIAgent class via `run_agent`. Import lazily-safe so
@@ -41,6 +42,12 @@ except Exception as exc:  # pragma: no cover - depends on host install
 MODEL = os.getenv("HERMES_AGENT_MODEL", "Hermes-4-70B")
 # Whether the agent may use its persistent memory / context files.
 USE_MEMORY = os.getenv("HERMES_AGENT_MEMORY", "true").lower() == "true"
+# C4: shared secret. When set, every /ask call must present it as a bearer
+# token. Leaving it unset is only safe when the sidecar is bound to loopback.
+AUTH_TOKEN = os.getenv("HERMES_SIDECAR_TOKEN", "")
+# C4: cap request size so a caller cannot stuff an unbounded prompt/context.
+MAX_QUESTION_CHARS = int(os.getenv("HERMES_SIDECAR_MAX_QUESTION", "8000"))
+MAX_CONTEXT_CHARS = int(os.getenv("HERMES_SIDECAR_MAX_CONTEXT", "32000"))
 
 DEFAULT_SYSTEM = (
     "Kamu adalah Hermes, supervisor assistant untuk banyak chatbot WhatsApp "
@@ -49,6 +56,15 @@ DEFAULT_SYSTEM = (
 )
 
 app = FastAPI(title="Hermes Supervisor Sidecar")
+
+
+def require_auth(authorization: Optional[str] = Header(default=None)) -> None:
+    """Enforce the bearer token when HERMES_SIDECAR_TOKEN is configured (C4)."""
+    if not AUTH_TOKEN:
+        return
+    expected = f"Bearer {AUTH_TOKEN}"
+    if authorization != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 class AskRequest(BaseModel):
@@ -73,12 +89,17 @@ def health() -> dict:
 
 
 @app.post("/ask", response_model=AskResponse)
-def ask(req: AskRequest) -> AskResponse:
+def ask(req: AskRequest, _: None = Depends(require_auth)) -> AskResponse:
     if not AGENT_AVAILABLE:
         raise HTTPException(
             status_code=503,
             detail=f"hermes-agent not available: {IMPORT_ERROR}",
         )
+
+    if len(req.question) > MAX_QUESTION_CHARS:
+        raise HTTPException(status_code=413, detail="question too large")
+    if req.context and len(req.context) > MAX_CONTEXT_CHARS:
+        raise HTTPException(status_code=413, detail="context too large")
 
     system = req.system or DEFAULT_SYSTEM
     if req.context:

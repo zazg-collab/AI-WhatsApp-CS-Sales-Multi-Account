@@ -13,19 +13,20 @@ import {
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 
+@ApiTags('users')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly users: UsersService) {}
 
-  /**
-   * List users — owner/supervisor only.
-   */
+  @ApiOperation({ summary: 'List users (owner/supervisor only)' })
   @Roles('owner', 'supervisor')
   @Get()
   list(
@@ -40,18 +41,15 @@ export class UsersController {
     });
   }
 
-  /**
-   * Create a new user — owner only.
-   */
+  @ApiOperation({ summary: 'Create a new user (owner only)' })
   @Roles('owner')
   @Post()
   create(@Body() dto: CreateUserDto, @CurrentUser() user: AuthUser) {
     return this.users.create(dto, user.id);
   }
 
-  /**
-   * Get a user by ID — self or owner/supervisor.
-   */
+  @ApiOperation({ summary: 'Get a user by ID (self or owner/supervisor)' })
+  @Roles('viewer')
   @Get(':id')
   async get(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     // Allow user to fetch their own details, or owner/supervisor to fetch any user
@@ -61,9 +59,8 @@ export class UsersController {
     return this.users.get(id);
   }
 
-  /**
-   * Update a user — self (limited fields) or owner.
-   */
+  @ApiOperation({ summary: 'Update a user (self or owner)' })
+  @Roles('viewer')
   @Patch(':id')
   async update(
     @Param('id') id: string,
@@ -80,18 +77,15 @@ export class UsersController {
     return this.users.update(id, dto, user.id);
   }
 
-  /**
-   * Delete a user — owner only.
-   */
+  @ApiOperation({ summary: 'Delete a user (owner only)' })
   @Roles('owner')
   @Delete(':id')
   delete(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.users.delete(id, user.id);
   }
 
-  /**
-   * Change password — self + owner can change any user's password.
-   */
+  @ApiOperation({ summary: 'Change password (self or owner)' })
+  @Roles('viewer')
   @Post(':id/change-password')
   changePassword(
     @Param('id') id: string,

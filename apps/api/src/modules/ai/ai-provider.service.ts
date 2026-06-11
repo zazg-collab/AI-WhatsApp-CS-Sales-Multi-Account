@@ -29,6 +29,7 @@ export class AiProviderService {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly defaultModel: string;
+  private readonly timeoutMs: number;
 
   constructor(config: ConfigService) {
     this.baseUrl = (
@@ -36,6 +37,7 @@ export class AiProviderService {
     ).replace(/\/$/, '');
     this.apiKey = config.get<string>('AI_API_KEY') ?? '';
     this.defaultModel = config.get<string>('AI_MODEL') ?? 'gpt-4o-mini';
+    this.timeoutMs = Number(config.get<string>('AI_TIMEOUT_MS') ?? 30_000);
   }
 
   get model(): string {
@@ -57,6 +59,7 @@ export class AiProviderService {
     try {
       const res = await fetch(`${this.baseUrl}/models`, {
         headers: this.headers(),
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
       if (!res.ok) {
         throw new Error(`Provider returned ${res.status}`);
@@ -86,6 +89,8 @@ export class AiProviderService {
         method: 'POST',
         headers: this.headers(),
         body: JSON.stringify(payload),
+        // H8: bound the wait so a hung provider can't stall auto-reply forever.
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (err) {
       this.logger.error(`chat request failed: ${err}`);

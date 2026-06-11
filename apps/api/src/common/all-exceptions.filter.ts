@@ -6,7 +6,18 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@hermes/database';
 import { Request, Response } from 'express';
+
+/**
+ * A11: well-known Prisma errors map to client errors instead of opaque 500s —
+ * e.g. assigning a nonexistent bot/admin id used to surface as a 500.
+ */
+const PRISMA_STATUS: Record<string, { status: number; message: string }> = {
+  P2002: { status: HttpStatus.CONFLICT, message: 'A record with this value already exists' },
+  P2003: { status: HttpStatus.BAD_REQUEST, message: 'Referenced record does not exist' },
+  P2025: { status: HttpStatus.NOT_FOUND, message: 'Record not found' },
+};
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -16,13 +27,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request & { requestId?: string }>();
+    const prismaMapping =
+      exception instanceof Prisma.PrismaClientKnownRequestError
+        ? PRISMA_STATUS[exception.code]
+        : undefined;
     const status = exception instanceof HttpException
       ? exception.getStatus()
-      : HttpStatus.INTERNAL_SERVER_ERROR;
+      : prismaMapping?.status ?? HttpStatus.INTERNAL_SERVER_ERROR;
     const exceptionResponse = exception instanceof HttpException
       ? exception.getResponse()
       : undefined;
-    const message = this.extractMessage(exceptionResponse, exception);
+    const message = prismaMapping?.message ?? this.extractMessage(exceptionResponse, exception);
     const requestId = request.requestId ?? response.getHeader('x-request-id')?.toString();
 
     if (status >= 500) {

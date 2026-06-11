@@ -13,6 +13,16 @@ const BASE_RULES = `Aturan:
 7. Berikan CTA yang sesuai.
 8. Jika komplain/refund/legal, arahkan ke admin.`;
 
+/** Hard cap on how many recent messages to keep as history turns. */
+export const MAX_HISTORY_MESSAGES = 20;
+/** Rough character budget for the chat-history portion of the prompt. */
+export const MAX_CONTEXT_CHARS = 12000;
+
+/** Rough token estimate (~4 chars/token). */
+export function estimateTokens(text: string): number {
+  return Math.ceil((text?.length ?? 0) / 4);
+}
+
 @Injectable()
 export class PromptBuilderService {
   constructor(private readonly prisma: PrismaService) {}
@@ -64,17 +74,42 @@ export class PromptBuilderService {
       BASE_RULES,
     ].join('\n');
 
-    const history: ChatMessage[] = conversation.messages
+    // Messages come newest-first; map to chronological user/assistant turns.
+    const ordered = conversation.messages
       .slice()
       .reverse()
-      .filter((m) => m.content)
-      .map((m) => ({
-        role:
-          m.senderType === SenderType.customer
-            ? ('user' as const)
-            : ('assistant' as const),
-        content: m.content as string,
-      }));
+      .filter((m) => m.content);
+
+    const cap = Math.min(historyLimit, MAX_HISTORY_MESSAGES);
+    const truncated = ordered.length > cap;
+    const kept = truncated ? ordered.slice(ordered.length - cap) : ordered;
+
+    let history: ChatMessage[] = kept.map((m) => ({
+      role:
+        m.senderType === SenderType.customer
+          ? ('user' as const)
+          : ('assistant' as const),
+      content: m.content as string,
+    }));
+
+    // Token-budget trim: drop oldest history turns until under MAX_CONTEXT_CHARS.
+    // System prompt + knowledge stay intact; only chat history is trimmed.
+    const historyChars = (msgs: ChatMessage[]) =>
+      msgs.reduce((sum, m) => sum + m.content.length, 0);
+    let budgetTrimmed = false;
+    while (history.length > 1 && historyChars(history) > MAX_CONTEXT_CHARS) {
+      history.shift();
+      budgetTrimmed = true;
+    }
+
+    // If we dropped context, prepend a placeholder so it isn't silently lost.
+    if (truncated || budgetTrimmed) {
+      const boundary = history[0]?.content ?? '';
+      const note =
+        '[Ringkasan percakapan sebelumnya: percakapan dipangkas untuk hemat konteks; ' +
+        `pesan terlama yang disertakan dimulai dari "${boundary.slice(0, 80)}"]`;
+      history = [{ role: 'system', content: note }, ...history];
+    }
 
     return [{ role: 'system', content: system }, ...history];
   }
@@ -103,13 +138,15 @@ export class PromptBuilderService {
     tags: string[];
     notes: string | null;
   }): string {
+    // Internal admin notes (M6) are NOT injected into the bot prompt: they are
+    // private, may contain commentary not meant for the customer, and could be
+    // reflected back verbatim by the model. Only customer-facing memory is used.
     const lines = [
       `Nama: ${customer.name ?? 'Belum diketahui'}`,
       `Nomor: ${customer.phoneNumber}`,
       `Lead stage: ${customer.leadStage}`,
     ];
     if (customer.tags.length) lines.push(`Tags: ${customer.tags.join(', ')}`);
-    if (customer.notes) lines.push(`Catatan admin: ${customer.notes}`);
     return lines.join('\n');
   }
 }

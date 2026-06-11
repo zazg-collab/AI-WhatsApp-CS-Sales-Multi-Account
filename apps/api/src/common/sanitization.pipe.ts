@@ -3,6 +3,7 @@ import { ArgumentMetadata, Injectable, PipeTransform } from '@nestjs/common';
 const SCRIPT_TAG_PATTERN = /<\/?script[^>]*>/gi;
 const HTML_EVENT_PATTERN = /\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi;
 const JAVASCRIPT_URL_PATTERN = /javascript:/gi;
+// eslint-disable-next-line no-control-regex -- intentional: strips control chars
 const CONTROL_CHARS_PATTERN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
 @Injectable()

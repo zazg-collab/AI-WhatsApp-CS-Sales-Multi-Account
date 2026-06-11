@@ -1,0 +1,117 @@
+import { NotFoundException } from '@nestjs/common';
+import {
+  PromptBuilderService,
+  MAX_HISTORY_MESSAGES,
+  MAX_CONTEXT_CHARS,
+  estimateTokens,
+} from './prompt-builder.service';
+
+describe('PromptBuilderService', () => {
+  let service: PromptBuilderService;
+  let prisma: any;
+
+  const customer = {
+    name: 'Budi',
+    phoneNumber: '628',
+    leadStage: 'warm',
+    tags: ['vip'],
+    notes: 'pelanggan lama',
+  };
+
+  beforeEach(() => {
+    prisma = {
+      conversation: { findUnique: jest.fn() },
+      knowledgeItem: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    service = new PromptBuilderService(prisma);
+  });
+
+  it('throws when conversation missing', async () => {
+    prisma.conversation.findUnique.mockResolvedValue(null);
+    await expect(service.buildForConversation('c1')).rejects.toThrow(NotFoundException);
+  });
+
+  it('builds system + mapped history', async () => {
+    prisma.conversation.findUnique.mockResolvedValue({
+      id: 'c1',
+      customer,
+      bot: { persona: { soulMd: 'Saya ramah' }, knowledgeBaseId: 'kb1' },
+      messages: [
+        { senderType: 'ai', content: 'Halo kak' },
+        { senderType: 'customer', content: 'Berapa harga?' },
+      ],
+    });
+    prisma.knowledgeItem.findMany.mockResolvedValue([
+      { title: 'Harga', productName: 'Paket A', content: '100rb' },
+    ]);
+
+    const msgs = await service.buildForConversation('c1');
+    expect(msgs[0].role).toBe('system');
+    expect(msgs[0].content).toContain('Saya ramah');
+    expect(msgs[0].content).toContain('Paket A');
+    expect(msgs[0].content).toContain('Budi');
+    // Internal admin notes must never leak into the bot prompt (M6).
+    expect(msgs[0].content).not.toContain('pelanggan lama');
+    // history reversed: customer first then ai
+    expect(msgs[1]).toEqual({ role: 'user', content: 'Berapa harga?' });
+    expect(msgs[2]).toEqual({ role: 'assistant', content: 'Halo kak' });
+  });
+
+  it('uses default persona + no-knowledge note when bot/kb absent', async () => {
+    prisma.conversation.findUnique.mockResolvedValue({
+      id: 'c1',
+      customer: { ...customer, tags: [], notes: null },
+      bot: null,
+      messages: [],
+    });
+    const msgs = await service.buildForConversation('c1');
+    expect(msgs[0].content).toContain('belum ada knowledge');
+    expect(prisma.knowledgeItem.findMany).not.toHaveBeenCalled();
+  });
+
+  it('estimateTokens approximates ~4 chars/token', () => {
+    expect(estimateTokens('')).toBe(0);
+    expect(estimateTokens('abcd')).toBe(1);
+    expect(estimateTokens('abcde')).toBe(2);
+  });
+
+  it('caps history to MAX_HISTORY_MESSAGES and adds a summary placeholder', async () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({
+      senderType: i % 2 === 0 ? 'customer' : 'ai',
+      content: `pesan ${i}`,
+    }));
+    prisma.conversation.findUnique.mockResolvedValue({
+      id: 'c1',
+      customer: { ...customer, tags: [], notes: null },
+      bot: { persona: { soulMd: 's' }, knowledgeBaseId: null },
+      messages: many,
+    });
+
+    const msgs = await service.buildForConversation('c1', 40);
+    const nonSystem = msgs.slice(1);
+    // first non-system turn is the summary placeholder
+    expect(nonSystem[0].role).toBe('system');
+    expect(nonSystem[0].content).toContain('Ringkasan percakapan sebelumnya');
+    const turns = nonSystem.slice(1);
+    expect(turns.length).toBeLessThanOrEqual(MAX_HISTORY_MESSAGES);
+  });
+
+  it('trims oldest history turns to stay under MAX_CONTEXT_CHARS', async () => {
+    const big = 'x'.repeat(5000);
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      senderType: i % 2 === 0 ? 'customer' : 'ai',
+      content: big,
+    }));
+    prisma.conversation.findUnique.mockResolvedValue({
+      id: 'c1',
+      customer: { ...customer, tags: [], notes: null },
+      bot: { persona: { soulMd: 's' }, knowledgeBaseId: null },
+      messages: many,
+    });
+
+    const msgs = await service.buildForConversation('c1', 40);
+    const turns = msgs.slice(1).filter((m) => m.role !== 'system');
+    const chars = turns.reduce((s, m) => s + m.content.length, 0);
+    expect(chars).toBeLessThanOrEqual(MAX_CONTEXT_CHARS);
+  });
+});

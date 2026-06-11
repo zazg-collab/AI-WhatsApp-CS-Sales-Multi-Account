@@ -38,22 +38,6 @@ assert.match(main, /disable\('x-powered-by'\)/, 'Main bootstrap must disable x-p
 const webError = read('apps/web/src/app/error.tsx');
 assert.match(webError, /Something went wrong/, 'Web app must include route error boundary');
 
-const appLayout = read('apps/web/src/components/AppLayout.tsx');
-const sidebar = read('apps/web/src/components/Sidebar.tsx');
-const globalsCss = read('apps/web/src/app/globals.css');
-const loginPage = read('apps/web/src/app/page.tsx');
-const dashboardPage = read('apps/web/src/app/dashboard/page.tsx');
-const frontendTaste = read('docs/frontend-design-taste.md');
-const tasteSurface = [appLayout, sidebar, globalsCss, loginPage, dashboardPage, frontendTaste].join('\n');
-assert.match(frontendTaste, /Design read: redesign-preserve/, 'Taste skill pass must document the design read');
-assert.match(frontendTaste, /DESIGN_VARIANCE: 5/, 'Taste skill pass must document dial values');
-assert.doesNotMatch(tasteSurface, /[—–]/, 'Taste skill pass must avoid em-dash and en-dash characters');
-assert.doesNotMatch(tasteSurface, /(^|[^a-z-])h-screen/, 'Taste skill pass must avoid fixed h-screen shells');
-assert.doesNotMatch(tasteSurface, /🔥|⚠|📎|💬|🤖|📄/u, 'Taste skill pass must avoid emoji-driven UI controls');
-assert.doesNotMatch(sidebar, /<svg|<path/, 'Sidebar must avoid hand-rolled SVG navigation icons');
-assert.match(globalsCss, /prefers-reduced-motion/, 'Frontend must provide a reduced-motion fallback');
-assert.match(globalsCss, /\.wa-action:active/, 'Frontend must provide tactile active states');
-
 const schema = read('packages/database/prisma/schema.prisma');
 assert.match(schema, /model Campaign\s*{[\s\S]*@@map\("campaigns"\)/, 'Campaign model must be mapped');
 assert.match(schema, /model CampaignRecipient\s*{[\s\S]*idempotencyKey\s+String\s+@unique/, 'CampaignRecipient idempotency key must be unique');

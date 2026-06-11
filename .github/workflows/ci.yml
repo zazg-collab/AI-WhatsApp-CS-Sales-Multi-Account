@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**', 'feat/**', 'fix/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-build:
+    name: Lint & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Lint API
+        run: npm run lint --workspace=@hermes/api
+
+      - name: Lint Web
+        run: npm run lint --workspace=@hermes/web
+
+      - name: Build API
+        run: npm run build --workspace=@hermes/api
+
+      - name: Build Web
+        run: npm run build --workspace=@hermes/web
+
+  typecheck:
+    name: TypeScript Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: TypeScript check (API)
+        run: npx tsc --noEmit
+        working-directory: apps/api
+
+      - name: TypeScript check (Web)
+        run: npx tsc --noEmit
+        working-directory: apps/web
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: API unit tests
+        run: npm run test --workspace=@hermes/api
+
+      - name: API e2e tests (security wiring)
+        run: npm run test:e2e --workspace=@hermes/api
+
+      - name: Web tests
+        run: npm run test --workspace=@hermes/web
+
+  migrations:
+    name: Prisma Migrations
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hermes
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hermes
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      # Applies every committed migration to a fresh database. Catches the
+      # "migration won't deploy" class of bug that unit tests (Prisma mocked)
+      # can't see.
+      - name: Apply migrations to a fresh database
+        run: npm run migrate:deploy --workspace=@hermes/database
+
+      # Fails if the schema and the applied migrations have drifted apart
+      # (a migration is missing for a schema change). Blocking: this exact
+      # gap shipped once (customer opt-out columns without a migration).
+      - name: Verify schema matches migrations (no drift)
+        run: npx prisma migrate diff --exit-code --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma
+        working-directory: packages/database
