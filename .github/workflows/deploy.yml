@@ -19,6 +19,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Docker registry repo names must be lowercase; github.repository is
+      # "filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account" (mixed case), which
+      # makes buildx fail with "repository name must be lowercase".
+      - name: Compute lowercase image name
+        id: image
+        run: echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -33,8 +40,8 @@ jobs:
           file: apps/api/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/api:${{ github.sha }}
-            ghcr.io/${{ github.repository }}/api:latest
+            ghcr.io/${{ steps.image.outputs.repo }}/api:${{ github.sha }}
+            ghcr.io/${{ steps.image.outputs.repo }}/api:latest
 
       - name: Build and push Web image
         uses: docker/build-push-action@v5
@@ -43,5 +50,5 @@ jobs:
           file: apps/web/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/web:${{ github.sha }}
-            ghcr.io/${{ github.repository }}/web:latest
+            ghcr.io/${{ steps.image.outputs.repo }}/web:${{ github.sha }}
+            ghcr.io/${{ steps.image.outputs.repo }}/web:latest
