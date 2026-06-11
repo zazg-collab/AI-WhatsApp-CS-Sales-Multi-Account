@@ -51,6 +51,21 @@ export class WaController {
     return { qr: this.wa.getQr(id), connected: this.wa.isConnected(id) };
   }
 
+  @ApiOperation({ summary: 'Get live connection health for an account' })
+  @Get(':id/health')
+  async health(@Param('id') id: string) {
+    const account = await this.prisma.whatsappAccount.findUnique({
+      where: { id },
+    });
+    const { liveSocket, reconnectAttempts } = this.wa.getHealth(id);
+    return {
+      accountId: id,
+      dbStatus: account?.sessionStatus ?? null,
+      liveSocket,
+      reconnectAttempts,
+    };
+  }
+
   @ApiOperation({ summary: 'Restart a WhatsApp session' })
   @Roles('owner', 'supervisor', 'admin')
   @Post(':id/restart')

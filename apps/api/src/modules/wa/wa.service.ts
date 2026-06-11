@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Interval } from '@nestjs/schedule';
 import { join } from 'path';
 import * as QRCode from 'qrcode';
 import pino from 'pino';
@@ -31,7 +32,7 @@ import { MessageIngestService } from './message-ingest.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { AiService } from '../ai/ai.service';
 import { HermesService } from '../hermes/hermes.service';
-import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, extForMimetype } from './wa.util';
+import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, extForMimetype, typingDelay, backoffDelay } from './wa.util';
 import { MediaStorageService } from '../media/media-storage.service';
 import { logAudit } from '../../common/audit.util';
 import { isWithinBusinessHours } from '../../common/business-hours.util';
@@ -53,6 +54,13 @@ export class WaService implements OnModuleInit {
   private readonly sessionDir: string;
   private readonly mediaMaxBytes: number;
   private readonly awayCooldownMs: number;
+
+  // Anti-ban + stability state (in-memory; survives reconnect, not restart).
+  private static readonly MAX_RECONNECT_ATTEMPTS = 10;
+  private static readonly MAX_SENDS_PER_MINUTE = 20;
+  private readonly reconnectAttempts = new Map<string, number>();
+  private readonly sendTimestamps = new Map<string, number[]>();
+  private readonly reconnectingSince = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -117,6 +125,8 @@ export class WaService implements OnModuleInit {
       if (connection === 'open') {
         const session = this.sessions.get(accountId);
         if (session) session.qr = undefined;
+        this.reconnectAttempts.set(accountId, 0);
+        this.reconnectingSince.delete(accountId);
         await this.setStatus(accountId, SessionStatus.connected);
       }
 
@@ -127,16 +137,20 @@ export class WaService implements OnModuleInit {
         this.sessions.delete(accountId);
 
         if (loggedOut) {
+          this.reconnectAttempts.delete(accountId);
+          this.reconnectingSince.delete(accountId);
           await this.setStatus(accountId, SessionStatus.disconnected);
           this.logger.warn(`Account ${accountId} logged out`);
+          const account = await this.prisma.whatsappAccount
+            .findUnique({ where: { id: accountId } })
+            .catch(() => null);
+          this.notifications.send(
+            `🚫 WhatsApp logged out / possibly banned\nAkun: ${
+              account?.accountName ?? accountId
+            } (${account?.phoneNumber ?? '?'}) — needs a fresh QR scan.`,
+          );
         } else {
-          await this.setStatus(accountId, SessionStatus.reconnecting);
-          this.logger.log(`Account ${accountId} reconnecting...`);
-          setTimeout(() => {
-            this.startSession(accountId).catch((err) =>
-              this.logger.error(`Reconnect failed ${accountId}: ${err}`),
-            );
-          }, 3000);
+          await this.scheduleReconnect(accountId);
         }
       }
     });
@@ -217,6 +231,127 @@ export class WaService implements OnModuleInit {
     } catch (err) {
       this.logger.warn(`markRead failed for ${remoteJid}: ${err}`);
     }
+  }
+
+  /**
+   * Schedule an exponential-backoff reconnect for an account. Gives up after
+   * MAX_RECONNECT_ATTEMPTS, marking the account disconnected and alerting.
+   */
+  private async scheduleReconnect(accountId: string): Promise<void> {
+    const attempt = this.reconnectAttempts.get(accountId) ?? 0;
+
+    if (attempt >= WaService.MAX_RECONNECT_ATTEMPTS) {
+      this.reconnectAttempts.delete(accountId);
+      this.reconnectingSince.delete(accountId);
+      await this.setStatus(accountId, SessionStatus.disconnected);
+      const account = await this.prisma.whatsappAccount
+        .findUnique({ where: { id: accountId } })
+        .catch(() => null);
+      const name = account?.accountName ?? accountId;
+      this.notifications.send(
+        `⛔ WhatsApp account ${name} failed to reconnect after ` +
+          `${WaService.MAX_RECONNECT_ATTEMPTS} attempts.`,
+      );
+      this.events.emit('wa:status', {
+        accountId,
+        status: SessionStatus.disconnected,
+        failed: true,
+      });
+      return;
+    }
+
+    this.reconnectAttempts.set(accountId, attempt + 1);
+    if (!this.reconnectingSince.has(accountId)) {
+      this.reconnectingSince.set(accountId, Date.now());
+    }
+    await this.setStatus(accountId, SessionStatus.reconnecting);
+
+    const delay = backoffDelay(attempt);
+    this.logger.log(
+      `Account ${accountId} reconnecting in ${delay}ms ` +
+        `(attempt ${attempt + 1}/${WaService.MAX_RECONNECT_ATTEMPTS})`,
+    );
+    setTimeout(() => {
+      this.startSession(accountId).catch((err) =>
+        this.logger.error(`Reconnect failed ${accountId}: ${err}`),
+      );
+    }, delay);
+  }
+
+  /**
+   * Per-account outbound rate limiter. Blocks until fewer than
+   * MAX_SENDS_PER_MINUTE messages were sent in the trailing 60s window.
+   */
+  private async throttleSend(accountId: string): Promise<void> {
+    const now = Date.now();
+    const windowStart = now - 60_000;
+    const stamps = (this.sendTimestamps.get(accountId) ?? []).filter(
+      (t) => t > windowStart,
+    );
+
+    if (stamps.length >= WaService.MAX_SENDS_PER_MINUTE) {
+      const oldest = stamps[0];
+      const wait = oldest + 60_000 - now;
+      if (wait > 0) {
+        this.logger.warn(
+          `Throttling account ${accountId}: waiting ${wait}ms (rate limit)`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, wait));
+      }
+    }
+
+    const fresh = (this.sendTimestamps.get(accountId) ?? []).filter(
+      (t) => t > Date.now() - 60_000,
+    );
+    fresh.push(Date.now());
+    this.sendTimestamps.set(accountId, fresh);
+  }
+
+  /**
+   * Periodic session health check: revive accounts that the DB believes are
+   * connected but have no live socket, and warn about stuck reconnects.
+   */
+  @Interval(60_000)
+  async healthCheck(): Promise<void> {
+    try {
+      const accounts = await this.prisma.whatsappAccount.findMany({
+        where: { isActive: true },
+      });
+      for (const account of accounts) {
+        const live = this.sessions.has(account.id);
+
+        if (account.sessionStatus === SessionStatus.connected && !live) {
+          this.logger.warn(
+            `Health check: account ${account.id} marked connected but has no ` +
+              `live socket — reconnecting.`,
+          );
+          this.reconnectAttempts.set(account.id, 0);
+          await this.scheduleReconnect(account.id);
+          continue;
+        }
+
+        if (account.sessionStatus === SessionStatus.reconnecting) {
+          const since = this.reconnectingSince.get(account.id);
+          if (since && Date.now() - since > 5 * 60_000) {
+            this.logger.warn(
+              `Health check: account ${account.id} stuck reconnecting for ` +
+                `${Math.round((Date.now() - since) / 1000)}s.`,
+            );
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.error(`Health check failed: ${err}`);
+    }
+  }
+
+  /** Expose internal stability state for the health endpoint. */
+  getHealth(accountId: string) {
+    return {
+      accountId,
+      liveSocket: this.sessions.has(accountId),
+      reconnectAttempts: this.reconnectAttempts.get(accountId) ?? 0,
+    };
   }
 
   private async handleIncoming(accountId: string, m: proto.IWebMessageInfo) {
@@ -496,11 +631,22 @@ export class WaService implements OnModuleInit {
     }
     const jid = phoneToJid(phone);
 
-    // Human-like typing indicator + delay to reduce ban risk.
-    await session.sock.presenceSubscribe(jid);
-    await session.sock.sendPresenceUpdate('composing', jid);
-    await humanDelay();
-    await session.sock.sendPresenceUpdate('paused', jid);
+    await this.throttleSend(accountId);
+
+    // Human-like typing indicator + length-proportional delay to reduce ban
+    // risk. Presence updates must never block the actual send.
+    try {
+      await session.sock.presenceSubscribe(jid);
+      await session.sock.sendPresenceUpdate('composing', jid);
+    } catch {
+      /* presence is best-effort */
+    }
+    await typingDelay(text);
+    try {
+      await session.sock.sendPresenceUpdate('paused', jid);
+    } catch {
+      /* presence is best-effort */
+    }
 
     const options = quoted
       ? {
@@ -528,6 +674,7 @@ export class WaService implements OnModuleInit {
       throw new NotFoundException(`Account ${accountId} is not connected`);
     }
     const jid = phoneToJid(phone);
+    await this.throttleSend(accountId);
     await humanDelay();
 
     let content: Record<string, unknown>;

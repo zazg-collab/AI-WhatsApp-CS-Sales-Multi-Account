@@ -7,6 +7,7 @@ describe('AiService', () => {
   let provider: any;
   let prompts: any;
   let notifications: any;
+  let cache: any;
 
   beforeEach(() => {
     prisma = {
@@ -21,7 +22,12 @@ describe('AiService', () => {
     };
     prompts = { buildForConversation: jest.fn().mockResolvedValue([]) };
     notifications = { send: jest.fn() };
-    service = new AiService(prisma, provider, prompts, notifications);
+    cache = {
+      get: jest.fn().mockReturnValue(null),
+      set: jest.fn(),
+      stats: jest.fn().mockReturnValue({ size: 0, hits: 0, misses: 0, hitRate: 0 }),
+    };
+    service = new AiService(prisma, provider, prompts, notifications, cache);
   });
 
   it('listModels + config delegate to provider', () => {
@@ -51,6 +57,28 @@ describe('AiService', () => {
       ]);
       provider.chat.mockResolvedValue('ringkasan');
       expect(await service.summarizeChat('c1')).toBe('ringkasan');
+    });
+  });
+
+  describe('analyzeSentiment', () => {
+    it('parses sentiment JSON', async () => {
+      prompts.buildForConversation.mockResolvedValue([
+        { role: 'user', content: 'mantap, terima kasih' },
+      ]);
+      provider.chat.mockResolvedValue(
+        '{"sentiment":"positive","score":85,"reason":"puas"}',
+      );
+      const r = await service.analyzeSentiment('c1');
+      expect(r).toEqual({ sentiment: 'positive', score: 85, reason: 'puas' });
+    });
+
+    it('defaults to neutral on unparseable output', async () => {
+      prompts.buildForConversation.mockResolvedValue([
+        { role: 'user', content: 'halo' },
+      ]);
+      provider.chat.mockResolvedValue('not json at all');
+      const r = await service.analyzeSentiment('c1');
+      expect(r).toEqual({ sentiment: 'neutral', score: 50, reason: 'unparseable' });
     });
   });
 

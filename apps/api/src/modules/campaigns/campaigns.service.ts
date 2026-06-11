@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Interval } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import {
@@ -14,6 +15,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { AuditService } from '../audit/audit.service';
 import { WaService } from '../wa/wa.service';
+import { renderTemplate } from '../wa/wa.util';
 import { CreateCampaignDto, CampaignTargetFilterDto, UpdateCampaignDto } from './dto/campaigns.dto';
 
 const BLOCKED_TAGS = ['opt_out', 'blocked', 'do_not_contact'];
@@ -192,27 +194,34 @@ export class CampaignsService {
     if (campaign.status !== CampaignStatus.pending_approval) {
       throw new BadRequestException('Only pending approval campaigns can be approved');
     }
-    // Separation of duties (H4): the creator cannot approve their own campaign.
+    // Separation of duties: the creator cannot approve their own campaign.
     if (campaign.createdById && campaign.createdById === userId) {
       throw new BadRequestException(
         'You cannot approve a campaign you created; a different reviewer must approve it',
       );
     }
-    // Atomic guard (H4): only flip from pending_approval, so two concurrent
-    // approvals cannot both succeed.
+    // Atomic guard: only flip from pending_approval, so two concurrent approvals cannot both succeed.
     const result = await this.prisma.campaign.updateMany({
       where: { id, status: CampaignStatus.pending_approval },
-      data: { status: CampaignStatus.approved, approvedById: userId },
+      data: {
+        status: campaign.scheduledAt != null && campaign.scheduledAt > new Date()
+          ? CampaignStatus.scheduled
+          : CampaignStatus.approved,
+        approvedById: userId,
+      },
     });
     if (result.count === 0) {
       throw new BadRequestException('Campaign is no longer pending approval');
     }
     const approved = await this.findCampaign(id);
-    await this.audit.log(userId, 'campaign_approved', 'Campaign', id, { name: approved.name });
+    await this.audit.log(userId, 'campaign_approved', 'Campaign', id, {
+      name: approved.name,
+      scheduledAt: campaign.scheduledAt,
+    });
     return approved;
   }
 
-  async start(id: string, userId: string) {
+  async start(id: string, userId?: string) {
     const campaign = await this.findCampaign(id);
     if (!([CampaignStatus.approved, CampaignStatus.paused, CampaignStatus.scheduled] as CampaignStatus[]).includes(campaign.status)) {
       throw new BadRequestException('Campaign must be approved, scheduled, or paused before start');
@@ -335,6 +344,82 @@ export class CampaignsService {
     return campaign;
   }
 
+  @Interval(60_000)
+  async runScheduledCampaigns() {
+    try {
+      const due = await this.prisma.campaign.findMany({
+        where: { status: CampaignStatus.scheduled, scheduledAt: { lte: new Date() } },
+        select: { id: true, createdById: true },
+      });
+      for (const campaign of due) {
+        try {
+          await this.start(campaign.id, campaign.createdById ?? undefined);
+        } catch (err) {
+          this.logger.warn(`Scheduled campaign ${campaign.id} failed to auto-start: ${err}`);
+        }
+      }
+    } catch (err) {
+      this.logger.error(`runScheduledCampaigns failed: ${err}`);
+    }
+  }
+
+  async duplicate(id: string, userId: string) {
+    const source = await this.findCampaign(id);
+    const copy = await this.prisma.campaign.create({
+      data: {
+        name: `${source.name} (copy)`,
+        messageTemplate: source.messageTemplate,
+        whatsappAccountId: source.whatsappAccountId,
+        targetFilter: (source.targetFilter ?? {}) as Prisma.InputJsonValue,
+        createdById: userId,
+        rateLimitPerMinute: source.rateLimitPerMinute,
+        humanDelayMinMs: source.humanDelayMinMs,
+        humanDelayMaxMs: source.humanDelayMaxMs,
+        status: CampaignStatus.draft,
+      },
+    });
+    await this.audit.log(userId, 'campaign_duplicated', 'Campaign', copy.id, { sourceId: id });
+    return copy;
+  }
+
+  async optOut(customerId: string, userId: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException('Customer not found');
+    const updated = await this.prisma.customer.update({
+      where: { id: customerId },
+      data: { optedOut: true, optedOutAt: new Date() },
+    });
+    await this.audit.log(userId, 'customer_opted_out', 'Customer', customerId, {});
+    return updated;
+  }
+
+  async optIn(customerId: string, userId: string) {
+    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException('Customer not found');
+    const updated = await this.prisma.customer.update({
+      where: { id: customerId },
+      data: { optedOut: false, optedOutAt: null },
+    });
+    await this.audit.log(userId, 'customer_opted_in', 'Customer', customerId, {});
+    return updated;
+  }
+
+  async listOptedOut(page = 1, pageSize = 50) {
+    const take = Math.min(Math.max(pageSize, 1), 200);
+    const skip = (Math.max(page, 1) - 1) * take;
+    const [items, total] = await Promise.all([
+      this.prisma.customer.findMany({
+        where: { optedOut: true },
+        orderBy: { optedOutAt: 'desc' },
+        select: { id: true, name: true, phoneNumber: true, optedOutAt: true, tags: true },
+        skip,
+        take,
+      }),
+      this.prisma.customer.count({ where: { optedOut: true } }),
+    ]);
+    return { items, total, page: Math.max(page, 1), pageSize: take };
+  }
+
   async processRecipient(recipientId: string) {
     const recipient = await this.prisma.campaignRecipient.findUnique({
       where: { id: recipientId },
@@ -399,6 +484,12 @@ export class CampaignsService {
       data: { status: CampaignStatus.running },
     });
 
+    // Personalized message body (shared by send + persistence below).
+    const content = renderTemplate(recipient.campaign.messageTemplate, {
+      name: recipient.customer?.name,
+      phone: recipient.phoneNumber,
+    });
+
     // Phase 1: the actual send. A failure here is safe to retry — nothing
     // reached the customer — so mark failed and rethrow.
     let sentMessageId: string | null;
@@ -406,7 +497,7 @@ export class CampaignsService {
       sentMessageId = await this.wa.sendText(
         recipient.campaign.whatsappAccountId,
         recipient.phoneNumber,
-        recipient.campaign.messageTemplate,
+        content,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -433,7 +524,7 @@ export class CampaignsService {
             conversationId: recipient.conversationId,
             senderType: SenderType.admin,
             senderId: recipient.campaign.createdById,
-            content: recipient.campaign.messageTemplate,
+            content,
             status: 'sent',
             externalId: sentMessageId,
           },
@@ -441,7 +532,7 @@ export class CampaignsService {
         await this.prisma.conversation.update({
           where: { id: recipient.conversationId },
           data: {
-            lastMessage: recipient.campaign.messageTemplate,
+            lastMessage: content,
             lastMessageAt: new Date(),
           },
         });
@@ -493,7 +584,7 @@ export class CampaignsService {
   }
 
   private async buildTargets(whatsappAccountId: string, targetFilter: CampaignTargetFilterDto) {
-    const where: Prisma.CustomerWhereInput = {};
+    const where: Prisma.CustomerWhereInput = { optedOut: false };
     if (targetFilter.customerIds?.length) where.id = { in: targetFilter.customerIds };
     if (targetFilter.leadStage) where.leadStage = targetFilter.leadStage;
     if (targetFilter.tag) where.tags = { has: targetFilter.tag };

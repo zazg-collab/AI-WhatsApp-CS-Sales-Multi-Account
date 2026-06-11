@@ -117,6 +117,12 @@ export class UpdateCampaignDto {
   scheduledAt?: string | null;
 }
 
+export class OptOutDto {
+  @ApiProperty({ description: 'Customer ID to opt out / opt in' })
+  @IsString()
+  customerId!: string;
+}
+
 export class PreviewCampaignDto {
   @IsString()
   whatsappAccountId!: string;

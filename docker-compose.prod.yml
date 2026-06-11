@@ -1,0 +1,59 @@
+# Production overrides — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file overrides restart policies, enables Redis password + persistence,
+# adds the Nginx reverse proxy, and wires NODE_ENV=production everywhere.
+
+services:
+  postgres:
+    restart: always
+    ports: []   # do not expose Postgres to the host in production
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    restart: always
+    ports: []   # do not expose Redis to the host in production
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispass}
+
+  api:
+    restart: always
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    restart: always
+    environment:
+      - NODE_ENV=production
+      # Override with your real domain/IP so the browser can reach the API.
+      # If you have a domain: http://yourdomain.com/api/v1
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://YOUR_SERVER_IP/api/v1}
+      - NEXT_PUBLIC_SOCKET_URL=${NEXT_PUBLIC_SOCKET_URL:-http://YOUR_SERVER_IP}
+
+  nginx:
+    image: nginx:alpine
+    container_name: hermes-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot_certs:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    depends_on:
+      - api
+      - web
+    restart: always
+
+volumes:
+  postgres_data:
+  redis_data:
+  certbot_certs:
+  certbot_www:

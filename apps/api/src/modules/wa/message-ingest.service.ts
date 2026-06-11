@@ -4,7 +4,7 @@ import { MessageType, SenderType, Prisma } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { AutoAssignService } from './auto-assign.service';
-import { jidToPhone } from './wa.util';
+import { isOptOutMessage, jidToPhone } from './wa.util';
 
 interface IncomingMessage {
   accountId: string;
@@ -195,6 +195,18 @@ export class MessageIngestService {
     await this.maybeCaptureCsat(conversation, msg.text).catch((err) =>
       this.logger.warn(`CSAT capture failed: ${err}`),
     );
+
+    if (!customer.optedOut && isOptOutMessage(msg.text)) {
+      try {
+        await this.prisma.customer.update({
+          where: { id: customer.id },
+          data: { optedOut: true, optedOutAt: new Date() },
+        });
+        this.logger.log(`Customer ${customer.id} auto opted-out via keyword`);
+      } catch (err) {
+        this.logger.warn(`Failed to mark customer ${customer.id} opted-out: ${err}`);
+      }
+    }
 
     return { conversation, message, customer, account };
   }

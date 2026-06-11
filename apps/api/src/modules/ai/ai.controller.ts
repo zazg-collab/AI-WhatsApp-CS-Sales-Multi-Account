@@ -54,4 +54,17 @@ export class AiController {
   leadScore(@Body() dto: ConversationRefDto) {
     return this.ai.leadScore(dto.conversationId);
   }
+
+  @ApiOperation({ summary: 'Analyze customer sentiment for a conversation' })
+  @Post('sentiment')
+  sentiment(@Body() dto: ConversationRefDto) {
+    return this.ai.analyzeSentiment(dto.conversationId);
+  }
+
+  @ApiOperation({ summary: 'AI response cache stats (owner/supervisor)' })
+  @Roles('owner', 'supervisor')
+  @Get('cache/stats')
+  cacheStats() {
+    return this.ai.cacheStats();
+  }
 }

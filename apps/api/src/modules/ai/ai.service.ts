@@ -7,6 +7,7 @@ import {
   ChatMessage,
 } from './ai-provider.service';
 import { PromptBuilderService } from './prompt-builder.service';
+import { AiCacheService } from './ai-cache.service';
 
 export interface GeneratedReply {
   text: string;
@@ -19,6 +20,16 @@ export interface LeadScoreResult {
   reasons: string[];
 }
 
+export type Sentiment = 'positive' | 'neutral' | 'negative' | 'frustrated';
+
+export interface SentimentResult {
+  sentiment: Sentiment;
+  score: number;
+  reason: string;
+}
+
+const CACHEABLE_MAX_QUESTION_CHARS = 200;
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
@@ -28,7 +39,12 @@ export class AiService {
     private readonly provider: AiProviderService,
     private readonly prompts: PromptBuilderService,
     private readonly notifications: NotificationsService,
+    private readonly cache: AiCacheService,
   ) {}
+
+  cacheStats() {
+    return this.cache.stats();
+  }
 
   listModels() {
     return this.provider.listModels();
@@ -42,14 +58,104 @@ export class AiService {
   async generateReply(
     conversationId: string,
     model?: string,
+    useCache = false,
   ): Promise<GeneratedReply> {
     const messages = await this.prompts.buildForConversation(conversationId);
+    const resolvedModel = model ?? this.provider.model;
+
+    // Conservative caching: only for short, generic latest questions. The
+    // cache is opt-in (useCache) so existing callers keep prior behavior.
+    const lastUser = [...messages]
+      .reverse()
+      .find((m) => m.role === 'user')?.content;
+    const cacheable =
+      useCache &&
+      typeof lastUser === 'string' &&
+      lastUser.length > 0 &&
+      lastUser.length < CACHEABLE_MAX_QUESTION_CHARS;
+
+    let botId: string | null = null;
+    if (cacheable) {
+      const conv = await this.prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { botId: true },
+      });
+      botId = conv?.botId ?? null;
+      if (botId) {
+        const hit = this.cache.get(botId, lastUser as string);
+        if (hit !== null) {
+          return { text: hit, model: resolvedModel };
+        }
+      }
+    }
+
     const text = await this.provider.chat(messages, {
       model,
       temperature: 0.6,
       maxTokens: 500,
     });
-    return { text, model: model ?? this.provider.model };
+
+    if (cacheable && botId) {
+      this.cache.set(botId, lastUser as string, text);
+    }
+
+    return { text, model: resolvedModel };
+  }
+
+  /**
+   * Analyze customer sentiment from the most recent customer messages.
+   * Returns a structured result; never throws on parse failure.
+   */
+  async analyzeSentiment(conversationId: string): Promise<SentimentResult> {
+    const history = await this.prompts.buildForConversation(conversationId, 30);
+    const customerLines = history
+      .filter((m) => m.role === 'user')
+      .slice(-10)
+      .map((m) => `- ${m.content}`)
+      .join('\n');
+
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: `Kamu menilai sentimen customer dari pesan WhatsApp mereka.
+Balas HANYA JSON: {"sentiment": "positive|neutral|negative|frustrated", "score": number, "reason": string}.
+score 0-100 (semakin tinggi semakin positif). reason singkat Bahasa Indonesia.`,
+      },
+      {
+        role: 'user',
+        content:
+          'Pesan terakhir customer:\n' +
+          (customerLines || '(tidak ada pesan customer)') +
+          '\nNilai sentimennya sebagai JSON.',
+      },
+    ];
+
+    const raw = await this.provider.chat(messages, {
+      temperature: 0,
+      json: true,
+      maxTokens: 200,
+    });
+
+    return this.parseSentiment(raw);
+  }
+
+  private parseSentiment(raw: string): SentimentResult {
+    const valid: Sentiment[] = ['positive', 'neutral', 'negative', 'frustrated'];
+    try {
+      const json = JSON.parse(this.extractJson(raw));
+      const sentiment: Sentiment = valid.includes(json.sentiment)
+        ? json.sentiment
+        : 'neutral';
+      const score = Math.max(0, Math.min(100, Number(json.score)));
+      return {
+        sentiment,
+        score: Number.isFinite(score) ? score : 50,
+        reason: typeof json.reason === 'string' ? json.reason : '',
+      };
+    } catch (err) {
+      this.logger.warn(`Failed to parse sentiment: ${err}`);
+      return { sentiment: 'neutral', score: 50, reason: 'unparseable' };
+    }
   }
 
   async summarizeChat(conversationId: string): Promise<string> {
