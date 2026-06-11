@@ -58,7 +58,7 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
   }
 
   return (
-    <div className="mt-3 border-t border-black/30 pt-3">
+    <div className="mt-3 border-t border-gray-200 dark:border-black/30 pt-3">
       <button
         onClick={() => setOpen((v) => !v)}
         className="text-xs text-wa-accent hover:underline"
@@ -73,34 +73,34 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
             <span>Aktifkan jam operasional</span>
           </label>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-gray-400">Jam</span>
-            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="rounded bg-black/30 px-2 py-1" />
+            <span className="text-xs text-gray-600 dark:text-gray-400">Jam</span>
+            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="rounded bg-black/5 dark:bg-black/30 px-2 py-1" />
             <span className="text-gray-500">–</span>
-            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded bg-black/30 px-2 py-1" />
+            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded bg-black/5 dark:bg-black/30 px-2 py-1" />
           </div>
           <div className="flex flex-wrap gap-1">
             {DAY_LABELS.map((label, d) => (
               <button
                 key={d}
                 onClick={() => toggleDay(d)}
-                className={`rounded px-2 py-1 text-xs ${days.includes(d) ? 'bg-wa-accent text-black' : 'bg-black/30 text-gray-400'}`}
+                className={`rounded px-2 py-1 text-xs ${days.includes(d) ? 'bg-wa-accent text-black' : 'bg-black/5 dark:bg-black/30 text-gray-600 dark:text-gray-400'}`}
               >
                 {label}
               </button>
             ))}
           </div>
           <div>
-            <label className="mb-1 block text-xs text-gray-400">Timezone</label>
-            <input value={tz} onChange={(e) => setTz(e.target.value)} placeholder="Asia/Jakarta" className="w-full rounded bg-black/30 px-2 py-1" />
+            <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Timezone</label>
+            <input value={tz} onChange={(e) => setTz(e.target.value)} placeholder="Asia/Jakarta" className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1" />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-gray-400">Pesan auto-away (di luar jam, saat AI tidak ON)</label>
+            <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Pesan auto-away (di luar jam, saat AI tidak ON)</label>
             <textarea
               rows={2}
               value={away}
               onChange={(e) => setAway(e.target.value)}
               placeholder="Halo kak, saat ini di luar jam operasional. Kami balas pada jam kerja ya 🙏"
-              className="w-full resize-none rounded bg-black/30 px-2 py-1"
+              className="w-full resize-none rounded bg-black/5 dark:bg-black/30 px-2 py-1"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -173,14 +173,14 @@ export default function AccountsPage() {
           placeholder="Nama akun"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="flex-1 rounded bg-wa-panel px-3 py-2 outline-none"
+          className="flex-1 rounded bg-white dark:bg-wa-panel px-3 py-2 outline-none"
           required
         />
         <input
           placeholder="Nomor (mis. 628123...)"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          className="flex-1 rounded bg-wa-panel px-3 py-2 outline-none"
+          className="flex-1 rounded bg-white dark:bg-wa-panel px-3 py-2 outline-none"
           required
         />
         <button className="rounded bg-wa-accent px-4 font-medium text-black">
@@ -192,13 +192,13 @@ export default function AccountsPage() {
 
       <ul className="space-y-4">
         {accounts.map((a) => (
-          <li key={a.id} className="rounded-lg bg-wa-panel p-4">
+          <li key={a.id} className="rounded-lg bg-white dark:bg-wa-panel p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-medium">{a.accountName}</p>
-                <p className="text-xs text-gray-400">{a.phoneNumber}</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">{a.phoneNumber}</p>
               </div>
-              <span className="rounded bg-black/40 px-2 py-1 text-xs">
+              <span className="rounded bg-black/10 dark:bg-black/40 px-2 py-1 text-xs">
                 {a.sessionStatus}
               </span>
             </div>
@@ -211,7 +211,7 @@ export default function AccountsPage() {
                 />
               ) : (
                 !canScan && (
-                  <p className="mt-4 text-xs text-gray-400">
+                  <p className="mt-4 text-xs text-gray-600 dark:text-gray-400">
                     Menunggu admin untuk memindai QR.
                   </p>
                 )

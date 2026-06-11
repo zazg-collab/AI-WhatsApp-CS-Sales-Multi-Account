@@ -3,6 +3,7 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  MaxLength,
 } from 'class-validator';
 import { KnowledgeStatus } from '@hermes/database';
 
@@ -85,4 +86,10 @@ export class UpdateKnowledgeItemDto {
   @IsOptional()
   @IsEnum(KnowledgeStatus)
   status?: KnowledgeStatus;
+}
+
+export class IngestUrlDto {
+  @IsString()
+  @MaxLength(2048)
+  url!: string;
 }

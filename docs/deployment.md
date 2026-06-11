@@ -88,7 +88,7 @@ For multi-instance deployments, replace in-memory rate limiting with a Redis-bac
 
 - **Admin access is flat across WhatsApp accounts (DR2).** Every `admin` can read and operate every account's conversations/customers via the REST API; Socket.IO room scoping only constrains *live event delivery* to assigned accounts. This fits a single-team deployment. Revisit (add per-account filters for the `admin` role across conversations/customers endpoints) before any multi-tenant or franchise rollout.
 - **Media URLs are unauthenticated capability URLs.** `/media/<uuid>.<ext>` can be fetched without a JWT because `<img>`/`<audio>` tags cannot attach one; the random UUID is the secret. Don't log or share these URLs externally.
-- **JWT lives in browser localStorage.** Standard SPA tradeoff (XSS-readable); mitigated by React escaping, input sanitization, and no `dangerouslySetInnerHTML` anywhere. A `Content-Security-Policy` for the web app is on the hardening backlog (needs Next.js nonce wiring).
+- **JWT lives in browser localStorage.** Standard SPA tradeoff (XSS-readable); mitigated by React escaping, input sanitization, and no `dangerouslySetInnerHTML` on any dynamic content (the only use is a static inline theme script in the root layout). A `Content-Security-Policy` for the web app is on the hardening backlog (needs Next.js nonce wiring).
 
 ### Tunable safety limits
 

@@ -14,6 +14,7 @@ import { WaService } from '../wa/wa.service';
 import { MediaStorageService } from '../media/media-storage.service';
 import { extForMimetype } from '../wa/wa.util';
 import { assertSafeMediaUrl } from '../../common/media-url.util';
+import { logAudit } from '../../common/audit.util';
 
 const DEFAULT_CSAT_MESSAGE =
   'Terima kasih sudah menghubungi kami 🙏 Boleh bantu beri nilai layanan kami? Balas angka 1–5 (1 = kurang, 5 = sangat puas).';
@@ -200,6 +201,12 @@ export class ConversationsService {
     });
 
     this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message });
+    await logAudit(this.prisma, {
+      userId: adminId,
+      action: 'message_send',
+      entityType: 'conversation',
+      entityId: id,
+    });
     return message;
   }
 
@@ -251,6 +258,12 @@ export class ConversationsService {
       where: { id: draft.id },
       data: { content: text, externalId, senderId: adminId },
     });
+    await logAudit(this.prisma, {
+      userId: adminId,
+      action: 'draft_approve',
+      entityType: 'message',
+      entityId: draft.id,
+    });
 
     await this.prisma.conversation.update({
       where: { id },
@@ -262,7 +275,7 @@ export class ConversationsService {
   }
 
   /** Block/discard a supervised draft: mark it failed so it is never sent. */
-  async blockDraft(id: string, messageId: string) {
+  async blockDraft(id: string, messageId: string, actorId?: string) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       select: { whatsappAccountId: true },
@@ -286,6 +299,12 @@ export class ConversationsService {
       conversationId: id,
       messageId: draft.id,
     });
+    await logAudit(this.prisma, {
+      userId: actorId,
+      action: 'draft_block',
+      entityType: 'message',
+      entityId: draft.id,
+    });
     return message;
   }
 
@@ -296,7 +315,7 @@ export class ConversationsService {
       select: { aiMode: true },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
-    return this.prisma.conversation.update({
+    const updated = await this.prisma.conversation.update({
       where: { id },
       data: {
         takeoverStatus: TakeoverStatus.admin_takeover,
@@ -308,9 +327,16 @@ export class ConversationsService {
         assignedAdminId: adminId,
       },
     });
+    await logAudit(this.prisma, {
+      userId: adminId,
+      action: 'takeover',
+      entityType: 'conversation',
+      entityId: id,
+    });
+    return updated;
   }
 
-  async returnToAi(id: string) {
+  async returnToAi(id: string, actorId?: string) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       select: { previousAiMode: true },
@@ -319,7 +345,7 @@ export class ConversationsService {
     // DR1: restore the mode that was active before takeover. Falling back to
     // ai_draft (not ai_on) avoids silently re-enabling unsupervised auto-reply.
     const restored = conversation.previousAiMode ?? AiMode.ai_draft;
-    return this.prisma.conversation.update({
+    const updated = await this.prisma.conversation.update({
       where: { id },
       data: {
         takeoverStatus: TakeoverStatus.returned_to_ai,
@@ -327,6 +353,14 @@ export class ConversationsService {
         previousAiMode: null,
       },
     });
+    await logAudit(this.prisma, {
+      userId: actorId,
+      action: 'return_to_ai',
+      entityType: 'conversation',
+      entityId: id,
+      newValue: { aiMode: restored },
+    });
+    return updated;
   }
 
   setAiMode(id: string, aiMode: AiMode) {
@@ -337,7 +371,7 @@ export class ConversationsService {
   }
 
   /** Set the workflow status (open/pending/resolved) of a conversation. */
-  async setStatus(id: string, status: ConversationStatus) {
+  async setStatus(id: string, status: ConversationStatus, actorId?: string) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       select: { whatsappAccountId: true, status: true, csatRequestedAt: true },
@@ -395,11 +429,19 @@ export class ConversationsService {
       status: updated.status,
       assignedAdmin: updated.assignedAdmin,
     });
+    await logAudit(this.prisma, {
+      userId: actorId,
+      action: 'status_change',
+      entityType: 'conversation',
+      entityId: id,
+      oldValue: { status: conversation.status },
+      newValue: { status },
+    });
     return updated;
   }
 
   /** Replace a conversation's custom labels (deduped, trimmed, capped). */
-  async setLabels(id: string, labels: string[]) {
+  async setLabels(id: string, labels: string[], actorId?: string) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       select: { whatsappAccountId: true },
@@ -422,11 +464,18 @@ export class ConversationsService {
       conversationId: id,
       labels: updated.labels,
     });
+    await logAudit(this.prisma, {
+      userId: actorId,
+      action: 'labels_change',
+      entityType: 'conversation',
+      entityId: id,
+      newValue: { labels: clean },
+    });
     return updated;
   }
 
   /** Assign a conversation to an admin (or unassign with adminId = null). */
-  async assign(id: string, adminId: string | null) {
+  async assign(id: string, adminId: string | null, actorId?: string) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       select: { whatsappAccountId: true },
@@ -450,6 +499,13 @@ export class ConversationsService {
       conversationId: id,
       status: updated.status,
       assignedAdmin: updated.assignedAdmin,
+    });
+    await logAudit(this.prisma, {
+      userId: actorId,
+      action: 'conversation_assign',
+      entityType: 'conversation',
+      entityId: id,
+      newValue: { assignedAdminId: adminId },
     });
     return updated;
   }

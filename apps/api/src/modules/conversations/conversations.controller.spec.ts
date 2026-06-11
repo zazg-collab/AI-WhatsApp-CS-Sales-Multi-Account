@@ -34,8 +34,8 @@ describe('ConversationsController', () => {
 
   it('setLabels delegates', () => {
     svc.setLabels = jest.fn().mockResolvedValue({});
-    controller.setLabels('c1', { labels: ['vip', 'refund'] });
-    expect(svc.setLabels).toHaveBeenCalledWith('c1', ['vip', 'refund']);
+    controller.setLabels('c1', { labels: ['vip', 'refund'] }, { id: 'u1' } as any);
+    expect(svc.setLabels).toHaveBeenCalledWith('c1', ['vip', 'refund'], 'u1');
   });
 
   it('list rejects an invalid status', () => {
@@ -51,12 +51,12 @@ describe('ConversationsController', () => {
   it('setStatus and assign delegate', () => {
     svc.setStatus = jest.fn().mockResolvedValue({});
     svc.assign = jest.fn().mockResolvedValue({});
-    controller.setStatus('c1', { status: ConversationStatus.resolved });
-    controller.assign('c1', { adminId: 'u1' });
-    controller.assign('c1', {});
-    expect(svc.setStatus).toHaveBeenCalledWith('c1', ConversationStatus.resolved);
-    expect(svc.assign).toHaveBeenCalledWith('c1', 'u1');
-    expect(svc.assign).toHaveBeenCalledWith('c1', null);
+    controller.setStatus('c1', { status: ConversationStatus.resolved }, { id: 'u1' } as any);
+    controller.assign('c1', { adminId: 'u1' }, { id: 'u1' } as any);
+    controller.assign('c1', {}, { id: 'u1' } as any);
+    expect(svc.setStatus).toHaveBeenCalledWith('c1', ConversationStatus.resolved, 'u1');
+    expect(svc.assign).toHaveBeenCalledWith('c1', 'u1', 'u1');
+    expect(svc.assign).toHaveBeenCalledWith('c1', null, 'u1');
   });
 
   it('list defaults page/limit', () => {
@@ -84,7 +84,7 @@ describe('ConversationsController', () => {
 
   it('takeover/returnToAi/setAiMode/update/sendMedia delegate', () => {
     controller.takeover('c1', { id: 'u1' } as any);
-    controller.returnToAi('c1');
+    controller.returnToAi('c1', { id: 'u1' } as any);
     controller.setAiMode('c1', { aiMode: AiMode.ai_off } as any);
     controller.update('c1', { aiMode: AiMode.ai_on });
     controller.sendMedia('c1', { mediaType: 'image', url: 'u' } as any, { id: 'u1' } as any);

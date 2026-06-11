@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { getToken, clearToken } from '@/lib/api';
+import { ThemeToggle } from './ThemeToggle';
 
 interface NavItem {
   href: string;
@@ -187,7 +188,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen w-16 flex-col items-center border-r border-gray-700 bg-gray-900 py-4 lg:w-56 lg:items-stretch">
+    <aside className="flex h-screen w-16 flex-col items-center border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 py-4 lg:w-56 lg:items-stretch">
       {/* Brand */}
       <div className="mb-6 flex items-center justify-center gap-2 px-2 lg:justify-start lg:px-4">
         <span className="text-xl">&#9889;</span>
@@ -207,7 +208,7 @@ export function Sidebar() {
               className={`flex items-center justify-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium transition-colors lg:justify-start lg:px-3 ${
                 isActive
                   ? 'bg-emerald-600 text-white'
-                  : 'text-gray-400 hover:bg-gray-800 hover:text-gray-100'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
               }`}
               title={item.label}
             >
@@ -218,13 +219,18 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* Theme switch */}
+      <div className="px-1 lg:px-2 mb-1">
+        <ThemeToggle />
+      </div>
+
       {/* API Docs link */}
       <div className="px-1 lg:px-2 mb-1">
         <a
           href={`${(process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1').replace(/\/api\/v1$/, '')}/api/docs`}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex w-full items-center justify-center gap-3 rounded-lg px-2 py-2.5 text-sm text-gray-400 hover:bg-gray-800 hover:text-gray-100 lg:justify-start lg:px-3"
+          className="flex w-full items-center justify-center gap-3 rounded-lg px-2 py-2.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 lg:justify-start lg:px-3"
           title="API Docs"
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -236,10 +242,10 @@ export function Sidebar() {
       </div>
 
       {/* Logout */}
-      <div className="border-t border-gray-700 pt-3 px-1 lg:px-2">
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-3 px-1 lg:px-2">
         <button
           onClick={handleLogout}
-          className="flex w-full items-center justify-center gap-3 rounded-lg px-2 py-2.5 text-sm text-gray-400 hover:bg-gray-800 hover:text-gray-100 lg:justify-start lg:px-3"
+          className="flex w-full items-center justify-center gap-3 rounded-lg px-2 py-2.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 lg:justify-start lg:px-3"
           title="Logout"
         >
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

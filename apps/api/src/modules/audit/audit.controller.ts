@@ -1,16 +1,20 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
+import { Roles, RolesGuard } from '../../auth/roles';
 import { AuditService } from './audit.service';
 
+// The audit trail records who did what — supervisor/owner eyes only,
+// matching the sidebar gating.
 @ApiTags('audit')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('audit-logs')
 export class AuditController {
   constructor(private readonly audit: AuditService) {}
 
   @ApiOperation({ summary: 'List audit log entries with optional filters' })
+  @Roles('supervisor', 'owner')
   @Get()
   list(
     @Query('entity') entity?: string,

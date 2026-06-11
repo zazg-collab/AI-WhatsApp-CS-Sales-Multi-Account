@@ -99,6 +99,7 @@ interface WaAccount {
   id: string;
   accountName: string;
   phoneNumber: string;
+  sessionStatus?: string;
 }
 
 interface FollowUp {
@@ -115,12 +116,12 @@ interface FollowUp {
 function aiModeBadge(mode: string) {
   const map: Record<string, { label: string; cls: string }> = {
     ai_on: { label: 'AI ON', cls: 'bg-green-700 text-green-100' },
-    ai_off: { label: 'AI OFF', cls: 'bg-gray-600 text-gray-100' },
+    ai_off: { label: 'AI OFF', cls: 'bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-gray-100' },
     ai_draft: { label: 'Draft', cls: 'bg-yellow-700 text-yellow-100' },
     ai_supervised: { label: 'Supervised', cls: 'bg-blue-700 text-blue-100' },
     ai_paused: { label: 'Paused', cls: 'bg-red-700 text-red-100' },
   };
-  const { label, cls } = map[mode] ?? { label: mode, cls: 'bg-gray-700 text-gray-100' };
+  const { label, cls } = map[mode] ?? { label: mode, cls: 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100' };
   return (
     <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>{label}</span>
   );
@@ -130,9 +131,9 @@ function statusBadge(status: string) {
   const map: Record<string, { label: string; cls: string }> = {
     open: { label: 'Open', cls: 'bg-emerald-900 text-emerald-200' },
     pending: { label: 'Pending', cls: 'bg-yellow-900 text-yellow-200' },
-    resolved: { label: 'Resolved', cls: 'bg-gray-700 text-gray-300' },
+    resolved: { label: 'Resolved', cls: 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300' },
   };
-  const { label, cls } = map[status] ?? { label: status, cls: 'bg-gray-700 text-gray-100' };
+  const { label, cls } = map[status] ?? { label: status, cls: 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100' };
   return (
     <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>{label}</span>
   );
@@ -154,7 +155,7 @@ function decisionBadge(decision: string) {
     takeover_required: 'bg-purple-700',
   };
   return (
-    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${map[decision] ?? 'bg-gray-700'}`}>
+    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${map[decision] ?? 'bg-gray-200 dark:bg-gray-700'}`}>
       {decision.replace('_', ' ')}
     </span>
   );
@@ -279,15 +280,15 @@ function LeftPanel({
   ];
 
   return (
-    <aside className="flex w-80 flex-col border-r border-black/40 bg-wa-panel">
+    <aside className="flex w-80 flex-col border-r border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel">
       {/* Header */}
-      <div className="border-b border-black/30 p-3">
+      <div className="border-b border-gray-200 dark:border-black/30 p-3">
         <h2 className="mb-2 text-sm font-semibold text-wa-accent">Percakapan</h2>
         {/* Account switcher — filter the list by WhatsApp account */}
         <select
           value={accountId}
           onChange={(e) => onAccountChange(e.target.value)}
-          className="mb-2 w-full rounded bg-black/30 px-2 py-1.5 text-sm outline-none"
+          className="mb-2 w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1.5 text-sm outline-none"
           title="Pilih akun WhatsApp"
         >
           <option value="">Semua Akun ({accounts.length})</option>
@@ -301,7 +302,7 @@ function LeftPanel({
         <select
           value={statusFilter}
           onChange={(e) => onStatusFilterChange(e.target.value)}
-          className="mb-2 w-full rounded bg-black/30 px-2 py-1.5 text-sm outline-none"
+          className="mb-2 w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1.5 text-sm outline-none"
           title="Filter status percakapan"
         >
           <option value="">Semua Status</option>
@@ -314,25 +315,25 @@ function LeftPanel({
           placeholder="Filter label (mis. refund)"
           value={labelFilter}
           onChange={(e) => onLabelFilterChange(e.target.value)}
-          className="mb-2 w-full rounded bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
+          className="mb-2 w-full rounded bg-black/5 dark:bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
         />
         <input
           type="text"
           placeholder="Cari nama / nomor..."
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full rounded bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
+          className="w-full rounded bg-black/5 dark:bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
         />
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 overflow-x-auto border-b border-black/30 px-2 py-1.5">
+      <div className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-black/30 px-2 py-1.5">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => onFilterChange(t.key)}
             className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-colors ${
-              filter === t.key ? 'bg-wa-accent text-black' : 'text-gray-400 hover:text-gray-200'
+              filter === t.key ? 'bg-wa-accent text-black' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
             }`}
           >
             {t.label}
@@ -353,8 +354,8 @@ function LeftPanel({
             <button
               key={c.id}
               onClick={() => onSelect(c.id)}
-              className={`w-full border-b border-black/20 px-3 py-3 text-left transition-colors hover:bg-black/20 ${
-                selectedId === c.id ? 'bg-black/30' : ''
+              className={`w-full border-b border-gray-200 dark:border-black/20 px-3 py-3 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/20 ${
+                selectedId === c.id ? 'bg-black/5 dark:bg-black/30' : ''
               }`}
             >
               <div className="flex items-start justify-between gap-2">
@@ -367,7 +368,7 @@ function LeftPanel({
                       <span className="shrink-0 text-xs text-orange-400">●</span>
                     )}
                   </div>
-                  <p className="truncate text-xs text-gray-400">
+                  <p className="truncate text-xs text-gray-600 dark:text-gray-400">
                     {lastMsg?.content ?? 'Belum ada pesan'}
                   </p>
                   <div className="mt-0.5 flex items-center gap-1.5">
@@ -449,18 +450,18 @@ function MediaModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-96 rounded-lg border border-gray-700 bg-gray-800 p-5">
-        <h3 className="mb-3 text-sm font-semibold text-gray-100">Kirim Media</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60">
+      <div className="w-96 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+        <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">Kirim Media</h3>
 
         {/* Tabs */}
-        <div className="mb-3 flex gap-1 rounded bg-gray-900 p-1 text-xs">
+        <div className="mb-3 flex gap-1 rounded bg-gray-100 dark:bg-gray-900 p-1 text-xs">
           {(['upload', 'url'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`flex-1 rounded px-2 py-1 font-medium ${
-                tab === t ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                tab === t ? 'bg-emerald-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
               }`}
             >
               {t === 'upload' ? 'Upload dari device' : 'Dari URL'}
@@ -479,11 +480,11 @@ function MediaModal({
                 if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
               }}
               className={`rounded border-2 border-dashed p-6 text-center text-xs ${
-                dragOver ? 'border-emerald-500 bg-emerald-950/30' : 'border-gray-600'
+                dragOver ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-gray-300 dark:border-gray-600'
               }`}
             >
               {file ? (
-                <div className="text-gray-200">
+                <div className="text-gray-800 dark:text-gray-200">
                   <p className="font-medium">{file.name}</p>
                   <p className="text-gray-500">{(file.size / 1024).toFixed(0)} KB</p>
                   <button onClick={() => setFile(null)} className="mt-1 text-red-400 hover:text-red-300">
@@ -493,7 +494,7 @@ function MediaModal({
               ) : (
                 <p className="text-gray-500">Tarik file ke sini, atau</p>
               )}
-              <label className="mt-2 inline-block cursor-pointer rounded bg-gray-700 px-3 py-1 text-gray-100 hover:bg-gray-600">
+              <label className="mt-2 inline-block cursor-pointer rounded bg-gray-200 dark:bg-gray-700 px-3 py-1 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600">
                 Pilih file
                 <input
                   type="file"
@@ -508,7 +509,7 @@ function MediaModal({
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
               placeholder="Caption (opsional)"
-              className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600"
+              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
             />
             <div className="flex gap-2 pt-1">
               <button
@@ -518,7 +519,7 @@ function MediaModal({
               >
                 {busy ? 'Mengirim...' : 'Kirim'}
               </button>
-              <button onClick={onClose} className="flex-1 rounded bg-gray-700 py-1.5 text-sm font-medium text-gray-100 hover:bg-gray-600">
+              <button onClick={onClose} className="flex-1 rounded bg-gray-200 dark:bg-gray-700 py-1.5 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600">
                 Batal
               </button>
             </div>
@@ -526,11 +527,11 @@ function MediaModal({
         ) : (
           <div className="space-y-3">
             <div>
-              <label className="mb-1 block text-xs text-gray-400">Tipe Media</label>
+              <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Tipe Media</label>
               <select
                 value={mediaType}
                 onChange={(e) => setMediaType(e.target.value)}
-                className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none"
+                className="w-full rounded bg-gray-100 dark:bg-gray-900 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none"
               >
                 <option value="image">Gambar</option>
                 <option value="document">Dokumen</option>
@@ -543,14 +544,14 @@ function MediaModal({
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://..."
-              className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600"
+              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
             />
             <input
               type="text"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
               placeholder="Caption (opsional)"
-              className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600"
+              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
             />
             <div className="flex gap-2 pt-1">
               <button
@@ -560,7 +561,7 @@ function MediaModal({
               >
                 Kirim
               </button>
-              <button onClick={onClose} className="flex-1 rounded bg-gray-700 py-1.5 text-sm font-medium text-gray-100 hover:bg-gray-600">
+              <button onClick={onClose} className="flex-1 rounded bg-gray-200 dark:bg-gray-700 py-1.5 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600">
                 Batal
               </button>
             </div>
@@ -581,7 +582,7 @@ function MessageMedia({ msg }: { msg: Message }) {
   if (!src && typeLabel[msg.messageType]) {
     return (
       <div>
-        <p className="text-xs italic text-gray-400">
+        <p className="text-xs italic text-gray-600 dark:text-gray-400">
           {typeLabel[msg.messageType]} (file tidak tersedia)
         </p>
         {msg.content && <p className="mt-1 whitespace-pre-wrap">{msg.content}</p>}
@@ -592,7 +593,7 @@ function MessageMedia({ msg }: { msg: Message }) {
     return (
       <div>
         <img src={src} alt={msg.content ?? 'image'} className="max-w-full rounded" />
-        {msg.content && <p className="mt-1 text-xs text-gray-300">{msg.content}</p>}
+        {msg.content && <p className="mt-1 text-xs text-gray-700 dark:text-gray-300">{msg.content}</p>}
       </div>
     );
   }
@@ -613,7 +614,7 @@ function MessageMedia({ msg }: { msg: Message }) {
     return (
       <div>
         <video controls src={src} className="max-w-full rounded" />
-        {msg.content && <p className="mt-1 text-xs text-gray-300">{msg.content}</p>}
+        {msg.content && <p className="mt-1 text-xs text-gray-700 dark:text-gray-300">{msg.content}</p>}
       </div>
     );
   }
@@ -636,6 +637,7 @@ function CenterPanel({
   typing,
   quickReplies,
   onLoadOlder,
+  accountStatus,
 }: {
   conv: ConvDetail | null;
   onSend: (text: string, quotedMessageId?: string) => void;
@@ -652,6 +654,7 @@ function CenterPanel({
   typing: boolean;
   quickReplies: QuickReply[];
   onLoadOlder: () => Promise<void>;
+  accountStatus?: string;
 }) {
   const [text, setText] = useState('');
   const [showMediaModal, setShowMediaModal] = useState(false);
@@ -761,7 +764,7 @@ function CenterPanel({
 
   if (!conv) {
     return (
-      <section className="flex flex-1 items-center justify-center bg-wa-bg">
+      <section className="flex flex-1 items-center justify-center bg-[#efeae2] dark:bg-wa-bg">
         <p className="text-sm text-gray-500">Pilih percakapan</p>
       </section>
     );
@@ -773,7 +776,7 @@ function CenterPanel({
   return (
     <section className="flex flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-black/40 bg-wa-panel px-4 py-3">
+      <header className="flex items-center justify-between border-b border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel px-4 py-3">
         <div className="flex items-center gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -782,7 +785,7 @@ function CenterPanel({
               </span>
               {aiModeBadge(conv.aiMode)}
             </div>
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-gray-600 dark:text-gray-400">
               {typing ? (
                 <span className="text-wa-accent">sedang mengetik…</span>
               ) : (
@@ -798,7 +801,7 @@ function CenterPanel({
             className={`rounded px-2.5 py-1 text-xs font-medium ring-1 ${
               searchOpen
                 ? 'bg-wa-accent text-black ring-wa-accent'
-                : 'text-gray-300 ring-gray-600 hover:ring-gray-400'
+                : 'text-gray-700 dark:text-gray-300 ring-gray-300 dark:ring-gray-600 hover:ring-gray-400'
             }`}
           >
             🔍
@@ -820,26 +823,36 @@ function CenterPanel({
           )}
           <button
             onClick={onToggleAi}
-            className="rounded bg-wa-panel px-3 py-1 text-xs font-medium text-gray-300 ring-1 ring-gray-600 hover:ring-gray-400"
+            className="rounded bg-white dark:bg-wa-panel px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 ring-1 ring-gray-300 dark:ring-gray-600 hover:ring-gray-400"
           >
             {conv.aiMode === 'ai_on' ? 'Matikan AI' : 'Nyalakan AI'}
           </button>
         </div>
       </header>
 
+      {/* Connection warning — the #1 reason messages "don't appear" */}
+      {accountStatus && accountStatus !== 'connected' && (
+        <div className="border-b border-yellow-800 bg-yellow-900/60 px-4 py-2 text-xs text-yellow-100">
+          ⚠ Akun WhatsApp <strong>{conv.whatsappAccount.accountName}</strong> tidak terhubung
+          (status: {accountStatus}). Pesan tidak bisa dikirim/diterima —{' '}
+          <a href="/accounts" className="underline">buka halaman Accounts</a>
+          {accountStatus === 'qr_required' ? ' untuk scan QR.' : ' untuk restart sesi.'}
+        </div>
+      )}
+
       {/* In-conversation search */}
       {searchOpen && (
-        <div className="border-b border-black/40 bg-wa-panel px-4 py-2">
+        <div className="border-b border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel px-4 py-2">
           <input
             type="text"
             autoFocus
             value={searchQ}
             onChange={(e) => setSearchQ(e.target.value)}
             placeholder="Cari teks dalam chat ini..."
-            className="w-full rounded bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
+            className="w-full rounded bg-black/5 dark:bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
           />
           {searchQ.trim() && (
-            <div className="mt-1 max-h-48 overflow-y-auto rounded bg-black/20">
+            <div className="mt-1 max-h-48 overflow-y-auto rounded bg-black/5 dark:bg-black/20">
               {searchResults.length === 0 && (
                 <p className="px-3 py-2 text-xs text-gray-500">Tidak ditemukan</p>
               )}
@@ -847,12 +860,12 @@ function CenterPanel({
                 <button
                   key={r.id}
                   onClick={() => jumpToMessage(r.id)}
-                  className="block w-full border-b border-black/20 px-3 py-1.5 text-left text-xs hover:bg-black/30"
+                  className="block w-full border-b border-gray-200 dark:border-black/20 px-3 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-black/30"
                 >
                   <span className="mr-2 text-gray-500">
                     {senderLabel(r.senderType, conv.customer.name)} · {fmtTime(r.createdAt)}
                   </span>
-                  <span className="text-gray-200">{(r.content ?? '').slice(0, 90)}</span>
+                  <span className="text-gray-800 dark:text-gray-200">{(r.content ?? '').slice(0, 90)}</span>
                 </button>
               ))}
             </div>
@@ -873,7 +886,7 @@ function CenterPanel({
           if (isSystem) {
             return (
               <div key={m.id} className="flex justify-center">
-                <span className="rounded bg-black/30 px-3 py-1 text-xs text-gray-400">
+                <span className="rounded bg-black/5 dark:bg-black/30 px-3 py-1 text-xs text-gray-600 dark:text-gray-400">
                   {m.content}
                 </span>
               </div>
@@ -897,7 +910,7 @@ function CenterPanel({
                 <button
                   onClick={() => setReplyTo(m)}
                   title="Balas pesan ini"
-                  className="hidden shrink-0 rounded bg-black/30 px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-100 group-hover:block"
+                  className="hidden shrink-0 rounded bg-black/5 dark:bg-black/30 px-1.5 py-0.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 group-hover:block"
                 >
                   ↩
                 </button>
@@ -905,10 +918,10 @@ function CenterPanel({
               <div
                 className={`max-w-[70%] rounded-lg px-3 py-2 text-sm transition-shadow ${
                   isCustomer
-                    ? 'bg-[#1f2c34] text-gray-100'
+                    ? 'bg-white dark:bg-[#1f2c34] text-gray-900 dark:text-gray-100'
                     : isDraft
                     ? 'bg-yellow-900/60 text-yellow-100 ring-1 ring-yellow-600'
-                    : 'bg-[#005c4b] text-gray-100'
+                    : 'bg-[#d9fdd3] dark:bg-[#005c4b] text-gray-900 dark:text-gray-100'
                 } ${highlightId === m.id ? 'ring-2 ring-wa-accent' : ''}`}
               >
                 {isDraft && (
@@ -920,12 +933,12 @@ function CenterPanel({
                 {quoted && (
                   <button
                     onClick={() => jumpToMessage(quoted.id)}
-                    className="mb-1 block w-full rounded border-l-2 border-wa-accent bg-black/20 px-2 py-1 text-left"
+                    className="mb-1 block w-full rounded border-l-2 border-wa-accent bg-black/5 dark:bg-black/20 px-2 py-1 text-left"
                   >
                     <span className="block text-[10px] font-medium text-wa-accent">
                       {senderLabel(quoted.senderType, conv.customer.name)}
                     </span>
-                    <span className="block truncate text-xs text-gray-400">
+                    <span className="block truncate text-xs text-gray-600 dark:text-gray-400">
                       {quoted.content || `[${quoted.messageType}]`}
                     </span>
                   </button>
@@ -965,7 +978,7 @@ function CenterPanel({
                 <button
                   onClick={() => setReplyTo(m)}
                   title="Balas pesan ini"
-                  className="hidden shrink-0 rounded bg-black/30 px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-100 group-hover:block"
+                  className="hidden shrink-0 rounded bg-black/5 dark:bg-black/30 px-1.5 py-0.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 group-hover:block"
                 >
                   ↩
                 </button>
@@ -987,18 +1000,18 @@ function CenterPanel({
 
       {/* Input */}
       {canSend && (
-        <div className="relative border-t border-black/40 bg-wa-panel px-4 py-3">
+        <div className="relative border-t border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel px-4 py-3">
           {/* Quick-reply picker (triggered by typing "/") */}
           {showQuickReplies && (
-            <div className="absolute bottom-full left-4 right-4 mb-1 max-h-56 overflow-y-auto rounded-lg border border-gray-700 bg-gray-800 shadow-lg">
-              <p className="border-b border-black/30 px-3 py-1 text-[10px] uppercase tracking-wide text-gray-500">
+            <div className="absolute bottom-full left-4 right-4 mb-1 max-h-56 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
+              <p className="border-b border-gray-200 dark:border-black/30 px-3 py-1 text-[10px] uppercase tracking-wide text-gray-500">
                 Template — pilih untuk menyisipkan
               </p>
               {qrMatches.map((q) => (
                 <button
                   key={q.id}
                   onClick={() => setText(q.content)}
-                  className="block w-full border-b border-black/20 px-3 py-2 text-left hover:bg-black/30"
+                  className="block w-full border-b border-gray-200 dark:border-black/20 px-3 py-2 text-left hover:bg-black/5 dark:hover:bg-black/30"
                 >
                   <div className="flex items-center gap-2">
                     {q.shortcut && (
@@ -1006,28 +1019,28 @@ function CenterPanel({
                         /{q.shortcut}
                       </span>
                     )}
-                    <span className="text-sm font-medium text-gray-100">{q.title}</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{q.title}</span>
                   </div>
-                  <p className="truncate text-xs text-gray-400">{q.content}</p>
+                  <p className="truncate text-xs text-gray-600 dark:text-gray-400">{q.content}</p>
                 </button>
               ))}
             </div>
           )}
           {/* Quoted reply preview */}
           {replyTo && (
-            <div className="mb-2 flex items-start gap-2 rounded border-l-2 border-wa-accent bg-black/20 px-2 py-1.5">
+            <div className="mb-2 flex items-start gap-2 rounded border-l-2 border-wa-accent bg-black/5 dark:bg-black/20 px-2 py-1.5">
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-medium text-wa-accent">
                   Membalas {senderLabel(replyTo.senderType, conv.customer.name)}
                 </p>
-                <p className="truncate text-xs text-gray-400">
+                <p className="truncate text-xs text-gray-600 dark:text-gray-400">
                   {replyTo.content || `[${replyTo.messageType}]`}
                 </p>
               </div>
               <button
                 onClick={() => setReplyTo(null)}
                 title="Batal membalas"
-                className="text-gray-500 hover:text-gray-200"
+                className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
               >
                 ✕
               </button>
@@ -1052,7 +1065,7 @@ function CenterPanel({
             <button
               onClick={() => setShowMediaModal(true)}
               title="Kirim media"
-              className="rounded bg-black/30 px-2 py-2 text-gray-400 hover:text-gray-200"
+              className="rounded bg-black/5 dark:bg-black/30 px-2 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
             >
               📎
             </button>
@@ -1067,7 +1080,7 @@ function CenterPanel({
                 }
               }}
               placeholder="Tulis pesan..."
-              className="flex-1 resize-none rounded bg-black/30 px-3 py-2 text-sm outline-none placeholder:text-gray-500"
+              className="flex-1 resize-none rounded bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none placeholder:text-gray-500"
             />
             <button
               onClick={handleSend}
@@ -1080,7 +1093,7 @@ function CenterPanel({
         </div>
       )}
       {!canSend && (
-        <div className="border-t border-black/40 bg-wa-panel px-4 py-3 text-center text-xs text-gray-500">
+        <div className="border-t border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel px-4 py-3 text-center text-xs text-gray-500">
           {conv.aiMode === 'ai_on'
             ? 'AI sedang aktif — Takeover untuk kirim manual'
             : conv.aiMode === 'ai_supervised'
@@ -1165,7 +1178,7 @@ function RightPanel({
     }
   }
 
-  if (!conv) return <aside className="w-72 border-l border-black/40 bg-wa-panel" />;
+  if (!conv) return <aside className="w-72 border-l border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel" />;
 
   const { customer, hermesReviews } = conv;
   const lastReview = hermesReviews[0] ?? null;
@@ -1179,17 +1192,17 @@ function RightPanel({
   ];
 
   return (
-    <aside className="flex w-72 flex-col gap-4 overflow-y-auto border-l border-black/40 bg-wa-panel p-4">
+    <aside className="flex w-72 flex-col gap-4 overflow-y-auto border-l border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel p-4">
       {/* Customer Info */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
           Info Customer
         </h3>
         <div className="space-y-1 text-sm">
           <p className="font-medium">{customer.name ?? '—'}</p>
-          <p className="text-xs text-gray-400">{customer.phoneNumber}</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400">{customer.phoneNumber}</p>
           <div className="flex items-center gap-2">
-            <span className={`text-xs font-medium ${leadColors[customer.leadStage] ?? 'text-gray-400'}`}>
+            <span className={`text-xs font-medium ${leadColors[customer.leadStage] ?? 'text-gray-600 dark:text-gray-400'}`}>
               {customer.leadStage.replace('_', ' ').toUpperCase()}
             </span>
             <span className="text-xs text-gray-500">Score: {customer.leadScore}</span>
@@ -1197,7 +1210,7 @@ function RightPanel({
           {customer.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 pt-1">
               {customer.tags.map((tag) => (
-                <span key={tag} className="rounded bg-black/30 px-1.5 py-0.5 text-xs text-gray-300">
+                <span key={tag} className="rounded bg-black/5 dark:bg-black/30 px-1.5 py-0.5 text-xs text-gray-700 dark:text-gray-300">
                   {tag}
                 </span>
               ))}
@@ -1208,14 +1221,14 @@ function RightPanel({
 
       {/* Status & Assignment */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
           Status & Penugasan
         </h3>
         <div className="space-y-2">
           <select
             value={conv.status}
             onChange={(e) => onStatusChange(e.target.value)}
-            className="w-full rounded bg-black/30 px-2 py-1.5 text-sm outline-none"
+            className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1.5 text-sm outline-none"
             title="Status percakapan"
           >
             <option value="open">Open</option>
@@ -1226,7 +1239,7 @@ function RightPanel({
             <select
               value={conv.assignedAdmin?.id ?? ''}
               onChange={(e) => onAssign(e.target.value || null)}
-              className="w-full rounded bg-black/30 px-2 py-1.5 text-sm outline-none"
+              className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1.5 text-sm outline-none"
               title="Tugaskan ke admin"
             >
               <option value="">— Tidak ditugaskan —</option>
@@ -1239,13 +1252,13 @@ function RightPanel({
           ) : (
             // Plain admins can't list users → offer self-assign only.
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-xs text-gray-400">
+              <span className="truncate text-xs text-gray-600 dark:text-gray-400">
                 {conv.assignedAdmin ? `👤 ${conv.assignedAdmin.name}` : 'Belum ditugaskan'}
               </span>
               {conv.assignedAdmin?.id === getUserId() ? (
                 <button
                   onClick={() => onAssign(null)}
-                  className="shrink-0 rounded bg-gray-700 px-2 py-0.5 text-xs text-gray-200 hover:bg-gray-600"
+                  className="shrink-0 rounded bg-gray-200 dark:bg-gray-700 px-2 py-0.5 text-xs text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600"
                 >
                   Lepas
                 </button>
@@ -1264,12 +1277,12 @@ function RightPanel({
 
       {/* Labels */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
           Label
         </h3>
         <div className="mb-2 flex flex-wrap gap-1">
           {(conv.labels ?? []).length === 0 && (
-            <span className="text-xs text-gray-600">Belum ada label.</span>
+            <span className="text-xs text-gray-500 dark:text-gray-600">Belum ada label.</span>
           )}
           {(conv.labels ?? []).map((l) => (
             <span key={l} className="flex items-center gap-1 rounded bg-indigo-900 px-1.5 py-0.5 text-xs text-indigo-200">
@@ -1296,32 +1309,32 @@ function RightPanel({
             }
           }}
           placeholder="Tambah label + Enter"
-          className="w-full rounded bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-600"
+          className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
         />
       </div>
 
       {/* CSAT result */}
       {typeof conv.csatScore === 'number' && (
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
             Rating Customer (CSAT)
           </h3>
           <p className="text-lg">
-            {'★'.repeat(conv.csatScore)}<span className="text-gray-600">{'★'.repeat(5 - conv.csatScore)}</span>
-            <span className="ml-2 text-sm text-gray-400">{conv.csatScore}/5</span>
+            {'★'.repeat(conv.csatScore)}<span className="text-gray-500 dark:text-gray-600">{'★'.repeat(5 - conv.csatScore)}</span>
+            <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">{conv.csatScore}/5</span>
           </p>
         </div>
       )}
 
       {/* AI Mode Selector */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
           Mode AI
         </h3>
         <select
           value={conv.aiMode}
           onChange={(e) => onAiModeChange(e.target.value)}
-          className="w-full rounded bg-black/30 px-2 py-1.5 text-sm outline-none"
+          className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1.5 text-sm outline-none"
         >
           {aiModes.map((m) => (
             <option key={m.value} value={m.value}>
@@ -1333,11 +1346,11 @@ function RightPanel({
 
       {/* Notes */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
           Catatan Internal
         </h3>
         {customer.notes && (
-          <p className="mb-2 rounded bg-black/20 p-2 text-xs text-gray-300">{customer.notes}</p>
+          <p className="mb-2 rounded bg-black/5 dark:bg-black/20 p-2 text-xs text-gray-700 dark:text-gray-300">{customer.notes}</p>
         )}
         <div className="flex gap-1">
           <input
@@ -1345,7 +1358,7 @@ function RightPanel({
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Tambah catatan..."
-            className="flex-1 rounded bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-600"
+            className="flex-1 rounded bg-black/5 dark:bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && note.trim()) {
                 onAddNote(note.trim());
@@ -1370,22 +1383,22 @@ function RightPanel({
       {/* Hermes Last Review */}
       {lastReview && (
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
             Hermes Review Terakhir
           </h3>
-          <div className="space-y-1.5 rounded bg-black/20 p-2 text-xs">
+          <div className="space-y-1.5 rounded bg-black/5 dark:bg-black/20 p-2 text-xs">
             <div className="flex items-center gap-2">
               {decisionBadge(lastReview.decision)}
-              <span className="text-gray-400">
+              <span className="text-gray-600 dark:text-gray-400">
                 {lastReview.riskLevel.toUpperCase()} risk
               </span>
             </div>
-            <div className="flex gap-3 text-gray-400">
-              <span>Confidence: <span className="text-gray-200">{lastReview.confidenceScore}</span></span>
-              <span>Risk: <span className="text-gray-200">{lastReview.riskScore}</span></span>
+            <div className="flex gap-3 text-gray-600 dark:text-gray-400">
+              <span>Confidence: <span className="text-gray-800 dark:text-gray-200">{lastReview.confidenceScore}</span></span>
+              <span>Risk: <span className="text-gray-800 dark:text-gray-200">{lastReview.riskScore}</span></span>
             </div>
             {lastReview.reason && (
-              <p className="text-gray-400">{lastReview.reason}</p>
+              <p className="text-gray-600 dark:text-gray-400">{lastReview.reason}</p>
             )}
             {lastReview.recommendation && (
               <p className="italic text-gray-500">{lastReview.recommendation}</p>
@@ -1397,15 +1410,15 @@ function RightPanel({
       {/* Bot info */}
       {conv.bot && (
         <div>
-          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-400">Bot</h3>
-          <p className="text-xs text-gray-300">{conv.bot.botName}</p>
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Bot</h3>
+          <p className="text-xs text-gray-700 dark:text-gray-300">{conv.bot.botName}</p>
         </div>
       )}
 
       {/* Follow-ups */}
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Follow-ups</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Follow-ups</h3>
           <button
             onClick={() => setShowFollowUpForm((v) => !v)}
             className="rounded bg-emerald-700 px-2 py-0.5 text-xs font-medium text-emerald-100 hover:bg-emerald-600"
@@ -1415,19 +1428,19 @@ function RightPanel({
         </div>
 
         {showFollowUpForm && (
-          <div className="mb-3 space-y-2 rounded bg-black/20 p-2">
+          <div className="mb-3 space-y-2 rounded bg-black/5 dark:bg-black/20 p-2">
             <textarea
               rows={2}
               value={fuMessage}
               onChange={(e) => setFuMessage(e.target.value)}
               placeholder="Pesan follow-up..."
-              className="w-full resize-none rounded bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-600"
+              className="w-full resize-none rounded bg-black/5 dark:bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
             />
             <input
               type="datetime-local"
               value={fuDateTime}
               onChange={(e) => setFuDateTime(e.target.value)}
-              className="w-full rounded bg-black/30 px-2 py-1 text-xs text-gray-200 outline-none"
+              className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1 text-xs text-gray-800 dark:text-gray-200 outline-none"
             />
             <button
               onClick={handleScheduleFollowUp}
@@ -1441,10 +1454,10 @@ function RightPanel({
 
         <div className="space-y-2">
           {followUps.length === 0 && (
-            <p className="text-xs text-gray-600">Belum ada follow-up.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-600">Belum ada follow-up.</p>
           )}
           {followUps.map((fu) => (
-            <div key={fu.id} className="rounded bg-black/20 p-2 text-xs">
+            <div key={fu.id} className="rounded bg-black/5 dark:bg-black/20 p-2 text-xs">
               <div className="mb-1 flex items-center justify-between gap-1">
                 <span
                   className={`rounded px-1.5 py-0.5 font-medium ${
@@ -1452,7 +1465,7 @@ function RightPanel({
                       ? 'bg-yellow-800 text-yellow-200'
                       : fu.status === 'sent'
                       ? 'bg-green-800 text-green-200'
-                      : 'bg-gray-700 text-gray-400'
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
                   }`}
                 >
                   {fu.status}
@@ -1467,7 +1480,7 @@ function RightPanel({
                   </button>
                 )}
               </div>
-              <p className="mb-1 text-gray-300">{fu.message}</p>
+              <p className="mb-1 text-gray-700 dark:text-gray-300">{fu.message}</p>
               <p className="text-gray-500">
                 {new Date(fu.scheduledAt).toLocaleString('id', {
                   day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
@@ -1881,7 +1894,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-900 text-gray-100">
+    <div className="flex h-screen overflow-hidden bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       <Sidebar />
       <div className="flex flex-1 overflow-hidden">
       <LeftPanel
@@ -1916,6 +1929,7 @@ export default function DashboardPage() {
         typing={typing}
         quickReplies={quickReplies}
         onLoadOlder={handleLoadOlder}
+        accountStatus={conv ? accounts.find((a) => a.id === conv.whatsappAccount.id)?.sessionStatus : undefined}
       />
       <RightPanel
         conv={conv}

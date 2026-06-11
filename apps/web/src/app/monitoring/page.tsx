@@ -61,9 +61,9 @@ function formatDuration(seconds: number) {
 
 function MetricCard({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-800 p-4">
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
       <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-gray-100">{value}</div>
+      <div className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">{value}</div>
       {hint && <div className="mt-1 text-xs text-gray-500">{hint}</div>}
     </div>
   );
@@ -102,16 +102,16 @@ export default function MonitoringPage() {
   return (
     <AppLayout>
       <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="border-b border-gray-700 bg-gray-800 px-6 py-4">
+        <header className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-xl font-semibold text-gray-100">Performance Monitoring</h1>
-              <p className="text-sm text-gray-400">Response time, AI quality, campaign delivery, dan volume operasional.</p>
+              <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Performance Monitoring</h1>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Response time, AI quality, campaign delivery, dan volume operasional.</p>
             </div>
             <select
               value={days}
               onChange={(event) => setDays(Number(event.target.value))}
-              className="rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none"
+              className="rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
             >
               <option value={7}>Last 7 days</option>
               <option value={14}>Last 14 days</option>
@@ -123,7 +123,7 @@ export default function MonitoringPage() {
 
         <main className="flex-1 overflow-y-auto p-6">
           {loading ? (
-            <p className="text-sm text-gray-400">Loading metrics...</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Loading metrics...</p>
           ) : error ? (
             <p className="rounded border border-red-800 bg-red-950/40 p-4 text-sm text-red-200">{error}</p>
           ) : data && (
@@ -138,8 +138,8 @@ export default function MonitoringPage() {
               </section>
 
               <section className="grid gap-6 xl:grid-cols-2">
-                <div className="rounded-lg border border-gray-700 bg-gray-800 p-5">
-                  <h2 className="mb-4 font-semibold text-gray-100">Message Volume</h2>
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+                  <h2 className="mb-4 font-semibold text-gray-900 dark:text-gray-100">Message Volume</h2>
                   <div className="flex h-56 items-end gap-2">
                     {data.messageVolume.map((item) => (
                       <div key={item.date} className="flex flex-1 flex-col items-center gap-2">
@@ -154,26 +154,26 @@ export default function MonitoringPage() {
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-gray-700 bg-gray-800 p-5">
-                  <h2 className="mb-4 font-semibold text-gray-100">AI Quality</h2>
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+                  <h2 className="mb-4 font-semibold text-gray-900 dark:text-gray-100">AI Quality</h2>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <MetricCard label="Hermes reviews" value={data.aiQuality.reviewCount} />
                     <MetricCard label="Fallback rate" value={`${data.aiQuality.fallbackRate}%`} hint={`${data.aiQuality.fallbackCount} fallback replies`} />
                   </div>
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
                     <div>
-                      <div className="mb-2 text-sm text-gray-400">Decisions</div>
+                      <div className="mb-2 text-sm text-gray-600 dark:text-gray-400">Decisions</div>
                       {Object.entries(data.aiQuality.decisions).map(([key, value]) => (
-                        <div key={key} className="flex justify-between border-b border-gray-700 py-1 text-sm">
-                          <span className="text-gray-400">{key}</span><span className="text-gray-100">{value}</span>
+                        <div key={key} className="flex justify-between border-b border-gray-200 dark:border-gray-700 py-1 text-sm">
+                          <span className="text-gray-600 dark:text-gray-400">{key}</span><span className="text-gray-900 dark:text-gray-100">{value}</span>
                         </div>
                       ))}
                     </div>
                     <div>
-                      <div className="mb-2 text-sm text-gray-400">Risk levels</div>
+                      <div className="mb-2 text-sm text-gray-600 dark:text-gray-400">Risk levels</div>
                       {Object.entries(data.aiQuality.riskLevels).map(([key, value]) => (
-                        <div key={key} className="flex justify-between border-b border-gray-700 py-1 text-sm">
-                          <span className="text-gray-400">{key}</span><span className="text-gray-100">{value}</span>
+                        <div key={key} className="flex justify-between border-b border-gray-200 dark:border-gray-700 py-1 text-sm">
+                          <span className="text-gray-600 dark:text-gray-400">{key}</span><span className="text-gray-900 dark:text-gray-100">{value}</span>
                         </div>
                       ))}
                     </div>
@@ -182,8 +182,8 @@ export default function MonitoringPage() {
               </section>
 
               <section className="grid gap-6 xl:grid-cols-2">
-                <div className="rounded-lg border border-gray-700 bg-gray-800 p-5">
-                  <h2 className="mb-4 font-semibold text-gray-100">Campaign Delivery</h2>
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+                  <h2 className="mb-4 font-semibold text-gray-900 dark:text-gray-100">Campaign Delivery</h2>
                   <div className="grid gap-3 sm:grid-cols-4">
                     <MetricCard label="Campaigns" value={data.campaign.campaignCount} />
                     <MetricCard label="Recipients" value={data.campaign.totalRecipients} />
@@ -192,16 +192,16 @@ export default function MonitoringPage() {
                   </div>
                   <div className="mt-4">
                     {Object.entries(data.campaign.byStatus).map(([key, value]) => (
-                      <div key={key} className="flex justify-between border-b border-gray-700 py-1 text-sm">
-                        <span className="text-gray-400">{key}</span><span className="text-gray-100">{value}</span>
+                      <div key={key} className="flex justify-between border-b border-gray-200 dark:border-gray-700 py-1 text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">{key}</span><span className="text-gray-900 dark:text-gray-100">{value}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 {data.csat && (
-                  <div className="rounded-lg border border-gray-700 bg-gray-800 p-5">
-                    <h2 className="mb-4 font-semibold text-gray-100">Customer Satisfaction (CSAT)</h2>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+                    <h2 className="mb-4 font-semibold text-gray-900 dark:text-gray-100">Customer Satisfaction (CSAT)</h2>
                     <div className="grid gap-3 sm:grid-cols-3">
                       <MetricCard label="Avg score" value={`${data.csat.avgScore} / 5`} hint={`${data.csat.responses} respon`} />
                       <MetricCard label="Response rate" value={`${data.csat.responseRate}%`} hint={`${data.csat.requested} diminta`} />
@@ -213,11 +213,11 @@ export default function MonitoringPage() {
                         const pct = data.csat!.responses > 0 ? Math.round((count / data.csat!.responses) * 100) : 0;
                         return (
                           <div key={score} className="flex items-center gap-2 text-sm">
-                            <span className="w-10 text-gray-400">{score}★</span>
-                            <div className="h-2 flex-1 overflow-hidden rounded bg-gray-900">
+                            <span className="w-10 text-gray-600 dark:text-gray-400">{score}★</span>
+                            <div className="h-2 flex-1 overflow-hidden rounded bg-gray-100 dark:bg-gray-900">
                               <div className="h-full bg-emerald-500/80" style={{ width: `${pct}%` }} />
                             </div>
-                            <span className="w-10 text-right text-gray-400">{count}</span>
+                            <span className="w-10 text-right text-gray-600 dark:text-gray-400">{count}</span>
                           </div>
                         );
                       })}
@@ -225,31 +225,31 @@ export default function MonitoringPage() {
                   </div>
                 )}
 
-                <div className="rounded-lg border border-gray-700 bg-gray-800 p-5">
-                  <h2 className="mb-4 font-semibold text-gray-100">Top Accounts</h2>
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+                  <h2 className="mb-4 font-semibold text-gray-900 dark:text-gray-100">Top Accounts</h2>
                   {data.topAccounts.length === 0 ? <p className="text-sm text-gray-500">No account activity.</p> : data.topAccounts.map((account) => (
-                    <div key={account.id} className="flex justify-between border-b border-gray-700 py-2 text-sm">
-                      <span className="text-gray-300">{account.name}</span>
-                      <span className="text-gray-100">{account.messageCount} messages</span>
+                    <div key={account.id} className="flex justify-between border-b border-gray-200 dark:border-gray-700 py-2 text-sm">
+                      <span className="text-gray-700 dark:text-gray-300">{account.name}</span>
+                      <span className="text-gray-900 dark:text-gray-100">{account.messageCount} messages</span>
                     </div>
                   ))}
                 </div>
               </section>
 
-              <section className="rounded-lg border border-gray-700 bg-gray-800 p-5">
-                <h2 className="mb-4 font-semibold text-gray-100">Recent Campaigns</h2>
+              <section className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+                <h2 className="mb-4 font-semibold text-gray-900 dark:text-gray-100">Recent Campaigns</h2>
                 {data.campaign.recentCampaigns.length === 0 ? <p className="text-sm text-gray-500">No recent campaigns.</p> : data.campaign.recentCampaigns.map((campaign) => (
-                  <div key={campaign.id} className="grid grid-cols-[1fr_140px_100px] gap-3 border-b border-gray-700 py-2 text-sm">
-                    <span className="text-gray-300">{campaign.name}</span>
-                    <span className="text-gray-400">{campaign.status}</span>
-                    <span className="text-right text-gray-100">{campaign.recipients}</span>
+                  <div key={campaign.id} className="grid grid-cols-[1fr_140px_100px] gap-3 border-b border-gray-200 dark:border-gray-700 py-2 text-sm">
+                    <span className="text-gray-700 dark:text-gray-300">{campaign.name}</span>
+                    <span className="text-gray-600 dark:text-gray-400">{campaign.status}</span>
+                    <span className="text-right text-gray-900 dark:text-gray-100">{campaign.recipients}</span>
                   </div>
                 ))}
               </section>
 
               {Array.isArray(workload?.admins) && (
-                <section className="rounded-lg border border-gray-700 bg-gray-800 p-5">
-                  <h2 className="mb-1 font-semibold text-gray-100">Beban Kerja Admin</h2>
+                <section className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+                  <h2 className="mb-1 font-semibold text-gray-900 dark:text-gray-100">Beban Kerja Admin</h2>
                   <p className="mb-4 text-xs text-gray-500">
                     Penugasan, penyelesaian, dan kecepatan balas per admin ({workload.rangeDays} hari).
                   </p>
@@ -259,7 +259,7 @@ export default function MonitoringPage() {
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-gray-700 text-left text-xs uppercase tracking-wide text-gray-500">
+                          <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs uppercase tracking-wide text-gray-500">
                             <th className="py-2 pr-3">Admin</th>
                             <th className="py-2 pr-3 text-right">Ditugaskan</th>
                             <th className="py-2 pr-3 text-right">Resolved</th>
@@ -269,15 +269,15 @@ export default function MonitoringPage() {
                         </thead>
                         <tbody>
                           {workload.admins.map((a) => (
-                            <tr key={a.id} className="border-b border-gray-700/60">
+                            <tr key={a.id} className="border-b border-gray-200 dark:border-gray-700/60">
                               <td className="py-2 pr-3">
-                                <span className="text-gray-200">{a.name}</span>
+                                <span className="text-gray-800 dark:text-gray-200">{a.name}</span>
                                 <span className="ml-2 text-xs text-gray-500">{a.role}</span>
                               </td>
-                              <td className="py-2 pr-3 text-right text-gray-300">{a.assigned}</td>
-                              <td className="py-2 pr-3 text-right text-gray-300">{a.resolved}</td>
-                              <td className="py-2 pr-3 text-right text-gray-300">{a.messagesSent}</td>
-                              <td className="py-2 text-right text-gray-300">
+                              <td className="py-2 pr-3 text-right text-gray-700 dark:text-gray-300">{a.assigned}</td>
+                              <td className="py-2 pr-3 text-right text-gray-700 dark:text-gray-300">{a.resolved}</td>
+                              <td className="py-2 pr-3 text-right text-gray-700 dark:text-gray-300">{a.messagesSent}</td>
+                              <td className="py-2 text-right text-gray-700 dark:text-gray-300">
                                 {a.responseSamples > 0 ? formatDuration(a.avgResponseSeconds) : '—'}
                               </td>
                             </tr>

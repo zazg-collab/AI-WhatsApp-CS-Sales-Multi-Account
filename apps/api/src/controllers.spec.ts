@@ -161,8 +161,8 @@ describe('WaController', () => {
     c.list();
     expect(c.qr('acc1')).toEqual({ qr: 'qr', connected: true });
     expect(await c.restart('acc1')).toEqual({ success: true });
-    c.update('acc1', {} as any);
-    await c.create({ accountName: 'A' } as any);
+    c.update('acc1', {} as any, { id: 'u1' } as any);
+    await c.create({ accountName: 'A' } as any, { id: 'u1' } as any);
     expect(wa.startSession).toHaveBeenCalledWith('acc1');
   });
 });

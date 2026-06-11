@@ -37,13 +37,13 @@ export default function AiSettingsPage() {
         Pengaturan AI
       </h1>
 
-      <div className="mb-6 rounded-lg bg-wa-panel p-4 text-sm">
+      <div className="mb-6 rounded-lg bg-white dark:bg-wa-panel p-4 text-sm">
         <p>
-          <span className="text-gray-400">Base URL:</span>{' '}
+          <span className="text-gray-600 dark:text-gray-400">Base URL:</span>{' '}
           {config?.baseUrl ?? '—'}
         </p>
         <p>
-          <span className="text-gray-400">Default model:</span>{' '}
+          <span className="text-gray-600 dark:text-gray-400">Default model:</span>{' '}
           {config?.defaultModel ?? '—'}
         </p>
         <p className="mt-2 text-xs text-gray-500">
@@ -63,9 +63,9 @@ export default function AiSettingsPage() {
       {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
 
       {models.length > 0 && (
-        <ul className="space-y-1 rounded-lg bg-wa-panel p-4 text-sm">
+        <ul className="space-y-1 rounded-lg bg-white dark:bg-wa-panel p-4 text-sm">
           {models.map((m) => (
-            <li key={m} className="font-mono text-gray-200">
+            <li key={m} className="font-mono text-gray-800 dark:text-gray-200">
               {m}
             </li>
           ))}

@@ -169,8 +169,12 @@ export class ConversationsController {
   @ApiOperation({ summary: 'Block/discard a supervised AI draft' })
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/messages/:messageId/block')
-  blockDraft(@Param('id') id: string, @Param('messageId') messageId: string) {
-    return this.conversations.blockDraft(id, messageId);
+  blockDraft(
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.conversations.blockDraft(id, messageId, user.id);
   }
 
   @ApiOperation({ summary: 'Mark customer messages as read (WhatsApp blue ticks)' })
@@ -188,8 +192,8 @@ export class ConversationsController {
 
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/return-to-ai')
-  returnToAi(@Param('id') id: string) {
-    return this.conversations.returnToAi(id);
+  returnToAi(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.conversations.returnToAi(id, user.id);
   }
 
   @Roles('admin', 'supervisor', 'owner')
@@ -201,22 +205,34 @@ export class ConversationsController {
   @ApiOperation({ summary: 'Set conversation workflow status (open/pending/resolved)' })
   @Roles('admin', 'supervisor', 'owner')
   @Patch(':id/status')
-  setStatus(@Param('id') id: string, @Body() dto: ConversationStatusDto) {
-    return this.conversations.setStatus(id, dto.status);
+  setStatus(
+    @Param('id') id: string,
+    @Body() dto: ConversationStatusDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.conversations.setStatus(id, dto.status, user.id);
   }
 
   @ApiOperation({ summary: 'Assign a conversation to an admin (null = unassign)' })
   @Roles('admin', 'supervisor', 'owner')
   @Patch(':id/assign')
-  assign(@Param('id') id: string, @Body() dto: AssignConversationDto) {
-    return this.conversations.assign(id, dto.adminId ?? null);
+  assign(
+    @Param('id') id: string,
+    @Body() dto: AssignConversationDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.conversations.assign(id, dto.adminId ?? null, user.id);
   }
 
   @ApiOperation({ summary: 'Replace a conversation\'s custom labels' })
   @Roles('admin', 'supervisor', 'owner')
   @Patch(':id/labels')
-  setLabels(@Param('id') id: string, @Body() dto: LabelsDto) {
-    return this.conversations.setLabels(id, dto.labels);
+  setLabels(
+    @Param('id') id: string,
+    @Body() dto: LabelsDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.conversations.setLabels(id, dto.labels, user.id);
   }
 
   @Roles('admin', 'supervisor', 'owner')

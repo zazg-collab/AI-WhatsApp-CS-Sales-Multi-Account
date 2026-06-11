@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { logAudit } from '../common/audit.util';
 
 export interface JwtPayload {
   sub: string;
@@ -44,6 +45,13 @@ export class AuthService {
       email: user.email,
       role: user.role,
     };
+
+    await logAudit(this.prisma, {
+      userId: user.id,
+      action: 'login',
+      entityType: 'user',
+      entityId: user.id,
+    });
 
     return {
       accessToken: await this.jwt.signAsync(payload),

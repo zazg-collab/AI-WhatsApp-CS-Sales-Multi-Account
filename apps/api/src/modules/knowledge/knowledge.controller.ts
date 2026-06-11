@@ -1,13 +1,17 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Param,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
@@ -17,6 +21,7 @@ import {
   UpdateKnowledgeBaseDto,
   CreateKnowledgeItemDto,
   UpdateKnowledgeItemDto,
+  IngestUrlDto,
 } from './dto/knowledge.dto';
 
 // PRD 14.6 — Knowledge base.
@@ -71,5 +76,30 @@ export class KnowledgeController {
   @Patch('knowledge-items/:id')
   updateItem(@Param('id') id: string, @Body() dto: UpdateKnowledgeItemDto) {
     return this.knowledge.updateItem(id, dto);
+  }
+
+  @ApiOperation({ summary: 'Ingest a document (pdf/docx/xlsx/csv/txt/md/html) as knowledge items' })
+  @ApiConsumes('multipart/form-data')
+  @Roles('owner', 'supervisor', 'admin')
+  @Post('knowledge-bases/:id/items/upload')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 15 * 1024 * 1024 } }))
+  ingestFile(
+    @Param('id') id: string,
+    @UploadedFile() file: { buffer: Buffer; originalname?: string } | undefined,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!file?.buffer?.length) throw new BadRequestException('No file uploaded');
+    return this.knowledge.ingestFile(id, file, user.id);
+  }
+
+  @ApiOperation({ summary: 'Ingest a public web page as knowledge items' })
+  @Roles('owner', 'supervisor', 'admin')
+  @Post('knowledge-bases/:id/items/from-url')
+  ingestUrl(
+    @Param('id') id: string,
+    @Body() dto: IngestUrlDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.knowledge.ingestUrl(id, dto.url, user.id);
   }
 }
