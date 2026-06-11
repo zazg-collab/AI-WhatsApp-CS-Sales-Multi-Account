@@ -70,12 +70,12 @@ export class UsersController {
     @Body() dto: UpdateUserDto,
     @CurrentUser() user: AuthUser,
   ) {
-    // Allow user to update their own email/name, or owner to update anything
+    // Allow self-update for non-role fields, or owner to update any field.
     if (id !== user.id && user.role !== 'owner') {
-      // Self-update: only allow email/name, not role
-      if (dto.role) {
-        throw new ForbiddenException('You can only update your own email/name');
-      }
+      throw new ForbiddenException('You can only update your own profile');
+    }
+    if (id === user.id && user.role !== 'owner' && dto.role) {
+      throw new ForbiddenException('You cannot update your own role');
     }
     return this.users.update(id, dto, user.id);
   }

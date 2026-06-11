@@ -130,7 +130,7 @@ function Toast({ msg, onDismiss }: { msg: string; onDismiss: () => void }) {
     <div className="fixed bottom-4 right-4 z-50 max-w-xs rounded-lg bg-yellow-700 p-3 text-sm shadow-lg">
       <div className="flex items-start gap-2">
         <span className="flex-1">{msg}</span>
-        <button onClick={onDismiss} className="text-yellow-200 hover:text-white">✕</button>
+        <button onClick={onDismiss} className="text-yellow-200 hover:text-white">x</button>
       </div>
     </div>
   );
@@ -160,31 +160,37 @@ function LeftPanel({
     { key: 'ai_on', label: 'AI ON' },
     { key: 'ai_off', label: 'AI OFF' },
     { key: 'ai_supervised', label: 'Supervised' },
-    { key: 'needs_attention', label: '⚠ Perlu Perhatian' },
+    { key: 'needs_attention', label: 'Perlu Perhatian' },
   ];
 
   return (
-    <aside className="flex w-80 flex-col border-r border-black/40 bg-wa-panel">
+    <aside className="flex w-80 flex-col border-r border-white/10 bg-[#0f1a20]/95 lg:w-96">
       {/* Header */}
-      <div className="border-b border-black/30 p-3">
-        <h2 className="mb-2 text-sm font-semibold text-wa-accent">Percakapan</h2>
+      <div className="border-b border-white/10 bg-gradient-to-b from-emerald-500/10 to-transparent p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300/70">Inbox</p>
+            <h2 className="text-lg font-bold text-gray-50">Percakapan</h2>
+          </div>
+          <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-xs font-semibold text-emerald-200">{conversations.length}</span>
+        </div>
         <input
           type="text"
           placeholder="Cari nama / nomor..."
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full rounded bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
+          className="wa-focus w-full rounded-2xl border border-white/10 bg-black/25 px-3.5 py-2.5 text-sm outline-none placeholder:text-gray-500"
         />
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 overflow-x-auto border-b border-black/30 px-2 py-1.5">
+      <div className="wa-scrollbar flex gap-2 overflow-x-auto border-b border-white/10 px-3 py-2.5">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => onFilterChange(t.key)}
             className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-colors ${
-              filter === t.key ? 'bg-wa-accent text-black' : 'text-gray-400 hover:text-gray-200'
+              filter === t.key ? 'bg-emerald-400 text-[#06251e] shadow-lg shadow-emerald-950/30' : 'bg-white/[0.04] text-gray-400 hover:bg-white/[0.08] hover:text-gray-200'
             }`}
           >
             {t.label}
@@ -193,7 +199,7 @@ function LeftPanel({
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="wa-scrollbar flex-1 overflow-y-auto p-2">
         {conversations.length === 0 && (
           <p className="p-4 text-xs text-gray-500">Tidak ada percakapan</p>
         )}
@@ -205,8 +211,8 @@ function LeftPanel({
             <button
               key={c.id}
               onClick={() => onSelect(c.id)}
-              className={`w-full border-b border-black/20 px-3 py-3 text-left transition-colors hover:bg-black/20 ${
-                selectedId === c.id ? 'bg-black/30' : ''
+              className={`w-full rounded-2xl px-3 py-3 text-left transition-all duration-200 hover:bg-white/[0.05] ${
+                selectedId === c.id ? 'bg-emerald-400/10 shadow-inner shadow-emerald-950/30 ring-1 ring-emerald-400/25' : ''
               }`}
             >
               <div className="flex items-start justify-between gap-2">
@@ -216,7 +222,7 @@ function LeftPanel({
                       {c.customer.name ?? c.customer.phoneNumber}
                     </span>
                     {needsAttention && (
-                      <span className="shrink-0 text-xs text-orange-400">●</span>
+                      <span className="shrink-0 rounded-full bg-orange-400/15 px-1.5 py-0.5 text-[10px] font-bold text-orange-200">!</span>
                     )}
                   </div>
                   <p className="truncate text-xs text-gray-400">
@@ -320,7 +326,7 @@ function MessageMedia({ msg }: { msg: Message }) {
   if (msg.messageType === 'document' && msg.mediaUrl) {
     return (
       <div className="flex items-center gap-2">
-        <span className="text-lg">📄</span>
+        <span className="text-xs font-bold text-emerald-200">File</span>
         <a href={msg.mediaUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-300 underline">
           {msg.content ?? 'Dokumen'}
         </a>
@@ -378,8 +384,12 @@ function CenterPanel({
 
   if (!conv) {
     return (
-      <section className="flex flex-1 items-center justify-center bg-wa-bg">
-        <p className="text-sm text-gray-500">Pilih percakapan</p>
+      <section className="wa-chat-surface flex flex-1 items-center justify-center">
+        <div className="wa-glass rounded-3xl px-8 py-6 text-center">
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/15 text-xs font-bold text-emerald-200">Chat</div>
+          <p className="text-sm font-medium text-gray-300">Pilih percakapan</p>
+          <p className="mt-1 text-xs text-gray-500">Chat akan tampil seperti ruang WhatsApp operator.</p>
+        </div>
       </section>
     );
   }
@@ -394,10 +404,13 @@ function CenterPanel({
   );
 
   return (
-    <section className="flex flex-1 flex-col overflow-hidden">
+    <section className="wa-chat-surface flex flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-black/40 bg-wa-panel px-4 py-3">
+      <header className="wa-glass m-3 mb-0 flex items-center justify-between rounded-3xl px-4 py-3">
         <div className="flex items-center gap-3">
+          <div className="grid h-11 w-11 place-items-center rounded-full bg-gradient-to-br from-emerald-300 to-emerald-600 font-bold text-[#06251e] wa-presence-dot">
+            {(conv.customer.name ?? conv.customer.phoneNumber).slice(0, 1).toUpperCase()}
+          </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-medium">
@@ -412,21 +425,21 @@ function CenterPanel({
           {isAdmin ? (
             <button
               onClick={onReturnToAi}
-              className="rounded bg-green-700 px-3 py-1 text-xs font-medium text-green-100 hover:bg-green-600"
+              className="rounded-full bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-100 ring-1 ring-emerald-400/30 hover:bg-emerald-500/25"
             >
               Kembalikan ke AI
             </button>
           ) : (
             <button
               onClick={onTakeover}
-              className="rounded bg-orange-700 px-3 py-1 text-xs font-medium text-orange-100 hover:bg-orange-600"
+              className="rounded-full bg-orange-500/15 px-3 py-1.5 text-xs font-semibold text-orange-100 ring-1 ring-orange-400/30 hover:bg-orange-500/25"
             >
               Takeover
             </button>
           )}
           <button
             onClick={onToggleAi}
-            className="rounded bg-wa-panel px-3 py-1 text-xs font-medium text-gray-300 ring-1 ring-gray-600 hover:ring-gray-400"
+            className="rounded-full bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-gray-300 ring-1 ring-white/10 hover:ring-emerald-400/40"
           >
             {conv.aiMode === 'ai_on' ? 'Matikan AI' : 'Nyalakan AI'}
           </button>
@@ -434,7 +447,7 @@ function CenterPanel({
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+      <div className="wa-scrollbar flex-1 space-y-2 overflow-y-auto p-4 lg:p-6">
         {conv.messages.map((m) => {
           const isCustomer = m.senderType === 'customer';
           const isDraft = m.senderType === 'ai' && m.status === 'pending';
@@ -443,7 +456,7 @@ function CenterPanel({
           if (isSystem) {
             return (
               <div key={m.id} className="flex justify-center">
-                <span className="rounded bg-black/30 px-3 py-1 text-xs text-gray-400">
+                <span className="rounded-full bg-black/35 px-3 py-1 text-xs text-gray-400 ring-1 ring-white/10">
                   {m.content}
                 </span>
               </div>
@@ -456,12 +469,12 @@ function CenterPanel({
               className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}
             >
               <div
-                className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
+                className={`max-w-[72%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed shadow-lg shadow-black/15 ${
                   isCustomer
-                    ? 'bg-[#1f2c34] text-gray-100'
+                    ? 'bg-[var(--wa-chat-in)] text-gray-100 ring-1 ring-white/5'
                     : isDraft
                     ? 'bg-yellow-900/60 text-yellow-100 ring-1 ring-yellow-600'
-                    : 'bg-[#005c4b] text-gray-100'
+                    : 'bg-[var(--wa-chat-out)] text-gray-100 ring-1 ring-emerald-300/10'
                 }`}
               >
                 {isDraft && (
@@ -473,7 +486,7 @@ function CenterPanel({
                 <div className="mt-1 flex items-center justify-end gap-1">
                   <span className="text-xs opacity-50">{fmtTime(m.createdAt)}</span>
                   {m.aiGenerated && !isCustomer && (
-                    <span className="text-xs opacity-50">🤖</span>
+                    <span className="rounded-full bg-emerald-400/10 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200">AI</span>
                   )}
                 </div>
                 {/* Approve / Block buttons for supervised draft */}
@@ -510,14 +523,14 @@ function CenterPanel({
 
       {/* Input */}
       {canSend && (
-        <div className="border-t border-black/40 bg-wa-panel px-4 py-3">
+        <div className="border-t border-white/10 bg-[#0f1a20]/95 px-4 py-3">
           <div className="flex gap-2">
             <button
               onClick={() => setShowMediaModal(true)}
               title="Kirim media"
-              className="rounded bg-black/30 px-2 py-2 text-gray-400 hover:text-gray-200"
+              className="wa-action rounded-2xl bg-white/[0.06] px-3 py-2 text-xs font-semibold text-gray-300 hover:bg-white/[0.1] hover:text-gray-100"
             >
-              📎
+              Lampirkan
             </button>
             <textarea
               rows={1}
@@ -530,12 +543,12 @@ function CenterPanel({
                 }
               }}
               placeholder="Tulis pesan..."
-              className="flex-1 resize-none rounded bg-black/30 px-3 py-2 text-sm outline-none placeholder:text-gray-500"
+              className="wa-focus flex-1 resize-none rounded-2xl border border-white/10 bg-black/25 px-3.5 py-2.5 text-sm outline-none placeholder:text-gray-500"
             />
             <button
               onClick={handleSend}
               disabled={!text.trim() || sending}
-              className="rounded bg-wa-accent px-4 font-medium text-black disabled:opacity-50"
+              className="wa-action rounded-2xl bg-emerald-400 px-5 font-semibold text-[#06251e] shadow-lg shadow-emerald-950/30 hover:bg-emerald-300 disabled:opacity-50"
             >
               {sending ? '...' : 'Kirim'}
             </button>
@@ -543,12 +556,12 @@ function CenterPanel({
         </div>
       )}
       {!canSend && (
-        <div className="border-t border-black/40 bg-wa-panel px-4 py-3 text-center text-xs text-gray-500">
+        <div className="border-t border-white/10 bg-[#0f1a20]/95 px-4 py-3 text-center text-xs text-gray-500">
           {conv.aiMode === 'ai_on'
-            ? 'AI sedang aktif — Takeover untuk kirim manual'
+            ? 'AI sedang aktif - Takeover untuk kirim manual'
             : conv.aiMode === 'ai_supervised'
-            ? 'Mode supervised — AI membuat draft, review sebelum kirim'
-            : 'Mode draft — admin review dan kirim manual'}
+            ? 'Mode supervised - AI membuat draft, review sebelum kirim'
+            : 'Mode draft - admin review dan kirim manual'}
         </div>
       )}
     </section>
@@ -619,7 +632,7 @@ function RightPanel({
     }
   }
 
-  if (!conv) return <aside className="w-72 border-l border-black/40 bg-wa-panel" />;
+  if (!conv) return <aside className="hidden w-80 border-l border-white/10 bg-[#0f1a20]/95 xl:block" />;
 
   const { customer, hermesReviews } = conv;
   const lastReview = hermesReviews[0] ?? null;
@@ -633,14 +646,14 @@ function RightPanel({
   ];
 
   return (
-    <aside className="flex w-72 flex-col gap-4 overflow-y-auto border-l border-black/40 bg-wa-panel p-4">
+    <aside className="wa-scrollbar hidden w-80 flex-col gap-4 overflow-y-auto border-l border-white/10 bg-[#0f1a20]/95 p-4 xl:flex">
       {/* Customer Info */}
       <div>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
           Info Customer
         </h3>
-        <div className="space-y-1 text-sm">
-          <p className="font-medium">{customer.name ?? '—'}</p>
+        <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-3 text-sm">
+          <p className="font-medium">{customer.name ?? '-'}</p>
           <p className="text-xs text-gray-400">{customer.phoneNumber}</p>
           <div className="flex items-center gap-2">
             <span className={`text-xs font-medium ${leadColors[customer.leadStage] ?? 'text-gray-400'}`}>
@@ -668,7 +681,7 @@ function RightPanel({
         <select
           value={conv.aiMode}
           onChange={(e) => onAiModeChange(e.target.value)}
-          className="w-full rounded bg-black/30 px-2 py-1.5 text-sm outline-none"
+          className="wa-focus w-full rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm outline-none"
         >
           {aiModes.map((m) => (
             <option key={m.value} value={m.value}>
@@ -692,7 +705,7 @@ function RightPanel({
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Tambah catatan..."
-            className="flex-1 rounded bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-600"
+            className="wa-focus flex-1 rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-xs outline-none placeholder:text-gray-600"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && note.trim()) {
                 onAddNote(note.trim());
@@ -810,7 +823,7 @@ function RightPanel({
                     className="text-gray-500 hover:text-red-400"
                     title="Batalkan"
                   >
-                    ✕
+                    x
                   </button>
                 )}
               </div>
@@ -897,7 +910,7 @@ export default function DashboardPage() {
     });
 
     socket.on('hermes:alert', ({ decision, reason }: { decision: string; reason: string }) => {
-      setToast(`Hermes Alert: ${decision} — ${reason ?? ''}`);
+      setToast(`Hermes Alert: ${decision} - ${reason ?? ''}`);
     });
 
     return () => {
@@ -983,7 +996,7 @@ export default function DashboardPage() {
     }
   }
 
-  // Stub: approve/block draft — in real flow you'd call hermes endpoint
+  // Stub: approve/block draft - in real flow you'd call hermes endpoint
   async function handleApproveDraft(msgId: string) {
     setToast(`Draft approved (msg ${msgId.slice(0, 8)})`);
   }
@@ -993,9 +1006,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-900 text-gray-100">
+    <div className="wa-app-shell flex min-h-[100dvh] overflow-hidden text-gray-100">
       <Sidebar />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="m-3 flex min-w-0 flex-1 overflow-hidden rounded-[2rem] border border-white/10 bg-[#111b21]/85 shadow-2xl shadow-black/30">
       <LeftPanel
         conversations={conversations}
         selectedId={selectedId}

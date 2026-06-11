@@ -12,6 +12,16 @@ The PRD is the source of truth for product scope. Status:
 - **Iteration 3 (AI engine)** ✅ — provider-agnostic, OpenAI-compatible. reply/draft, summarize, lead-score, model listing, and AI_ON auto-reply through Baileys.
 - **Iteration 4 (Hermes supervisor)** ✅ — rules engine + LLM review, confidence/risk decision, pre-send gate (supervised) and post-send audit (ai_on), alerts/daily-report/bot-performance/knowledge-gaps.
 - **Iteration 5 (Knowledge base + Customer CRM)** ✅ — knowledge-base/items CRUD (feeds the AI prompt), customer list/filter/update, internal notes, unified timeline.
+- **Iteration 6 (Chat UI + bot/persona editor)** ✅ — 3-panel dashboard chat UI, draft controls, bot/persona management pages.
+- **Iteration 7 (Follow-ups + analytics + nav)** ✅ — follow-up scheduler, sales analytics, and global sidebar navigation.
+- **Iteration 8 (Media + audit + CSV)** ✅ — media send/ingest metadata, audit log page, CSV exports.
+- **Iteration 9 (User roles + search)** ✅ — user CRUD/password endpoints, role-aware user page/sidebar, conversation search.
+- **Iteration 10 (Customer bulk actions)** ✅ — bulk customer stage/tag/admin/note actions with server-side limits and audit logging.
+- **Iteration 11 (Controlled campaigns)** ✅ — campaign drafts, recipient preview, approval flow, queued sends, rate limiting, idempotency, and campaign monitoring UI.
+- **Iteration 12 (Performance monitoring)** ✅ — response-time metrics, AI quality/fallback stats, campaign delivery rates, and monitoring dashboard.
+- **Iteration 13 (Stabilization + QA hardening)** ✅ — campaign duplicate-job guardrails, validated monitoring ranges/status filters, and automated source-level QA checks.
+- **Iteration 14 (Deployment readiness)** ✅ — env template, deployment guide, readiness/config health checks, Redis persistence/healthcheck, and pilot checklist.
+- **Iteration 15 (Production hardening)** ✅ — sanitization, strict validation, rate limiting, structured error responses, request IDs/logging, security headers, graceful shutdown, error boundaries, and DB pool tuning guidance.
 - **All PRD section-14 endpoints are now implemented** (no more 501 stubs).
 
 ## Hermes Supervisor
@@ -138,7 +148,8 @@ apps/api/        NestJS backend. Global prefix /api/v1. Modules: auth, wa
                    helpers + humanDelay (anti-ban).
 apps/web/        Next.js (App Router) + Tailwind. Pages: / (login),
                  /accounts (add account + live QR scan), /dashboard (3-panel
-                 placeholder). src/lib/api.ts (JWT), src/lib/socket.ts (live).
+                 chat/search), /customers (bulk CRM actions), /campaigns (controlled outbound messaging), /monitoring (performance metrics), /admin/users.
+                 src/lib/api.ts (JWT), src/lib/socket.ts (live).
 packages/database/  Prisma schema (all 12 PRD tables) + shared client. Import
                  from '@hermes/database'.
 ```
@@ -276,6 +287,10 @@ Phase 1 (build first):
 - Use Baileys for MVP (flexible, low cost)
 - Always apply human-like send delays to avoid bans
 - Rate-limit outbound messages; avoid broadcast-style sends
+- Customer bulk actions are safe CRM mutations only. For campaign/broadcast work,
+  build a controlled queue first: owner/supervisor approval, per-account rate
+  limits, randomized human delay, opt-out/blocked-customer exclusion, idempotency,
+  and audit logging.
 - Implement auto-reconnect and QR refresh handling
 - Never send duplicate messages (idempotency check required)
 

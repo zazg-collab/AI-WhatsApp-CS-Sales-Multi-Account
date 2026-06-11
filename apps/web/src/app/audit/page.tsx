@@ -147,9 +147,9 @@ export default function AuditPage() {
                             {e.action}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 text-gray-400">{e.entityType ?? '—'}</td>
+                        <td className="px-4 py-2.5 text-gray-400">{e.entityType ?? '-'}</td>
                         <td className="px-4 py-2.5 font-mono text-xs text-gray-500">
-                          {e.entityId ? e.entityId.slice(0, 12) + '...' : '—'}
+                          {e.entityId ? e.entityId.slice(0, 12) + '...' : '-'}
                         </td>
                         <td className="max-w-xs px-4 py-2.5">
                           {(e.newValue || e.oldValue) ? (
@@ -157,7 +157,7 @@ export default function AuditPage() {
                               {JSON.stringify(e.newValue ?? e.oldValue, null, 2)}
                             </pre>
                           ) : (
-                            <span className="text-gray-600">—</span>
+                            <span className="text-gray-600">-</span>
                           )}
                         </td>
                       </tr>

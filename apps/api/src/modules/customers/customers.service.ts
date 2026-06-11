@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { LeadStage, Prisma } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UpdateCustomerDto } from './dto/customers.dto';
+import { AuditService } from '../audit/audit.service';
+import { BulkCustomerActionDto, UpdateCustomerDto } from './dto/customers.dto';
 
 interface ListFilters {
   stage?: LeadStage;
@@ -11,7 +12,10 @@ interface ListFilters {
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   list(filters: ListFilters) {
     const where: Prisma.CustomerWhereInput = {};
@@ -26,6 +30,9 @@ export class CustomersService {
     return this.prisma.customer.findMany({
       where,
       orderBy: { lastMessageAt: 'desc' },
+      include: {
+        assignedAdmin: { select: { id: true, name: true, email: true } },
+      },
       take: 100,
     });
   }
@@ -47,13 +54,83 @@ export class CustomersService {
   }
 
   /** Append a timestamped internal note (PRD 7.10). */
-  async addNote(id: string, note: string) {
+  async addNote(id: string, note: string, userId?: string) {
     const customer = await this.prisma.customer.findUnique({ where: { id } });
     if (!customer) throw new NotFoundException('Customer not found');
-    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
-    const entry = `[${stamp}] ${note}`;
-    const notes = customer.notes ? `${customer.notes}\n${entry}` : entry;
-    return this.prisma.customer.update({ where: { id }, data: { notes } });
+    const notes = this.appendStampedNote(customer.notes, note);
+    const updated = await this.prisma.customer.update({ where: { id }, data: { notes } });
+    await this.audit.log(userId, 'customer_note_added', 'Customer', id, { note });
+    return updated;
+  }
+
+  async bulkAction(dto: BulkCustomerActionDto, userId: string) {
+    const customerIds = [...new Set(dto.customerIds.map((id) => id.trim()).filter(Boolean))];
+    if (customerIds.length === 0) throw new BadRequestException('At least one customer is required');
+    if (customerIds.length > 100) {
+      throw new BadRequestException('Bulk actions are limited to 100 customers at a time');
+    }
+
+    const hasAssignedAdmin = Object.prototype.hasOwnProperty.call(dto, 'assignedAdminId');
+    const hasTags = Array.isArray(dto.tags);
+    const hasNote = typeof dto.note === 'string' && dto.note.trim().length > 0;
+    if (!dto.leadStage && !hasTags && !hasAssignedAdmin && !hasNote) {
+      throw new BadRequestException('Select at least one bulk action');
+    }
+
+    if (hasAssignedAdmin && dto.assignedAdminId) {
+      const admin = await this.prisma.user.findUnique({ where: { id: dto.assignedAdminId } });
+      if (!admin) throw new NotFoundException('Assigned admin not found');
+      if (admin.role === 'viewer') {
+        throw new BadRequestException('Viewer users cannot be assigned as customer admins');
+      }
+    }
+
+    const customers = await this.prisma.customer.findMany({ where: { id: { in: customerIds } } });
+    if (customers.length !== customerIds.length) {
+      const found = new Set(customers.map((customer) => customer.id));
+      const missing = customerIds.filter((id) => !found.has(id));
+      throw new NotFoundException(`Customers not found: ${missing.join(', ')}`);
+    }
+
+    const normalizedTags = this.normalizeTags(dto.tags ?? []);
+    if (hasTags && normalizedTags.length === 0) {
+      throw new BadRequestException('At least one tag is required for tag bulk actions');
+    }
+    const tagMode = dto.tagMode ?? 'append';
+    const note = hasNote ? dto.note!.trim() : undefined;
+
+    const updated = await this.prisma.$transaction(
+      customers.map((customer) => {
+        const data: Prisma.CustomerUpdateInput = {};
+        if (dto.leadStage) data.leadStage = dto.leadStage;
+        if (hasAssignedAdmin) {
+          data.assignedAdmin = dto.assignedAdminId
+            ? { connect: { id: dto.assignedAdminId } }
+            : { disconnect: true };
+        }
+        if (hasTags) data.tags = this.applyTagAction(customer.tags, normalizedTags, tagMode);
+        if (note) data.notes = this.appendStampedNote(customer.notes, note);
+        return this.prisma.customer.update({
+          where: { id: customer.id },
+          data,
+          include: {
+            assignedAdmin: { select: { id: true, name: true, email: true } },
+          },
+        });
+      }),
+    );
+
+    await this.audit.log(userId, 'customers_bulk_updated', 'Customer', 'bulk', {
+      customerIds,
+      count: updated.length,
+      leadStage: dto.leadStage,
+      assignedAdminId: hasAssignedAdmin ? dto.assignedAdminId ?? null : undefined,
+      tagMode: hasTags ? tagMode : undefined,
+      tags: hasTags ? normalizedTags : undefined,
+      noteAdded: Boolean(note),
+    });
+
+    return { updatedCount: updated.length, customers: updated };
   }
 
   async exportList(filters: ListFilters) {
@@ -122,5 +199,25 @@ export class CustomersService {
 
     events.sort((a, b) => b.at.getTime() - a.at.getTime());
     return events;
+  }
+
+  private appendStampedNote(existingNotes: string | null, note: string) {
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const entry = `[${stamp}] ${note}`;
+    return existingNotes ? `${existingNotes}\n${entry}` : entry;
+  }
+
+  private normalizeTags(tags: string[]) {
+    return [...new Set(tags.map((tag) => tag.trim()).filter(Boolean))];
+  }
+
+  private applyTagAction(
+    currentTags: string[],
+    tags: string[],
+    mode: 'replace' | 'append' | 'remove',
+  ) {
+    if (mode === 'replace') return tags;
+    if (mode === 'remove') return currentTags.filter((tag) => !tags.includes(tag));
+    return this.normalizeTags([...currentTags, ...tags]);
   }
 }

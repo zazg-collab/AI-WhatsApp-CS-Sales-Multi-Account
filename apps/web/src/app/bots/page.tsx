@@ -380,7 +380,7 @@ function BotModal({
             </div>
           </form>
 
-          {/* Assign accounts — only when editing */}
+          {/* Assign accounts - only when editing */}
           {bot && (
             <div className="mt-4 border-t border-black/30 pt-4">
               <h3 className="mb-2 text-xs font-semibold text-gray-400">Assign ke Akun WhatsApp</h3>

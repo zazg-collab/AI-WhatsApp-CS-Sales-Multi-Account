@@ -40,14 +40,14 @@ export default function AiSettingsPage() {
       <div className="mb-6 rounded-lg bg-wa-panel p-4 text-sm">
         <p>
           <span className="text-gray-400">Base URL:</span>{' '}
-          {config?.baseUrl ?? '—'}
+          {config?.baseUrl ?? '-'}
         </p>
         <p>
           <span className="text-gray-400">Default model:</span>{' '}
-          {config?.defaultModel ?? '—'}
+          {config?.defaultModel ?? '-'}
         </p>
         <p className="mt-2 text-xs text-gray-500">
-          Provider bersifat OpenAI-compatible — ganti lewat env AI_BASE_URL /
+          Provider bersifat OpenAI-compatible - ganti lewat env AI_BASE_URL /
           AI_API_KEY / AI_MODEL (OpenAI, OpenRouter, Ollama, LM Studio, vLLM).
         </p>
       </div>

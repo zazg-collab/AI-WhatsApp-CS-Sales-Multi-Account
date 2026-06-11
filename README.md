@@ -39,6 +39,13 @@ npm run dev:api           # http://localhost:3001/api/v1
 npm run dev:web           # http://localhost:3000
 ```
 
+## Deployment readiness
+
+- Copy `.env.example` to `.env` and replace all production secrets.
+- Use `GET /api/v1/health/ready` before promoting a deployment.
+- See [docs/deployment.md](./docs/deployment.md) for migration, health check, backup, and pilot verification steps.
+- Production hardening is enabled by default: strict validation, sanitization, rate limiting, request IDs, request logging, security headers, graceful shutdown, and structured error responses.
+
 ## Status
 
 - **Iteration 1 — foundation**: monorepo, full Prisma data model, JWT auth with
