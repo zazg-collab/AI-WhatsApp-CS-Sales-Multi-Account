@@ -2,112 +2,74 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --wa-bg: #0b141a;
-  --wa-panel: #111b21;
-  --wa-panel-raised: #18252d;
-  --wa-border: rgba(134, 150, 160, 0.18);
-  --wa-accent: #00a884;
-  --wa-accent-soft: rgba(0, 168, 132, 0.14);
-  --wa-chat-in: #202c33;
-  --wa-chat-out: #005c4b;
-}
-
 html,
 body {
-  min-height: 100%;
-  background: var(--wa-bg);
+  height: 100%;
 }
 
 body {
   overflow: hidden;
 }
 
-::selection {
-  background: rgba(0, 168, 132, 0.34);
-  color: #f3fbf8;
-}
+@layer base {
+  /* Tabular figures + sensible defaults for a data-heavy, editorial UI. */
+  body {
+    font-variant-numeric: tabular-nums;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
 
-button,
-a,
-input,
-textarea,
-select {
-  -webkit-tap-highlight-color: transparent;
+  /* Tighter, intentional headings. */
+  h1, h2, h3 {
+    letter-spacing: -0.02em;
+  }
+
+  /* On-brand focus ring instead of the default blue halo. */
+  :focus-visible {
+    outline: 2px solid theme('colors.wa.accent');
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: theme('colors.wa.accent');
+    color: #ffffff;
+  }
+
+  button, a, input, textarea, select {
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 @layer components {
-  .wa-app-shell {
-    background:
-      radial-gradient(circle at top left, rgba(0, 168, 132, 0.22), transparent 30rem),
-      radial-gradient(circle at bottom right, rgba(37, 211, 102, 0.12), transparent 26rem),
-      linear-gradient(135deg, #071116 0%, var(--wa-bg) 42%, #061014 100%);
-  }
-
-  .wa-panel-card {
-    border: 1px solid var(--wa-border);
-    background: linear-gradient(180deg, rgba(24, 37, 45, 0.96), rgba(17, 27, 33, 0.96));
-    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
-  }
-
+  /* WhatsApp chat wallpaper — subtle dotted texture, light by default. */
   .wa-chat-surface {
-    position: relative;
+    background-color: #efeae2;
+    background-image: radial-gradient(circle at 1px 1px, rgba(17, 15, 12, 0.04) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+  .dark .wa-chat-surface {
     background-color: #0b141a;
-    background-image:
-      radial-gradient(circle at 1px 1px, rgba(233, 237, 239, 0.045) 1px, transparent 0),
-      linear-gradient(135deg, rgba(0, 168, 132, 0.08), transparent 32%, rgba(17, 27, 33, 0.72));
-    background-size: 22px 22px, auto;
-  }
-
-  .wa-glass {
-    border: 1px solid var(--wa-border);
-    background: rgba(17, 27, 33, 0.84);
-    backdrop-filter: blur(16px) saturate(150%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  }
-
-  .wa-focus {
-    outline: none;
-    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, transform 160ms ease;
-  }
-
-  .wa-focus:focus {
-    border-color: rgba(0, 168, 132, 0.72);
-    box-shadow: 0 0 0 3px rgba(0, 168, 132, 0.16);
-  }
-
-  .wa-action {
-    transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease, color 160ms ease;
-  }
-
-  .wa-action:active {
-    transform: translateY(1px) scale(0.99);
-  }
-
-  .wa-scrollbar {
-    scrollbar-color: rgba(134, 150, 160, 0.36) transparent;
-    scrollbar-width: thin;
-  }
-
-  .wa-scrollbar::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  .wa-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(134, 150, 160, 0.3);
-    border-radius: 999px;
-  }
-
-  .wa-presence-dot {
-    box-shadow: 0 0 0 4px rgba(0, 168, 132, 0.12);
+    background-image: radial-gradient(circle at 1px 1px, rgba(233, 237, 239, 0.045) 1px, transparent 0);
   }
 }
 
+@layer utilities {
+  /* Thin, unobtrusive scrollbars matching the warm palette. */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.gray.300') transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: theme('colors.gray.300');
+    border-radius: 9999px;
+  }
+  .dark .scrollbar-thin { scrollbar-color: theme('colors.gray.700') transparent; }
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb { background-color: theme('colors.gray.700'); }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;

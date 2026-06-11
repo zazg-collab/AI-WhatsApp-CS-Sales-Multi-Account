@@ -342,7 +342,7 @@ function LeftPanel({
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="scrollbar-thin flex-1 overflow-y-auto">
         {conversations.length === 0 && (
           <p className="p-4 text-xs text-gray-500">Tidak ada percakapan</p>
         )}
@@ -354,8 +354,8 @@ function LeftPanel({
             <button
               key={c.id}
               onClick={() => onSelect(c.id)}
-              className={`w-full border-b border-gray-200 dark:border-black/20 px-3 py-3 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/20 ${
-                selectedId === c.id ? 'bg-black/5 dark:bg-black/30' : ''
+              className={`w-full border-b border-gray-100 px-3 py-3 text-left transition-colors hover:bg-gray-50 dark:border-black/20 dark:hover:bg-black/20 ${
+                selectedId === c.id ? 'bg-wa-accent/10 dark:bg-black/30' : ''
               }`}
             >
               <div className="flex items-start justify-between gap-2">
@@ -874,7 +874,7 @@ function CenterPanel({
       )}
 
       {/* Messages */}
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-2">
+      <div ref={scrollRef} onScroll={handleScroll} className="wa-chat-surface scrollbar-thin flex-1 space-y-2 overflow-y-auto p-4">
         {loadingOlder && (
           <p className="py-1 text-center text-xs text-gray-500">Memuat pesan lama…</p>
         )}
@@ -916,12 +916,12 @@ function CenterPanel({
                 </button>
               )}
               <div
-                className={`max-w-[70%] rounded-lg px-3 py-2 text-sm transition-shadow ${
+                className={`max-w-[70%] rounded-xl px-3 py-2 text-sm shadow-card transition-shadow ${
                   isCustomer
-                    ? 'bg-white dark:bg-[#1f2c34] text-gray-900 dark:text-gray-100'
+                    ? 'rounded-tl-sm border border-gray-200 bg-white text-gray-900 dark:border-transparent dark:bg-[#1f2c34] dark:text-gray-100'
                     : isDraft
-                    ? 'bg-yellow-900/60 text-yellow-100 ring-1 ring-yellow-600'
-                    : 'bg-[#d9fdd3] dark:bg-[#005c4b] text-gray-900 dark:text-gray-100'
+                    ? 'rounded-tr-sm border border-amber-300 bg-pastel-yellow text-pastel-yellowInk dark:border-yellow-600 dark:bg-yellow-900/60 dark:text-yellow-100'
+                    : 'rounded-tr-sm bg-[#d9fdd3] text-gray-900 dark:bg-[#005c4b] dark:text-gray-100'
                 } ${highlightId === m.id ? 'ring-2 ring-wa-accent' : ''}`}
               >
                 {isDraft && (
@@ -1192,7 +1192,7 @@ function RightPanel({
   ];
 
   return (
-    <aside className="flex w-72 flex-col gap-4 overflow-y-auto border-l border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel p-4">
+    <aside className="scrollbar-thin flex w-72 flex-col gap-4 overflow-y-auto border-l border-gray-200 bg-white p-4 dark:border-black/40 dark:bg-wa-panel">
       {/* Customer Info */}
       <div>
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">

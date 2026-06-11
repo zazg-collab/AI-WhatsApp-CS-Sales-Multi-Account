@@ -21,16 +21,16 @@ describe('LoginPage', () => {
   it('renders the login form', () => {
     render(<LoginPage />);
     expect(screen.getByText('Hermes Control Center')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Email')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
   });
 
   it('submits credentials, stores token and redirects', async () => {
     apiMock.mockResolvedValue({ accessToken: 'tok-1' });
     render(<LoginPage />);
 
-    await userEvent.type(screen.getByPlaceholderText('Email'), 'a@b.com');
-    await userEvent.type(screen.getByPlaceholderText('Password'), 'secret');
+    await userEvent.type(screen.getByLabelText('Email'), 'a@b.com');
+    await userEvent.type(screen.getByLabelText('Password'), 'secret');
     await userEvent.click(screen.getByRole('button', { name: 'Masuk' }));
 
     await waitFor(() => {
@@ -47,8 +47,8 @@ describe('LoginPage', () => {
     apiMock.mockRejectedValue(new Error('Email atau password salah'));
     render(<LoginPage />);
 
-    await userEvent.type(screen.getByPlaceholderText('Email'), 'a@b.com');
-    await userEvent.type(screen.getByPlaceholderText('Password'), 'bad');
+    await userEvent.type(screen.getByLabelText('Email'), 'a@b.com');
+    await userEvent.type(screen.getByLabelText('Password'), 'bad');
     await userEvent.click(screen.getByRole('button', { name: 'Masuk' }));
 
     expect(

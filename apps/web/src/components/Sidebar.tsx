@@ -188,15 +188,15 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen w-16 flex-col items-center border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 py-4 lg:w-56 lg:items-stretch">
+    <aside className="flex h-screen w-16 flex-col items-center border-r border-gray-200 bg-white py-4 dark:border-gray-800 dark:bg-gray-950 lg:w-56 lg:items-stretch">
       {/* Brand */}
-      <div className="mb-6 flex items-center justify-center gap-2 px-2 lg:justify-start lg:px-4">
-        <span className="text-xl">&#9889;</span>
-        <span className="hidden text-lg font-bold text-emerald-400 lg:block">Hermes</span>
+      <div className="mb-7 flex items-center justify-center gap-2.5 px-2 lg:justify-start lg:px-4">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-wa-accent text-base text-white">&#9889;</span>
+        <span className="hidden text-[15px] font-semibold tracking-tight text-gray-900 dark:text-gray-100 lg:block">Hermes</span>
       </div>
 
       {/* Nav */}
-      <nav className="flex flex-1 flex-col gap-1 px-1 lg:px-2">
+      <nav className="flex flex-1 flex-col gap-0.5 px-2 lg:px-3">
         {navItems.map((item) => {
           const userRole = getRoleFromToken();
           if (!canView(userRole, item.requiredRole)) return null;
@@ -205,13 +205,17 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center justify-center gap-3 rounded-lg px-2 py-2.5 text-sm font-medium transition-colors lg:justify-start lg:px-3 ${
+              className={`group relative flex items-center justify-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors lg:justify-start lg:px-3 ${
                 isActive
-                  ? 'bg-emerald-600 text-white'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100'
+                  ? 'bg-wa-accent/10 text-wa-accent dark:bg-wa-accent/15'
+                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100'
               }`}
               title={item.label}
             >
+              {/* Active accent bar (editorial detail). */}
+              {isActive && (
+                <span className="absolute left-0 top-1/2 hidden h-5 w-0.5 -translate-y-1/2 rounded-full bg-wa-accent lg:block" />
+              )}
               {item.icon}
               <span className="hidden lg:block">{item.label}</span>
             </Link>

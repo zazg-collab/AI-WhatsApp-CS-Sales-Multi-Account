@@ -51,9 +51,9 @@ describe('Sidebar', () => {
     setPathname('/accounts');
     render(<Sidebar />);
     const active = screen.getByText('Accounts').closest('a');
-    expect(active?.className).toContain('bg-emerald-600');
+    expect(active?.className).toContain('bg-wa-accent/10');
     const inactive = screen.getByText('Dashboard').closest('a');
-    expect(inactive?.className).not.toContain('bg-emerald-600');
+    expect(inactive?.className).not.toContain('bg-wa-accent/10');
   });
 
   it('logs out and navigates home', async () => {
