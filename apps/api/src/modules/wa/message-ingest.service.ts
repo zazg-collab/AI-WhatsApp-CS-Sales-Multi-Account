@@ -191,10 +191,12 @@ export class MessageIngestService {
     });
 
     // CSAT capture: if we asked this customer to rate (after resolving) and they
-    // reply with a number 1–5 within the window, record it as the score.
-    await this.maybeCaptureCsat(conversation, msg.text).catch((err) =>
-      this.logger.warn(`CSAT capture failed: ${err}`),
-    );
+    // reply with a number 1–5 within the window, record it as the score. A4: the
+    // flag lets the caller skip auto-reply/auto-away for a bare rating reply.
+    const csatCaptured = await this.maybeCaptureCsat(conversation, msg.text).catch((err) => {
+      this.logger.warn(`CSAT capture failed: ${err}`);
+      return false;
+    });
 
     if (!customer.optedOut && isOptOutMessage(msg.text)) {
       try {
@@ -208,19 +210,20 @@ export class MessageIngestService {
       }
     }
 
-    return { conversation, message, customer, account };
+    return { conversation, message, customer, account, csatCaptured };
   }
 
+  /** Returns true when the inbound text was consumed as a CSAT rating. */
   private async maybeCaptureCsat(
     conversation: { id: string; whatsappAccountId: string; csatScore: number | null; csatRequestedAt: Date | null },
     text: string,
-  ) {
-    if (conversation.csatScore !== null || !conversation.csatRequestedAt) return;
+  ): Promise<boolean> {
+    if (conversation.csatScore !== null || !conversation.csatRequestedAt) return false;
     const ageMs = Date.now() - conversation.csatRequestedAt.getTime();
-    if (ageMs > this.csatWindowHours * 60 * 60 * 1000) return;
+    if (ageMs > this.csatWindowHours * 60 * 60 * 1000) return false;
 
     const m = /^\s*([1-5])\s*$/.exec(text ?? '');
-    if (!m) return;
+    if (!m) return false;
     const score = parseInt(m[1], 10);
 
     await this.prisma.conversation.update({
@@ -231,5 +234,6 @@ export class MessageIngestService {
       conversationId: conversation.id,
       csatScore: score,
     });
+    return true;
   }
 }

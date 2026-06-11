@@ -27,6 +27,7 @@ describe('ConversationsService', () => {
         findUnique: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
         update: jest.fn().mockResolvedValue({ id: 'm1', status: 'sent' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       user: {
         findFirst: jest.fn(),
@@ -150,6 +151,17 @@ describe('ConversationsService', () => {
       expect(prisma.conversation.update.mock.calls[0][0].data.csatRequestedAt).toBeInstanceOf(Date);
       expect(wa.sendText).toHaveBeenCalledWith('a1', '628', expect.stringContaining('1'));
     });
+    it('persists the CSAT request as a system message in the timeline (A4)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1', status: 'open', csatRequestedAt: null });
+      prisma.conversation.update.mockResolvedValue({ id: 'c1', status: 'resolved', whatsappAccountId: 'a1', assignedAdmin: null, customer: { phoneNumber: '628' } });
+      await service.setStatus('c1', ConversationStatus.resolved);
+      // the persist happens in a fire-and-forget chain — flush microtasks
+      await new Promise((resolve) => setImmediate(resolve));
+      const created = prisma.message.create.mock.calls[0][0].data;
+      expect(created.senderType).toBe('system');
+      expect(created.conversationId).toBe('c1');
+      expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'message:new', expect.anything());
+    });
     it('does not re-request CSAT when already resolved', async () => {
       prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1', status: 'resolved', csatRequestedAt: new Date() });
       prisma.conversation.update.mockResolvedValue({ id: 'c1', status: 'resolved', whatsappAccountId: 'a1', assignedAdmin: null, customer: { phoneNumber: '628' } });
@@ -226,16 +238,20 @@ describe('ConversationsService', () => {
   });
 
   describe('approveDraft', () => {
-    it('sends the draft, flips it to sent in place, emits', async () => {
+    it('claims the draft atomically before sending, then emits', async () => {
       prisma.conversation.findUnique.mockResolvedValue({
         id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
       });
       prisma.message.findFirst.mockResolvedValue({ id: 'd1', content: 'draft text', status: 'pending' });
       await service.approveDraft('c1', 'd1', 'admin');
+      // A2: the pending→sent flip happens via a conditional updateMany claim.
+      const claim = prisma.message.updateMany.mock.calls[0][0];
+      expect(claim.where).toEqual({ id: 'd1', status: 'pending' });
+      expect(claim.data.status).toBe('sent');
       expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'draft text');
       const update = prisma.message.update.mock.calls[0][0];
       expect(update.where).toEqual({ id: 'd1' });
-      expect(update.data.status).toBe('sent');
+      expect(update.data.externalId).toBe('ext1');
       expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'message:new', expect.anything());
     });
     it('uses edited text when provided', async () => {
@@ -246,6 +262,27 @@ describe('ConversationsService', () => {
       await service.approveDraft('c1', 'd1', 'admin', 'edited reply');
       expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'edited reply');
     });
+    it('never double-sends when a concurrent approve already claimed the draft (A2)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
+      });
+      prisma.message.findFirst.mockResolvedValue({ id: 'd1', content: 'x', status: 'pending' });
+      prisma.message.updateMany.mockResolvedValue({ count: 0 }); // lost the race
+      await expect(service.approveDraft('c1', 'd1', 'admin')).rejects.toThrow(NotFoundException);
+      expect(wa.sendText).not.toHaveBeenCalled();
+    });
+    it('rolls the claim back when the gateway send fails (A2)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
+      });
+      prisma.message.findFirst.mockResolvedValue({ id: 'd1', content: 'x', status: 'pending' });
+      wa.sendText.mockRejectedValue(new Error('gateway down'));
+      await expect(service.approveDraft('c1', 'd1', 'admin')).rejects.toThrow('gateway down');
+      // rollback: the row is put back to pending so a retry stays possible
+      const rollback = prisma.message.update.mock.calls[0][0];
+      expect(rollback.where).toEqual({ id: 'd1' });
+      expect(rollback.data.status).toBe('pending');
+    });
     it('throws when the draft is missing or already handled', async () => {
       prisma.conversation.findUnique.mockResolvedValue({ id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' } });
       prisma.message.findFirst.mockResolvedValue(null);
@@ -255,13 +292,22 @@ describe('ConversationsService', () => {
   });
 
   describe('blockDraft', () => {
-    it('marks the draft failed and never sends', async () => {
+    it('marks the draft failed atomically and never sends', async () => {
       prisma.conversation.findUnique.mockResolvedValue({ id: 'c1', whatsappAccountId: 'a1' });
       prisma.message.findFirst.mockResolvedValue({ id: 'd1', content: 'x', status: 'pending' });
+      prisma.message.findUnique.mockResolvedValue({ id: 'd1', status: 'failed' });
       await service.blockDraft('c1', 'd1');
-      expect(prisma.message.update.mock.calls[0][0].data.status).toBe('failed');
+      const claim = prisma.message.updateMany.mock.calls[0][0];
+      expect(claim.where).toEqual({ id: 'd1', status: 'pending' });
+      expect(claim.data.status).toBe('failed');
       expect(wa.sendText).not.toHaveBeenCalled();
       expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'message:draft-removed', expect.anything());
+    });
+    it('throws when a concurrent approve already claimed the draft (A2)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ id: 'c1', whatsappAccountId: 'a1' });
+      prisma.message.findFirst.mockResolvedValue({ id: 'd1', content: 'x', status: 'pending' });
+      prisma.message.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.blockDraft('c1', 'd1')).rejects.toThrow(NotFoundException);
     });
     it('throws when the draft is missing', async () => {
       prisma.conversation.findUnique.mockResolvedValue({ id: 'c1', whatsappAccountId: 'a1' });
@@ -365,6 +411,12 @@ describe('ConversationsService', () => {
       prisma.conversation.findUnique.mockResolvedValue({ id: 'c1' });
       await service.update('c1', { aiMode: AiMode.ai_on });
       expect(prisma.conversation.update).toHaveBeenCalled();
+    });
+    it('drops unexpected fields — no mass assignment (A1)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ id: 'c1' });
+      await service.update('c1', { aiMode: AiMode.ai_on, csatScore: 5, unreadCount: 0 } as any);
+      const data = prisma.conversation.update.mock.calls[0][0].data;
+      expect(data).toEqual({ aiMode: AiMode.ai_on });
     });
   });
 

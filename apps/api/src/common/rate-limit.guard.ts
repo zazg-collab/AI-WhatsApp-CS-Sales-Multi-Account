@@ -25,7 +25,13 @@ export class RateLimitGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request & { user?: { id?: string } }>();
     const response = context.switchToHttp().getResponse<Response>();
     const key = this.keyFor(request);
-    const limit = request.user?.id ? this.perUserLimit : this.perIpLimit;
+    // A8: this global guard runs *before* the controller-level JwtAuthGuard, so
+    // request.user is never populated here. Use the presence of an auth token
+    // (bucketed by its hash in keyFor) to grant the authenticated limit.
+    const limit =
+      request.user?.id || request.headers.authorization
+        ? this.perUserLimit
+        : this.perIpLimit;
     const now = Date.now();
     const bucket = this.nextBucket(key, now);
 

@@ -400,6 +400,9 @@ export class WaService implements OnModuleInit {
     });
 
     if (result) {
+      // A4: a bare "1–5" consumed as a CSAT rating needs no away message and
+      // must not be answered by the bot.
+      if (result.csatCaptured) return;
       await this.maybeAutoAway(result).catch((err) =>
         this.logger.warn(`Auto-away failed: ${err}`),
       );
@@ -431,12 +434,20 @@ export class WaService implements OnModuleInit {
     if (!account.businessHoursEnabled || !account.awayMessage) return;
     if (conversation.aiMode === AiMode.ai_on) return; // bot replies 24/7
     if (isWithinBusinessHours(account)) return;
-    if (
-      conversation.lastAwayAt &&
-      Date.now() - conversation.lastAwayAt.getTime() < this.awayCooldownMs
-    ) {
-      return;
-    }
+
+    // Atomic cooldown claim (A15): set lastAwayAt only if still outside the
+    // cooldown, so a burst of near-simultaneous inbounds can't double-send.
+    // If the send below fails, the away message is simply skipped until the
+    // next cooldown window — preferable to risking duplicates.
+    const cutoff = new Date(Date.now() - this.awayCooldownMs);
+    const claim = await this.prisma.conversation.updateMany({
+      where: {
+        id: conversation.id,
+        OR: [{ lastAwayAt: null }, { lastAwayAt: { lt: cutoff } }],
+      },
+      data: { lastAwayAt: new Date() },
+    });
+    if (claim.count === 0) return;
 
     const externalId = await this.sendText(account.id, customer.phoneNumber, account.awayMessage);
     const message = await this.prisma.message.create({
@@ -450,7 +461,7 @@ export class WaService implements OnModuleInit {
     });
     await this.prisma.conversation.update({
       where: { id: conversation.id },
-      data: { lastAwayAt: new Date(), lastMessage: account.awayMessage, lastMessageAt: new Date() },
+      data: { lastMessage: account.awayMessage, lastMessageAt: new Date() },
     });
     this.events.emitToAccount(account.id, 'message:new', { conversationId: conversation.id, message });
   }

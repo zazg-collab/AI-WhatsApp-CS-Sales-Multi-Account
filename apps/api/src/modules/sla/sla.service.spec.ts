@@ -13,7 +13,11 @@ function makeService(overrides: { responseMinutes?: number } = {}) {
     get: (k: string) =>
       k === 'SLA_RESPONSE_MINUTES' ? overrides.responseMinutes ?? 15 : undefined,
   };
-  const queue: any = { add: jest.fn().mockResolvedValue({}) };
+  const queue: any = {
+    add: jest.fn().mockResolvedValue({}),
+    getRepeatableJobs: jest.fn().mockResolvedValue([]),
+    removeRepeatableByKey: jest.fn().mockResolvedValue(undefined),
+  };
   const service = new SlaService(prisma, events, notifications, config, queue);
   return { service, prisma, events, notifications, queue };
 }
@@ -26,6 +30,17 @@ describe('SlaService', () => {
     const { service, queue } = makeService();
     await service.onModuleInit();
     expect(queue.add).toHaveBeenCalledWith('scan', {}, expect.objectContaining({ repeat: expect.any(Object) }));
+  });
+
+  it('removes stale schedules with a different cadence on init (A5)', async () => {
+    const { service, queue } = makeService();
+    queue.getRepeatableJobs.mockResolvedValue([
+      { name: 'scan', every: '30000', key: 'old-key' }, // stale cadence
+      { name: 'scan', every: '60000', key: 'current-key' }, // matches default 60s
+    ]);
+    await service.onModuleInit();
+    expect(queue.removeRepeatableByKey).toHaveBeenCalledWith('old-key');
+    expect(queue.removeRepeatableByKey).not.toHaveBeenCalledWith('current-key');
   });
 
   it('flags a conversation whose last message is an overdue customer message', async () => {

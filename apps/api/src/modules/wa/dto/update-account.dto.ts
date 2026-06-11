@@ -8,6 +8,7 @@ import {
   IsString,
   Matches,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { AiMode } from '@hermes/database';
@@ -60,5 +61,6 @@ export class UpdateAccountDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   awayMessage?: string;
 }

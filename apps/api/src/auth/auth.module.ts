@@ -21,7 +21,8 @@ import { LoginThrottleGuard } from './login-throttle.guard';
         return {
           secret,
           signOptions: {
-            expiresIn: config.get<string>('JWT_EXPIRES_IN') ?? '7d',
+            // A13: 24h default for an admin panel; override via JWT_EXPIRES_IN.
+            expiresIn: config.get<string>('JWT_EXPIRES_IN') ?? '24h',
           },
         };
       },

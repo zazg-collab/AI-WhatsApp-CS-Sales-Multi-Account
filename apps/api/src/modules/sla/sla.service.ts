@@ -35,9 +35,17 @@ export class SlaService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    // Register the recurring scan. BullMQ dedupes repeatable jobs by key, so
-    // re-adding on every boot is safe (no duplicate schedules).
+    // Register the recurring scan. BullMQ keys repeatable jobs by their cadence
+    // (`every`), so changing SLA_SCAN_INTERVAL_MS would otherwise leave the old
+    // schedule running alongside the new one (A5) — drop stale ones first.
     try {
+      const existing = await this.slaQueue.getRepeatableJobs();
+      for (const job of existing) {
+        if (job.name === 'scan' && Number(job.every) !== this.intervalMs) {
+          await this.slaQueue.removeRepeatableByKey(job.key);
+          this.logger.log(`Removed stale SLA schedule (every ${job.every}ms)`);
+        }
+      }
       await this.slaQueue.add(
         'scan',
         {},
@@ -59,36 +67,66 @@ export class SlaService implements OnModuleInit {
     const cutoff = new Date(Date.now() - this.responseMinutes * 60_000);
     const horizon = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    const candidates = await this.prisma.conversation.findMany({
-      where: {
-        OR: [
-          // Active, recently-touched conversations that might be overdue…
-          { status: { not: ConversationStatus.resolved }, lastMessageAt: { gte: horizon } },
-          // …and any already-flagged ones, so we can clear them.
-          { slaBreachedAt: { not: null } },
-        ],
-      },
-      take: 1000,
-      include: {
-        messages: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-          select: { senderType: true, createdAt: true },
+    // Cursor pagination (A7): a fixed take(1000) silently skipped everything
+    // beyond the first page once the active set grew. Batch through all
+    // candidates, with a hard safety cap against runaway scans.
+    const BATCH = 500;
+    const MAX_CANDIDATES = 20_000;
+    const candidates: Array<{
+      id: string;
+      status: ConversationStatus;
+      slaBreachedAt: Date | null;
+      whatsappAccountId: string;
+      messages: { senderType: SenderType; createdAt: Date }[];
+      customer: { name: string | null; phoneNumber: string };
+      whatsappAccount: {
+        id: string;
+        accountName: string;
+        businessHoursEnabled: boolean;
+        businessHoursStart: string | null;
+        businessHoursEnd: string | null;
+        businessDays: number[];
+        businessTimezone: string | null;
+      };
+    }> = [];
+    let cursor: string | undefined;
+    for (;;) {
+      const batch = await this.prisma.conversation.findMany({
+        where: {
+          OR: [
+            // Active, recently-touched conversations that might be overdue…
+            { status: { not: ConversationStatus.resolved }, lastMessageAt: { gte: horizon } },
+            // …and any already-flagged ones, so we can clear them.
+            { slaBreachedAt: { not: null } },
+          ],
         },
-        customer: { select: { name: true, phoneNumber: true } },
-        whatsappAccount: {
-          select: {
-            id: true,
-            accountName: true,
-            businessHoursEnabled: true,
-            businessHoursStart: true,
-            businessHoursEnd: true,
-            businessDays: true,
-            businessTimezone: true,
+        orderBy: { id: 'asc' },
+        take: BATCH,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        include: {
+          messages: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { senderType: true, createdAt: true },
+          },
+          customer: { select: { name: true, phoneNumber: true } },
+          whatsappAccount: {
+            select: {
+              id: true,
+              accountName: true,
+              businessHoursEnabled: true,
+              businessHoursStart: true,
+              businessHoursEnd: true,
+              businessDays: true,
+              businessTimezone: true,
+            },
           },
         },
-      },
-    });
+      });
+      candidates.push(...batch);
+      if (batch.length < BATCH || candidates.length >= MAX_CANDIDATES) break;
+      cursor = batch[batch.length - 1].id;
+    }
 
     const newlyBreached: { name: string; account: string }[] = [];
     let cleared = 0;

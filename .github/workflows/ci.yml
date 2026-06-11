@@ -134,8 +134,8 @@ jobs:
         run: npm run migrate:deploy --workspace=@hermes/database
 
       # Fails if the schema and the applied migrations have drifted apart
-      # (a migration is missing for a schema change).
+      # (a migration is missing for a schema change). Blocking: this exact
+      # gap shipped once (customer opt-out columns without a migration).
       - name: Verify schema matches migrations (no drift)
         run: npx prisma migrate diff --exit-code --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma
         working-directory: packages/database
-        continue-on-error: true

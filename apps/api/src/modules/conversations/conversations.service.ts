@@ -223,15 +223,33 @@ export class ConversationsService {
     const text = (editedText ?? draft.content ?? '').trim();
     if (!text) throw new NotFoundException('Draft has no content to send');
 
-    const externalId = await this.wa.sendText(
-      conversation.whatsappAccountId,
-      conversation.customer.phoneNumber,
-      text,
-    );
+    // Atomic claim (A2): flip pending→sent *before* sending so a concurrent
+    // approve (double-click / second admin) can never double-send. Rolled back
+    // if the gateway send fails, so a retry stays possible.
+    const claim = await this.prisma.message.updateMany({
+      where: { id: draft.id, status: 'pending' },
+      data: { status: 'sent' },
+    });
+    if (claim.count === 0) throw new NotFoundException('Draft not found or already handled');
+
+    let externalId: string | null;
+    try {
+      externalId = await this.wa.sendText(
+        conversation.whatsappAccountId,
+        conversation.customer.phoneNumber,
+        text,
+      );
+    } catch (err) {
+      await this.prisma.message.update({
+        where: { id: draft.id },
+        data: { status: 'pending' },
+      });
+      throw err;
+    }
 
     const message = await this.prisma.message.update({
       where: { id: draft.id },
-      data: { content: text, status: 'sent', externalId, senderId: adminId },
+      data: { content: text, externalId, senderId: adminId },
     });
 
     await this.prisma.conversation.update({
@@ -256,10 +274,14 @@ export class ConversationsService {
     });
     if (!draft) throw new NotFoundException('Draft not found or already handled');
 
-    const message = await this.prisma.message.update({
-      where: { id: draft.id },
+    // Atomic (A2): only the first block/approve wins the pending row.
+    const claim = await this.prisma.message.updateMany({
+      where: { id: draft.id, status: 'pending' },
       data: { status: 'failed' },
     });
+    if (claim.count === 0) throw new NotFoundException('Draft not found or already handled');
+
+    const message = await this.prisma.message.findUnique({ where: { id: draft.id } });
     this.events.emitToAccount(conversation.whatsappAccountId, 'message:draft-removed', {
       conversationId: id,
       messageId: draft.id,
@@ -342,8 +364,29 @@ export class ConversationsService {
 
     if (justResolved && this.csatEnabled) {
       // Fire-and-forget: a disconnected account shouldn't block resolving.
+      // A4: persist the request as a system message so the customer's rating
+      // reply has visible context in the timeline.
       this.wa
         .sendText(updated.whatsappAccountId, updated.customer.phoneNumber, this.csatMessage)
+        .then(async (externalId) => {
+          const message = await this.prisma.message.create({
+            data: {
+              conversationId: id,
+              senderType: SenderType.system,
+              content: this.csatMessage,
+              status: 'sent',
+              externalId,
+            },
+          });
+          await this.prisma.conversation.update({
+            where: { id },
+            data: { lastMessage: this.csatMessage, lastMessageAt: new Date() },
+          });
+          this.events.emitToAccount(updated.whatsappAccountId, 'message:new', {
+            conversationId: id,
+            message,
+          });
+        })
         .catch(() => undefined);
     }
 
@@ -413,7 +456,8 @@ export class ConversationsService {
 
   /** Full-text search within one conversation's messages (most recent first). */
   async searchMessages(id: string, query: string, limit = 50) {
-    const q = query.trim();
+    // A9: cap the needle so an absurdly long query can't be shipped into ILIKE.
+    const q = query.trim().slice(0, 200);
     if (!q) return { items: [] };
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
@@ -595,9 +639,15 @@ export class ConversationsService {
     return { marked: externalIds.length };
   }
 
-  async update(id: string, data: { aiMode?: AiMode; takeoverStatus?: TakeoverStatus }) {
+  async update(id: string, dto: { aiMode?: AiMode; takeoverStatus?: TakeoverStatus }) {
     const conversation = await this.prisma.conversation.findUnique({ where: { id } });
     if (!conversation) throw new NotFoundException('Conversation not found');
+    // A1 defense-in-depth: rebuild the update payload from named fields so a
+    // bypassed/forgotten DTO can never mass-assign other columns.
+    const data: Prisma.ConversationUpdateInput = {
+      ...(dto.aiMode !== undefined ? { aiMode: dto.aiMode } : {}),
+      ...(dto.takeoverStatus !== undefined ? { takeoverStatus: dto.takeoverStatus } : {}),
+    };
     return this.prisma.conversation.update({ where: { id }, data });
   }
 }

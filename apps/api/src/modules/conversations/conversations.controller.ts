@@ -26,6 +26,8 @@ import { AiModeDto } from './dto/ai-mode.dto';
 import { ConversationStatusDto } from './dto/conversation-status.dto';
 import { AssignConversationDto } from './dto/assign-conversation.dto';
 import { LabelsDto } from './dto/labels.dto';
+import { UpdateConversationDto } from './dto/update-conversation.dto';
+import { SendMediaDto } from './dto/send-media.dto';
 import { AiMode, ConversationStatus } from '@hermes/database';
 import { csvRow } from '../../common/csv.util';
 
@@ -219,7 +221,7 @@ export class ConversationsController {
 
   @Roles('admin', 'supervisor', 'owner')
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: { aiMode?: AiMode }) {
+  update(@Param('id') id: string, @Body() dto: UpdateConversationDto) {
     return this.conversations.update(id, dto);
   }
 
@@ -227,7 +229,7 @@ export class ConversationsController {
   @Post(':id/media')
   sendMedia(
     @Param('id') id: string,
-    @Body() dto: { mediaType: 'image' | 'document' | 'audio' | 'video'; url: string; caption?: string },
+    @Body() dto: SendMediaDto,
     @CurrentUser() user: AuthUser,
   ) {
     return this.conversations.sendMedia(id, user.id, dto.mediaType, dto.url, dto.caption);
@@ -239,7 +241,9 @@ export class ConversationsController {
   @Post(':id/media/upload')
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: 25 * 1024 * 1024 }, // 25MB, mirrors WA_MEDIA_MAX_BYTES
+      // A10: actually honour WA_MEDIA_MAX_BYTES (decorators can't use
+      // ConfigService, so read the env directly; default 25MB).
+      limits: { fileSize: Number(process.env.WA_MEDIA_MAX_BYTES) || 25 * 1024 * 1024 },
     }),
   )
   uploadMedia(
