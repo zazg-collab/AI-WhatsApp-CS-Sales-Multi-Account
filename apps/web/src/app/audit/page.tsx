@@ -22,6 +22,7 @@ export default function AuditPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [entity, setEntity] = useState('');
   const [action, setAction] = useState('');
@@ -31,6 +32,7 @@ export default function AuditPage() {
   const load = useCallback(async (p: number) => {
     setLoading(true);
     try {
+      setError(null);
       const params = new URLSearchParams();
       if (entity) params.set('entity', entity);
       if (action) params.set('action', action);
@@ -41,8 +43,10 @@ export default function AuditPage() {
       const data = await api<{ data: AuditEntry[]; total: number }>(`/audit-logs?${params}`);
       setEntries(data.data);
       setTotal(data.total);
-    } catch {
-      // ignore
+    } catch (e) {
+      setEntries([]);
+      setTotal(0);
+      setError(e instanceof Error ? e.message : 'Gagal memuat audit log');
     } finally {
       setLoading(false);
     }
@@ -99,6 +103,12 @@ export default function AuditPage() {
             className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none"
           />
         </div>
+
+        {error && (
+          <div className="mb-4 rounded border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            {error}
+          </div>
+        )}
 
         {loading ? (
           <p className="text-sm text-gray-600 dark:text-gray-400">Memuat...</p>

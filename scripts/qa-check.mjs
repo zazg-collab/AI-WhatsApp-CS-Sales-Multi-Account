@@ -10,6 +10,7 @@ assert.match(envExample, /JWT_SECRET=/, '.env.example must document JWT_SECRET')
 assert.match(envExample, /DATABASE_URL=/, '.env.example must document DATABASE_URL');
 assert.match(envExample, /REDIS_URL=/, '.env.example must document REDIS_URL');
 assert.match(envExample, /WA_SESSION_DIR=/, '.env.example must document WA_SESSION_DIR');
+assert.match(envExample, /WA_SYNC_FULL_HISTORY=true/, 'Env template must enable WhatsApp phone history sync by default');
 assert.match(envExample, /RATE_LIMIT_PER_IP=/, '.env.example must document IP rate limits');
 assert.match(envExample, /connection_limit=10/, '.env.example must document Prisma connection pool tuning');
 
@@ -59,6 +60,37 @@ assert.match(customersService, /customers_bulk_updated/, 'Bulk customer actions 
 const roles = read('apps/api/src/auth/roles.ts');
 assert.match(roles, /const roleHierarchy/, 'RolesGuard must use hierarchy');
 assert.match(roles, /userLevel >= minimumLevel/, 'RolesGuard must allow higher roles to satisfy lower requirements');
+
+
+const knowledgeService = read('apps/api/src/modules/knowledge/knowledge.service.ts');
+const documentExtract = read('apps/api/src/modules/knowledge/document-extract.util.ts');
+const knowledgePage = read('apps/web/src/app/knowledge/page.tsx');
+assert.match(knowledgeService, /contentType = res\.headers\.get\('content-type'\)/, 'Knowledge URL ingest must inspect content-type');
+assert.match(knowledgeService, /extractFromFile\(raw, urlName, contentType\)/, 'Knowledge URL ingest must support direct document URLs');
+assert.match(documentExtract, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/, 'Knowledge ingest must support Excel MIME types');
+assert.match(knowledgePage, /Upload PDF, Word \(\.docx\), Excel/, 'Knowledge UI must advertise file and website ingestion');
+
+const conversationsService = read('apps/api/src/modules/conversations/conversations.service.ts');
+const dashboardPage = read('apps/web/src/app/dashboard/page.tsx');
+assert.match(conversationsService, /status: MessageStatus\.pending/, 'Manual sends must be persisted before gateway delivery');
+assert.match(conversationsService, /message_send_failed/, 'Failed manual sends must be audited');
+assert.match(dashboardPage, /prev\.messages\.some\(\(m\) => m\.id === message\.id\)/, 'Dashboard must de-duplicate live message events');
+assert.match(dashboardPage, /await loadConv\(selectedId\);[\s\S]*setToast/, 'Dashboard must refresh failed sends so failed messages stay visible');
+
+const auditPage = read('apps/web/src/app/audit/page.tsx');
+assert.match(auditPage, /Gagal memuat audit log/, 'Audit UI must show load errors instead of silently failing');
+
+
+const waService = read('apps/api/src/modules/wa/wa.service.ts');
+const messageIngest = read('apps/api/src/modules/wa/message-ingest.service.ts');
+assert.match(waService, /syncFullHistory: this\.syncFullHistory/, 'WhatsApp sync must request full phone history when enabled');
+assert.match(waService, /Browsers\.macOS\('Desktop'\)/, 'WhatsApp history sync must use a desktop browser identity');
+assert.match(waService, /type !== 'notify' && type !== 'append'/, 'WhatsApp sync must ingest live and history append messages');
+assert.doesNotMatch(waService, /m\.key\.fromMe \|\| !m\.key\.remoteJid/, 'WhatsApp sync must not drop phone-sent fromMe messages');
+assert.match(waService, /fromMe,[\s\S]*occurredAt: this\.messageTimestamp\(m\)/, 'WhatsApp sync must pass phone direction and timestamp into ingest');
+assert.match(messageIngest, /senderType: fromMe \? SenderType\.admin : SenderType\.customer/, 'Phone-sent messages must appear as admin-side messages');
+assert.match(messageIngest, /phone_message_sync/, 'Phone-sent messages must be audited as phone sync events');
+assert.match(messageIngest, /!fromMe && !msg\.suppressAutomation/, 'Phone/history sync must not trigger customer automation side effects');
 
 const dashboardController = read('apps/api/src/modules/dashboard/dashboard.controller.ts');
 assert.match(dashboardController, /@Get\('performance'\)/, 'Performance overview endpoint must exist');

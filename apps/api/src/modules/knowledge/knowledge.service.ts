@@ -87,14 +87,14 @@ export class KnowledgeService {
    */
   async ingestFile(
     baseId: string,
-    file: { buffer: Buffer; originalname?: string },
+    file: { buffer: Buffer; originalname?: string; mimetype?: string },
     userId: string,
   ) {
     const base = await this.prisma.knowledgeBase.findUnique({ where: { id: baseId } });
     if (!base) throw new NotFoundException('Knowledge base not found');
 
     const filename = file.originalname ?? 'dokumen';
-    const { text, kind } = await extractFromFile(file.buffer, filename);
+    const { text, kind } = await extractFromFile(file.buffer, filename, file.mimetype);
     if (!text) {
       throw new BadRequestException(
         'Tidak ada teks yang bisa diekstrak dari file ini (mungkin hasil scan/gambar)',
@@ -142,20 +142,37 @@ export class KnowledgeService {
       throw new BadRequestException('Halaman terlalu besar (maks 5MB)');
     }
 
-    const html = raw.toString('utf8');
-    const text = htmlToText(html);
-    if (!text) throw new BadRequestException('Tidak ada teks terbaca di halaman ini');
+    const contentType = res.headers.get('content-type') ?? '';
+    const parsedUrl = new URL(url);
+    const urlName = decodeURIComponent(parsedUrl.pathname.split('/').filter(Boolean).pop() ?? parsedUrl.hostname);
 
-    const sourceTitle = htmlTitle(html) ?? new URL(url).hostname;
-    const items = await this.createChunkedItems(baseId, sourceTitle, text, 'website', url);
+    let sourceTitle: string;
+    let text: string;
+    let kind: string;
+
+    if (contentType.toLowerCase().includes('html') || /\.html?$/i.test(parsedUrl.pathname) || !urlName.includes('.')) {
+      const html = raw.toString('utf8');
+      text = htmlToText(html);
+      kind = 'website';
+      sourceTitle = htmlTitle(html) ?? parsedUrl.hostname;
+    } else {
+      const extracted = await extractFromFile(raw, urlName, contentType);
+      text = extracted.text;
+      kind = extracted.kind;
+      sourceTitle = urlName;
+    }
+
+    if (!text) throw new BadRequestException('Tidak ada teks terbaca dari sumber ini');
+
+    const items = await this.createChunkedItems(baseId, sourceTitle, text, kind, url);
     await logAudit(this.prisma, {
       userId,
       action: 'knowledge_ingest_url',
       entityType: 'knowledge_base',
       entityId: baseId,
-      newValue: { url, items: items.length, chars: text.length },
+      newValue: { url, kind, items: items.length, chars: text.length },
     });
-    return { source: url, kind: 'website', chars: text.length, items };
+    return { source: url, kind, chars: text.length, items };
   }
 
   /** Store extracted text as one or more active knowledge items. */

@@ -14,6 +14,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   downloadMediaMessage,
+  Browsers,
   type WASocket,
   type proto,
 } from '@whiskeysockets/baileys';
@@ -54,6 +55,7 @@ export class WaService implements OnModuleInit {
   private readonly sessionDir: string;
   private readonly mediaMaxBytes: number;
   private readonly awayCooldownMs: number;
+  private readonly syncFullHistory: boolean;
 
   // Anti-ban + stability state (in-memory; survives reconnect, not restart).
   private static readonly MAX_RECONNECT_ATTEMPTS = 10;
@@ -78,6 +80,7 @@ export class WaService implements OnModuleInit {
     );
     const cooldown = Number(config.get('AUTO_AWAY_COOLDOWN_MS'));
     this.awayCooldownMs = Number.isFinite(cooldown) && cooldown > 0 ? cooldown : 12 * 60 * 60 * 1000;
+    this.syncFullHistory = config.get<string>('WA_SYNC_FULL_HISTORY') !== 'false';
   }
 
   /** Reconnect every active account on boot. */
@@ -105,6 +108,10 @@ export class WaService implements OnModuleInit {
       auth: state,
       logger: pino({ level: 'silent' }) as never,
       printQRInTerminal: false,
+      // Request WhatsApp history chunks so the app mirrors chats sent/read on the phone.
+      // macOS/desktop browser identity is required by Baileys for full history sync.
+      syncFullHistory: this.syncFullHistory,
+      browser: Browsers.macOS('Desktop'),
     });
 
     this.sessions.set(accountId, { sock });
@@ -156,9 +163,12 @@ export class WaService implements OnModuleInit {
     });
 
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
-      if (type !== 'notify') return;
+      // notify = live traffic; append = history/backfill from the linked phone.
+      // We persist both so the dashboard mirrors WhatsApp, but suppress AI/away
+      // automation for backfilled history to avoid replying to old chats.
+      if (type !== 'notify' && type !== 'append') return;
       for (const m of messages) {
-        await this.handleIncoming(accountId, m);
+        await this.handleIncoming(accountId, m, { suppressAutomation: type !== 'notify' });
       }
     });
 
@@ -354,10 +364,16 @@ export class WaService implements OnModuleInit {
     };
   }
 
-  private async handleIncoming(accountId: string, m: proto.IWebMessageInfo) {
-    if (m.key.fromMe || !m.key.remoteJid) return;
+  private async handleIncoming(
+    accountId: string,
+    m: proto.IWebMessageInfo,
+    opts: { suppressAutomation?: boolean } = {},
+  ) {
+    if (!m.key.remoteJid) return;
     // Only 1-on-1 chats (M1): drop groups, broadcast lists, newsletters.
     if (!isDirectChatJid(m.key.remoteJid)) return;
+
+    const fromMe = m.key.fromMe === true;
 
     const text =
       m.message?.conversation ??
@@ -368,6 +384,7 @@ export class WaService implements OnModuleInit {
       '';
 
     const type = this.resolveType(m);
+    if (!text && type === MessageType.text) return;
 
     // Download inbound media to WA_MEDIA_DIR and reference it as /media/<file>.
     // Failure is non-fatal: the message is still ingested, just without media.
@@ -397,9 +414,12 @@ export class WaService implements OnModuleInit {
       type,
       mediaUrl,
       quotedExternalId: ctx?.stanzaId ?? undefined,
+      fromMe,
+      occurredAt: this.messageTimestamp(m),
+      suppressAutomation: opts.suppressAutomation,
     });
 
-    if (result) {
+    if (result && !result.fromMe && !result.suppressAutomation) {
       // A4: a bare "1–5" consumed as a CSAT rating needs no away message and
       // must not be answered by the bot.
       if (result.csatCaptured) return;
@@ -410,6 +430,15 @@ export class WaService implements OnModuleInit {
         this.logger.error(`Auto-reply failed: ${err}`),
       );
     }
+  }
+
+
+  private messageTimestamp(m: proto.IWebMessageInfo): Date | undefined {
+    const raw = m.messageTimestamp;
+    if (raw === undefined || raw === null) return undefined;
+    const seconds = Number(typeof raw === 'object' && 'toString' in raw ? raw.toString() : raw);
+    if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
+    return new Date(seconds * 1000);
   }
 
   /**

@@ -28,7 +28,7 @@ Mandatory production changes:
 
 - Replace `JWT_SECRET` with a strong random value.
 - Point `DATABASE_URL` and `REDIS_URL` at managed/persistent services. Tune Prisma with `connection_limit` and `pool_timeout` in the Postgres URL.
-- Set `WA_SESSION_DIR` to a persistent mounted path.
+- Set `WA_SESSION_DIR` to a persistent mounted path. Keep `WA_SYNC_FULL_HISTORY=true` when operators need phone/native WhatsApp chats mirrored into the dashboard.
 - Set `AI_BASE_URL`, `AI_API_KEY`, and `AI_MODEL` for your provider.
 - Set `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_SOCKET_URL` to public API endpoints.
 
@@ -123,11 +123,12 @@ Then verify manually:
 1. Login as owner.
 2. Add a WhatsApp account and scan QR.
 3. Receive an inbound customer message.
-4. Send a manual reply.
-5. Toggle AI mode and generate a draft.
-6. Create a customer bulk action and confirm audit logs.
-7. Create a campaign draft, preview recipients, submit, approve, and start with a low rate limit.
-8. Open `/monitoring` and confirm response, AI quality, and campaign metrics load.
+4. Send a message from the linked phone/native WhatsApp and confirm it appears in `/dashboard` as an admin-side bubble.
+5. Send a manual reply.
+6. Toggle AI mode and generate a draft.
+7. Create a customer bulk action and confirm audit logs.
+8. Create a campaign draft, preview recipients, submit, approve, and start with a low rate limit.
+9. Open `/monitoring` and confirm response, AI quality, and campaign metrics load.
 
 ## 8. Backup procedures
 

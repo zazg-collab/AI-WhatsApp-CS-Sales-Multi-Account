@@ -77,6 +77,24 @@ function extOf(filename: string): string {
   return (filename.split('.').pop() ?? '').toLowerCase();
 }
 
+function extFromMime(mimeType?: string): string {
+  const mime = (mimeType ?? '').split(';')[0].trim().toLowerCase();
+  const map: Record<string, string> = {
+    'application/pdf': 'pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+    'application/vnd.ms-excel': 'xls',
+    'text/csv': 'csv',
+    'text/plain': 'txt',
+    'text/markdown': 'md',
+    'text/html': 'html',
+    'application/html': 'html',
+    'application/json': 'json',
+  };
+  return map[mime] ?? '';
+}
+
 /**
  * Extract plain text from an uploaded document. Format is detected from the
  * file extension (more reliable than browser-supplied mimetypes).
@@ -84,8 +102,11 @@ function extOf(filename: string): string {
 export async function extractFromFile(
   buffer: Buffer,
   filename: string,
+  mimeType?: string,
 ): Promise<ExtractedDoc> {
-  const ext = extOf(filename);
+  const detectedExt = extOf(filename);
+  const supportedExts = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'md', 'csv', 'json', 'html', 'htm']);
+  const ext = supportedExts.has(detectedExt) ? detectedExt : extFromMime(mimeType);
 
   if (ext === 'pdf') {
     const pdfParse = (await import('pdf-parse')).default;
@@ -124,6 +145,6 @@ export async function extractFromFile(
   }
 
   throw new BadRequestException(
-    `Tipe file .${ext || '?'} tidak didukung (pdf, docx, xlsx, csv, txt, md, html)`,
+    `Tipe file .${ext || '?'} tidak didukung (pdf, docx, xlsx/xls, csv, txt, md, html)`,
   );
 }

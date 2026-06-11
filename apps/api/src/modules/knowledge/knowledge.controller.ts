@@ -85,7 +85,7 @@ export class KnowledgeController {
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 15 * 1024 * 1024 } }))
   ingestFile(
     @Param('id') id: string,
-    @UploadedFile() file: { buffer: Buffer; originalname?: string } | undefined,
+    @UploadedFile() file: { buffer: Buffer; originalname?: string; mimetype?: string } | undefined,
     @CurrentUser() user: AuthUser,
   ) {
     if (!file?.buffer?.length) throw new BadRequestException('No file uploaded');
