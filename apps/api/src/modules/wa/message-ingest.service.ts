@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MessageType, SenderType, Prisma } from '@hermes/database';
+import { MessageStatus, MessageType, SenderType, Prisma } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { AutoAssignService } from './auto-assign.service';
+import { logAudit } from '../../common/audit.util';
 import { isOptOutMessage, jidToPhone } from './wa.util';
 
 interface IncomingMessage {
@@ -14,8 +15,14 @@ interface IncomingMessage {
   text: string;
   type: MessageType;
   mediaUrl?: string;
-  /** WhatsApp id of the message the customer replied to, if any. */
+  /** WhatsApp id of the message this message replied to, if any. */
   quotedExternalId?: string;
+  /** True when WhatsApp says the message came from the linked phone/account. */
+  fromMe?: boolean;
+  /** Original WhatsApp timestamp, used for phone/history sync ordering. */
+  occurredAt?: Date;
+  /** Do not trigger AI/away/CSAT side effects for history backfills. */
+  suppressAutomation?: boolean;
 }
 
 /**
@@ -41,6 +48,8 @@ export class MessageIngestService {
 
   async ingest(msg: IncomingMessage) {
     const phone = jidToPhone(msg.remoteJid);
+    const fromMe = msg.fromMe === true;
+    const occurredAt = msg.occurredAt ?? new Date();
 
     const account = await this.prisma.whatsappAccount.findUnique({
       where: { id: msg.accountId },
@@ -58,15 +67,15 @@ export class MessageIngestService {
         },
       },
       update: {
-        lastMessageAt: new Date(),
-        ...(msg.pushName ? { name: msg.pushName } : {}),
+        ...(msg.suppressAutomation ? {} : { lastMessageAt: occurredAt }),
+        ...(!fromMe && msg.pushName ? { name: msg.pushName } : {}),
       },
       create: {
-        name: msg.pushName ?? null,
+        name: !fromMe ? msg.pushName ?? null : null,
         phoneNumber: phone,
         sourceAccountId: account.id,
         assignedAdminId: account.assignedAdminId,
-        lastMessageAt: new Date(),
+        lastMessageAt: occurredAt,
       },
     });
 
@@ -89,7 +98,7 @@ export class MessageIngestService {
           assignedAdminId,
         },
       });
-    } else if (this.autoAssign.enabled && !conversation.assignedAdminId) {
+    } else if (!fromMe && this.autoAssign.enabled && !conversation.assignedAdminId) {
       // Existing chat that nobody owns yet → assign on this inbound.
       const adminId = await this.autoAssign.pickAdmin(account.id);
       if (adminId) {
@@ -148,14 +157,15 @@ export class MessageIngestService {
       message = await this.prisma.message.create({
         data: {
           conversationId: conversation.id,
-          senderType: SenderType.customer,
-          senderId: customer.id,
+          senderType: fromMe ? SenderType.admin : SenderType.customer,
+          senderId: fromMe ? account.assignedAdminId ?? null : customer.id,
           messageType: msg.type,
           content: msg.text,
           mediaUrl: msg.mediaUrl,
           externalId: msg.externalId || null,
           quotedMessageId,
-          status: 'delivered',
+          status: fromMe ? MessageStatus.sent : MessageStatus.delivered,
+          createdAt: occurredAt,
         },
         include: {
           quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } },
@@ -175,42 +185,70 @@ export class MessageIngestService {
       throw err;
     }
 
-    await this.prisma.conversation.update({
-      where: { id: conversation.id },
-      // Inbound is always from the customer → bump the unread badge.
-      data: {
-        lastMessage: msg.text,
-        lastMessageAt: new Date(),
-        unreadCount: { increment: 1 },
-      },
-    });
+    const conversationData: Prisma.ConversationUpdateInput = {};
+    const shouldRefreshLastMessage =
+      !conversation.lastMessageAt || occurredAt >= conversation.lastMessageAt;
+    if (shouldRefreshLastMessage) {
+      conversationData.lastMessage = msg.text;
+      conversationData.lastMessageAt = occurredAt;
+    }
+    if (!fromMe && !msg.suppressAutomation) {
+      conversationData.unreadCount = { increment: 1 };
+    }
+    if (Object.keys(conversationData).length > 0) {
+      await this.prisma.conversation.update({
+        where: { id: conversation.id },
+        data: conversationData,
+      });
+    }
 
     this.events.emitToAccount(account.id, 'message:new', {
       conversationId: conversation.id,
       message,
     });
 
-    // CSAT capture: if we asked this customer to rate (after resolving) and they
-    // reply with a number 1–5 within the window, record it as the score. A4: the
-    // flag lets the caller skip auto-reply/auto-away for a bare rating reply.
-    const csatCaptured = await this.maybeCaptureCsat(conversation, msg.text).catch((err) => {
-      this.logger.warn(`CSAT capture failed: ${err}`);
-      return false;
-    });
+    let csatCaptured = false;
+    if (!fromMe && !msg.suppressAutomation) {
+      // CSAT capture: if we asked this customer to rate (after resolving) and they
+      // reply with a number 1-5 within the window, record it as the score. A4: the
+      // flag lets the caller skip auto-reply/auto-away for a bare rating reply.
+      csatCaptured = await this.maybeCaptureCsat(conversation, msg.text).catch((err) => {
+        this.logger.warn(`CSAT capture failed: ${err}`);
+        return false;
+      });
 
-    if (!customer.optedOut && isOptOutMessage(msg.text)) {
-      try {
-        await this.prisma.customer.update({
-          where: { id: customer.id },
-          data: { optedOut: true, optedOutAt: new Date() },
-        });
-        this.logger.log(`Customer ${customer.id} auto opted-out via keyword`);
-      } catch (err) {
-        this.logger.warn(`Failed to mark customer ${customer.id} opted-out: ${err}`);
+      if (!customer.optedOut && isOptOutMessage(msg.text)) {
+        try {
+          await this.prisma.customer.update({
+            where: { id: customer.id },
+            data: { optedOut: true, optedOutAt: new Date() },
+          });
+          this.logger.log(`Customer ${customer.id} auto opted-out via keyword`);
+        } catch (err) {
+          this.logger.warn(`Failed to mark customer ${customer.id} opted-out: ${err}`);
+        }
       }
     }
 
-    return { conversation, message, customer, account, csatCaptured };
+    if (fromMe) {
+      await logAudit(this.prisma, {
+        userId: account.assignedAdminId ?? undefined,
+        action: 'phone_message_sync',
+        entityType: 'conversation',
+        entityId: conversation.id,
+        newValue: { messageId: message.id, externalId: msg.externalId || null },
+      });
+    }
+
+    return {
+      conversation,
+      message,
+      customer,
+      account,
+      csatCaptured,
+      fromMe,
+      suppressAutomation: msg.suppressAutomation === true,
+    };
   }
 
   /** Returns true when the inbound text was consumed as a CSAT rating. */

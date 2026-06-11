@@ -1619,7 +1619,9 @@ export default function DashboardPage() {
       // update detail if active
       setConv((prev) => {
         if (!prev || prev.id !== conversationId) return prev;
-        return { ...prev, messages: [...prev.messages, message] };
+        return prev.messages.some((m) => m.id === message.id)
+          ? prev
+          : { ...prev, messages: [...prev.messages, message] };
       });
       if (message.senderType === 'customer') {
         if (isOpen) {
@@ -1636,7 +1638,9 @@ export default function DashboardPage() {
     socket.on('message:draft', ({ conversationId, message }: { conversationId: string; message: Message }) => {
       setConv((prev) => {
         if (!prev || prev.id !== conversationId) return prev;
-        return { ...prev, messages: [...prev.messages, message] };
+        return prev.messages.some((m) => m.id === message.id)
+          ? prev
+          : { ...prev, messages: [...prev.messages, message] };
       });
     });
 
@@ -1749,6 +1753,7 @@ export default function DashboardPage() {
       });
       await loadConv(selectedId);
     } catch (e) {
+      if (selectedId) await loadConv(selectedId);
       setToast(e instanceof Error ? e.message : 'Gagal mengirim');
     } finally {
       setSending(false);

@@ -77,7 +77,7 @@ export default function KnowledgePage() {
         `/knowledge-bases/${selected}/items/upload`,
         form,
       );
-      setIngestMsg(`✓ ${file.name}: ${r.items.length} item (${r.chars} karakter)`);
+      setIngestMsg(`Berhasil impor ${file.name}: ${r.items.length} item (${r.chars} karakter)`);
       loadBase(selected);
       loadBases();
     } catch (e) {
@@ -88,7 +88,7 @@ export default function KnowledgePage() {
     }
   }
 
-  // Ingest a public web page into the selected base.
+  // Ingest a public web page or direct document URL into the selected base.
   async function handleUrlIngest(e: React.FormEvent) {
     e.preventDefault();
     if (!selected || !ingestUrl.trim() || ingesting) return;
@@ -99,7 +99,7 @@ export default function KnowledgePage() {
         `/knowledge-bases/${selected}/items/from-url`,
         { method: 'POST', body: JSON.stringify({ url: ingestUrl.trim() }) },
       );
-      setIngestMsg(`✓ ${r.source}: ${r.items.length} item (${r.chars} karakter)`);
+      setIngestMsg(`Berhasil impor ${r.source}: ${r.items.length} item (${r.chars} karakter)`);
       setIngestUrl('');
       loadBase(selected);
       loadBases();
@@ -154,17 +154,17 @@ export default function KnowledgePage() {
             <div className="mb-6 rounded-lg bg-white dark:bg-wa-panel p-4">
               <h2 className="mb-2 text-sm font-semibold">Impor Knowledge</h2>
               <p className="mb-3 text-xs text-gray-600 dark:text-gray-400">
-                Upload PDF, Word (.docx), Excel (.xlsx), CSV, TXT, Markdown, atau ambil dari halaman website.
-                Isi diekstrak otomatis menjadi item aktif.
+                Upload PDF, Word (.docx), Excel (.xlsx/.xls), CSV, TXT, Markdown, HTML, atau ambil dari halaman website / URL file publik.
+                Isi diekstrak otomatis menjadi item aktif dan dipotong menjadi beberapa item bila dokumen besar.
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <label className={`cursor-pointer rounded bg-wa-accent px-3 py-2 text-sm font-medium text-black ${ingesting ? 'opacity-50' : ''}`}>
-                  {ingesting ? 'Memproses…' : '📄 Upload file'}
+                  {ingesting ? 'Memproses...' : 'Upload file'}
                   <input
                     ref={fileRef}
                     type="file"
                     className="hidden"
-                    accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md,.html"
+                    accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md,.html,.htm,.json"
                     disabled={ingesting}
                     onChange={(e) => {
                       const f = e.target.files?.[0];
@@ -177,19 +177,19 @@ export default function KnowledgePage() {
                     type="url"
                     value={ingestUrl}
                     onChange={(e) => setIngestUrl(e.target.value)}
-                    placeholder="https://website-anda.com/halaman-produk"
+                    placeholder="https://website.com/produk atau https://.../price-list.pdf"
                     className="min-w-48 flex-1 rounded bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none placeholder:text-gray-500"
                   />
                   <button
                     disabled={!ingestUrl.trim() || ingesting}
                     className="rounded bg-wa-accent px-3 py-2 text-sm font-medium text-black disabled:opacity-50"
                   >
-                    🌐 Ambil
+                    Ambil URL
                   </button>
                 </form>
               </div>
               {ingestMsg && (
-                <p className={`mt-2 text-xs ${ingestMsg.startsWith('✓') ? 'text-emerald-400' : 'text-red-400'}`}>
+                <p className={`mt-2 text-xs ${ingestMsg.startsWith('Berhasil') ? 'text-emerald-400' : 'text-red-400'}`}>
                   {ingestMsg}
                 </p>
               )}

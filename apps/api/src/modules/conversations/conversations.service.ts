@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   AiMode,
   ConversationStatus,
+  MessageStatus,
   MessageType,
   Prisma,
   SenderType,
@@ -173,21 +174,13 @@ export class ConversationsService {
       }
     }
 
-    const externalId = await this.wa.sendText(
-      conversation.whatsappAccountId,
-      conversation.customer.phoneNumber,
-      text,
-      quoted,
-    );
-
-    const message = await this.prisma.message.create({
+    const pendingMessage = await this.prisma.message.create({
       data: {
         conversationId: id,
         senderType: SenderType.admin,
         senderId: adminId,
         content: text,
-        status: 'sent',
-        externalId,
+        status: MessageStatus.pending,
         quotedMessageId: quotedMessageId ?? null,
       },
       include: {
@@ -199,15 +192,55 @@ export class ConversationsService {
       where: { id },
       data: { lastMessage: text, lastMessageAt: new Date() },
     });
+    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message: pendingMessage });
 
-    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message });
-    await logAudit(this.prisma, {
-      userId: adminId,
-      action: 'message_send',
-      entityType: 'conversation',
-      entityId: id,
-    });
-    return message;
+    try {
+      const externalId = await this.wa.sendText(
+        conversation.whatsappAccountId,
+        conversation.customer.phoneNumber,
+        text,
+        quoted,
+      );
+
+      const message = await this.prisma.message.update({
+        where: { id: pendingMessage.id },
+        data: { status: MessageStatus.sent, externalId },
+        include: {
+          quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } },
+        },
+      });
+      this.events.emitToAccount(conversation.whatsappAccountId, 'message:status', {
+        conversationId: id,
+        messageId: message.id,
+        status: message.status,
+      });
+      await logAudit(this.prisma, {
+        userId: adminId,
+        action: 'message_send',
+        entityType: 'conversation',
+        entityId: id,
+        newValue: { messageId: message.id, status: message.status },
+      });
+      return message;
+    } catch (err) {
+      const failed = await this.prisma.message.update({
+        where: { id: pendingMessage.id },
+        data: { status: MessageStatus.failed },
+      });
+      this.events.emitToAccount(conversation.whatsappAccountId, 'message:status', {
+        conversationId: id,
+        messageId: failed.id,
+        status: failed.status,
+      });
+      await logAudit(this.prisma, {
+        userId: adminId,
+        action: 'message_send_failed',
+        entityType: 'conversation',
+        entityId: id,
+        newValue: { messageId: failed.id, error: err instanceof Error ? err.message : 'Unknown send error' },
+      });
+      throw err;
+    }
   }
 
   /**
