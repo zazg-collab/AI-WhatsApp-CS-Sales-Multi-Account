@@ -6,7 +6,6 @@ import { Queue } from 'bullmq';
 import {
   CampaignRecipientStatus,
   CampaignStatus,
-  LeadStage,
   Prisma,
   SenderType,
   TakeoverStatus,

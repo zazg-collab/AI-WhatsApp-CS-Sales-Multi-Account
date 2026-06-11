@@ -113,7 +113,7 @@ export class UsersService {
       },
     });
     if (!user || user.deletedAt) throw new NotFoundException('User not found');
-    const { deletedAt, ...result } = user;
+    const { deletedAt: _deletedAt, ...result } = user;
     return result;
   }
 

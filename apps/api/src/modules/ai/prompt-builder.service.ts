@@ -82,7 +82,7 @@ export class PromptBuilderService {
 
     const cap = Math.min(historyLimit, MAX_HISTORY_MESSAGES);
     const truncated = ordered.length > cap;
-    let kept = truncated ? ordered.slice(ordered.length - cap) : ordered;
+    const kept = truncated ? ordered.slice(ordered.length - cap) : ordered;
 
     let history: ChatMessage[] = kept.map((m) => ({
       role:

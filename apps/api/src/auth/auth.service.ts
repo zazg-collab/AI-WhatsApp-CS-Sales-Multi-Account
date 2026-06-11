@@ -62,7 +62,7 @@ export class AuthService {
       select: { id: true, name: true, email: true, role: true, status: true, deletedAt: true },
     });
     if (!user || user.deletedAt) throw new UnauthorizedException();
-    const { deletedAt, ...result } = user;
+    const { deletedAt: _deletedAt, ...result } = user;
     return result;
   }
 }

@@ -25,14 +25,11 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate
 
-      # Lint is advisory — style issues shouldn't block a merge.
       - name: Lint API
         run: npm run lint --workspace=@hermes/api
-        continue-on-error: true
 
       - name: Lint Web
         run: npm run lint --workspace=@hermes/web
-        continue-on-error: true
 
       - name: Build API
         run: npm run build --workspace=@hermes/api
