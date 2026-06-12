@@ -278,6 +278,11 @@ function LeftPanel({
   labelFilter,
   onLabelFilterChange,
   onNewChat,
+  onPin,
+  onArchive,
+  onMute,
+  onMarkUnread,
+  onDeleteWaChat,
 }: {
   conversations: ConvSummary[];
   selectedId: string | null;
@@ -294,7 +299,13 @@ function LeftPanel({
   labelFilter: string;
   onLabelFilterChange: (s: string) => void;
   onNewChat: () => void;
+  onPin: (id: string, pin: boolean) => void;
+  onArchive: (id: string, archive: boolean) => void;
+  onMute: (id: string, mute: boolean) => void;
+  onMarkUnread: (id: string) => void;
+  onDeleteWaChat: (id: string) => void;
 }) {
+  const [ctxMenu, setCtxMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const tabs: { key: FilterTab; label: string }[] = [
     { key: 'all', label: 'Semua' },
     { key: 'ai_on', label: 'AI ON' },
@@ -390,6 +401,10 @@ function LeftPanel({
             <button
               key={c.id}
               onClick={() => onSelect(c.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setCtxMenu({ id: c.id, x: e.clientX, y: e.clientY });
+              }}
               className={`w-full border-b border-gray-100 px-3 py-3 text-left transition-colors hover:bg-gray-50 dark:border-black/20 dark:hover:bg-black/20 ${
                 selectedId === c.id ? 'bg-wa-accent/10 dark:bg-black/30' : ''
               }`}
@@ -450,6 +465,29 @@ function LeftPanel({
           );
         })}
       </div>
+      {ctxMenu && (
+        <div
+          className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg py-1 min-w-[180px]"
+          style={{ top: ctxMenu.y, left: ctxMenu.x }}
+          onMouseLeave={() => setCtxMenu(null)}
+        >
+          {[
+            { icon: '📌', label: 'Pin Chat', action: () => onPin(ctxMenu.id, true) },
+            { icon: '📦', label: 'Archive', action: () => onArchive(ctxMenu.id, true) },
+            { icon: '🔇', label: 'Mute', action: () => onMute(ctxMenu.id, true) },
+            { icon: '🔵', label: 'Tandai Belum Dibaca', action: () => onMarkUnread(ctxMenu.id) },
+            { icon: '🗑️', label: 'Hapus Chat WA', action: () => onDeleteWaChat(ctxMenu.id) },
+          ].map(({ icon, label, action }) => (
+            <button
+              key={label}
+              onClick={() => { action(); setCtxMenu(null); }}
+              className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+            >
+              <span>{icon}</span>{label}
+            </button>
+          ))}
+        </div>
+      )}
     </aside>
   );
 }
@@ -755,7 +793,7 @@ function MessageMedia({ msg }: { msg: Message }) {
   return <p className="whitespace-pre-wrap">{msg.content}</p>;
 }
 
-// Hover action cluster on a message: react / reply / edit / delete.
+// Hover action cluster on a message: react / reply / edit / delete / forward.
 function MessageActions({
   msg,
   side,
@@ -764,6 +802,7 @@ function MessageActions({
   onReact,
   onEdit,
   onDelete,
+  onForward,
 }: {
   msg: Message;
   side: 'left' | 'right';
@@ -772,6 +811,7 @@ function MessageActions({
   onReact: (emoji: string) => void;
   onEdit?: () => void;
   onDelete: () => void;
+  onForward?: () => void;
 }) {
   const [showPicker, setShowPicker] = useState(false);
   // Editable only for our own text messages (WhatsApp won't edit media).
@@ -784,6 +824,9 @@ function MessageActions({
         <button onClick={onEdit} title="Edit" className="rounded-full bg-black/5 px-1.5 py-0.5 text-xs hover:bg-black/10 dark:bg-black/30">✏️</button>
       )}
       <button onClick={onDelete} title="Hapus untuk semua" className="rounded-full bg-black/5 px-1.5 py-0.5 text-xs hover:bg-black/10 dark:bg-black/30">🗑️</button>
+      {onForward && (
+        <button onClick={onForward} title="Forward" className="rounded-full bg-black/5 px-1.5 py-0.5 text-xs hover:bg-black/10 dark:bg-black/30">↪️</button>
+      )}
       {showPicker && (
         <div className="absolute bottom-full z-10 mb-1 flex gap-0.5 rounded-full border border-gray-200 bg-white px-1.5 py-1 shadow-pop dark:border-gray-700 dark:bg-gray-800">
           {REACTION_CHOICES.map((e) => (
@@ -821,6 +864,10 @@ function CenterPanel({
   onReact,
   onEditMessage,
   onDeleteMessage,
+  onSendPoll,
+  onSendLocation,
+  onSendContact,
+  onForwardMessage,
 }: {
   conv: ConvDetail | null;
   onSend: (text: string, quotedMessageId?: string) => void;
@@ -841,9 +888,17 @@ function CenterPanel({
   onReact: (msgId: string, emoji: string) => void;
   onEditMessage: (msg: Message) => void;
   onDeleteMessage: (msgId: string) => void;
+  onSendPoll: (q: string, opts: string[], n: number) => void;
+  onSendLocation: (lat: number, lng: number, name: string) => void;
+  onSendContact: (contacts: { name: string; phone: string }[]) => void;
+  onForwardMessage: (msgId: string, toPhone: string) => void;
 }) {
   const [text, setText] = useState('');
   const [showMediaModal, setShowMediaModal] = useState(false);
+  const [showPollModalLocal, setShowPollModalLocal] = useState(false);
+  const [showLocationModalLocal, setShowLocationModalLocal] = useState(false);
+  const [showContactModalLocal, setShowContactModalLocal] = useState(false);
+  const [forwardMsgIdLocal, setForwardMsgIdLocal] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState('');
@@ -1102,6 +1157,7 @@ function CenterPanel({
                   onReact={(e) => onReact(m.id, e)}
                   onEdit={() => onEditMessage(m)}
                   onDelete={() => onDeleteMessage(m.id)}
+                  onForward={() => setForwardMsgIdLocal(m.id)}
                 />
               )}
               <div
@@ -1191,6 +1247,7 @@ function CenterPanel({
                   onReply={() => setReplyTo(m)}
                   onReact={(e) => onReact(m.id, e)}
                   onDelete={() => onDeleteMessage(m.id)}
+                  onForward={() => setForwardMsgIdLocal(m.id)}
                 />
               )}
             </div>
@@ -1205,6 +1262,30 @@ function CenterPanel({
           onClose={() => setShowMediaModal(false)}
           onSend={onSendMedia}
           onUpload={onUploadMedia}
+        />
+      )}
+      {showPollModalLocal && (
+        <PollModal
+          onClose={() => setShowPollModalLocal(false)}
+          onSend={onSendPoll}
+        />
+      )}
+      {showLocationModalLocal && (
+        <LocationModal
+          onClose={() => setShowLocationModalLocal(false)}
+          onSend={onSendLocation}
+        />
+      )}
+      {showContactModalLocal && (
+        <ContactModal
+          onClose={() => setShowContactModalLocal(false)}
+          onSend={onSendContact}
+        />
+      )}
+      {forwardMsgIdLocal && (
+        <ForwardModal
+          onClose={() => setForwardMsgIdLocal(null)}
+          onForward={(phone) => { onForwardMessage(forwardMsgIdLocal, phone); setForwardMsgIdLocal(null); }}
         />
       )}
 
@@ -1278,6 +1359,27 @@ function CenterPanel({
               className="rounded bg-black/5 dark:bg-black/30 px-2 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
             >
               📎
+            </button>
+            <button
+              onClick={() => setShowPollModalLocal(true)}
+              title="Kirim Poll"
+              className="rounded bg-black/5 dark:bg-black/30 px-2 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+            >
+              📊
+            </button>
+            <button
+              onClick={() => setShowLocationModalLocal(true)}
+              title="Kirim Lokasi"
+              className="rounded bg-black/5 dark:bg-black/30 px-2 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+            >
+              📍
+            </button>
+            <button
+              onClick={() => setShowContactModalLocal(true)}
+              title="Kirim Kontak"
+              className="rounded bg-black/5 dark:bg-black/30 px-2 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+            >
+              👤
             </button>
             <textarea
               rows={1}
@@ -1704,6 +1806,100 @@ function RightPanel({
   );
 }
 
+// ── Extra Modals ───────────────────────────────────────────────────────────────
+
+function PollModal({ onClose, onSend }: { onClose: () => void; onSend: (q: string, opts: string[], n: number) => void }) {
+  const [question, setQuestion] = useState('');
+  const [options, setOptions] = useState(['', '']);
+  const [selectable, setSelectable] = useState(1);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md shadow-xl">
+        <h3 className="font-semibold text-lg mb-4">Buat Poll</h3>
+        <input value={question} onChange={e => setQuestion(e.target.value)} placeholder="Pertanyaan" className="w-full border dark:border-gray-600 rounded px-3 py-2 mb-3 bg-transparent text-sm" />
+        {options.map((opt, i) => (
+          <div key={i} className="flex gap-2 mb-2">
+            <input value={opt} onChange={e => { const o = [...options]; o[i] = e.target.value; setOptions(o); }} placeholder={`Opsi ${i+1}`} className="flex-1 border dark:border-gray-600 rounded px-3 py-2 bg-transparent text-sm" />
+            {options.length > 2 && <button onClick={() => setOptions(options.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 px-2">✕</button>}
+          </div>
+        ))}
+        {options.length < 12 && <button onClick={() => setOptions([...options, ''])} className="text-blue-500 text-sm mb-3">+ Tambah opsi</button>}
+        <div className="flex items-center gap-3 mb-4">
+          <label className="text-sm">Pilihan maks:</label>
+          <select value={selectable} onChange={e => setSelectable(Number(e.target.value))} className="border dark:border-gray-600 rounded px-2 py-1 bg-transparent text-sm">
+            {Array.from({ length: options.length }, (_, i) => i+1).map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700">Batal</button>
+          <button onClick={() => { if (question.trim() && options.filter(Boolean).length >= 2) { onSend(question.trim(), options.filter(Boolean), selectable); onClose(); } }} className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">Kirim Poll</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LocationModal({ onClose, onSend }: { onClose: () => void; onSend: (lat: number, lng: number, name: string) => void }) {
+  const [lat, setLat] = useState('-6.2088');
+  const [lng, setLng] = useState('106.8456');
+  const [name, setName] = useState('');
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-sm shadow-xl">
+        <h3 className="font-semibold text-lg mb-4">Kirim Lokasi</h3>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div><label className="text-xs text-gray-500">Latitude</label><input value={lat} onChange={e => setLat(e.target.value)} className="w-full border dark:border-gray-600 rounded px-3 py-2 bg-transparent text-sm mt-1" /></div>
+          <div><label className="text-xs text-gray-500">Longitude</label><input value={lng} onChange={e => setLng(e.target.value)} className="w-full border dark:border-gray-600 rounded px-3 py-2 bg-transparent text-sm mt-1" /></div>
+        </div>
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Nama lokasi (opsional)" className="w-full border dark:border-gray-600 rounded px-3 py-2 mb-4 bg-transparent text-sm" />
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700">Batal</button>
+          <button onClick={() => { const la = parseFloat(lat); const lo = parseFloat(lng); if (!isNaN(la) && !isNaN(lo)) { onSend(la, lo, name.trim()); onClose(); } }} className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">Kirim</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContactModal({ onClose, onSend }: { onClose: () => void; onSend: (contacts: { name: string; phone: string }[]) => void }) {
+  const [contacts, setContacts] = useState([{ name: '', phone: '' }]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md shadow-xl">
+        <h3 className="font-semibold text-lg mb-4">Kirim Kontak</h3>
+        {contacts.map((c, i) => (
+          <div key={i} className="flex gap-2 mb-3">
+            <input value={c.name} onChange={e => { const cs = [...contacts]; cs[i] = { ...cs[i], name: e.target.value }; setContacts(cs); }} placeholder="Nama" className="flex-1 border dark:border-gray-600 rounded px-3 py-2 bg-transparent text-sm" />
+            <input value={c.phone} onChange={e => { const cs = [...contacts]; cs[i] = { ...cs[i], phone: e.target.value }; setContacts(cs); }} placeholder="62812..." className="flex-1 border dark:border-gray-600 rounded px-3 py-2 bg-transparent text-sm" />
+            {contacts.length > 1 && <button onClick={() => setContacts(contacts.filter((_, j) => j !== i))} className="text-red-400 px-2">✕</button>}
+          </div>
+        ))}
+        <button onClick={() => setContacts([...contacts, { name: '', phone: '' }])} className="text-blue-500 text-sm mb-4">+ Tambah kontak</button>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700">Batal</button>
+          <button onClick={() => { const valid = contacts.filter(c => c.name.trim() && c.phone.trim()); if (valid.length) { onSend(valid); onClose(); } }} className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">Kirim</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ForwardModal({ onClose, onForward }: { onClose: () => void; onForward: (phone: string) => void }) {
+  const [phone, setPhone] = useState('');
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-sm shadow-xl">
+        <h3 className="font-semibold text-lg mb-4">Forward Pesan</h3>
+        <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Nomor tujuan (628...)" className="w-full border dark:border-gray-600 rounded px-3 py-2 mb-4 bg-transparent text-sm" />
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700">Batal</button>
+          <button onClick={() => { if (phone.trim()) { onForward(phone.trim()); onClose(); } }} className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700">Forward</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -1723,6 +1919,11 @@ export default function DashboardPage() {
   const [typing, setTyping] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [showNewChat, setShowNewChat] = useState(false);
+  const [showPollModal, setShowPollModal] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [forwardMsgId, setForwardMsgId] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const convRef = useRef<ConvDetail | null>(null);
   convRef.current = conv;
@@ -2182,6 +2383,110 @@ export default function DashboardPage() {
     loadList();
   }
 
+  // Poll
+  async function handleSendPoll(question: string, options: string[], selectableCount: number) {
+    if (!selectedId) return;
+    try {
+      await api(`/conversations/${selectedId}/poll`, {
+        method: 'POST',
+        body: JSON.stringify({ question, options, selectableCount }),
+      });
+      await loadConv(selectedId);
+    } catch (e) { setToast(e instanceof Error ? e.message : 'Gagal kirim poll'); }
+  }
+
+  // Location
+  async function handleSendLocation(latitude: number, longitude: number, name: string) {
+    if (!selectedId) return;
+    try {
+      await api(`/conversations/${selectedId}/location`, {
+        method: 'POST',
+        body: JSON.stringify({ latitude, longitude, name }),
+      });
+      await loadConv(selectedId);
+    } catch (e) { setToast(e instanceof Error ? e.message : 'Gagal kirim lokasi'); }
+  }
+
+  // Contact
+  async function handleSendContact(contacts: { name: string; phone: string }[]) {
+    if (!selectedId) return;
+    try {
+      await api(`/conversations/${selectedId}/contact`, {
+        method: 'POST',
+        body: JSON.stringify({ contacts }),
+      });
+      await loadConv(selectedId);
+    } catch (e) { setToast(e instanceof Error ? e.message : 'Gagal kirim kontak'); }
+  }
+
+  // Forward
+  async function handleForwardMessage(msgId: string, toPhone: string) {
+    if (!selectedId) return;
+    try {
+      await api(`/conversations/${selectedId}/messages/${msgId}/forward`, {
+        method: 'POST',
+        body: JSON.stringify({ toPhone }),
+      });
+      setToast('Pesan berhasil diteruskan');
+    } catch (e) { setToast(e instanceof Error ? e.message : 'Gagal forward pesan'); }
+  }
+
+  // Archive
+  async function handleArchive(id: string, archive: boolean) {
+    try {
+      await api(`/conversations/${id}/${archive ? 'archive' : 'unarchive'}`, { method: 'POST' });
+      loadList();
+      if (selectedId === id) loadConv(id);
+    } catch (e) { setToast(e instanceof Error ? e.message : 'Gagal'); }
+  }
+
+  // Pin
+  async function handlePin(id: string, pin: boolean) {
+    try {
+      await api(`/conversations/${id}/${pin ? 'pin' : 'unpin'}`, { method: 'POST' });
+      loadList();
+    } catch (e) { setToast(e instanceof Error ? e.message : 'Gagal'); }
+  }
+
+  // Mute
+  async function handleMute(id: string, mute: boolean) {
+    try {
+      await api(`/conversations/${id}/${mute ? 'mute' : 'unmute'}`, { method: 'POST' });
+      loadList();
+      if (selectedId === id) loadConv(id);
+    } catch (e) { setToast(e instanceof Error ? e.message : 'Gagal'); }
+  }
+
+  // Mark unread
+  async function handleMarkUnread(id: string) {
+    try {
+      await api(`/conversations/${id}/unread`, { method: 'POST' });
+      loadList();
+    } catch (e) { setToast(e instanceof Error ? e.message : 'Gagal'); }
+  }
+
+  // Delete WA chat
+  async function handleDeleteWaChat(id: string) {
+    if (!window.confirm('Hapus chat dari WhatsApp? Data di dashboard tetap tersimpan.')) return;
+    try {
+      await api(`/conversations/${id}/wa-chat`, { method: 'DELETE' });
+      loadList();
+      if (selectedId === id) setSelectedId(null);
+    } catch (e) { setToast(e instanceof Error ? e.message : 'Gagal'); }
+  }
+
+  // Validate number
+  async function handleValidateNumber(phone: string): Promise<boolean> {
+    if (!accountId) return false;
+    try {
+      const res = await api<{ exists: boolean }>('/conversations/validate-number', {
+        method: 'POST',
+        body: JSON.stringify({ accountId, phoneNumber: phone }),
+      });
+      return res.exists;
+    } catch { return false; }
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       <Sidebar />
@@ -2202,6 +2507,11 @@ export default function DashboardPage() {
         labelFilter={labelFilter}
         onLabelFilterChange={setLabelFilter}
         onNewChat={() => setShowNewChat(true)}
+        onPin={handlePin}
+        onArchive={handleArchive}
+        onMute={handleMute}
+        onMarkUnread={handleMarkUnread}
+        onDeleteWaChat={handleDeleteWaChat}
       />
       <CenterPanel
         conv={conv}
@@ -2223,6 +2533,10 @@ export default function DashboardPage() {
         onReact={handleReact}
         onEditMessage={handleEditMessage}
         onDeleteMessage={handleDeleteMessage}
+        onSendPoll={handleSendPoll}
+        onSendLocation={handleSendLocation}
+        onSendContact={handleSendContact}
+        onForwardMessage={handleForwardMessage}
       />
       <RightPanel
         conv={conv}
