@@ -31,7 +31,7 @@ describe('LoginPage', () => {
 
     await userEvent.type(screen.getByLabelText('Email'), 'a@b.com');
     await userEvent.type(screen.getByLabelText('Password'), 'secret');
-    await userEvent.click(screen.getByRole('button', { name: 'Masuk' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     await waitFor(() => {
       expect(apiMock).toHaveBeenCalledWith('/auth/login', {
@@ -49,7 +49,7 @@ describe('LoginPage', () => {
 
     await userEvent.type(screen.getByLabelText('Email'), 'a@b.com');
     await userEvent.type(screen.getByLabelText('Password'), 'bad');
-    await userEvent.click(screen.getByRole('button', { name: 'Masuk' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     expect(
       await screen.findByText('Email atau password salah'),

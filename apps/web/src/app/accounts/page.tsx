@@ -170,7 +170,7 @@ export default function AccountsPage() {
     try {
       setAccounts(await api<Account[]>('/wa/accounts'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat');
+      setError(err instanceof Error ? err.message : 'Failed to load');
     }
   }, []);
 
@@ -199,7 +199,7 @@ export default function AccountsPage() {
       setPhone('');
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal menambah');
+      setError(err instanceof Error ? err.message : 'Failed to add account');
     }
   }
 

@@ -136,7 +136,7 @@ function relTime(iso: string | null | undefined): string {
 }
 
 function clockTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('id', { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
 // Per-conversation status label for the queue rows.

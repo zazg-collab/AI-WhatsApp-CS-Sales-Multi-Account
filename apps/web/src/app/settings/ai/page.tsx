@@ -26,7 +26,7 @@ export default function AiSettingsPage() {
     try {
       setModels(await api<string[]>('/ai/models'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat model');
+      setError(err instanceof Error ? err.message : 'Failed to load models');
     } finally {
       setLoading(false);
     }

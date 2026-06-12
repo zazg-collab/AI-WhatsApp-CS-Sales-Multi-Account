@@ -60,7 +60,7 @@ export default function HermesPage() {
       });
       setChat((prev) => [...prev, { q, a: res.answer }]);
     } catch (err) {
-      setChat((prev) => [...prev, { q, a: err instanceof Error ? err.message : 'Gagal bertanya' }]);
+      setChat((prev) => [...prev, { q, a: err instanceof Error ? err.message : 'Failed to get answer' }]);
     } finally {
       setAsking(false);
     }

@@ -118,7 +118,7 @@ function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
       });
       onCreated(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal membuat persona');
+      setError(err instanceof Error ? err.message : 'Failed to create persona');
     } finally {
       setLoading(false);
     }
@@ -212,7 +212,7 @@ function BotModal({
       }
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal menyimpan');
+      setError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setLoading(false);
     }
@@ -224,7 +224,7 @@ function BotModal({
       await api(`/bots/${bot.id}/assign/${accountId}`, { method: 'POST' });
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal assign');
+      setError(err instanceof Error ? err.message : 'Failed to assign');
     }
   }
 
@@ -431,7 +431,7 @@ export default function BotsPage() {
       setKbs(kbsData.items ?? (kbsData as unknown as KnowledgeBase[]));
       setAccounts(accountsData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat data');
+      setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setLoading(false);
     }
@@ -445,7 +445,7 @@ export default function BotsPage() {
       setConfirmDelete(null);
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal menghapus');
+      setError(err instanceof Error ? err.message : 'Failed to delete');
     }
   }
 

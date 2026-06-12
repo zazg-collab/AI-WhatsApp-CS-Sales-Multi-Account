@@ -47,7 +47,7 @@ export default function TemplatesPage() {
       setItems(list);
       setAccounts(accs);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal memuat template');
+      setError(e instanceof Error ? e.message : 'Failed to load templates');
     } finally {
       setLoading(false);
     }
@@ -62,7 +62,7 @@ export default function TemplatesPage() {
 
   async function handleSubmit() {
     if (!form.title.trim() || !form.content.trim()) {
-      setError('Judul dan isi wajib diisi');
+      setError('Title and content are required');
       return;
     }
     setError(null);
@@ -84,7 +84,7 @@ export default function TemplatesPage() {
       resetForm();
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal menyimpan template');
+      setError(e instanceof Error ? e.message : 'Failed to save template');
     }
   }
 
@@ -105,7 +105,7 @@ export default function TemplatesPage() {
       if (editingId === id) resetForm();
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal menghapus');
+      setError(e instanceof Error ? e.message : 'Failed to delete');
     }
   }
 

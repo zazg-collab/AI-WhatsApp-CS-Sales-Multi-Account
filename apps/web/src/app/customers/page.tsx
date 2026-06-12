@@ -154,7 +154,7 @@ export default function CustomersPage() {
     if (bulkNote.trim()) payload.note = bulkNote.trim();
 
     if (Object.keys(payload).length === 1) {
-      setToast('Pilih minimal satu bulk action.');
+      setToast('Select at least one bulk action.');
       return;
     }
 
@@ -164,7 +164,7 @@ export default function CustomersPage() {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      setToast(`${result.updatedCount} customer berhasil diupdate.`);
+      setToast(`${result.updatedCount} customers updated.`);
       setBulkStage('');
       setBulkTags('');
       setAssignedAdminId('');

@@ -142,7 +142,7 @@ export default function CampaignsPage() {
 
   async function handlePreview() {
     if (!whatsappAccountId) {
-      setToast('Pilih WhatsApp account dulu.');
+      setToast('Select a WhatsApp account first.');
       return;
     }
     setSubmitting(true);
@@ -160,7 +160,7 @@ export default function CampaignsPage() {
 
   async function createCampaign() {
     if (!name.trim() || !messageTemplate.trim() || !whatsappAccountId) {
-      setToast('Nama, pesan, dan WhatsApp account wajib diisi.');
+      setToast('Name, message, and WhatsApp account are required.');
       return;
     }
     setSubmitting(true);
@@ -176,7 +176,7 @@ export default function CampaignsPage() {
           scheduledAt: scheduledAt || undefined,
         }),
       });
-      setToast('Campaign draft dibuat. Submit untuk approval sebelum dikirim.');
+      setToast('Campaign draft created. Submit for approval before sending.');
       setSelectedId(campaign.id);
       setName('');
       setMessageTemplate('');
@@ -202,7 +202,7 @@ export default function CampaignsPage() {
     setSubmitting(true);
     try {
       await api(`/campaigns/${selectedCampaign.id}/${action}`, { method: 'POST' });
-      setToast(`Campaign action ${action} berhasil.`);
+      setToast(`Campaign ${action} succeeded.`);
       await loadCampaigns();
       await loadDetail(selectedCampaign.id);
     } catch (err) {

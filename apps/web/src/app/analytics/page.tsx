@@ -181,7 +181,7 @@ export default function AnalyticsPage() {
                   <div className="flex h-40 items-end gap-2">
                     {messageVolume.map((item) => {
                       const heightPct = Math.round((item.count / maxVolume) * 100);
-                      const dayLabel = new Date(item.date + 'T00:00:00').toLocaleDateString('id', {
+                      const dayLabel = new Date(item.date + 'T00:00:00').toLocaleDateString(undefined, {
                         day: '2-digit',
                         month: 'short',
                       });

@@ -31,7 +31,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-[100dvh] items-center justify-center bg-gray-50 px-4 dark:bg-wa-bg">
+    <main className="flex min-h-[100dvh] items-center justify-center bg-gray-50 px-4 dark:bg-gray-950">
       <div className="w-full max-w-sm">
         {/* Brand mark */}
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
@@ -42,13 +42,13 @@ export default function LoginPage() {
             <h1 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">
               Hermes Control Center
             </h1>
-            <p className="mt-0.5 text-sm text-gray-500">Masuk untuk mengelola percakapan</p>
+            <p className="mt-0.5 text-sm text-gray-500">Sign in to manage your conversations</p>
           </div>
         </div>
 
         <form
           onSubmit={onSubmit}
-          className="space-y-3 rounded-xl border border-gray-200 bg-white p-6 shadow-card dark:border-gray-800 dark:bg-wa-panel"
+          className="space-y-3 rounded-xl border border-gray-200 bg-white p-6 shadow-card dark:border-gray-800 dark:bg-gray-900"
         >
           <div className="space-y-1.5">
             <label htmlFor="login-email" className="block text-xs font-medium text-gray-600 dark:text-gray-400">Email</label>
@@ -82,7 +82,7 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-lg bg-hermes-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-hermes-700 disabled:opacity-50"
           >
-            {loading ? 'Memproses…' : 'Masuk'}
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
       </div>

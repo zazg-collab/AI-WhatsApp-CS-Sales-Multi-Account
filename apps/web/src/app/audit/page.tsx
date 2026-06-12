@@ -53,7 +53,7 @@ export default function AuditPage() {
     } catch (e) {
       setEntries([]);
       setTotal(0);
-      setError(e instanceof Error ? e.message : 'Gagal memuat audit log');
+      setError(e instanceof Error ? e.message : 'Failed to load audit log');
     } finally {
       setLoading(false);
     }
@@ -135,7 +135,7 @@ export default function AuditPage() {
                         className="border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40"
                       >
                         <td className="whitespace-nowrap px-4 py-2.5 text-gray-500 dark:text-gray-400">
-                          {new Date(e.createdAt).toLocaleString('id', {
+                          {new Date(e.createdAt).toLocaleString(undefined, {
                             day: '2-digit', month: 'short', year: 'numeric',
                             hour: '2-digit', minute: '2-digit',
                           })}

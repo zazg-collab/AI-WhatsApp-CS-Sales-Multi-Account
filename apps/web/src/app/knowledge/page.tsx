@@ -81,11 +81,11 @@ export default function KnowledgePage() {
         `/knowledge-bases/${selected}/items/upload`,
         form,
       );
-      setIngestMsg(`Berhasil impor ${file.name}: ${r.items.length} item (${r.chars} karakter)`);
+      setIngestMsg(`Imported ${file.name}: ${r.items.length} items (${r.chars} chars)`);
       loadBase(selected);
       loadBases();
     } catch (e) {
-      setIngestMsg(e instanceof Error ? e.message : 'Gagal mengimpor file');
+      setIngestMsg(e instanceof Error ? e.message : 'Failed to import file');
     } finally {
       setIngesting(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -102,18 +102,18 @@ export default function KnowledgePage() {
         `/knowledge-bases/${selected}/items/from-url`,
         { method: 'POST', body: JSON.stringify({ url: ingestUrl.trim() }) },
       );
-      setIngestMsg(`Berhasil impor ${r.source}: ${r.items.length} item (${r.chars} karakter)`);
+      setIngestMsg(`Imported ${r.source}: ${r.items.length} items (${r.chars} chars)`);
       setIngestUrl('');
       loadBase(selected);
       loadBases();
     } catch (e) {
-      setIngestMsg(e instanceof Error ? e.message : 'Gagal mengimpor URL');
+      setIngestMsg(e instanceof Error ? e.message : 'Failed to import URL');
     } finally {
       setIngesting(false);
     }
   }
 
-  const ingestOk = ingestMsg?.startsWith('Berhasil');
+  const ingestOk = ingestMsg?.startsWith('Imported');
 
   return (
     <AppLayout>
