@@ -15,6 +15,7 @@ interface Customer {
   leadStage: string;
   tags: string[];
   notes: string | null;
+  avatarUrl?: string | null;
 }
 
 interface QuotedMessage {
@@ -35,6 +36,9 @@ interface Message {
   createdAt: string;
   quotedMessageId?: string | null;
   quotedMessage?: QuotedMessage | null;
+  reactions?: Record<string, string[]> | null;
+  editedAt?: string | null;
+  deletedAt?: string | null;
 }
 
 interface HermesReview {
@@ -69,7 +73,7 @@ interface ConvSummary {
   lastMessage: string | null;
   lastMessageAt: string | null;
   unreadCount?: number;
-  customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[] };
+  customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[]; avatarUrl?: string | null };
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
   assignedAdmin?: AdminUser | null;
   messages: { content: string | null; senderType: string; createdAt: string; status: string }[];
@@ -196,6 +200,24 @@ function notifyInbound(title: string, body: string) {
 }
 
 /** WhatsApp-style delivery ticks for an outgoing message. */
+/** Round contact avatar with a coloured initials fallback. */
+function Avatar({ name, phone, url, size = 40 }: { name?: string | null; phone?: string; url?: string | null; size?: number }) {
+  const label = (name || phone || '?').trim();
+  const initials = label.replace(/[^a-zA-Z0-9 ]/g, '').split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '#';
+  const resolved = resolveMediaUrl(url) ?? (url && url.startsWith('http') ? url : null);
+  const palette = ['bg-emerald-500', 'bg-sky-500', 'bg-violet-500', 'bg-amber-500', 'bg-rose-500', 'bg-teal-500'];
+  const hue = palette[(label.charCodeAt(0) || 0) % palette.length];
+  return resolved ? (
+    <img src={resolved} alt={label} width={size} height={size} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
+  ) : (
+    <span className={`flex shrink-0 items-center justify-center rounded-full font-medium text-white ${hue}`} style={{ width: size, height: size, fontSize: size * 0.4 }}>
+      {initials}
+    </span>
+  );
+}
+
+const REACTION_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
 function StatusTicks({ status }: { status: string }) {
   if (status === 'read') return <span className="text-sky-400" title="Dibaca">✓✓</span>;
   if (status === 'delivered') return <span className="opacity-60" title="Terkirim ke device">✓✓</span>;
@@ -372,7 +394,8 @@ function LeftPanel({
                 selectedId === c.id ? 'bg-wa-accent/10 dark:bg-black/30' : ''
               }`}
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-3">
+                <Avatar name={c.customer.name} phone={c.customer.phoneNumber} url={c.customer.avatarUrl} size={44} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-medium">
@@ -732,6 +755,52 @@ function MessageMedia({ msg }: { msg: Message }) {
   return <p className="whitespace-pre-wrap">{msg.content}</p>;
 }
 
+// Hover action cluster on a message: react / reply / edit / delete.
+function MessageActions({
+  msg,
+  side,
+  canEdit,
+  onReply,
+  onReact,
+  onEdit,
+  onDelete,
+}: {
+  msg: Message;
+  side: 'left' | 'right';
+  canEdit?: boolean;
+  onReply: () => void;
+  onReact: (emoji: string) => void;
+  onEdit?: () => void;
+  onDelete: () => void;
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  // Editable only for our own text messages (WhatsApp won't edit media).
+  const editable = canEdit && (msg.messageType === 'text' || !msg.messageType);
+  return (
+    <div className={`relative hidden shrink-0 items-center gap-0.5 self-center group-hover:flex ${side === 'left' ? 'order-first' : ''}`}>
+      <button onClick={() => setShowPicker((v) => !v)} title="Reaksi" className="rounded-full bg-black/5 px-1.5 py-0.5 text-xs hover:bg-black/10 dark:bg-black/30">😀</button>
+      <button onClick={onReply} title="Balas" className="rounded-full bg-black/5 px-1.5 py-0.5 text-xs hover:bg-black/10 dark:bg-black/30">↩</button>
+      {editable && (
+        <button onClick={onEdit} title="Edit" className="rounded-full bg-black/5 px-1.5 py-0.5 text-xs hover:bg-black/10 dark:bg-black/30">✏️</button>
+      )}
+      <button onClick={onDelete} title="Hapus untuk semua" className="rounded-full bg-black/5 px-1.5 py-0.5 text-xs hover:bg-black/10 dark:bg-black/30">🗑️</button>
+      {showPicker && (
+        <div className="absolute bottom-full z-10 mb-1 flex gap-0.5 rounded-full border border-gray-200 bg-white px-1.5 py-1 shadow-pop dark:border-gray-700 dark:bg-gray-800">
+          {REACTION_CHOICES.map((e) => (
+            <button
+              key={e}
+              onClick={() => { onReact(e); setShowPicker(false); }}
+              className="rounded-full px-1 text-base transition-transform hover:scale-125"
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CenterPanel({
   conv,
   onSend,
@@ -749,6 +818,9 @@ function CenterPanel({
   quickReplies,
   onLoadOlder,
   accountStatus,
+  onReact,
+  onEditMessage,
+  onDeleteMessage,
 }: {
   conv: ConvDetail | null;
   onSend: (text: string, quotedMessageId?: string) => void;
@@ -766,6 +838,9 @@ function CenterPanel({
   quickReplies: QuickReply[];
   onLoadOlder: () => Promise<void>;
   accountStatus?: string;
+  onReact: (msgId: string, emoji: string) => void;
+  onEditMessage: (msg: Message) => void;
+  onDeleteMessage: (msgId: string) => void;
 }) {
   const [text, setText] = useState('');
   const [showMediaModal, setShowMediaModal] = useState(false);
@@ -889,6 +964,7 @@ function CenterPanel({
       {/* Header */}
       <header className="flex items-center justify-between border-b border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel px-4 py-3">
         <div className="flex items-center gap-3">
+          <Avatar name={conv.customer.name} phone={conv.customer.phoneNumber} url={conv.customer.avatarUrl} size={40} />
           <div>
             <div className="flex items-center gap-2">
               <span className="font-medium">
@@ -1016,15 +1092,17 @@ function CenterPanel({
               id={`msg-${m.id}`}
               className={`group flex items-center gap-1 ${isCustomer ? 'justify-start' : 'justify-end'}`}
             >
-              {/* Reply button (left of our own bubbles) */}
-              {!isCustomer && !isDraft && (
-                <button
-                  onClick={() => setReplyTo(m)}
-                  title="Balas pesan ini"
-                  className="hidden shrink-0 rounded bg-black/5 dark:bg-black/30 px-1.5 py-0.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 group-hover:block"
-                >
-                  ↩
-                </button>
+              {/* Hover actions (left of our own bubbles) */}
+              {!isCustomer && !isDraft && !m.deletedAt && (
+                <MessageActions
+                  msg={m}
+                  side="left"
+                  canEdit
+                  onReply={() => setReplyTo(m)}
+                  onReact={(e) => onReact(m.id, e)}
+                  onEdit={() => onEditMessage(m)}
+                  onDelete={() => onDeleteMessage(m.id)}
+                />
               )}
               <div
                 className={`max-w-[70%] rounded-xl px-3 py-2 text-sm shadow-card transition-shadow ${
@@ -1054,8 +1132,15 @@ function CenterPanel({
                     </span>
                   </button>
                 )}
-                <MessageMedia msg={m} />
+                {m.deletedAt ? (
+                  <p className="flex items-center gap-1 text-sm italic opacity-60">🚫 Pesan ini dihapus</p>
+                ) : (
+                  <MessageMedia msg={m} />
+                )}
                 <div className="mt-1 flex items-center justify-end gap-1">
+                  {m.editedAt && !m.deletedAt && (
+                    <span className="text-[10px] italic opacity-50">diedit</span>
+                  )}
                   <span className="text-xs opacity-50">{fmtTime(m.createdAt)}</span>
                   {m.aiGenerated && !isCustomer && (
                     <span className="text-xs opacity-50">🤖</span>
@@ -1065,6 +1150,20 @@ function CenterPanel({
                     <span className="text-xs"><StatusTicks status={m.status} /></span>
                   )}
                 </div>
+                {/* Reactions (WhatsApp-style chips below the content) */}
+                {m.reactions && Object.keys(m.reactions).length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {Object.entries(m.reactions).map(([emoji, who]) => (
+                      <span
+                        key={emoji}
+                        className="rounded-full bg-black/5 px-1.5 py-0.5 text-xs dark:bg-black/30"
+                        title={(who as string[]).join(', ')}
+                      >
+                        {emoji}{(who as string[]).length > 1 ? ` ${(who as string[]).length}` : ''}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {/* Approve (send) / Block (discard) for any pending AI draft —
                     applies to both ai_draft and ai_supervised modes. */}
                 {isDraft && (
@@ -1084,15 +1183,15 @@ function CenterPanel({
                   </div>
                 )}
               </div>
-              {/* Reply button (right of customer bubbles) */}
-              {isCustomer && (
-                <button
-                  onClick={() => setReplyTo(m)}
-                  title="Balas pesan ini"
-                  className="hidden shrink-0 rounded bg-black/5 dark:bg-black/30 px-1.5 py-0.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 group-hover:block"
-                >
-                  ↩
-                </button>
+              {/* Hover actions (right of customer bubbles) */}
+              {isCustomer && !m.deletedAt && (
+                <MessageActions
+                  msg={m}
+                  side="right"
+                  onReply={() => setReplyTo(m)}
+                  onReact={(e) => onReact(m.id, e)}
+                  onDelete={() => onDeleteMessage(m.id)}
+                />
               )}
             </div>
           );
@@ -1771,6 +1870,26 @@ export default function DashboardPage() {
       });
     });
 
+    // WhatsApp-native message updates: reaction / edit / delete-for-everyone.
+    socket.on('message:reaction', ({ conversationId, messageId, reactions }: { conversationId: string; messageId: string; reactions: Record<string, string[]> | null }) => {
+      setConv((prev) => prev && prev.id === conversationId
+        ? { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, reactions } : m)) } : prev);
+    });
+    socket.on('message:edited', ({ conversationId, messageId, content }: { conversationId: string; messageId: string; content: string }) => {
+      setConv((prev) => prev && prev.id === conversationId
+        ? { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, content, editedAt: new Date().toISOString() } : m)) } : prev);
+    });
+    socket.on('message:deleted', ({ conversationId, messageId }: { conversationId: string; messageId: string }) => {
+      setConv((prev) => prev && prev.id === conversationId
+        ? { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, deletedAt: new Date().toISOString() } : m)) } : prev);
+    });
+    // Customer profile picture arrived → refresh the open chat's avatar + list.
+    socket.on('customer:avatar', ({ customerId, avatarUrl }: { customerId: string; avatarUrl: string }) => {
+      setConv((prev) => prev && prev.customer.id === customerId
+        ? { ...prev, customer: { ...prev.customer, avatarUrl } } : prev);
+      loadList();
+    });
+
     // Customer typing/recording indicator for the open conversation.
     socket.on('wa:presence', ({ accountId, phone, typing: isTyping }: { accountId: string; phone: string; typing: boolean }) => {
       const c = convRef.current;
@@ -1817,6 +1936,10 @@ export default function DashboardPage() {
     return () => {
       socket.off('message:new');
       socket.off('message:status');
+      socket.off('message:reaction');
+      socket.off('message:edited');
+      socket.off('message:deleted');
+      socket.off('customer:avatar');
       socket.off('wa:presence');
       socket.off('message:draft');
       socket.off('message:draft-removed');
@@ -1852,6 +1975,45 @@ export default function DashboardPage() {
     } catch (e) {
       setToast(e instanceof Error ? e.message : 'Gagal upload media');
       throw e; // let the modal keep itself open on failure
+    }
+  }
+
+  // React to / edit / delete a message (WhatsApp-native actions).
+  async function handleReact(msgId: string, emoji: string) {
+    if (!selectedId) return;
+    const current = convRef.current?.messages.find((m) => m.id === msgId);
+    // Toggle off if we already reacted with the same emoji.
+    const already = current?.reactions?.[emoji]?.includes('me');
+    try {
+      await api(`/conversations/${selectedId}/messages/${msgId}/react`, {
+        method: 'POST',
+        body: JSON.stringify({ emoji: already ? '' : emoji }),
+      });
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal memberi reaksi');
+    }
+  }
+
+  async function handleEditMessage(msg: Message) {
+    if (!selectedId) return;
+    const next = window.prompt('Edit pesan:', msg.content ?? '');
+    if (next === null || next.trim() === (msg.content ?? '')) return;
+    try {
+      await api(`/conversations/${selectedId}/messages/${msg.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ text: next.trim() }),
+      });
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal mengedit pesan');
+    }
+  }
+
+  async function handleDeleteMessage(msgId: string) {
+    if (!selectedId || !window.confirm('Hapus pesan ini untuk semua orang?')) return;
+    try {
+      await api(`/conversations/${selectedId}/messages/${msgId}`, { method: 'DELETE' });
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal menghapus pesan');
     }
   }
 
@@ -2058,6 +2220,9 @@ export default function DashboardPage() {
         quickReplies={quickReplies}
         onLoadOlder={handleLoadOlder}
         accountStatus={conv ? accounts.find((a) => a.id === conv.whatsappAccount.id)?.sessionStatus : undefined}
+        onReact={handleReact}
+        onEditMessage={handleEditMessage}
+        onDeleteMessage={handleDeleteMessage}
       />
       <RightPanel
         conv={conv}

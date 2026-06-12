@@ -115,6 +115,16 @@ export class ConversationsService {
       });
     }
 
+    // Best-effort: pull the contact's avatar so the new chat looks native.
+    if (!customer.avatarUrl) {
+      this.wa
+        .fetchAvatar(accountId, digits)
+        .then(async (url) => {
+          if (url) await this.prisma.customer.update({ where: { id: customer.id }, data: { avatarUrl: url } });
+        })
+        .catch(() => undefined);
+    }
+
     await logAudit(this.prisma, {
       userId: adminId,
       action: 'conversation_start',
@@ -157,7 +167,7 @@ export class ConversationsService {
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          customer: { select: { id: true, name: true, phoneNumber: true, leadScore: true, leadStage: true, tags: true } },
+          customer: { select: { id: true, name: true, phoneNumber: true, leadScore: true, leadStage: true, tags: true, avatarUrl: true } },
           whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true } },
           assignedAdmin: { select: { id: true, name: true } },
           messages: { orderBy: { createdAt: 'desc' }, take: 1, select: { content: true, senderType: true, createdAt: true, status: true } },
@@ -795,6 +805,73 @@ export class ConversationsService {
       data: { unreadCount: 0 },
     });
     return { marked: externalIds.length };
+  }
+
+  /** Helper: load a message + its conversation's account/phone, or throw. */
+  private async messageWithRoute(conversationId: string, messageId: string) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: { customer: { select: { phoneNumber: true } } },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+    const message = await this.prisma.message.findFirst({
+      where: { id: messageId, conversationId },
+    });
+    if (!message) throw new NotFoundException('Message not found');
+    return { conversation, message };
+  }
+
+  /** React to a message with an emoji (empty string clears the reaction). */
+  async reactToMessage(id: string, messageId: string, emoji: string, adminId: string) {
+    const { conversation, message } = await this.messageWithRoute(id, messageId);
+    if (message.externalId) {
+      await this.wa.sendReaction(conversation.whatsappAccountId, conversation.customer.phoneNumber, message.externalId, emoji);
+    }
+    // Reflect our reaction locally under a synthetic "me" reactor key.
+    const map: Record<string, string[]> = (message.reactions as Record<string, string[]>) ?? {};
+    for (const key of Object.keys(map)) {
+      map[key] = (map[key] ?? []).filter((p) => p !== 'me');
+      if (map[key].length === 0) delete map[key];
+    }
+    if (emoji) map[emoji] = [...(map[emoji] ?? []), 'me'];
+    const updated = await this.prisma.message.update({ where: { id: messageId }, data: { reactions: map as never } });
+    this.events.emitToAccount(conversation.whatsappAccountId, 'message:reaction', { conversationId: id, messageId, reactions: updated.reactions });
+    await logAudit(this.prisma, { userId: adminId, action: 'message_react', entityType: 'message', entityId: messageId, newValue: { emoji } });
+    return updated;
+  }
+
+  /** Edit a message we sent. */
+  async editMessage(id: string, messageId: string, newText: string, adminId: string) {
+    const { conversation, message } = await this.messageWithRoute(id, messageId);
+    if (message.senderType === SenderType.customer) throw new BadRequestException('Tidak bisa mengedit pesan customer');
+    if (message.externalId) {
+      await this.wa.editMessage(conversation.whatsappAccountId, conversation.customer.phoneNumber, message.externalId, newText);
+    }
+    const updated = await this.prisma.message.update({ where: { id: messageId }, data: { content: newText, editedAt: new Date() } });
+    this.events.emitToAccount(conversation.whatsappAccountId, 'message:edited', { conversationId: id, messageId, content: newText });
+    await logAudit(this.prisma, { userId: adminId, action: 'message_edit', entityType: 'message', entityId: messageId });
+    return updated;
+  }
+
+  /** Delete a message for everyone (revoke). */
+  async deleteMessage(id: string, messageId: string, adminId: string) {
+    const { conversation, message } = await this.messageWithRoute(id, messageId);
+    const fromMe = message.senderType !== SenderType.customer;
+    if (message.externalId) {
+      await this.wa.deleteMessage(conversation.whatsappAccountId, conversation.customer.phoneNumber, message.externalId, fromMe);
+    }
+    const updated = await this.prisma.message.update({ where: { id: messageId }, data: { deletedAt: new Date() } });
+    this.events.emitToAccount(conversation.whatsappAccountId, 'message:deleted', { conversationId: id, messageId });
+    await logAudit(this.prisma, { userId: adminId, action: 'message_delete', entityType: 'message', entityId: messageId });
+    return updated;
+  }
+
+  /** Check whether a phone number is on WhatsApp via the given account. */
+  async validateNumber(accountId: string, phoneNumber: string) {
+    let digits = phoneNumber.replace(/[^\d]/g, '');
+    if (digits.startsWith('0')) digits = `62${digits.slice(1)}`;
+    const exists = await this.wa.isOnWhatsApp(accountId, digits);
+    return { phoneNumber: digits, exists };
   }
 
   async update(id: string, dto: { aiMode?: AiMode; takeoverStatus?: TakeoverStatus }) {
