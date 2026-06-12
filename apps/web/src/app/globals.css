@@ -24,14 +24,14 @@ body {
     letter-spacing: -0.02em;
   }
 
-  /* On-brand focus ring instead of the default blue halo. */
+  /* On-brand focus ring — Hermes indigo, calm and consistent. */
   :focus-visible {
-    outline: 2px solid theme('colors.wa.accent');
+    outline: 2px solid theme('colors.hermes.500');
     outline-offset: 2px;
   }
 
   ::selection {
-    background: theme('colors.wa.accent');
+    background: theme('colors.hermes.600');
     color: #ffffff;
   }
 

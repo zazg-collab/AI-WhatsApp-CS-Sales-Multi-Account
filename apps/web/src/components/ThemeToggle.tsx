@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Sun, Moon } from 'lucide-react';
 
 const THEME_KEY = 'hermes_theme';
 
@@ -23,14 +24,21 @@ export function ThemeToggle() {
     }
   }
 
+  const label = dark ? 'Switch to light theme' : 'Switch to dark theme';
+
   return (
     <button
       onClick={toggle}
-      title={dark ? 'Ganti ke tema terang' : 'Ganti ke tema gelap'}
-      className="flex w-full items-center gap-3 rounded px-3 py-2 text-sm text-gray-600 hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/5"
+      title={label}
+      aria-label={label}
+      className="flex w-full items-center justify-center gap-2.5 rounded-lg px-2 py-2 text-[13px] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 lg:justify-start lg:px-2.5"
     >
-      <span className="text-base leading-none">{dark ? '☀️' : '🌙'}</span>
-      <span className="hidden lg:block">{dark ? 'Tema Terang' : 'Tema Gelap'}</span>
+      {dark ? (
+        <Sun className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
+      ) : (
+        <Moon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
+      )}
+      <span className="hidden lg:block">{dark ? 'Light theme' : 'Dark theme'}</span>
     </button>
   );
 }

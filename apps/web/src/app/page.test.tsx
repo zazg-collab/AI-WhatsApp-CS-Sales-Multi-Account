@@ -40,7 +40,7 @@ describe('LoginPage', () => {
       });
     });
     expect(setTokenMock).toHaveBeenCalledWith('tok-1');
-    expect(pushMock).toHaveBeenCalledWith('/dashboard');
+    expect(pushMock).toHaveBeenCalledWith('/overview');
   });
 
   it('shows an error message when login fails', async () => {

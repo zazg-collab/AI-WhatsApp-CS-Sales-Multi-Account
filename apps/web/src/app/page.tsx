@@ -21,7 +21,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       setToken(res.accessToken);
-      router.push('/dashboard');
+      router.push('/overview');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login gagal');
     } finally {
