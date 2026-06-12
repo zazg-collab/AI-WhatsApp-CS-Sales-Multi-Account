@@ -211,16 +211,155 @@ export class WaService implements OnModuleInit {
       });
     });
 
-    // Delivery/read receipts for messages WE sent → update status + checkmarks.
+    // Delivery/read receipts + edits/revokes for messages → update + checkmarks.
     sock.ev.on('messages.update', async (updates) => {
       for (const u of updates) {
+        if (!u.key?.id) continue;
+        // Edit (protocolMessage.editedMessage) and revoke (message === null after
+        // a delete-for-everyone) arrive on this channel too.
+        const edited = u.update?.message?.protocolMessage?.editedMessage
+          ?? (u.update?.message?.editedMessage as never);
+        const revoked = u.update?.messageStubType === 1 /* REVOKE */
+          || u.update?.message === null;
+        if (edited) {
+          const newText = (edited as { conversation?: string; extendedTextMessage?: { text?: string } })
+            .conversation ?? (edited as { extendedTextMessage?: { text?: string } }).extendedTextMessage?.text ?? '';
+          await this.applyEdit(accountId, u.key.id, newText).catch((err) =>
+            this.logger.warn(`Edit apply failed for ${u.key?.id}: ${err}`));
+          continue;
+        }
+        if (revoked) {
+          await this.applyRevoke(accountId, u.key.id).catch((err) =>
+            this.logger.warn(`Revoke apply failed for ${u.key?.id}: ${err}`));
+          continue;
+        }
         const status = u.update?.status;
-        if (status === undefined || status === null || !u.key?.id) continue;
+        if (status === undefined || status === null) continue;
         await this.applyReceipt(accountId, u.key.id, status).catch((err) =>
           this.logger.warn(`Receipt update failed for ${u.key?.id}: ${err}`),
         );
       }
     });
+
+    // Reactions (customer adds/removes an emoji on a message).
+    sock.ev.on('messages.reaction', async (reactions) => {
+      for (const r of reactions) {
+        if (!r.key?.id || !r.reaction) continue;
+        await this.applyReaction(
+          accountId,
+          r.key.id,
+          r.reaction.text ?? '',
+          jidToPhone(r.key.remoteJid ?? ''),
+        ).catch((err) => this.logger.warn(`Reaction apply failed: ${err}`));
+      }
+    });
+
+    // Incoming calls: auto-reject (the bot can't answer) + log to the timeline.
+    sock.ev.on('call', async (calls) => {
+      for (const c of calls) {
+        if (c.status !== 'offer') continue;
+        try {
+          await sock.rejectCall(c.id, c.from);
+        } catch (err) {
+          this.logger.warn(`rejectCall failed: ${err}`);
+        }
+        await this.logCall(accountId, c.from, c.isVideo ?? false).catch((err) =>
+          this.logger.warn(`Call log failed: ${err}`));
+      }
+    });
+  }
+
+  /** Mark a message edited: update content + editedAt, emit live. */
+  private async applyEdit(accountId: string, externalId: string, newText: string) {
+    const message = await this.prisma.message.findFirst({
+      where: { externalId, conversation: { whatsappAccountId: accountId } },
+      select: { id: true, conversationId: true },
+    });
+    if (!message) return;
+    const updated = await this.prisma.message.update({
+      where: { id: message.id },
+      data: { content: newText, editedAt: new Date() },
+    });
+    this.events.emitToAccount(accountId, 'message:edited', {
+      conversationId: message.conversationId,
+      messageId: message.id,
+      content: updated.content,
+    });
+  }
+
+  /** Mark a message deleted-for-everyone (revoked). */
+  private async applyRevoke(accountId: string, externalId: string) {
+    const message = await this.prisma.message.findFirst({
+      where: { externalId, conversation: { whatsappAccountId: accountId } },
+      select: { id: true, conversationId: true },
+    });
+    if (!message) return;
+    await this.prisma.message.update({
+      where: { id: message.id },
+      data: { deletedAt: new Date() },
+    });
+    this.events.emitToAccount(accountId, 'message:deleted', {
+      conversationId: message.conversationId,
+      messageId: message.id,
+    });
+  }
+
+  /** Merge/clear a reaction emoji for one reactor on a message. */
+  private async applyReaction(
+    accountId: string,
+    externalId: string,
+    emoji: string,
+    reactor: string,
+  ) {
+    const message = await this.prisma.message.findFirst({
+      where: { externalId, conversation: { whatsappAccountId: accountId } },
+      select: { id: true, conversationId: true, reactions: true },
+    });
+    if (!message) return;
+    const map: Record<string, string[]> = (message.reactions as Record<string, string[]>) ?? {};
+    // Remove this reactor from every emoji first (WA = one reaction per person).
+    for (const key of Object.keys(map)) {
+      map[key] = (map[key] ?? []).filter((p) => p !== reactor);
+      if (map[key].length === 0) delete map[key];
+    }
+    if (emoji) {
+      map[emoji] = [...(map[emoji] ?? []), reactor];
+    }
+    const updated = await this.prisma.message.update({
+      where: { id: message.id },
+      data: { reactions: map as never },
+    });
+    this.events.emitToAccount(accountId, 'message:reaction', {
+      conversationId: message.conversationId,
+      messageId: message.id,
+      reactions: updated.reactions,
+    });
+  }
+
+  /** Record a (rejected) incoming call as a system message in the timeline. */
+  private async logCall(accountId: string, fromJid: string, isVideo: boolean) {
+    const phone = jidToPhone(fromJid);
+    const customer = await this.prisma.customer.findFirst({
+      where: { phoneNumber: phone, sourceAccountId: accountId },
+      select: { id: true },
+    });
+    if (!customer) return;
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { customerId: customer.id, whatsappAccountId: accountId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    if (!conversation) return;
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        senderType: SenderType.system,
+        content: `📞 ${isVideo ? 'Panggilan video' : 'Panggilan suara'} masuk (ditolak otomatis)`,
+        messageType: MessageType.system,
+        status: MessageStatus.delivered,
+      },
+    });
+    this.events.emitToAccount(accountId, 'message:new', { conversationId: conversation.id, message });
   }
 
   /** Map a Baileys numeric status to our MessageStatus and persist + emit it. */
@@ -449,6 +588,11 @@ export class WaService implements OnModuleInit {
     });
 
     if (result && !result.fromMe && !result.suppressAutomation) {
+      // Fetch the contact's profile picture once (when we don't have one yet).
+      if (result.customer && !result.customer.avatarUrl) {
+        this.maybeFetchAvatar(accountId, result.customer.id, result.customer.phoneNumber)
+          .catch(() => undefined);
+      }
       // A4: a bare "1–5" consumed as a CSAT rating needs no away message and
       // must not be answered by the bot.
       if (result.csatCaptured) return;
@@ -459,6 +603,14 @@ export class WaService implements OnModuleInit {
         this.logger.error(`Auto-reply failed: ${err}`),
       );
     }
+  }
+
+  /** Store a customer's WhatsApp avatar and notify the dashboard. */
+  private async maybeFetchAvatar(accountId: string, customerId: string, phone: string) {
+    const url = await this.fetchAvatar(accountId, phone);
+    if (!url) return;
+    await this.prisma.customer.update({ where: { id: customerId }, data: { avatarUrl: url } });
+    this.events.emitToAccount(accountId, 'customer:avatar', { customerId, avatarUrl: url });
   }
 
 
@@ -801,8 +953,67 @@ export class WaService implements OnModuleInit {
       content = { video: buffer, caption: caption ?? '' };
     }
 
+    // Send audio as a real voice note (PTT) so it plays inline like WhatsApp.
+    if (mediaType === 'audio') (content as { ptt?: boolean }).ptt = true;
+
     const sent = await session.sock.sendMessage(jid, content as never);
     return sent?.key.id ?? null;
+  }
+
+  /** Check whether a phone number is registered on WhatsApp. */
+  async isOnWhatsApp(accountId: string, phone: string): Promise<boolean> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    try {
+      const jid = phoneToJid(phone);
+      const results = await session.sock.onWhatsApp(jid);
+      return Boolean(results?.[0]?.exists);
+    } catch (err) {
+      this.logger.warn(`onWhatsApp check failed for ${phone}: ${err}`);
+      return false;
+    }
+  }
+
+  /** Best-effort profile-picture URL for a contact (null if none/locked). */
+  async fetchAvatar(accountId: string, phone: string): Promise<string | null> {
+    const session = this.sessions.get(accountId);
+    if (!session) return null;
+    try {
+      return (await session.sock.profilePictureUrl(phoneToJid(phone), 'image')) ?? null;
+    } catch {
+      return null; // no picture or privacy-locked
+    }
+  }
+
+  /** React to a message with an emoji (empty string clears our reaction). */
+  async sendReaction(accountId: string, phone: string, externalId: string, emoji: string) {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(phone);
+    await session.sock.sendMessage(jid, {
+      react: { text: emoji, key: { remoteJid: jid, id: externalId, fromMe: false } },
+    } as never);
+  }
+
+  /** Edit a message we sent (WhatsApp allows edits within ~15 minutes). */
+  async editMessage(accountId: string, phone: string, externalId: string, newText: string) {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(phone);
+    await session.sock.sendMessage(jid, {
+      text: newText,
+      edit: { remoteJid: jid, id: externalId, fromMe: true },
+    } as never);
+  }
+
+  /** Delete a message for everyone (revoke). */
+  async deleteMessage(accountId: string, phone: string, externalId: string, fromMe: boolean) {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(phone);
+    await session.sock.sendMessage(jid, {
+      delete: { remoteJid: jid, id: externalId, fromMe },
+    } as never);
   }
 
   /** Log AI mode change to audit trail. */

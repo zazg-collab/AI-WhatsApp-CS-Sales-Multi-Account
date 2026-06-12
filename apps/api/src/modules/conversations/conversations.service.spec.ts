@@ -45,6 +45,11 @@ describe('ConversationsService', () => {
       sendMedia: jest.fn().mockResolvedValue('ext2'),
       sendMediaBuffer: jest.fn().mockResolvedValue('ext3'),
       markRead: jest.fn().mockResolvedValue(undefined),
+      fetchAvatar: jest.fn().mockResolvedValue(null),
+      isOnWhatsApp: jest.fn().mockResolvedValue(true),
+      sendReaction: jest.fn().mockResolvedValue(undefined),
+      editMessage: jest.fn().mockResolvedValue(undefined),
+      deleteMessage: jest.fn().mockResolvedValue(undefined),
     };
     events = { emit: jest.fn(), emitToAccount: jest.fn() };
     storage = { save: jest.fn().mockResolvedValue({ key: 'k.png', url: '/media/k.png' }), read: jest.fn() };
@@ -424,6 +429,51 @@ describe('ConversationsService', () => {
       await service.update('c1', { aiMode: AiMode.ai_on, csatScore: 5, unreadCount: 0 } as any);
       const data = prisma.conversation.update.mock.calls[0][0].data;
       expect(data).toEqual({ aiMode: AiMode.ai_on });
+    });
+  });
+
+  describe('message actions', () => {
+    function routeMocks(msg: any) {
+      prisma.conversation.findUnique.mockResolvedValue({ id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' } });
+      prisma.message.findFirst.mockResolvedValue(msg);
+    }
+    it('reactToMessage sends the emoji + persists under "me"', async () => {
+      routeMocks({ id: 'm1', externalId: 'wamid1', reactions: null, senderType: 'customer' });
+      prisma.message.update.mockResolvedValue({ id: 'm1', reactions: { '👍': ['me'] } });
+      await service.reactToMessage('c1', 'm1', '👍', 'admin');
+      expect(wa.sendReaction).toHaveBeenCalledWith('a1', '628', 'wamid1', '👍');
+      expect(prisma.message.update.mock.calls[0][0].data.reactions['👍']).toContain('me');
+      expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'message:reaction', expect.anything());
+    });
+    it('editMessage rejects editing a customer message', async () => {
+      routeMocks({ id: 'm1', externalId: 'x', senderType: 'customer' });
+      await expect(service.editMessage('c1', 'm1', 'baru', 'admin')).rejects.toThrow(BadRequestException);
+      expect(wa.editMessage).not.toHaveBeenCalled();
+    });
+    it('editMessage updates an admin message via the gateway', async () => {
+      routeMocks({ id: 'm1', externalId: 'x', senderType: 'admin' });
+      prisma.message.update.mockResolvedValue({ id: 'm1', content: 'baru' });
+      await service.editMessage('c1', 'm1', 'baru', 'admin');
+      expect(wa.editMessage).toHaveBeenCalledWith('a1', '628', 'x', 'baru');
+      expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'message:edited', expect.anything());
+    });
+    it('deleteMessage revokes for everyone (fromMe for admin msgs)', async () => {
+      routeMocks({ id: 'm1', externalId: 'x', senderType: 'admin' });
+      prisma.message.update.mockResolvedValue({ id: 'm1', deletedAt: new Date() });
+      await service.deleteMessage('c1', 'm1', 'admin');
+      expect(wa.deleteMessage).toHaveBeenCalledWith('a1', '628', 'x', true);
+      expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'message:deleted', expect.anything());
+    });
+    it('validateNumber normalises and checks onWhatsApp', async () => {
+      wa.isOnWhatsApp.mockResolvedValue(true);
+      const r = await service.validateNumber('a1', '0812-345');
+      expect(wa.isOnWhatsApp).toHaveBeenCalledWith('a1', '62812345');
+      expect(r).toEqual({ phoneNumber: '62812345', exists: true });
+    });
+    it('throws when the message is not in the conversation', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' } });
+      prisma.message.findFirst.mockResolvedValue(null);
+      await expect(service.deleteMessage('c1', 'm1', 'admin')).rejects.toThrow(NotFoundException);
     });
   });
 

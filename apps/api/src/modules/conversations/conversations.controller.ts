@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -29,6 +30,7 @@ import { LabelsDto } from './dto/labels.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { SendMediaDto } from './dto/send-media.dto';
 import { StartConversationDto } from './dto/start-conversation.dto';
+import { ReactionDto, EditMessageDto, ValidateNumberDto } from './dto/message-actions.dto';
 import { AiMode, ConversationStatus } from '@hermes/database';
 import { csvRow } from '../../common/csv.util';
 
@@ -72,6 +74,48 @@ export class ConversationsController {
   @Post('start')
   start(@Body() dto: StartConversationDto, @CurrentUser() user: AuthUser) {
     return this.conversations.startConversation(dto.accountId, dto.phoneNumber, dto.name, user.id);
+  }
+
+  @ApiOperation({ summary: 'Check if a phone number is registered on WhatsApp' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Post('validate-number')
+  validateNumber(@Body() dto: ValidateNumberDto) {
+    return this.conversations.validateNumber(dto.accountId, dto.phoneNumber);
+  }
+
+  @ApiOperation({ summary: 'React to a message with an emoji (empty clears)' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Post(':id/messages/:messageId/react')
+  react(
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body() dto: ReactionDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.conversations.reactToMessage(id, messageId, dto.emoji, user.id);
+  }
+
+  @ApiOperation({ summary: 'Edit a message you sent' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Patch(':id/messages/:messageId')
+  editMessage(
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body() dto: EditMessageDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.conversations.editMessage(id, messageId, dto.text, user.id);
+  }
+
+  @ApiOperation({ summary: 'Delete a message for everyone (revoke)' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Delete(':id/messages/:messageId')
+  deleteMessage(
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.conversations.deleteMessage(id, messageId, user.id);
   }
 
   @ApiOperation({ summary: 'List conversations with optional filters' })

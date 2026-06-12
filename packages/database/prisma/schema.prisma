@@ -300,6 +300,7 @@ model Customer {
   notes           String?
   optedOut        Boolean   @default(false) @map("opted_out")
   optedOutAt      DateTime? @map("opted_out_at")
+  avatarUrl       String?   @map("avatar_url")
   lastMessageAt   DateTime? @map("last_message_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
@@ -364,6 +365,9 @@ model Message {
   hermesReviewId String?       @unique @map("hermes_review_id")
   externalId     String?       @map("external_id")
   quotedMessageId String?      @map("quoted_message_id")
+  reactions      Json?         // { "👍": ["628.."], ... } emoji → reactor jids
+  editedAt       DateTime?     @map("edited_at")
+  deletedAt      DateTime?     @map("deleted_at") // set when revoked (deleted for everyone)
   createdAt      DateTime      @default(now()) @map("created_at")
 
   conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
