@@ -12,20 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id" suppressHydrationWarning>
-      <head>
-        {/* Apply the saved theme before first paint to avoid a flash.
-            Light is the default; "dark" opts into the old dark look. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html:
-              "try{if(localStorage.getItem('hermes_theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}",
-          }}
-        />
-      </head>
-      <body className="bg-slate-50 text-slate-950 antialiased">
-        {children}
-      </body>
+    <html lang="id">
+      <body className="bg-wa-bg text-gray-100 antialiased">{children}</body>
     </html>
   );
 }

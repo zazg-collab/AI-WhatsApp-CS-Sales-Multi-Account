@@ -101,15 +101,15 @@ export default function HermesPage() {
         </div>
       )}
 
-      <section className="mb-8 rounded-lg bg-white dark:bg-wa-panel p-4">
-        <h2 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-400">
+      <section className="mb-8 rounded-lg bg-wa-panel p-4">
+        <h2 className="mb-3 text-sm font-semibold text-gray-400">
           Tanya Hermes (supervisor assistant)
         </h2>
         <div className="mb-3 space-y-3">
           {chat.map((c, i) => (
             <div key={i}>
-              <p className="text-sm text-gray-600 dark:text-gray-400">› {c.q}</p>
-              <p className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100">
+              <p className="text-sm text-gray-400">› {c.q}</p>
+              <p className="whitespace-pre-wrap text-sm text-gray-100">
                 {c.a}
               </p>
             </div>
@@ -121,23 +121,23 @@ export default function HermesPage() {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="mis. Bot mana yang paling bermasalah hari ini?"
-            className="flex-1 rounded bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none"
+            className="flex-1 rounded bg-black/30 px-3 py-2 text-sm outline-none"
           />
           <button
             disabled={asking}
-            className="rounded bg-wa-accent px-4 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded bg-wa-accent px-4 text-sm font-medium text-black disabled:opacity-50"
           >
             Tanya
           </button>
         </form>
       </section>
 
-      <h2 className="mb-3 text-sm font-semibold text-gray-600 dark:text-gray-400">
+      <h2 className="mb-3 text-sm font-semibold text-gray-400">
         Alert ({alerts.length})
       </h2>
       <ul className="space-y-3">
         {alerts.map((a) => (
-          <li key={a.id} className="rounded-lg bg-white dark:bg-wa-panel p-4">
+          <li key={a.id} className="rounded-lg bg-wa-panel p-4">
             <div className="flex items-center justify-between">
               <span className="font-medium">
                 {a.conversation?.customer?.name ??
@@ -148,13 +148,13 @@ export default function HermesPage() {
                 {a.riskLevel} · {a.decision}
               </span>
             </div>
-            <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{a.reason}</p>
+            <p className="mt-1 text-sm text-gray-300">{a.reason}</p>
             {a.recommendation && (
               <p className="mt-1 text-xs text-gray-500">
                 Rekomendasi: {a.recommendation}
               </p>
             )}
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-600">
+            <p className="mt-1 text-xs text-gray-600">
               confidence {a.confidenceScore} · risk {a.riskScore}
             </p>
           </li>
@@ -169,9 +169,9 @@ export default function HermesPage() {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg bg-white dark:bg-wa-panel p-4">
+    <div className="rounded-lg bg-wa-panel p-4">
       <p className="text-2xl font-semibold text-wa-accent">{value}</p>
-      <p className="text-xs text-gray-600 dark:text-gray-400">{label}</p>
+      <p className="text-xs text-gray-400">{label}</p>
     </div>
   );
 }

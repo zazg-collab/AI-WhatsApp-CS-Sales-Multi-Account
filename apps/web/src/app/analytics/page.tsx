@@ -72,7 +72,7 @@ export default function AnalyticsPage() {
 
   const modeColors: Record<string, string> = {
     ai_on: 'bg-green-500',
-    ai_off: 'bg-gray-300 dark:bg-gray-500',
+    ai_off: 'bg-gray-500',
     ai_draft: 'bg-yellow-500',
     ai_supervised: 'bg-blue-500',
     ai_paused: 'bg-red-500',
@@ -90,7 +90,7 @@ export default function AnalyticsPage() {
     <AppLayout>
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Analytics</h1>
+          <h1 className="text-xl font-bold text-gray-100">Analytics</h1>
           <div className="flex gap-2">
             <button
               onClick={() => {
@@ -130,13 +130,13 @@ export default function AnalyticsPage() {
         </div>
 
         {loading ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400">Memuat data...</p>
+          <p className="text-sm text-gray-400">Memuat data...</p>
         ) : (
           <>
             {/* Summary Cards */}
             {summary && (
               <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-                <SummaryCard label="Total Conversations" value={summary.totalConversations} color="text-gray-900 dark:text-gray-100" />
+                <SummaryCard label="Total Conversations" value={summary.totalConversations} color="text-gray-100" />
                 <SummaryCard label="Active (Waiting Admin)" value={summary.activeConversations} color="text-orange-400" />
                 <SummaryCard label="AI ON" value={summary.aiOnConversations} color="text-green-400" />
                 <SummaryCard label="Pending Follow-ups" value={summary.pendingFollowUps} color="text-yellow-400" />
@@ -146,8 +146,8 @@ export default function AnalyticsPage() {
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               {/* Lead Funnel */}
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+              <div className="rounded-lg border border-gray-700 bg-gray-800 p-5">
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">
                   Lead Funnel
                 </h2>
                 {leadFunnel.length === 0 ? (
@@ -160,14 +160,14 @@ export default function AnalyticsPage() {
                       return (
                         <div key={item.stage}>
                           <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="font-medium text-gray-700 dark:text-gray-300">
+                            <span className="font-medium text-gray-300">
                               {item.stage.replace('_', ' ').toUpperCase()}
                             </span>
-                            <span className="text-gray-600 dark:text-gray-400">{item.count} ({pct}%)</span>
+                            <span className="text-gray-400">{item.count} ({pct}%)</span>
                           </div>
-                          <div className="h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                          <div className="h-2.5 w-full rounded-full bg-gray-700">
                             <div
-                              className={`h-2.5 rounded-full ${leadColors[item.stage] ?? 'bg-gray-300 dark:bg-gray-500'}`}
+                              className={`h-2.5 rounded-full ${leadColors[item.stage] ?? 'bg-gray-500'}`}
                               style={{ width: `${pct}%` }}
                             />
                           </div>
@@ -179,8 +179,8 @@ export default function AnalyticsPage() {
               </div>
 
               {/* AI Mode Breakdown */}
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+              <div className="rounded-lg border border-gray-700 bg-gray-800 p-5">
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">
                   AI Mode Breakdown
                 </h2>
                 {aiModeBreakdown.length === 0 ? (
@@ -190,14 +190,14 @@ export default function AnalyticsPage() {
                     {aiModeBreakdown.map((item) => (
                       <div key={item.mode}>
                         <div className="mb-1 flex items-center justify-between text-xs">
-                          <span className="font-medium text-gray-700 dark:text-gray-300">
+                          <span className="font-medium text-gray-300">
                             {modeLabels[item.mode] ?? item.mode}
                           </span>
-                          <span className="text-gray-600 dark:text-gray-400">{item.count} ({item.percentage}%)</span>
+                          <span className="text-gray-400">{item.count} ({item.percentage}%)</span>
                         </div>
-                        <div className="h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
+                        <div className="h-2.5 w-full rounded-full bg-gray-700">
                           <div
-                            className={`h-2.5 rounded-full ${modeColors[item.mode] ?? 'bg-gray-300 dark:bg-gray-500'}`}
+                            className={`h-2.5 rounded-full ${modeColors[item.mode] ?? 'bg-gray-500'}`}
                             style={{ width: `${item.percentage}%` }}
                           />
                         </div>
@@ -208,8 +208,8 @@ export default function AnalyticsPage() {
               </div>
 
               {/* Message Volume (last 7 days) */}
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 lg:col-span-2">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+              <div className="rounded-lg border border-gray-700 bg-gray-800 p-5 lg:col-span-2">
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">
                   Message Volume (Last 7 Days)
                 </h2>
                 {messageVolume.length === 0 ? (
@@ -224,7 +224,7 @@ export default function AnalyticsPage() {
                       });
                       return (
                         <div key={item.date} className="flex flex-1 flex-col items-center gap-1">
-                          <span className="text-xs text-gray-600 dark:text-gray-400">{item.count}</span>
+                          <span className="text-xs text-gray-400">{item.count}</span>
                           <div className="flex w-full flex-col justify-end" style={{ height: '100px' }}>
                             <div
                               className="w-full rounded-t bg-emerald-600"
@@ -241,16 +241,16 @@ export default function AnalyticsPage() {
 
               {/* Top Accounts */}
               {summary && summary.topAccounts.length > 0 && (
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 lg:col-span-2">
-                  <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+                <div className="rounded-lg border border-gray-700 bg-gray-800 p-5 lg:col-span-2">
+                  <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">
                     Top Accounts (Last 7 Days)
                   </h2>
                   <div className="space-y-2">
                     {summary.topAccounts.map((acc, i) => (
                       <div key={acc.id} className="flex items-center gap-3 text-sm">
                         <span className="w-5 text-center text-xs text-gray-500">{i + 1}</span>
-                        <span className="flex-1 text-gray-800 dark:text-gray-200">{acc.name}</span>
-                        <span className="text-gray-600 dark:text-gray-400">{acc.messageCount} msgs</span>
+                        <span className="flex-1 text-gray-200">{acc.name}</span>
+                        <span className="text-gray-400">{acc.messageCount} msgs</span>
                       </div>
                     ))}
                   </div>
@@ -266,8 +266,8 @@ export default function AnalyticsPage() {
 
 function SummaryCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-      <p className="mb-1 text-xs text-gray-600 dark:text-gray-400">{label}</p>
+    <div className="rounded-lg border border-gray-700 bg-gray-800 p-4">
+      <p className="mb-1 text-xs text-gray-400">{label}</p>
       <p className={`text-2xl font-bold ${color}`}>{value}</p>
     </div>
   );
