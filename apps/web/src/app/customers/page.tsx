@@ -1,8 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Search, RefreshCw, ContactRound, X } from 'lucide-react';
 import { api, getToken } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 
 type LeadStage = 'cold' | 'warm' | 'hot' | 'very_hot';
 type Role = 'owner' | 'supervisor' | 'admin' | 'viewer';
@@ -35,12 +40,16 @@ const stages: { value: LeadStage; label: string }[] = [
   { value: 'very_hot', label: 'Very Hot' },
 ];
 
-const stageColors: Record<LeadStage, string> = {
-  cold: 'bg-blue-900/50 text-blue-200',
-  warm: 'bg-yellow-900/50 text-yellow-200',
-  hot: 'bg-orange-900/50 text-orange-200',
-  very_hot: 'bg-red-900/50 text-red-200',
+// Lead stages map to the semantic temperature scale.
+const stageTone: Record<LeadStage, 'hermes' | 'review' | 'danger'> = {
+  cold: 'hermes',
+  warm: 'review',
+  hot: 'review',
+  very_hot: 'danger',
 };
+
+const inputClass =
+  'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 function getRoleFromToken(): Role | null {
   if (typeof window === 'undefined') return null;
@@ -63,7 +72,6 @@ export default function CustomersPage() {
   const [admins, setAdmins] = useState<User[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [search, setSearch] = useState('');
-  // M7: debounced copy of `search` so typing doesn't fire a request per keystroke.
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [stageFilter, setStageFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
@@ -102,11 +110,9 @@ export default function CustomersPage() {
   }, [debouncedSearch, stageFilter, tagFilter]);
 
   useEffect(() => {
-    const currentRole = getRoleFromToken();
-    setRole(currentRole);
+    setRole(getRoleFromToken());
   }, []);
 
-  // M7: debounce search input — only query 300ms after the user stops typing.
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(handle);
@@ -176,90 +182,73 @@ export default function CustomersPage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Customers</h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Bulk assign stage, tags, admin, dan internal note.</p>
-            </div>
-            <div className="rounded border border-gray-200 dark:border-gray-700 px-3 py-2 text-sm text-gray-700 dark:text-gray-300">
-              {customers.length} customers loaded
-            </div>
-          </div>
-        </header>
+      <PageHeader title="Contacts" subtitle="Bulk-assign stage, tags, admin, and internal notes">
+        <Badge tone="neutral">{customers.length} loaded</Badge>
+      </PageHeader>
 
-        <section className="border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/80 px-6 py-4">
-          <div className="grid gap-3 lg:grid-cols-[1fr_180px_180px_auto]">
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Cari nama / nomor..."
-              className="rounded bg-white dark:bg-gray-800 px-3 py-2 text-sm outline-none placeholder:text-gray-500"
-            />
-            <select
-              value={stageFilter}
-              onChange={(event) => setStageFilter(event.target.value)}
-              className="rounded bg-white dark:bg-gray-800 px-3 py-2 text-sm outline-none"
-            >
-              <option value="">Semua stage</option>
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* Filters */}
+        <section className="border-b border-gray-200 bg-white px-5 py-3 dark:border-gray-800 dark:bg-gray-900">
+          <div className="grid gap-2 lg:grid-cols-[1fr_180px_180px_auto]">
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search name or number…"
+                className={`${inputClass} w-full pl-8`}
+              />
+            </div>
+            <select value={stageFilter} onChange={(e) => setStageFilter(e.target.value)} className={inputClass}>
+              <option value="">All stages</option>
               {stages.map((stage) => (
                 <option key={stage.value} value={stage.value}>{stage.label}</option>
               ))}
             </select>
             <input
               value={tagFilter}
-              onChange={(event) => setTagFilter(event.target.value)}
+              onChange={(e) => setTagFilter(e.target.value)}
               placeholder="Filter tag"
-              className="rounded bg-white dark:bg-gray-800 px-3 py-2 text-sm outline-none placeholder:text-gray-500"
+              className={inputClass}
             />
-            <button
-              onClick={loadCustomers}
-              className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-            >
+            <Button variant="outline" size="md" onClick={loadCustomers}>
+              <RefreshCw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
               Refresh
-            </button>
+            </Button>
           </div>
         </section>
 
+        {/* Bulk action bar */}
         {canBulkEdit && (
-          <section className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4">
-            <div className="mb-3 text-sm text-gray-700 dark:text-gray-300">
-              <span className="font-semibold text-emerald-300">{selectedCount}</span> customer dipilih
-              <span className="ml-2 text-xs text-gray-500">Maksimal 100 customer per bulk action.</span>
+          <section className="border-b border-gray-200 bg-gray-50 px-5 py-3 dark:border-gray-800 dark:bg-gray-950">
+            <div className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+              <span className="font-semibold text-hermes-600">{selectedCount}</span> selected
+              <span className="ml-2 text-gray-400">Up to 100 customers per bulk action.</span>
             </div>
-            <div className="grid gap-3 xl:grid-cols-[150px_1fr_140px_220px_1fr_auto]">
-              <select
-                value={bulkStage}
-                onChange={(event) => setBulkStage(event.target.value)}
-                className="rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm outline-none"
-              >
-                <option value="">Stage...</option>
+            <div className="grid gap-2 xl:grid-cols-[150px_1fr_140px_220px_1fr_auto]">
+              <select value={bulkStage} onChange={(e) => setBulkStage(e.target.value)} className={inputClass}>
+                <option value="">Stage…</option>
                 {stages.map((stage) => (
                   <option key={stage.value} value={stage.value}>{stage.label}</option>
                 ))}
               </select>
               <input
                 value={bulkTags}
-                onChange={(event) => setBulkTags(event.target.value)}
+                onChange={(e) => setBulkTags(e.target.value)}
                 placeholder="Tags: vip, repeat, promo"
-                className="rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm outline-none placeholder:text-gray-500"
+                className={inputClass}
               />
-              <select
-                value={tagMode}
-                onChange={(event) => setTagMode(event.target.value as TagMode)}
-                className="rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm outline-none"
-              >
-                <option value="append">Tambah tag</option>
-                <option value="replace">Replace tag</option>
-                <option value="remove">Hapus tag</option>
+              <select value={tagMode} onChange={(e) => setTagMode(e.target.value as TagMode)} className={inputClass}>
+                <option value="append">Add tags</option>
+                <option value="replace">Replace tags</option>
+                <option value="remove">Remove tags</option>
               </select>
-              <select
-                value={assignedAdminId}
-                onChange={(event) => setAssignedAdminId(event.target.value)}
-                className="rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm outline-none"
-              >
-                <option value="">Assign admin...</option>
+              <select value={assignedAdminId} onChange={(e) => setAssignedAdminId(e.target.value)} className={inputClass}>
+                <option value="">Assign admin…</option>
                 <option value="unassigned">Unassigned</option>
                 {admins.map((admin) => (
                   <option key={admin.id} value={admin.id}>{admin.name || admin.email}</option>
@@ -267,17 +256,13 @@ export default function CustomersPage() {
               </select>
               <input
                 value={bulkNote}
-                onChange={(event) => setBulkNote(event.target.value)}
-                placeholder="Internal note opsional"
-                className="rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm outline-none placeholder:text-gray-500"
+                onChange={(e) => setBulkNote(e.target.value)}
+                placeholder="Optional internal note"
+                className={inputClass}
               />
-              <button
-                onClick={applyBulkAction}
-                disabled={submitting || selectedCount === 0}
-                className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {submitting ? 'Applying...' : 'Apply'}
-              </button>
+              <Button size="md" onClick={applyBulkAction} disabled={submitting || selectedCount === 0}>
+                {submitting ? 'Applying…' : 'Apply'}
+              </Button>
             </div>
           </section>
         )}
@@ -285,72 +270,82 @@ export default function CustomersPage() {
         {toast && (
           <button
             onClick={() => setToast(null)}
-            className="mx-6 mt-4 rounded border border-emerald-700 bg-emerald-950/40 px-4 py-2 text-left text-sm text-emerald-200"
+            className="mx-5 mt-3 flex items-center gap-2 self-start rounded-lg border border-hermes-100 bg-hermes-50 px-3 py-2 text-left text-sm text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-200"
           >
             {toast}
+            <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
           </button>
         )}
 
-        <div className="flex-1 overflow-auto p-6">
+        <div className="scrollbar-thin flex-1 overflow-auto p-5">
           {loading ? (
-            <p className="text-sm text-gray-600 dark:text-gray-400">Loading customers...</p>
+            <p className="text-sm text-gray-500">Loading customers…</p>
           ) : customers.length === 0 ? (
-            <p className="text-sm text-gray-600 dark:text-gray-400">Belum ada customer.</p>
+            <Card className="flex flex-col items-center justify-center py-16 text-center">
+              <ContactRound className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+              <p className="text-sm text-gray-400">No customers yet.</p>
+            </Card>
           ) : (
-            <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+            <Card className="overflow-hidden">
               <table className="w-full text-sm">
-                <thead className="bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-                  <tr>
-                    <th className="w-10 px-4 py-3 text-left">
-                      <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} />
+                <thead>
+                  <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
+                    <th className="w-10 px-4 py-3">
+                      <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="accent-hermes-600" />
                     </th>
-                    <th className="px-4 py-3 text-left">Customer</th>
-                    <th className="px-4 py-3 text-left">Stage</th>
-                    <th className="px-4 py-3 text-left">Tags</th>
-                    <th className="px-4 py-3 text-left">Assigned Admin</th>
-                    <th className="px-4 py-3 text-left">Last Contact</th>
+                    <th className="px-4 py-3 font-medium">Customer</th>
+                    <th className="px-4 py-3 font-medium">Stage</th>
+                    <th className="px-4 py-3 font-medium">Tags</th>
+                    <th className="px-4 py-3 font-medium">Assigned admin</th>
+                    <th className="px-4 py-3 font-medium">Last contact</th>
                   </tr>
                 </thead>
                 <tbody>
                   {customers.map((customer) => (
-                    <tr key={customer.id} className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-100/50 dark:hover:bg-gray-800/50">
+                    <tr
+                      key={customer.id}
+                      className="border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40"
+                    >
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
                           checked={selectedSet.has(customer.id)}
                           onChange={() => toggleCustomer(customer.id)}
+                          className="accent-hermes-600"
                         />
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900 dark:text-gray-100">{customer.name || 'Tanpa nama'}</div>
-                        <div className="text-xs text-gray-500">{customer.phoneNumber}</div>
+                        <div className="font-medium text-gray-900 dark:text-gray-100">{customer.name || 'Unnamed'}</div>
+                        <div className="text-xs text-gray-400">{customer.phoneNumber}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`rounded px-2 py-1 text-xs font-medium ${stageColors[customer.leadStage]}`}>
-                          {customer.leadStage}
-                        </span>
-                        <span className="ml-2 text-xs text-gray-500">score {customer.leadScore}</span>
+                        <Badge tone={stageTone[customer.leadStage]}>{customer.leadStage}</Badge>
+                        <span className="ml-2 text-xs tabular-nums text-gray-400">score {customer.leadScore}</span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex max-w-sm flex-wrap gap-1">
                           {customer.tags.length === 0 ? (
-                            <span className="text-xs text-gray-500">No tags</span>
-                          ) : customer.tags.map((tag) => (
-                            <span key={tag} className="rounded bg-gray-200 dark:bg-gray-700 px-2 py-1 text-xs text-gray-800 dark:text-gray-200">{tag}</span>
-                          ))}
+                            <span className="text-xs text-gray-400">No tags</span>
+                          ) : (
+                            customer.tags.map((tag) => (
+                              <Badge key={tag} tone="neutral">{tag}</Badge>
+                            ))
+                          )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
-                        {customer.assignedAdmin?.name || customer.assignedAdmin?.email || 'Unassigned'}
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                        {customer.assignedAdmin?.name || customer.assignedAdmin?.email || (
+                          <span className="text-gray-400">Unassigned</span>
+                        )}
                       </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                        {customer.lastMessageAt ? new Date(customer.lastMessageAt).toLocaleString() : '-'}
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
+                        {customer.lastMessageAt ? new Date(customer.lastMessageAt).toLocaleString() : '—'}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
+            </Card>
           )}
         </div>
       </div>

@@ -26,7 +26,7 @@ describe('CustomersPage', () => {
       return Promise.resolve({});
     });
     render(<CustomersPage />);
-    expect(await screen.findByRole('heading', { name: 'Customers' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Contacts' })).toBeInTheDocument();
     expect(await screen.findByText('Budi')).toBeInTheDocument();
   });
 
@@ -35,6 +35,6 @@ describe('CustomersPage', () => {
       path.startsWith('/users') ? Promise.resolve({ users: [] }) : Promise.resolve([]),
     );
     render(<CustomersPage />);
-    expect(await screen.findByPlaceholderText('Cari nama / nomor...')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('Search name or number…')).toBeInTheDocument();
   });
 });

@@ -37,9 +37,9 @@ describe('KnowledgePage', () => {
     );
     render(<KnowledgePage />);
     await waitFor(() => expect(apiMock).toHaveBeenCalledWith('/knowledge-bases'));
-    const input = screen.getByPlaceholderText(/[Nn]ama/);
+    const input = screen.getByPlaceholderText(/knowledge base/i);
     await userEvent.type(input, 'KB Baru');
-    await userEvent.click(screen.getByRole('button', { name: /[Tt]ambah|[Bb]uat/ }));
+    await userEvent.click(screen.getByRole('button', { name: /[Cc]reate/ }));
     await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith('/knowledge-bases', expect.objectContaining({ method: 'POST' })),
     );

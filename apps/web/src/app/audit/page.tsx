@@ -1,8 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { ChevronLeft, ChevronRight, History, CircleX } from 'lucide-react';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 
 interface AuditEntry {
   id: string;
@@ -16,6 +20,9 @@ interface AuditEntry {
 }
 
 const PAGE_SIZE = 20;
+
+const inputClass =
+  'h-9 rounded-lg border border-gray-200 bg-white px-3 text-[13px] text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 export default function AuditPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
@@ -66,17 +73,13 @@ export default function AuditPage() {
 
   return (
     <AppLayout>
-      <div className="flex-1 overflow-y-auto p-6">
-        <h1 className="mb-6 text-xl font-bold text-gray-900 dark:text-gray-100">Audit Log</h1>
+      <PageHeader title="Audit Log" subtitle="Every action, traceable across accounts" />
 
+      <div className="scrollbar-thin flex-1 overflow-y-auto p-5">
         {/* Filters */}
-        <div className="mb-4 flex flex-wrap gap-3">
-          <select
-            value={entity}
-            onChange={(e) => setEntity(e.target.value)}
-            className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none"
-          >
-            <option value="">Semua Entity</option>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <select value={entity} onChange={(e) => setEntity(e.target.value)} className={inputClass}>
+            <option value="">All entities</option>
             <option value="message">message</option>
             <option value="conversation">conversation</option>
             <option value="customer">customer</option>
@@ -84,59 +87,54 @@ export default function AuditPage() {
           </select>
           <input
             type="text"
-            placeholder="Filter action..."
+            placeholder="Filter action…"
             value={action}
             onChange={(e) => setAction(e.target.value)}
-            className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none placeholder:text-gray-500"
+            className={inputClass}
           />
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none"
-          />
-          <span className="self-center text-xs text-gray-500">s/d</span>
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none"
-          />
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputClass} />
+          <span className="text-xs text-gray-400">to</span>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputClass} />
         </div>
 
         {error && (
-          <div className="mb-4 rounded border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-danger-100 bg-danger-50 px-3 py-2 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-700/10 dark:text-danger-500">
+            <CircleX className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
             {error}
           </div>
         )}
 
         {loading ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400">Memuat...</p>
+          <p className="text-sm text-gray-500">Loading…</p>
         ) : (
           <>
-            <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+            <Card className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs uppercase tracking-wider text-gray-600 dark:text-gray-400">
-                    <th className="px-4 py-3 text-left">Waktu</th>
-                    <th className="px-4 py-3 text-left">User</th>
-                    <th className="px-4 py-3 text-left">Action</th>
-                    <th className="px-4 py-3 text-left">Entity</th>
-                    <th className="px-4 py-3 text-left">Entity ID</th>
-                    <th className="px-4 py-3 text-left">Data</th>
+                  <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
+                    <th className="px-4 py-3 font-medium">Time</th>
+                    <th className="px-4 py-3 font-medium">User</th>
+                    <th className="px-4 py-3 font-medium">Action</th>
+                    <th className="px-4 py-3 font-medium">Entity</th>
+                    <th className="px-4 py-3 font-medium">Entity ID</th>
+                    <th className="px-4 py-3 font-medium">Data</th>
                   </tr>
                 </thead>
                 <tbody>
                   {entries.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
-                        Tidak ada data
+                      <td colSpan={6} className="px-4 py-10 text-center">
+                        <History className="mx-auto mb-2 h-5 w-5 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+                        <p className="text-sm text-gray-400">No audit entries</p>
                       </td>
                     </tr>
                   ) : (
                     entries.map((e) => (
-                      <tr key={e.id} className="border-b border-gray-200 dark:border-gray-800 hover:bg-gray-100/50 dark:hover:bg-gray-800/50">
-                        <td className="whitespace-nowrap px-4 py-2.5 text-gray-600 dark:text-gray-400">
+                      <tr
+                        key={e.id}
+                        className="border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40"
+                      >
+                        <td className="whitespace-nowrap px-4 py-2.5 text-gray-500 dark:text-gray-400">
                           {new Date(e.createdAt).toLocaleString('id', {
                             day: '2-digit', month: 'short', year: 'numeric',
                             hour: '2-digit', minute: '2-digit',
@@ -146,28 +144,28 @@ export default function AuditPage() {
                           {e.user ? (
                             <div>
                               <p className="font-medium">{e.user.name}</p>
-                              <p className="text-xs text-gray-500">{e.user.email}</p>
+                              <p className="text-xs text-gray-400">{e.user.email}</p>
                             </div>
                           ) : (
-                            <span className="text-gray-500 dark:text-gray-600">system</span>
+                            <span className="text-gray-400">system</span>
                           )}
                         </td>
                         <td className="px-4 py-2.5">
-                          <span className="rounded bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 text-xs font-mono text-emerald-400">
+                          <span className="rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">
                             {e.action}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 text-gray-600 dark:text-gray-400">{e.entityType ?? '—'}</td>
-                        <td className="px-4 py-2.5 font-mono text-xs text-gray-500">
-                          {e.entityId ? e.entityId.slice(0, 12) + '...' : '—'}
+                        <td className="px-4 py-2.5 text-gray-500 dark:text-gray-400">{e.entityType ?? '—'}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs text-gray-400">
+                          {e.entityId ? e.entityId.slice(0, 12) + '…' : '—'}
                         </td>
                         <td className="max-w-xs px-4 py-2.5">
                           {(e.newValue || e.oldValue) ? (
-                            <pre className="max-h-20 overflow-auto whitespace-pre-wrap rounded bg-gray-100 dark:bg-gray-900 p-1.5 text-xs text-gray-600 dark:text-gray-400">
+                            <pre className="scrollbar-thin max-h-20 overflow-auto whitespace-pre-wrap rounded-md bg-gray-50 p-1.5 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                               {JSON.stringify(e.newValue ?? e.oldValue, null, 2)}
                             </pre>
                           ) : (
-                            <span className="text-gray-500 dark:text-gray-600">—</span>
+                            <span className="text-gray-400">—</span>
                           )}
                         </td>
                       </tr>
@@ -175,28 +173,26 @@ export default function AuditPage() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </Card>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="mt-4 flex items-center gap-2">
-                <button
-                  onClick={() => handlePageChange(page - 1)}
-                  disabled={page === 0}
-                  className="rounded bg-gray-200 dark:bg-gray-700 px-3 py-1 text-sm text-gray-900 dark:text-gray-100 disabled:opacity-40 hover:bg-gray-300 dark:hover:bg-gray-600"
-                >
-                  &larr; Prev
-                </button>
-                <span className="text-xs text-gray-600 dark:text-gray-400">
-                  Halaman {page + 1} / {totalPages} ({total} total)
+                <Button variant="outline" size="sm" onClick={() => handlePageChange(page - 1)} disabled={page === 0}>
+                  <ChevronLeft className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  Prev
+                </Button>
+                <span className="text-xs text-gray-400">
+                  Page {page + 1} / {totalPages} ({total} total)
                 </span>
-                <button
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => handlePageChange(page + 1)}
                   disabled={page >= totalPages - 1}
-                  className="rounded bg-gray-200 dark:bg-gray-700 px-3 py-1 text-sm text-gray-900 dark:text-gray-100 disabled:opacity-40 hover:bg-gray-300 dark:hover:bg-gray-600"
                 >
-                  Next &rarr;
-                </button>
+                  Next
+                  <ChevronRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                </Button>
               </div>
             )}
           </>
