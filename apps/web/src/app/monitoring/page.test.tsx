@@ -45,14 +45,14 @@ describe('MonitoringPage', () => {
   it('renders the admin workload report', async () => {
     apiMock.mockImplementation(routed);
     render(<MonitoringPage />);
-    expect(await screen.findByText('Beban Kerja Admin')).toBeInTheDocument();
+    expect(await screen.findByText(/Admin workload/)).toBeInTheDocument();
     expect(await screen.findByText('Ani')).toBeInTheDocument();
   });
 
   it('renders the CSAT card', async () => {
     apiMock.mockImplementation(routed);
     render(<MonitoringPage />);
-    expect(await screen.findByText('Customer Satisfaction (CSAT)')).toBeInTheDocument();
+    expect(await screen.findByText('Customer satisfaction (CSAT)')).toBeInTheDocument();
     expect(await screen.findByText('4.5 / 5')).toBeInTheDocument();
   });
 

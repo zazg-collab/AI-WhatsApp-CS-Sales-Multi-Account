@@ -27,7 +27,7 @@ describe('AiSettingsPage', () => {
     await screen.findByText('b');
 
     apiMock.mockResolvedValueOnce(['model-a', 'model-b']);
-    await userEvent.click(screen.getByRole('button', { name: /Muat model/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load models/ }));
     expect(await screen.findByText('model-a')).toBeInTheDocument();
     expect(screen.getByText('model-b')).toBeInTheDocument();
   });
@@ -38,7 +38,7 @@ describe('AiSettingsPage', () => {
     await screen.findByText('b');
 
     apiMock.mockRejectedValueOnce(new Error('boom'));
-    await userEvent.click(screen.getByRole('button', { name: /Muat model/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load models/ }));
     await waitFor(() => expect(screen.getByText('boom')).toBeInTheDocument());
   });
 });

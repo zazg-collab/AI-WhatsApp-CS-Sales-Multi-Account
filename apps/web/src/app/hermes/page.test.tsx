@@ -23,7 +23,7 @@ describe('HermesPage', () => {
       return Promise.resolve(null);
     });
     render(<HermesPage />);
-    expect(await screen.findByText('Pesan hari ini')).toBeInTheDocument();
+    expect(await screen.findByText('Messages today')).toBeInTheDocument();
     expect(await screen.findByText('legal')).toBeInTheDocument();
   });
 
