@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+@layer base {
+  /* Tabular figures + sensible defaults for a data-heavy, editorial UI. */
+  body {
+    font-variant-numeric: tabular-nums;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Tighter, intentional headings. */
+  h1, h2, h3 {
+    letter-spacing: -0.02em;
+  }
+
+  /* On-brand focus ring instead of the default blue halo. */
+  :focus-visible {
+    outline: 2px solid theme('colors.wa.accent');
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: theme('colors.wa.accent');
+    color: #ffffff;
+  }
+
+  button, a, input, textarea, select {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  /* WhatsApp chat wallpaper — subtle dotted texture, light by default. */
+  .wa-chat-surface {
+    background-color: #efeae2;
+    background-image: radial-gradient(circle at 1px 1px, rgba(17, 15, 12, 0.04) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+  .dark .wa-chat-surface {
+    background-color: #0b141a;
+    background-image: radial-gradient(circle at 1px 1px, rgba(233, 237, 239, 0.045) 1px, transparent 0);
+  }
+}
+
+@layer utilities {
+  /* Thin, unobtrusive scrollbars matching the warm palette. */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.gray.300') transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: theme('colors.gray.300');
+    border-radius: 9999px;
+  }
+  .dark .scrollbar-thin { scrollbar-color: theme('colors.gray.700') transparent; }
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb { background-color: theme('colors.gray.700'); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

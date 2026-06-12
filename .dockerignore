@@ -1,0 +1,15 @@
+node_modules
+.git
+.gitignore
+*.md
+.env
+.env.local
+*.local
+dist
+.next
+.agents
+.vscode
+.idea
+__pycache__
+*.pyc
+coverage
