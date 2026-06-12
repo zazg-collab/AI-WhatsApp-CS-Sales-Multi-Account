@@ -113,4 +113,42 @@ for (const label of ['AI generated', 'Hermes reviewed', 'Needs review', 'Human t
 assert.match(webIcons, /strokeWidth=\{1\.75\}/, 'Icon system must use consistent Lucide-style outline stroke width');
 assert.doesNotMatch(webDashboard + webSidebar, /[☀🌙⚠⏰👤⏳💡📎●✓✕🤖↩✅❌🚀🔥✨💬📊📈📁🎯🟢🔴🟡⭐🔍⚙🧠📱📞📋🙏]/u, 'Web UI must not use emoji or decorative Unicode icons');
 
+
+const conflictFiles = [
+  'apps/api/src/modules/conversations/conversations.controller.spec.ts',
+  'apps/api/src/modules/conversations/conversations.controller.ts',
+  'apps/api/src/modules/conversations/conversations.service.spec.ts',
+  'apps/api/src/modules/conversations/conversations.service.ts',
+  'apps/api/src/modules/wa/wa.service.ts',
+  'apps/web/package.json',
+  'apps/web/src/app/accounts/page.test.tsx',
+  'apps/web/src/app/accounts/page.tsx',
+  'apps/web/src/app/admin/users/page.test.tsx',
+  'apps/web/src/app/admin/users/page.tsx',
+  'apps/web/src/app/analytics/page.tsx',
+  'apps/web/src/app/audit/page.tsx',
+  'apps/web/src/app/bots/page.test.tsx',
+  'apps/web/src/app/bots/page.tsx',
+  'apps/web/src/app/campaigns/page.test.tsx',
+  'apps/web/src/app/campaigns/page.tsx',
+  'apps/web/src/app/customers/page.test.tsx',
+  'apps/web/src/app/customers/page.tsx',
+  'apps/web/src/app/dashboard/page.test.tsx',
+  'apps/web/src/app/dashboard/page.tsx',
+  'apps/web/src/app/hermes/page.test.tsx',
+  'apps/web/src/app/hermes/page.tsx',
+  'apps/web/src/app/knowledge/page.test.tsx',
+  'apps/web/src/app/knowledge/page.tsx',
+  'apps/web/src/app/layout.tsx',
+];
+for (const file of conflictFiles) {
+  const content = read(file);
+  assert.doesNotMatch(content, /<<<<<<<|=======|>>>>>>>/, `${file} must not contain merge conflict markers`);
+}
+
+const mergeNotes = read('docs/merge-conflict-resolution.md');
+assert.match(mergeNotes, /Do not drop production features/, 'Merge notes must document no-feature-loss resolution policy');
+assert.match(mergeNotes, /phone\/history sync/, 'Merge notes must preserve WhatsApp phone/history sync guidance');
+assert.match(mergeNotes, /AI draft approval\/blocking/, 'Merge notes must preserve conversation AI draft controls');
+
 console.log('QA hardening checks passed');
