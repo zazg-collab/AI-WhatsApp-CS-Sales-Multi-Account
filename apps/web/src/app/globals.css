@@ -2,7 +2,136 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --hermes-bg: #f6f8fb;
+  --hermes-surface: #ffffff;
+  --hermes-muted: #f1f5f9;
+  --hermes-border: #dbe3ef;
+  --hermes-text: #0f172a;
+  --hermes-subtle: #64748b;
+  --hermes-indigo: #3730a3;
+  --hermes-indigo-soft: #eef2ff;
+  --hermes-wa: #16a34a;
+  --hermes-amber: #b45309;
+  --hermes-red: #dc2626;
+  --wa-bg: #f6f8fb;
+  --wa-panel: #ffffff;
+  --wa-panel-raised: #f8fafc;
+  --wa-border: #dbe3ef;
+  --wa-accent: #3730a3;
+  --wa-accent-soft: #eef2ff;
+  --wa-chat-in: #ffffff;
+  --wa-chat-out: #eef2ff;
+}
+
 html,
 body {
-  height: 100%;
+  min-height: 100%;
+  background: var(--hermes-bg);
+}
+
+body {
+  overflow: hidden;
+  color: var(--hermes-text);
+}
+
+::selection {
+  background: rgba(55, 48, 163, 0.18);
+  color: #111827;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer components {
+  .wa-app-shell,
+  .hermes-app-shell {
+    background:
+      linear-gradient(180deg, rgba(238, 242, 255, 0.9), rgba(246, 248, 251, 0.82) 36%, #f8fafc),
+      radial-gradient(circle at 20% 0%, rgba(55, 48, 163, 0.08), transparent 34rem);
+  }
+
+  .wa-panel-card,
+  .hermes-panel {
+    border: 1px solid var(--hermes-border);
+    background: var(--hermes-surface);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .wa-chat-surface,
+  .hermes-chat-surface {
+    position: relative;
+    background-color: #f8fafc;
+    background-image:
+      linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .wa-glass,
+  .hermes-card {
+    border: 1px solid var(--hermes-border);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .wa-focus,
+  .hermes-focus {
+    outline: none;
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, transform 160ms ease;
+  }
+
+  .wa-focus:focus,
+  .hermes-focus:focus {
+    border-color: rgba(55, 48, 163, 0.64);
+    box-shadow: 0 0 0 3px rgba(55, 48, 163, 0.12);
+  }
+
+  .wa-action,
+  .hermes-action {
+    transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+  }
+
+  .wa-action:active,
+  .hermes-action:active {
+    transform: translateY(1px);
+  }
+
+  .wa-scrollbar,
+  .hermes-scrollbar {
+    scrollbar-color: rgba(100, 116, 139, 0.38) transparent;
+    scrollbar-width: thin;
+  }
+
+  .wa-scrollbar::-webkit-scrollbar,
+  .hermes-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .wa-scrollbar::-webkit-scrollbar-thumb,
+  .hermes-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.32);
+    border-radius: 999px;
+  }
+
+  .wa-presence-dot {
+    box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

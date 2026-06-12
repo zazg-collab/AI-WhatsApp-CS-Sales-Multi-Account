@@ -17,8 +17,9 @@ npm-debug.log*
 # prisma
 packages/database/prisma/*.db
 
-# whatsapp sessions
+# whatsapp sessions + downloaded inbound media
 .wa-sessions/
+.wa-media/
 auth_info_baileys/
 
 # python
@@ -28,3 +29,4 @@ __pycache__/
 
 # os
 .DS_Store
+*.tsbuildinfo

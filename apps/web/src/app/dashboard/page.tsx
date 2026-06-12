@@ -1,9 +1,32 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { api } from '@/lib/api';
+import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
+import { api, uploadFile, resolveMediaUrl, getUserId } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
-import { Sidebar } from '@/components/Sidebar';
+import { AppLayout } from '@/components/AppLayout';
+import {
+  ArrowUpRight,
+  Bot,
+  Check,
+  CheckCheck,
+  CircleCheck,
+  CircleX,
+  Clock3,
+  FileSearch,
+  Hand,
+  Inbox,
+  MessageSquareReply,
+  Paperclip,
+  Pencil,
+  Plus,
+  ScrollText,
+  Send,
+  ShieldCheck,
+  TriangleAlert,
+  Unplug,
+  Workflow,
+  X,
+} from '@/components/icons';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -17,6 +40,13 @@ interface Customer {
   notes: string | null;
 }
 
+interface QuotedMessage {
+  id: string;
+  content: string | null;
+  senderType: string;
+  messageType: string;
+}
+
 interface Message {
   id: string;
   senderType: 'customer' | 'admin' | 'ai' | 'system' | 'hermes';
@@ -26,6 +56,8 @@ interface Message {
   status: string;
   aiGenerated: boolean;
   createdAt: string;
+  quotedMessageId?: string | null;
+  quotedMessage?: QuotedMessage | null;
 }
 
 interface HermesReview {
@@ -38,14 +70,31 @@ interface HermesReview {
   recommendation: string | null;
 }
 
+interface AdminUser {
+  id: string;
+  name: string;
+}
+
+interface QuickReply {
+  id: string;
+  title: string;
+  content: string;
+  shortcut: string | null;
+}
+
 interface ConvSummary {
   id: string;
   aiMode: string;
   takeoverStatus: string;
+  status: string;
+  slaBreachedAt?: string | null;
+  labels?: string[];
   lastMessage: string | null;
   lastMessageAt: string | null;
+  unreadCount?: number;
   customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[] };
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
+  assignedAdmin?: AdminUser | null;
   messages: { content: string | null; senderType: string; createdAt: string; status: string }[];
 }
 
@@ -53,14 +102,28 @@ interface ConvDetail {
   id: string;
   aiMode: string;
   takeoverStatus: string;
+  status: string;
+  slaBreachedAt?: string | null;
+  labels?: string[];
+  csatScore?: number | null;
   customer: Customer & { status: string | null };
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
   bot: { id: string; botName: string } | null;
+  assignedAdmin?: AdminUser | null;
   messages: Message[];
   hermesReviews: HermesReview[];
+  hasMoreMessages?: boolean;
+  oldestCursor?: string | null;
 }
 
 type FilterTab = 'all' | 'ai_on' | 'ai_off' | 'ai_supervised' | 'needs_attention';
+
+interface WaAccount {
+  id: string;
+  accountName: string;
+  phoneNumber: string;
+  sessionStatus?: string;
+}
 
 interface FollowUp {
   id: string;
@@ -74,32 +137,87 @@ interface FollowUp {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function aiModeBadge(mode: string) {
-  const map: Record<string, { label: string; cls: string }> = {
-    ai_on: { label: 'AI ON', cls: 'bg-green-700 text-green-100' },
-    ai_off: { label: 'AI OFF', cls: 'bg-gray-600 text-gray-100' },
-    ai_draft: { label: 'Draft', cls: 'bg-yellow-700 text-yellow-100' },
-    ai_supervised: { label: 'Supervised', cls: 'bg-blue-700 text-blue-100' },
-    ai_paused: { label: 'Paused', cls: 'bg-red-700 text-red-100' },
+  const map: Record<string, { label: string; cls: string; icon: ReactNode }> = {
+    ai_on: { label: 'Automation mode', cls: 'border-emerald-200 bg-emerald-50 text-emerald-700', icon: <Workflow size={14} /> },
+    ai_off: { label: 'Human takeover', cls: 'border-slate-200 bg-slate-100 text-slate-700', icon: <Hand size={14} /> },
+    ai_draft: { label: 'AI generated', cls: 'border-amber-200 bg-amber-50 text-amber-700', icon: <Pencil size={14} /> },
+    ai_supervised: { label: 'Hermes reviewed', cls: 'border-indigo-200 bg-indigo-50 text-indigo-700', icon: <ShieldCheck size={14} /> },
+    ai_paused: { label: 'Sending blocked', cls: 'border-red-200 bg-red-50 text-red-700', icon: <CircleX size={14} /> },
   };
-  const { label, cls } = map[mode] ?? { label: mode, cls: 'bg-gray-700 text-gray-100' };
-  return (
-    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>{label}</span>
-  );
+  const { label, cls, icon } = map[mode] ?? { label: mode, cls: 'border-slate-200 bg-slate-50 text-slate-700', icon: <Workflow size={14} /> };
+  return <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${cls}`}>{icon}{label}</span>;
+}
+
+function statusBadge(status: string) {
+  const map: Record<string, { label: string; cls: string; icon: ReactNode }> = {
+    open: { label: 'Open', cls: 'border-emerald-200 bg-emerald-50 text-emerald-700', icon: <CircleCheck size={12} /> },
+    pending: { label: 'Needs review', cls: 'border-amber-200 bg-amber-50 text-amber-700', icon: <TriangleAlert size={12} /> },
+    resolved: { label: 'Resolved', cls: 'border-slate-200 bg-slate-50 text-slate-600', icon: <Check size={12} /> },
+  };
+  const { label, cls, icon } = map[status] ?? { label: status, cls: 'border-slate-200 bg-slate-50 text-slate-700', icon: <Clock3 size={12} /> };
+  return <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>{icon}{label}</span>;
+}
+
+/** Short display label for who sent a (quoted) message. */
+function senderLabel(senderType: string, customerName?: string | null) {
+  if (senderType === 'customer') return customerName || 'Customer';
+  if (senderType === 'ai') return 'AI';
+  return 'Anda';
 }
 
 function decisionBadge(decision: string) {
-  const map: Record<string, string> = {
-    approve: 'bg-green-700',
-    draft: 'bg-yellow-700',
-    block: 'bg-red-700',
-    pause_ai: 'bg-orange-700',
-    takeover_required: 'bg-purple-700',
+  const map: Record<string, { cls: string; label: string; icon: ReactNode }> = {
+    approve: { label: 'Hermes reviewed', cls: 'border-emerald-200 bg-emerald-50 text-emerald-700', icon: <CircleCheck size={14} /> },
+    draft: { label: 'AI generated', cls: 'border-amber-200 bg-amber-50 text-amber-700', icon: <Pencil size={14} /> },
+    block: { label: 'Sending blocked', cls: 'border-red-200 bg-red-50 text-red-700', icon: <CircleX size={14} /> },
+    pause_ai: { label: 'Needs review', cls: 'border-amber-200 bg-amber-50 text-amber-700', icon: <TriangleAlert size={14} /> },
+    takeover_required: { label: 'Human takeover', cls: 'border-indigo-200 bg-indigo-50 text-indigo-700', icon: <Hand size={14} /> },
   };
-  return (
-    <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${map[decision] ?? 'bg-gray-700'}`}>
-      {decision.replace('_', ' ')}
-    </span>
-  );
+  const item = map[decision] ?? { label: decision.replace('_', ' '), cls: 'border-slate-200 bg-slate-50 text-slate-700', icon: <ShieldCheck size={14} /> };
+  return <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${item.cls}`}>{item.icon}{item.label}</span>;
+}
+
+/** Short notification beep via Web Audio (no asset bundling needed). */
+function playBeep() {
+  try {
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.26);
+    osc.onended = () => ctx.close();
+  } catch {
+    // audio is best-effort
+  }
+}
+
+/** Beep + browser notification for a new inbound message. */
+function notifyInbound(title: string, body: string) {
+  playBeep();
+  try {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, { body, tag: 'hermes-inbound' });
+    }
+  } catch {
+    // notifications are best-effort
+  }
+}
+
+/** WhatsApp-style delivery ticks for an outgoing message. */
+function StatusTicks({ status }: { status: string }) {
+  if (status === 'read') return <CheckCheck size={14} className="text-indigo-500" aria-label="Read" />;
+  if (status === 'delivered') return <CheckCheck size={14} className="text-slate-500" aria-label="Delivered" />;
+  if (status === 'sent') return <Check size={14} className="text-slate-500" aria-label="Sent" />;
+  if (status === 'failed') return <CircleX size={14} className="text-red-600" aria-label="Failed" />;
+  return <Clock3 size={14} className="text-slate-400" aria-label="Pending" />;
 }
 
 function fmtTime(iso: string | null) {
@@ -127,10 +245,11 @@ function Toast({ msg, onDismiss }: { msg: string; onDismiss: () => void }) {
     return () => clearTimeout(t);
   }, [onDismiss]);
   return (
-    <div className="fixed bottom-4 right-4 z-50 max-w-xs rounded-lg bg-yellow-700 p-3 text-sm shadow-lg">
+    <div className="fixed bottom-4 right-4 z-50 max-w-xs rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 shadow-sm">
       <div className="flex items-start gap-2">
+        <TriangleAlert size={16} className="mt-0.5 shrink-0 text-amber-700" />
         <span className="flex-1">{msg}</span>
-        <button onClick={onDismiss} className="text-yellow-200 hover:text-white">✕</button>
+        <button onClick={onDismiss} className="rounded text-amber-700 hover:text-amber-950" aria-label="Dismiss notification"><X size={14} /></button>
       </div>
     </div>
   );
@@ -146,6 +265,13 @@ function LeftPanel({
   onSearchChange,
   filter,
   search,
+  accounts,
+  accountId,
+  onAccountChange,
+  statusFilter,
+  onStatusFilterChange,
+  labelFilter,
+  onLabelFilterChange,
 }: {
   conversations: ConvSummary[];
   selectedId: string | null;
@@ -154,37 +280,77 @@ function LeftPanel({
   onSearchChange: (s: string) => void;
   filter: FilterTab;
   search: string;
+  accounts: WaAccount[];
+  accountId: string;
+  onAccountChange: (id: string) => void;
+  statusFilter: string;
+  onStatusFilterChange: (s: string) => void;
+  labelFilter: string;
+  onLabelFilterChange: (s: string) => void;
 }) {
   const tabs: { key: FilterTab; label: string }[] = [
     { key: 'all', label: 'Semua' },
     { key: 'ai_on', label: 'AI ON' },
     { key: 'ai_off', label: 'AI OFF' },
     { key: 'ai_supervised', label: 'Supervised' },
-    { key: 'needs_attention', label: '⚠ Perlu Perhatian' },
+    { key: 'needs_attention', label: 'Needs review' },
   ];
 
   return (
-    <aside className="flex w-80 flex-col border-r border-black/40 bg-wa-panel">
+    <aside className="flex w-80 flex-col border-r border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel">
       {/* Header */}
-      <div className="border-b border-black/30 p-3">
+      <div className="border-b border-gray-200 dark:border-black/30 p-3">
         <h2 className="mb-2 text-sm font-semibold text-wa-accent">Percakapan</h2>
+        {/* Account switcher — filter the list by WhatsApp account */}
+        <select
+          value={accountId}
+          onChange={(e) => onAccountChange(e.target.value)}
+          className="mb-2 w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1.5 text-sm outline-none"
+          title="Pilih akun WhatsApp"
+        >
+          <option value="">Semua Akun ({accounts.length})</option>
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.accountName} · {a.phoneNumber}
+            </option>
+          ))}
+        </select>
+        {/* Workflow status filter (open/pending/resolved) */}
+        <select
+          value={statusFilter}
+          onChange={(e) => onStatusFilterChange(e.target.value)}
+          className="mb-2 w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1.5 text-sm outline-none"
+          title="Filter status percakapan"
+        >
+          <option value="">Semua Status</option>
+          <option value="open">Open</option>
+          <option value="pending">Pending</option>
+          <option value="resolved">Resolved</option>
+        </select>
+        <input
+          type="text"
+          placeholder="Filter label (mis. refund)"
+          value={labelFilter}
+          onChange={(e) => onLabelFilterChange(e.target.value)}
+          className="mb-2 w-full rounded bg-black/5 dark:bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
+        />
         <input
           type="text"
           placeholder="Cari nama / nomor..."
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full rounded bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
+          className="w-full rounded bg-black/5 dark:bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
         />
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 overflow-x-auto border-b border-black/30 px-2 py-1.5">
+      <div className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-black/30 px-2 py-1.5">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => onFilterChange(t.key)}
             className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-colors ${
-              filter === t.key ? 'bg-wa-accent text-black' : 'text-gray-400 hover:text-gray-200'
+              filter === t.key ? 'bg-wa-accent text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
             }`}
           >
             {t.label}
@@ -200,13 +366,13 @@ function LeftPanel({
         {conversations.map((c) => {
           const lastMsg = c.messages[0];
           const needsAttention =
-            c.takeoverStatus === 'waiting_admin' || c.aiMode === 'ai_paused';
+            c.takeoverStatus === 'waiting_admin' || c.aiMode === 'ai_paused' || !!c.slaBreachedAt;
           return (
             <button
               key={c.id}
               onClick={() => onSelect(c.id)}
-              className={`w-full border-b border-black/20 px-3 py-3 text-left transition-colors hover:bg-black/20 ${
-                selectedId === c.id ? 'bg-black/30' : ''
+              className={`w-full border-b border-gray-200 dark:border-black/20 px-3 py-3 text-left transition-colors hover:bg-black/5 dark:hover:bg-black/20 ${
+                selectedId === c.id ? 'bg-black/5 dark:bg-black/30' : ''
               }`}
             >
               <div className="flex items-start justify-between gap-2">
@@ -216,15 +382,48 @@ function LeftPanel({
                       {c.customer.name ?? c.customer.phoneNumber}
                     </span>
                     {needsAttention && (
-                      <span className="shrink-0 text-xs text-orange-400">●</span>
+                      <TriangleAlert size={14} className="shrink-0 text-amber-600" />
                     )}
                   </div>
-                  <p className="truncate text-xs text-gray-400">
+                  <p className="truncate text-xs text-gray-600 dark:text-gray-400">
                     {lastMsg?.content ?? 'Belum ada pesan'}
                   </p>
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    {statusBadge(c.status)}
+                    {c.slaBreachedAt && (
+                      <span className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700" title="Belum dibalas melewati batas SLA">
+                        <TriangleAlert size={12} />
+                        SLA risk
+                      </span>
+                    )}
+                    {c.assignedAdmin && (
+                      <span className="truncate text-[10px] text-gray-500" title="Ditugaskan ke">
+                        {c.assignedAdmin.name}
+                      </span>
+                    )}
+                  </div>
+                  {c.labels && c.labels.length > 0 && (
+                    <div className="mt-0.5 flex flex-wrap gap-1">
+                      {c.labels.map((l) => (
+                        <span key={l} className="rounded bg-indigo-900 px-1.5 py-0.5 text-[10px] text-indigo-200">
+                          {l}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {!accountId && (
+                    <p className="mt-0.5 truncate text-[10px] text-wa-accent/70">
+                      via {c.whatsappAccount.accountName}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <span className="text-xs text-gray-500">{fmtTime(c.lastMessageAt)}</span>
+                  {c.unreadCount && c.unreadCount > 0 ? (
+                    <span className="min-w-[18px] rounded-full bg-wa-accent px-1.5 text-center text-[11px] font-semibold text-white">
+                      {c.unreadCount > 99 ? '99+' : c.unreadCount}
+                    </span>
+                  ) : null}
                   {aiModeBadge(c.aiMode)}
                 </div>
               </div>
@@ -241,100 +440,199 @@ function LeftPanel({
 function MediaModal({
   onClose,
   onSend,
+  onUpload,
 }: {
   onClose: () => void;
   onSend: (mediaType: string, url: string, caption: string) => void;
+  onUpload: (file: File, caption: string) => Promise<void>;
 }) {
+  const [tab, setTab] = useState<'upload' | 'url'>('upload');
   const [url, setUrl] = useState('');
   const [mediaType, setMediaType] = useState('image');
   const [caption, setCaption] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function handleUpload() {
+    if (!file || busy) return;
+    setBusy(true);
+    try {
+      await onUpload(file, caption);
+      onClose();
+    } catch {
+      // error toast is surfaced by the caller; keep the modal open to retry
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-96 rounded-lg border border-gray-700 bg-gray-800 p-5">
-        <h3 className="mb-4 text-sm font-semibold text-gray-100">Kirim Media</h3>
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-xs text-gray-400">Tipe Media</label>
-            <select
-              value={mediaType}
-              onChange={(e) => setMediaType(e.target.value)}
-              className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60">
+      <div className="w-96 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
+        <h3 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">Send Message Media</h3>
+
+        {/* Tabs */}
+        <div className="mb-3 flex gap-1 rounded bg-gray-100 dark:bg-gray-900 p-1 text-xs">
+          {(['upload', 'url'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`flex-1 rounded px-2 py-1 font-medium ${
+                tab === t ? 'bg-emerald-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+              }`}
             >
-              <option value="image">Gambar</option>
-              <option value="document">Dokumen</option>
-              <option value="audio">Audio</option>
-              <option value="video">Video</option>
-            </select>
+              {t === 'upload' ? 'Upload dari device' : 'Dari URL'}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'upload' ? (
+          <div className="space-y-3">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+              }}
+              className={`rounded border-2 border-dashed p-6 text-center text-xs ${
+                dragOver ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30' : 'border-gray-300 dark:border-gray-600'
+              }`}
+            >
+              {file ? (
+                <div className="text-gray-800 dark:text-gray-200">
+                  <p className="font-medium">{file.name}</p>
+                  <p className="text-gray-500">{(file.size / 1024).toFixed(0)} KB</p>
+                  <button onClick={() => setFile(null)} className="mt-1 text-red-400 hover:text-red-300">
+                    Hapus
+                  </button>
+                </div>
+              ) : (
+                <p className="text-gray-500">Tarik file ke sini, atau</p>
+              )}
+              <label className="mt-2 inline-block cursor-pointer rounded bg-gray-200 dark:bg-gray-700 px-3 py-1 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600">
+                Pilih file
+                <input
+                  type="file"
+                  className="hidden"
+                  accept="image/*,video/*,audio/*,application/pdf"
+                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </div>
+            <input
+              type="text"
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder="Caption (opsional)"
+              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
+            />
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleUpload}
+                disabled={!file || busy}
+                className="flex-1 rounded bg-emerald-600 py-1.5 text-sm font-medium text-white disabled:opacity-50 hover:bg-emerald-500"
+              >
+                {busy ? 'Mengirim...' : 'Send Message'}
+              </button>
+              <button onClick={onClose} className="flex-1 rounded bg-gray-200 dark:bg-gray-700 py-1.5 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600">
+                Batal
+              </button>
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs text-gray-400">URL</label>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Tipe Media</label>
+              <select
+                value={mediaType}
+                onChange={(e) => setMediaType(e.target.value)}
+                className="w-full rounded bg-gray-100 dark:bg-gray-900 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none"
+              >
+                <option value="image">Gambar</option>
+                <option value="document">Dokumen</option>
+                <option value="audio">Audio</option>
+                <option value="video">Video</option>
+              </select>
+            </div>
             <input
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://..."
-              className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600"
+              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
             />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-gray-400">Caption (opsional)</label>
             <input
               type="text"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
-              placeholder="Keterangan..."
-              className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none placeholder:text-gray-600"
+              placeholder="Caption (opsional)"
+              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
             />
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => { if (url.trim()) { onSend(mediaType, url.trim(), caption); onClose(); } }}
+                disabled={!url.trim()}
+                className="flex-1 rounded bg-emerald-600 py-1.5 text-sm font-medium text-white disabled:opacity-50 hover:bg-emerald-500"
+              >
+                Send Message
+              </button>
+              <button onClick={onClose} className="flex-1 rounded bg-gray-200 dark:bg-gray-700 py-1.5 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600">
+                Batal
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2 pt-1">
-            <button
-              onClick={() => { if (url.trim()) { onSend(mediaType, url.trim(), caption); onClose(); } }}
-              disabled={!url.trim()}
-              className="flex-1 rounded bg-emerald-600 py-1.5 text-sm font-medium text-white disabled:opacity-50 hover:bg-emerald-500"
-            >
-              Kirim
-            </button>
-            <button
-              onClick={onClose}
-              className="flex-1 rounded bg-gray-700 py-1.5 text-sm font-medium text-gray-100 hover:bg-gray-600"
-            >
-              Batal
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
 }
 
 function MessageMedia({ msg }: { msg: Message }) {
-  if (msg.messageType === 'image' && msg.mediaUrl) {
+  const src = resolveMediaUrl(msg.mediaUrl);
+  const typeLabel: Record<string, string> = {
+    image: '📷 Gambar', video: '🎬 Video', audio: '🎵 Audio', document: '📄 Dokumen',
+  };
+
+  // Media message whose file isn't available (download failed / legacy rows).
+  if (!src && typeLabel[msg.messageType]) {
     return (
       <div>
-        <img src={msg.mediaUrl} alt={msg.content ?? 'image'} className="max-w-full rounded" />
-        {msg.content && <p className="mt-1 text-xs text-gray-300">{msg.content}</p>}
+        <p className="text-xs italic text-gray-600 dark:text-gray-400">
+          {typeLabel[msg.messageType]} (file tidak tersedia)
+        </p>
+        {msg.content && <p className="mt-1 whitespace-pre-wrap">{msg.content}</p>}
       </div>
     );
   }
-  if (msg.messageType === 'document' && msg.mediaUrl) {
+  if (msg.messageType === 'image' && src) {
+    return (
+      <div>
+        <img src={src} alt={msg.content ?? 'image'} className="max-w-full rounded" />
+        {msg.content && <p className="mt-1 text-xs text-gray-700 dark:text-gray-300">{msg.content}</p>}
+      </div>
+    );
+  }
+  if (msg.messageType === 'document' && src) {
     return (
       <div className="flex items-center gap-2">
         <span className="text-lg">📄</span>
-        <a href={msg.mediaUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-300 underline">
+        <a href={src} target="_blank" rel="noreferrer" className="text-xs text-blue-300 underline">
           {msg.content ?? 'Dokumen'}
         </a>
       </div>
     );
   }
-  if (msg.messageType === 'audio' && msg.mediaUrl) {
-    return <audio controls src={msg.mediaUrl} className="w-full" />;
+  if (msg.messageType === 'audio' && src) {
+    return <audio controls src={src} className="w-full" />;
   }
-  if (msg.messageType === 'video' && msg.mediaUrl) {
+  if (msg.messageType === 'video' && src) {
     return (
       <div>
-        <video controls src={msg.mediaUrl} className="max-w-full rounded" />
-        {msg.content && <p className="mt-1 text-xs text-gray-300">{msg.content}</p>}
+        <video controls src={src} className="max-w-full rounded" />
+        {msg.content && <p className="mt-1 text-xs text-gray-700 dark:text-gray-300">{msg.content}</p>}
       </div>
     );
   }
@@ -345,40 +643,146 @@ function CenterPanel({
   conv,
   onSend,
   onSendMedia,
+  onUploadMedia,
   onTakeover,
   onReturnToAi,
   onToggleAi,
   onApproveDraft,
   onBlockDraft,
+  onSuggest,
+  suggesting,
   sending,
+  typing,
+  quickReplies,
+  onLoadOlder,
+  accountStatus,
 }: {
   conv: ConvDetail | null;
-  onSend: (text: string) => void;
+  onSend: (text: string, quotedMessageId?: string) => void;
   onSendMedia: (mediaType: string, url: string, caption: string) => void;
+  onUploadMedia: (file: File, caption: string) => Promise<void>;
   onTakeover: () => void;
   onReturnToAi: () => void;
   onToggleAi: () => void;
   onApproveDraft: (msgId: string) => void;
   onBlockDraft: (msgId: string) => void;
+  onSuggest: () => Promise<string | null>;
+  suggesting: boolean;
   sending: boolean;
+  typing: boolean;
+  quickReplies: QuickReply[];
+  onLoadOlder: () => Promise<void>;
+  accountStatus?: string;
 }) {
   const [text, setText] = useState('');
   const [showMediaModal, setShowMediaModal] = useState(false);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
+  const [searchResults, setSearchResults] = useState<(QuotedMessage & { createdAt: string })[]>([]);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // When set, the next messages render is an older-page prepend → restore the
+  // prior scroll position instead of jumping to the bottom.
+  const olderRestore = useRef<number | null>(null);
+
+  // Quick-reply picker: typing "/foo" filters templates by shortcut or title.
+  const slashQuery = text.startsWith('/') ? text.slice(1).toLowerCase() : null;
+  const qrMatches =
+    slashQuery !== null
+      ? quickReplies
+          .filter(
+            (q) =>
+              (q.shortcut ?? '').toLowerCase().includes(slashQuery) ||
+              q.title.toLowerCase().includes(slashQuery),
+          )
+          .slice(0, 6)
+      : [];
+  const showQuickReplies = slashQuery !== null && qrMatches.length > 0;
+
+  async function handleSuggest() {
+    const suggestion = await onSuggest();
+    if (suggestion) setText(suggestion);
+  }
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = scrollRef.current;
+    if (olderRestore.current !== null && el) {
+      // Older messages were prepended — keep the viewport anchored.
+      el.scrollTop = el.scrollHeight - olderRestore.current;
+      olderRestore.current = null;
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [conv?.messages]);
+
+  async function handleScroll() {
+    const el = scrollRef.current;
+    if (!el || loadingOlder || !conv?.hasMoreMessages) return;
+    if (el.scrollTop < 80) {
+      setLoadingOlder(true);
+      olderRestore.current = el.scrollHeight;
+      try {
+        await onLoadOlder();
+      } finally {
+        setLoadingOlder(false);
+      }
+    }
+  }
+
+  // Reset chat-local state when switching conversations.
+  useEffect(() => {
+    setReplyTo(null);
+    setSearchOpen(false);
+    setSearchQ('');
+    setSearchResults([]);
+    setHighlightId(null);
+  }, [conv?.id]);
+
+  // In-conversation search, debounced against the server.
+  useEffect(() => {
+    if (!conv?.id || !searchQ.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const convId = conv.id;
+    const t = setTimeout(async () => {
+      try {
+        const r = await api<{ items: (QuotedMessage & { createdAt: string })[] }>(
+          `/conversations/${convId}/messages/search?q=${encodeURIComponent(searchQ.trim())}`,
+        );
+        setSearchResults(r.items);
+      } catch {
+        setSearchResults([]);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [conv?.id, searchQ]);
+
+  /** Scroll to a message bubble (if loaded) and flash-highlight it. */
+  function jumpToMessage(id: string) {
+    const el = document.getElementById(`msg-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightId(id);
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+      highlightTimer.current = setTimeout(() => setHighlightId(null), 1800);
+    }
+  }
 
   function handleSend() {
     if (!text.trim() || sending) return;
-    onSend(text.trim());
+    onSend(text.trim(), replyTo?.id);
     setText('');
+    setReplyTo(null);
   }
 
   if (!conv) {
     return (
-      <section className="flex flex-1 items-center justify-center bg-wa-bg">
+      <section className="flex flex-1 items-center justify-center bg-[#efeae2] dark:bg-wa-bg">
         <p className="text-sm text-gray-500">Pilih percakapan</p>
       </section>
     );
@@ -386,17 +790,11 @@ function CenterPanel({
 
   const isAdmin = conv.takeoverStatus === 'admin_takeover';
   const canSend = conv.aiMode === 'ai_off' || isAdmin;
-  const isSupervisedPending = conv.aiMode === 'ai_supervised';
-
-  // find draft messages for supervised mode
-  const draftMessages = conv.messages.filter(
-    (m) => m.senderType === 'ai' && m.status === 'pending' && isSupervisedPending,
-  );
 
   return (
     <section className="flex flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex items-center justify-between border-b border-black/40 bg-wa-panel px-4 py-3">
+      <header className="flex items-center justify-between border-b border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel px-4 py-3">
         <div className="flex items-center gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -405,36 +803,103 @@ function CenterPanel({
               </span>
               {aiModeBadge(conv.aiMode)}
             </div>
-            <p className="text-xs text-gray-400">{conv.customer.phoneNumber}</p>
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              {typing ? (
+                <span className="text-wa-accent">sedang mengetik…</span>
+              ) : (
+                conv.customer.phoneNumber
+              )}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setSearchOpen((v) => !v)}
+            title="Cari dalam percakapan"
+            className={`rounded px-2.5 py-1 text-xs font-medium ring-1 ${
+              searchOpen
+                ? 'bg-wa-accent text-white ring-wa-accent'
+                : 'text-gray-700 dark:text-gray-300 ring-gray-300 dark:ring-gray-600 hover:ring-gray-400'
+            }`}
+          >
+            <FileSearch size={16} />
+            <span className="sr-only">Cari dalam percakapan</span>
+          </button>
           {isAdmin ? (
             <button
               onClick={onReturnToAi}
               className="rounded bg-green-700 px-3 py-1 text-xs font-medium text-green-100 hover:bg-green-600"
             >
-              Kembalikan ke AI
+              Return to AI
             </button>
           ) : (
             <button
               onClick={onTakeover}
               className="rounded bg-orange-700 px-3 py-1 text-xs font-medium text-orange-100 hover:bg-orange-600"
             >
-              Takeover
+              Take Over
             </button>
           )}
           <button
             onClick={onToggleAi}
-            className="rounded bg-wa-panel px-3 py-1 text-xs font-medium text-gray-300 ring-1 ring-gray-600 hover:ring-gray-400"
+            className="rounded bg-white dark:bg-wa-panel px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300 ring-1 ring-gray-300 dark:ring-gray-600 hover:ring-gray-400"
           >
-            {conv.aiMode === 'ai_on' ? 'Matikan AI' : 'Nyalakan AI'}
+            {conv.aiMode === 'ai_on' ? 'Human takeover' : 'Automation mode'}
           </button>
         </div>
       </header>
 
+      {/* Connection warning — the #1 reason messages "don't appear" */}
+      {accountStatus && accountStatus !== 'connected' && (
+        <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+          <Unplug size={16} className="shrink-0 text-amber-700" />
+          <span>
+            Akun WhatsApp <strong>{conv.whatsappAccount.accountName}</strong> tidak terhubung
+            (status: {accountStatus}). Pesan tidak bisa dikirim/diterima.{' '}
+            <a href="/accounts" className="font-medium underline">Buka halaman Accounts</a>
+            {accountStatus === 'qr_required' ? ' untuk scan QR.' : ' untuk restart sesi.'}
+          </span>
+        </div>
+      )}
+
+      {/* In-conversation search */}
+      {searchOpen && (
+        <div className="border-b border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel px-4 py-2">
+          <input
+            type="text"
+            autoFocus
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            placeholder="Cari teks dalam chat ini..."
+            className="w-full rounded bg-black/5 dark:bg-black/30 px-3 py-1.5 text-sm outline-none placeholder:text-gray-500"
+          />
+          {searchQ.trim() && (
+            <div className="mt-1 max-h-48 overflow-y-auto rounded bg-black/5 dark:bg-black/20">
+              {searchResults.length === 0 && (
+                <p className="px-3 py-2 text-xs text-gray-500">Tidak ditemukan</p>
+              )}
+              {searchResults.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => jumpToMessage(r.id)}
+                  className="block w-full border-b border-gray-200 dark:border-black/20 px-3 py-1.5 text-left text-xs hover:bg-black/5 dark:hover:bg-black/30"
+                >
+                  <span className="mr-2 text-gray-500">
+                    {senderLabel(r.senderType, conv.customer.name)} · {fmtTime(r.createdAt)}
+                  </span>
+                  <span className="text-gray-800 dark:text-gray-200">{(r.content ?? '').slice(0, 90)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-2">
+        {loadingOlder && (
+          <p className="py-1 text-center text-xs text-gray-500">Memuat pesan lama…</p>
+        )}
         {conv.messages.map((m) => {
           const isCustomer = m.senderType === 'customer';
           const isDraft = m.senderType === 'ai' && m.status === 'pending';
@@ -443,57 +908,112 @@ function CenterPanel({
           if (isSystem) {
             return (
               <div key={m.id} className="flex justify-center">
-                <span className="rounded bg-black/30 px-3 py-1 text-xs text-gray-400">
+                <span className="rounded bg-black/5 dark:bg-black/30 px-3 py-1 text-xs text-gray-600 dark:text-gray-400">
                   {m.content}
                 </span>
               </div>
             );
           }
 
+          // Resolve the quoted message: prefer the API include, fall back to
+          // a lookup in the loaded timeline.
+          const quoted =
+            m.quotedMessage ??
+            (m.quotedMessageId ? conv.messages.find((x) => x.id === m.quotedMessageId) ?? null : null);
+
           return (
             <div
               key={m.id}
-              className={`flex ${isCustomer ? 'justify-start' : 'justify-end'}`}
+              id={`msg-${m.id}`}
+              className={`group flex items-center gap-1 ${isCustomer ? 'justify-start' : 'justify-end'}`}
             >
+              {/* Reply button (left of our own bubbles) */}
+              {!isCustomer && !isDraft && (
+                <button
+                  onClick={() => setReplyTo(m)}
+                  title="Balas pesan ini"
+                  className="hidden shrink-0 rounded bg-black/5 dark:bg-black/30 px-1.5 py-0.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 group-hover:block"
+                >
+
+                </button>
+              )}
               <div
-                className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
+                className={`max-w-[70%] rounded-lg px-3 py-2 text-sm transition-shadow ${
                   isCustomer
-                    ? 'bg-[#1f2c34] text-gray-100'
+                    ? 'bg-white dark:bg-[#1f2c34] text-gray-900 dark:text-gray-100'
                     : isDraft
                     ? 'bg-yellow-900/60 text-yellow-100 ring-1 ring-yellow-600'
-                    : 'bg-[#005c4b] text-gray-100'
-                }`}
+                    : 'bg-[#d9fdd3] dark:bg-[#005c4b] text-gray-900 dark:text-gray-100'
+                } ${highlightId === m.id ? 'ring-2 ring-wa-accent' : ''}`}
               >
                 {isDraft && (
                   <div className="mb-1 flex items-center gap-1 text-xs text-yellow-400">
                     <span>Draft AI</span>
                   </div>
                 )}
+                {/* Quoted message block (WhatsApp-style reply preview) */}
+                {quoted && (
+                  <button
+                    onClick={() => jumpToMessage(quoted.id)}
+                    className="mb-1 block w-full rounded border-l-2 border-wa-accent bg-black/5 dark:bg-black/20 px-2 py-1 text-left"
+                  >
+                    <span className="block text-[10px] font-medium text-wa-accent">
+                      {senderLabel(quoted.senderType, conv.customer.name)}
+                    </span>
+                    <span className="block truncate text-xs text-gray-600 dark:text-gray-400">
+                      {quoted.content || `[${quoted.messageType}]`}
+                    </span>
+                  </button>
+                )}
                 <MessageMedia msg={m} />
                 <div className="mt-1 flex items-center justify-end gap-1">
                   <span className="text-xs opacity-50">{fmtTime(m.createdAt)}</span>
                   {m.aiGenerated && !isCustomer && (
-                    <span className="text-xs opacity-50">🤖</span>
+                    <span className="text-xs opacity-50"></span>
+                  )}
+                  {/* Delivery ticks only on our outgoing (non-draft) messages. */}
+                  {!isCustomer && !isDraft && (
+                    <span className="text-xs"><StatusTicks status={m.status} /></span>
                   )}
                 </div>
-                {/* Approve / Block buttons for supervised draft */}
-                {isDraft && isSupervisedPending && (
-                  <div className="mt-2 flex gap-2">
+                {/* Approve (send) / Block (discard) for any pending AI draft —
+                    applies to both ai_draft and ai_supervised modes. */}
+                {isDraft && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => setText(m.content ?? '')}
+                      className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <Pencil size={13} />
+                      Edit Draft
+                    </button>
                     <button
                       onClick={() => onApproveDraft(m.id)}
-                      className="rounded bg-green-700 px-2 py-0.5 text-xs font-medium hover:bg-green-600"
+                      className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
                     >
-                      Approve
+                      <CircleCheck size={13} />
+                      Approve & Send
                     </button>
                     <button
                       onClick={() => onBlockDraft(m.id)}
-                      className="rounded bg-red-700 px-2 py-0.5 text-xs font-medium hover:bg-red-600"
+                      className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
                     >
-                      Block
+                      <CircleX size={13} />
+                      Sending blocked
                     </button>
                   </div>
                 )}
               </div>
+              {/* Reply button (right of customer bubbles) */}
+              {isCustomer && (
+                <button
+                  onClick={() => setReplyTo(m)}
+                  title="Balas pesan ini"
+                  className="hidden shrink-0 rounded bg-black/5 dark:bg-black/30 px-1.5 py-0.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 group-hover:block"
+                >
+                  <MessageSquareReply size={14} />
+                </button>
+              )}
             </div>
           );
         })}
@@ -505,19 +1025,81 @@ function CenterPanel({
         <MediaModal
           onClose={() => setShowMediaModal(false)}
           onSend={onSendMedia}
+          onUpload={onUploadMedia}
         />
       )}
 
       {/* Input */}
       {canSend && (
-        <div className="border-t border-black/40 bg-wa-panel px-4 py-3">
+        <div className="relative border-t border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel px-4 py-3">
+          {/* Quick-reply picker (triggered by typing "/") */}
+          {showQuickReplies && (
+            <div className="absolute bottom-full left-4 right-4 mb-1 max-h-56 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg">
+              <p className="border-b border-gray-200 dark:border-black/30 px-3 py-1 text-[10px] uppercase tracking-wide text-gray-500">
+                Template — pilih untuk menyisipkan
+              </p>
+              {qrMatches.map((q) => (
+                <button
+                  key={q.id}
+                  onClick={() => setText(q.content)}
+                  className="block w-full border-b border-gray-200 dark:border-black/20 px-3 py-2 text-left hover:bg-black/5 dark:hover:bg-black/30"
+                >
+                  <div className="flex items-center gap-2">
+                    {q.shortcut && (
+                      <span className="rounded bg-emerald-900 px-1.5 py-0.5 text-[10px] text-emerald-200">
+                        /{q.shortcut}
+                      </span>
+                    )}
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{q.title}</span>
+                  </div>
+                  <p className="truncate text-xs text-gray-600 dark:text-gray-400">{q.content}</p>
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Quoted reply preview */}
+          {replyTo && (
+            <div className="mb-2 flex items-start gap-2 rounded border-l-2 border-wa-accent bg-black/5 dark:bg-black/20 px-2 py-1.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-medium text-wa-accent">
+                  Membalas {senderLabel(replyTo.senderType, conv.customer.name)}
+                </p>
+                <p className="truncate text-xs text-gray-600 dark:text-gray-400">
+                  {replyTo.content || `[${replyTo.messageType}]`}
+                </p>
+              </div>
+              <button
+                onClick={() => setReplyTo(null)}
+                title="Batal membalas"
+                className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+          {isAdmin && (
+            <div className="mb-2 flex items-center gap-2">
+              <button
+                onClick={handleSuggest}
+                disabled={suggesting}
+                title="Minta AI menyarankan balasan"
+                className="rounded bg-blue-700/70 px-2 py-1 text-xs font-medium text-blue-100 hover:bg-blue-600 disabled:opacity-50"
+              >
+                {suggesting ? 'Menyiapkan saran...' : 'View Reasoning'}
+              </button>
+              <span className="text-[10px] text-gray-500">
+                Saran bisa diedit sebelum dikirim
+              </span>
+            </div>
+          )}
           <div className="flex gap-2">
             <button
               onClick={() => setShowMediaModal(true)}
-              title="Kirim media"
-              className="rounded bg-black/30 px-2 py-2 text-gray-400 hover:text-gray-200"
+              title="Send Message media"
+              className="rounded bg-black/5 dark:bg-black/30 px-2 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
             >
-              📎
+              <Paperclip size={16} />
+              <span className="sr-only">Send Message media</span>
             </button>
             <textarea
               rows={1}
@@ -530,22 +1112,22 @@ function CenterPanel({
                 }
               }}
               placeholder="Tulis pesan..."
-              className="flex-1 resize-none rounded bg-black/30 px-3 py-2 text-sm outline-none placeholder:text-gray-500"
+              className="flex-1 resize-none rounded bg-black/5 dark:bg-black/30 px-3 py-2 text-sm outline-none placeholder:text-gray-500"
             />
             <button
               onClick={handleSend}
               disabled={!text.trim() || sending}
-              className="rounded bg-wa-accent px-4 font-medium text-black disabled:opacity-50"
+              className="rounded bg-wa-accent px-4 font-medium text-white disabled:opacity-50"
             >
-              {sending ? '...' : 'Kirim'}
+              {sending ? '...' : 'Send Message'}
             </button>
           </div>
         </div>
       )}
       {!canSend && (
-        <div className="border-t border-black/40 bg-wa-panel px-4 py-3 text-center text-xs text-gray-500">
+        <div className="border-t border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel px-4 py-3 text-center text-xs text-gray-500">
           {conv.aiMode === 'ai_on'
-            ? 'AI sedang aktif — Takeover untuk kirim manual'
+            ? 'AI sedang aktif — Take Over untuk kirim manual'
             : conv.aiMode === 'ai_supervised'
             ? 'Mode supervised — AI membuat draft, review sebelum kirim'
             : 'Mode draft — admin review dan kirim manual'}
@@ -559,14 +1141,23 @@ function CenterPanel({
 
 function RightPanel({
   conv,
+  admins,
   onAiModeChange,
   onAddNote,
+  onStatusChange,
+  onAssign,
+  onSetLabels,
 }: {
   conv: ConvDetail | null;
+  admins: AdminUser[];
   onAiModeChange: (mode: string) => void;
   onAddNote: (note: string) => void;
+  onStatusChange: (status: string) => void;
+  onAssign: (adminId: string | null) => void;
+  onSetLabels: (labels: string[]) => void;
 }) {
   const [note, setNote] = useState('');
+  const [newLabel, setNewLabel] = useState('');
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [showFollowUpForm, setShowFollowUpForm] = useState(false);
   const [fuMessage, setFuMessage] = useState('');
@@ -619,7 +1210,7 @@ function RightPanel({
     }
   }
 
-  if (!conv) return <aside className="w-72 border-l border-black/40 bg-wa-panel" />;
+  if (!conv) return <aside className="w-72 border-l border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel" />;
 
   const { customer, hermesReviews } = conv;
   const lastReview = hermesReviews[0] ?? null;
@@ -633,17 +1224,36 @@ function RightPanel({
   ];
 
   return (
-    <aside className="flex w-72 flex-col gap-4 overflow-y-auto border-l border-black/40 bg-wa-panel p-4">
+    <aside className="flex w-72 flex-col gap-4 overflow-y-auto border-l border-gray-200 dark:border-black/40 bg-white dark:bg-wa-panel p-4">
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Control actions</h3>
+        <div className="grid grid-cols-1 gap-2">
+          <button
+            onClick={() => onStatusChange('pending')}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 hover:bg-amber-100"
+          >
+            <ArrowUpRight size={14} />
+            Escalate
+          </button>
+          <a
+            href="/audit"
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <ScrollText size={14} />
+            View Audit Trail
+          </a>
+        </div>
+      </div>
       {/* Customer Info */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
           Info Customer
         </h3>
         <div className="space-y-1 text-sm">
           <p className="font-medium">{customer.name ?? '—'}</p>
-          <p className="text-xs text-gray-400">{customer.phoneNumber}</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400">{customer.phoneNumber}</p>
           <div className="flex items-center gap-2">
-            <span className={`text-xs font-medium ${leadColors[customer.leadStage] ?? 'text-gray-400'}`}>
+            <span className={`text-xs font-medium ${leadColors[customer.leadStage] ?? 'text-gray-600 dark:text-gray-400'}`}>
               {customer.leadStage.replace('_', ' ').toUpperCase()}
             </span>
             <span className="text-xs text-gray-500">Score: {customer.leadScore}</span>
@@ -651,7 +1261,7 @@ function RightPanel({
           {customer.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 pt-1">
               {customer.tags.map((tag) => (
-                <span key={tag} className="rounded bg-black/30 px-1.5 py-0.5 text-xs text-gray-300">
+                <span key={tag} className="rounded bg-black/5 dark:bg-black/30 px-1.5 py-0.5 text-xs text-gray-700 dark:text-gray-300">
                   {tag}
                 </span>
               ))}
@@ -660,15 +1270,122 @@ function RightPanel({
         </div>
       </div>
 
+      {/* Status & Assignment */}
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+          Status & Penugasan
+        </h3>
+        <div className="space-y-2">
+          <select
+            value={conv.status}
+            onChange={(e) => onStatusChange(e.target.value)}
+            className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1.5 text-sm outline-none"
+            title="Status percakapan"
+          >
+            <option value="open">Open</option>
+            <option value="pending">Pending</option>
+            <option value="resolved">Resolved</option>
+          </select>
+          {admins.length > 0 ? (
+            <select
+              value={conv.assignedAdmin?.id ?? ''}
+              onChange={(e) => onAssign(e.target.value || null)}
+              className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1.5 text-sm outline-none"
+              title="Tugaskan ke admin"
+            >
+              <option value="">— Tidak ditugaskan —</option>
+              {admins.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            // Plain admins can't list users → offer self-assign only.
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-xs text-gray-600 dark:text-gray-400">
+                {conv.assignedAdmin ? conv.assignedAdmin.name : 'Belum ditugaskan'}
+              </span>
+              {conv.assignedAdmin?.id === getUserId() ? (
+                <button
+                  onClick={() => onAssign(null)}
+                  className="shrink-0 rounded bg-gray-200 dark:bg-gray-700 px-2 py-0.5 text-xs text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600"
+                >
+                  Lepas
+                </button>
+              ) : (
+                <button
+                  onClick={() => { const me = getUserId(); if (me) onAssign(me); }}
+                  className="shrink-0 rounded bg-emerald-700 px-2 py-0.5 text-xs text-emerald-100 hover:bg-emerald-600"
+                >
+                  Ambil untuk saya
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Labels */}
+      <div>
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+          Label
+        </h3>
+        <div className="mb-2 flex flex-wrap gap-1">
+          {(conv.labels ?? []).length === 0 && (
+            <span className="text-xs text-gray-500 dark:text-gray-600">Belum ada label.</span>
+          )}
+          {(conv.labels ?? []).map((l) => (
+            <span key={l} className="flex items-center gap-1 rounded bg-indigo-900 px-1.5 py-0.5 text-xs text-indigo-200">
+              {l}
+              <button
+                onClick={() => onSetLabels((conv.labels ?? []).filter((x) => x !== l))}
+                className="text-indigo-300 hover:text-white"
+                title="Hapus label"
+              >
+
+              </button>
+            </span>
+          ))}
+        </div>
+        <input
+          type="text"
+          value={newLabel}
+          onChange={(e) => setNewLabel(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && newLabel.trim()) {
+              const next = Array.from(new Set([...(conv.labels ?? []), newLabel.trim()]));
+              onSetLabels(next);
+              setNewLabel('');
+            }
+          }}
+          placeholder="Tambah label + Enter"
+          className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
+        />
+      </div>
+
+      {/* CSAT result */}
+      {typeof conv.csatScore === 'number' && (
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
+            Rating Customer (CSAT)
+          </h3>
+          <p className="text-lg">
+            {'★'.repeat(conv.csatScore)}<span className="text-gray-500 dark:text-gray-600">{'★'.repeat(5 - conv.csatScore)}</span>
+            <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">{conv.csatScore}/5</span>
+          </p>
+        </div>
+      )}
+
       {/* AI Mode Selector */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
           Mode AI
         </h3>
         <select
           value={conv.aiMode}
           onChange={(e) => onAiModeChange(e.target.value)}
-          className="w-full rounded bg-black/30 px-2 py-1.5 text-sm outline-none"
+          className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1.5 text-sm outline-none"
         >
           {aiModes.map((m) => (
             <option key={m.value} value={m.value}>
@@ -680,11 +1397,11 @@ function RightPanel({
 
       {/* Notes */}
       <div>
-        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
           Catatan Internal
         </h3>
         {customer.notes && (
-          <p className="mb-2 rounded bg-black/20 p-2 text-xs text-gray-300">{customer.notes}</p>
+          <p className="mb-2 rounded bg-black/5 dark:bg-black/20 p-2 text-xs text-gray-700 dark:text-gray-300">{customer.notes}</p>
         )}
         <div className="flex gap-1">
           <input
@@ -692,7 +1409,7 @@ function RightPanel({
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Tambah catatan..."
-            className="flex-1 rounded bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-600"
+            className="flex-1 rounded bg-black/5 dark:bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && note.trim()) {
                 onAddNote(note.trim());
@@ -707,7 +1424,7 @@ function RightPanel({
                 setNote('');
               }
             }}
-            className="rounded bg-wa-accent px-2 py-1 text-xs font-medium text-black"
+            className="rounded bg-wa-accent px-2 py-1 text-xs font-medium text-white"
           >
             +
           </button>
@@ -717,22 +1434,22 @@ function RightPanel({
       {/* Hermes Last Review */}
       {lastReview && (
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
             Hermes Review Terakhir
           </h3>
-          <div className="space-y-1.5 rounded bg-black/20 p-2 text-xs">
+          <div className="space-y-1.5 rounded bg-black/5 dark:bg-black/20 p-2 text-xs">
             <div className="flex items-center gap-2">
               {decisionBadge(lastReview.decision)}
-              <span className="text-gray-400">
+              <span className="text-gray-600 dark:text-gray-400">
                 {lastReview.riskLevel.toUpperCase()} risk
               </span>
             </div>
-            <div className="flex gap-3 text-gray-400">
-              <span>Confidence: <span className="text-gray-200">{lastReview.confidenceScore}</span></span>
-              <span>Risk: <span className="text-gray-200">{lastReview.riskScore}</span></span>
+            <div className="flex gap-3 text-gray-600 dark:text-gray-400">
+              <span>Confidence: <span className="text-gray-800 dark:text-gray-200">{lastReview.confidenceScore}</span></span>
+              <span>Risk: <span className="text-gray-800 dark:text-gray-200">{lastReview.riskScore}</span></span>
             </div>
             {lastReview.reason && (
-              <p className="text-gray-400">{lastReview.reason}</p>
+              <p className="text-gray-600 dark:text-gray-400">{lastReview.reason}</p>
             )}
             {lastReview.recommendation && (
               <p className="italic text-gray-500">{lastReview.recommendation}</p>
@@ -744,15 +1461,15 @@ function RightPanel({
       {/* Bot info */}
       {conv.bot && (
         <div>
-          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-400">Bot</h3>
-          <p className="text-xs text-gray-300">{conv.bot.botName}</p>
+          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Bot</h3>
+          <p className="text-xs text-gray-700 dark:text-gray-300">{conv.bot.botName}</p>
         </div>
       )}
 
       {/* Follow-ups */}
       <div>
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Follow-ups</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">Follow-ups</h3>
           <button
             onClick={() => setShowFollowUpForm((v) => !v)}
             className="rounded bg-emerald-700 px-2 py-0.5 text-xs font-medium text-emerald-100 hover:bg-emerald-600"
@@ -762,19 +1479,19 @@ function RightPanel({
         </div>
 
         {showFollowUpForm && (
-          <div className="mb-3 space-y-2 rounded bg-black/20 p-2">
+          <div className="mb-3 space-y-2 rounded bg-black/5 dark:bg-black/20 p-2">
             <textarea
               rows={2}
               value={fuMessage}
               onChange={(e) => setFuMessage(e.target.value)}
               placeholder="Pesan follow-up..."
-              className="w-full resize-none rounded bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-600"
+              className="w-full resize-none rounded bg-black/5 dark:bg-black/30 px-2 py-1 text-xs outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
             />
             <input
               type="datetime-local"
               value={fuDateTime}
               onChange={(e) => setFuDateTime(e.target.value)}
-              className="w-full rounded bg-black/30 px-2 py-1 text-xs text-gray-200 outline-none"
+              className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1 text-xs text-gray-800 dark:text-gray-200 outline-none"
             />
             <button
               onClick={handleScheduleFollowUp}
@@ -788,10 +1505,10 @@ function RightPanel({
 
         <div className="space-y-2">
           {followUps.length === 0 && (
-            <p className="text-xs text-gray-600">Belum ada follow-up.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-600">Belum ada follow-up.</p>
           )}
           {followUps.map((fu) => (
-            <div key={fu.id} className="rounded bg-black/20 p-2 text-xs">
+            <div key={fu.id} className="rounded bg-black/5 dark:bg-black/20 p-2 text-xs">
               <div className="mb-1 flex items-center justify-between gap-1">
                 <span
                   className={`rounded px-1.5 py-0.5 font-medium ${
@@ -799,7 +1516,7 @@ function RightPanel({
                       ? 'bg-yellow-800 text-yellow-200'
                       : fu.status === 'sent'
                       ? 'bg-green-800 text-green-200'
-                      : 'bg-gray-700 text-gray-400'
+                      : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
                   }`}
                 >
                   {fu.status}
@@ -810,11 +1527,11 @@ function RightPanel({
                     className="text-gray-500 hover:text-red-400"
                     title="Batalkan"
                   >
-                    ✕
+                    <X size={14} />
                   </button>
                 )}
               </div>
-              <p className="mb-1 text-gray-300">{fu.message}</p>
+              <p className="mb-1 text-gray-700 dark:text-gray-300">{fu.message}</p>
               <p className="text-gray-500">
                 {new Date(fu.scheduledAt).toLocaleString('id', {
                   day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
@@ -828,16 +1545,90 @@ function RightPanel({
   );
 }
 
+
+function OperationalQueueBar({ conversations, accounts }: { conversations: ConvSummary[]; accounts: WaAccount[] }) {
+  const pendingReviews = conversations.filter((c) => c.status === 'pending' || c.takeoverStatus === 'waiting_admin').length;
+  const highRisk = conversations.filter((c) => c.aiMode === 'ai_paused' || c.takeoverStatus === 'waiting_admin').length;
+  const failedMessages = conversations.filter((c) => c.messages.some((m) => m.status === 'failed')).length;
+  const disconnected = accounts.filter((a) => a.sessionStatus && a.sessionStatus !== 'connected').length;
+  const slaRisks = conversations.filter((c) => !!c.slaBreachedAt).length;
+  const total = conversations.length;
+  const items = [
+    { label: 'Pending reviews', value: pendingReviews, tone: 'amber', icon: <TriangleAlert size={16} /> },
+    { label: 'High-risk conversations', value: highRisk, tone: 'red', icon: <ShieldCheck size={16} /> },
+    { label: 'Failed messages', value: failedMessages, tone: 'red', icon: <CircleX size={16} /> },
+    { label: 'Disconnected accounts', value: disconnected, tone: 'amber', icon: <Unplug size={16} /> },
+    { label: 'SLA risks', value: slaRisks, tone: 'amber', icon: <Clock3 size={16} /> },
+    { label: 'Active conversations', value: total, tone: 'slate', icon: <Inbox size={16} /> },
+  ];
+  const toneClass: Record<string, string> = {
+    amber: 'border-amber-200 bg-amber-50 text-amber-800',
+    red: 'border-red-200 bg-red-50 text-red-800',
+    slate: 'border-slate-200 bg-white text-slate-700',
+  };
+  return (
+    <section className="mb-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm" aria-label="Operational attention queues">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-sm font-semibold text-slate-950">Hermes AI Sales & Customer Service Control Center</h1>
+          <p className="text-xs text-slate-500">AI accelerates routine work. Hermes supervises quality and risk. Humans approve high-impact decisions.</p>
+        </div>
+        <span className="hidden rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 sm:inline-flex">
+          Auditable AI operations
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
+        {items.map((item) => (
+          <div key={item.label} className={`rounded-lg border px-3 py-2 ${toneClass[item.tone]}`}>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-medium uppercase tracking-wide opacity-80">{item.label}</span>
+              {item.icon}
+            </div>
+            <p className="mt-1 text-2xl font-semibold tabular-nums">{item.value}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const [conversations, setConversations] = useState<ConvSummary[]>([]);
+  const [accounts, setAccounts] = useState<WaAccount[]>([]);
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const [accountId, setAccountId] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [conv, setConv] = useState<ConvDetail | null>(null);
   const [filter, setFilter] = useState<FilterTab>('all');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [labelFilter, setLabelFilter] = useState('');
   const [search, setSearch] = useState('');
   const [sending, setSending] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [typing, setTyping] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const convRef = useRef<ConvDetail | null>(null);
+  convRef.current = conv;
+
+  // load WhatsApp accounts once for the switcher
+  useEffect(() => {
+    api<WaAccount[]>('/wa/accounts')
+      .then(setAccounts)
+      .catch(() => setAccounts([]));
+    // Admin list for the assignment dropdown. Owner/supervisor only — plain
+    // admins get a 403 and fall back to the self-assign button.
+    api<{ users: (AdminUser & { role: string })[] }>('/users?limit=100')
+      .then((r) => setAdmins(r.users.filter((u) => u.role !== 'viewer')))
+      .catch(() => setAdmins([]));
+    // Ask for browser notification permission (best-effort).
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
 
   // load conversation list
   const loadList = useCallback(async () => {
@@ -845,20 +1636,56 @@ export default function DashboardPage() {
       const params = new URLSearchParams();
       if (filter === 'needs_attention') params.set('needsAttention', 'true');
       else if (filter !== 'all') params.set('aiMode', filter);
+      if (statusFilter) params.set('status', statusFilter);
+      if (labelFilter.trim()) params.set('label', labelFilter.trim());
       if (search) params.set('search', search);
+      if (accountId) params.set('accountId', accountId);
       params.set('limit', '100');
       const data = await api<{ items: ConvSummary[] }>(`/conversations?${params}`);
       setConversations(data.items);
     } catch {
       // silently fail on list
     }
-  }, [filter, search]);
+  }, [filter, statusFilter, labelFilter, search, accountId]);
 
   useEffect(() => {
     loadList();
     const t = setInterval(loadList, 30_000);
     return () => clearInterval(t);
   }, [loadList]);
+
+  // Quick replies available for the open conversation's account (+ global).
+  useEffect(() => {
+    const accId = conv?.whatsappAccount.id;
+    const path = accId ? `/quick-replies?accountId=${accId}` : '/quick-replies';
+    api<QuickReply[]>(path)
+      .then(setQuickReplies)
+      .catch(() => setQuickReplies([]));
+  }, [conv?.whatsappAccount.id]);
+
+  // Load an older page of messages (infinite scroll, prepended to the top).
+  const handleLoadOlder = useCallback(async () => {
+    const current = convRef.current;
+    if (!current || !current.hasMoreMessages || !current.oldestCursor) return;
+    try {
+      const r = await api<{ messages: Message[]; hasMore: boolean; oldestCursor: string | null }>(
+        `/conversations/${current.id}/messages?before=${encodeURIComponent(current.oldestCursor)}`,
+      );
+      setConv((prev) => {
+        if (!prev || prev.id !== current.id) return prev;
+        const seen = new Set(prev.messages.map((m) => m.id));
+        const older = r.messages.filter((m) => !seen.has(m.id));
+        return {
+          ...prev,
+          messages: [...older, ...prev.messages],
+          hasMoreMessages: r.hasMore,
+          oldestCursor: r.oldestCursor,
+        };
+      });
+    } catch {
+      // ignore — the scroll handler will allow a retry
+    }
+  }, []);
 
   // load selected conversation detail
   const loadConv = useCallback(async (id: string) => {
@@ -871,8 +1698,14 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedId) loadConv(selectedId);
-    else setConv(null);
+    setTyping(false);
+    if (selectedId) {
+      loadConv(selectedId);
+      // Send blue ticks for the customer's messages now that an admin is here.
+      api(`/conversations/${selectedId}/read`, { method: 'POST' }).catch(() => {});
+    } else {
+      setConv(null);
+    }
   }, [selectedId, loadConv]);
 
   // socket
@@ -880,20 +1713,87 @@ export default function DashboardPage() {
     const socket = getSocket();
 
     socket.on('message:new', ({ conversationId, message }: { conversationId: string; message: Message }) => {
+      const isOpen = convRef.current?.id === conversationId;
       // update detail if active
       setConv((prev) => {
         if (!prev || prev.id !== conversationId) return prev;
-        return { ...prev, messages: [...prev.messages, message] };
+        return prev.messages.some((m) => m.id === message.id)
+          ? prev
+          : { ...prev, messages: [...prev.messages, message] };
       });
-      // refresh list
+      if (message.senderType === 'customer') {
+        if (isOpen) {
+          // Admin is looking → keep it read, don't notify.
+          api(`/conversations/${conversationId}/read`, { method: 'POST' }).catch(() => {});
+        } else {
+          notifyInbound('Pesan baru', message.content?.slice(0, 80) ?? '[media]');
+        }
+      }
+      // refresh list (also refreshes unread badges)
       loadList();
     });
 
     socket.on('message:draft', ({ conversationId, message }: { conversationId: string; message: Message }) => {
       setConv((prev) => {
         if (!prev || prev.id !== conversationId) return prev;
-        return { ...prev, messages: [...prev.messages, message] };
+        return prev.messages.some((m) => m.id === message.id)
+          ? prev
+          : { ...prev, messages: [...prev.messages, message] };
       });
+    });
+
+    socket.on('message:draft-removed', ({ conversationId, messageId }: { conversationId: string; messageId: string }) => {
+      setConv((prev) => {
+        if (!prev || prev.id !== conversationId) return prev;
+        return { ...prev, messages: prev.messages.filter((m) => m.id !== messageId) };
+      });
+    });
+
+    // Delivery/read receipt for one of our sent messages → update checkmark.
+    socket.on('message:status', ({ conversationId, messageId, status }: { conversationId: string; messageId: string; status: string }) => {
+      setConv((prev) => {
+        if (!prev || prev.id !== conversationId) return prev;
+        return { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, status } : m)) };
+      });
+    });
+
+    // Customer typing/recording indicator for the open conversation.
+    socket.on('wa:presence', ({ accountId, phone, typing: isTyping }: { accountId: string; phone: string; typing: boolean }) => {
+      const c = convRef.current;
+      if (!c || c.whatsappAccount.id !== accountId || c.customer.phoneNumber !== phone) return;
+      setTyping(isTyping);
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+      if (isTyping) {
+        // Auto-clear if no further presence arrives (WhatsApp stops sending).
+        typingTimer.current = setTimeout(() => setTyping(false), 6000);
+      }
+    });
+
+    // Status / assignment / labels / CSAT changed (possibly by another admin
+    // or the SLA/CSAT automation) → live-sync only the provided fields.
+    socket.on('conversation:updated', (payload: { conversationId: string; status?: string; assignedAdmin?: AdminUser | null; labels?: string[]; csatScore?: number }) => {
+      setConv((prev) => {
+        if (!prev || prev.id !== payload.conversationId) return prev;
+        const next = { ...prev };
+        if (payload.status !== undefined) next.status = payload.status;
+        if (payload.assignedAdmin !== undefined) next.assignedAdmin = payload.assignedAdmin;
+        if (payload.labels !== undefined) next.labels = payload.labels;
+        if (payload.csatScore !== undefined) next.csatScore = payload.csatScore;
+        return next;
+      });
+      loadList();
+    });
+
+    // SLA monitor flagged / cleared a stale chat → update badge + list live.
+    socket.on('conversation:sla-breach', ({ conversationId }: { conversationId: string }) => {
+      setConv((prev) =>
+        prev && prev.id === conversationId ? { ...prev, slaBreachedAt: new Date().toISOString() } : prev,
+      );
+      loadList();
+    });
+    socket.on('conversation:sla-cleared', ({ conversationId }: { conversationId: string }) => {
+      setConv((prev) => (prev && prev.id === conversationId ? { ...prev, slaBreachedAt: null } : prev));
+      loadList();
     });
 
     socket.on('hermes:alert', ({ decision, reason }: { decision: string; reason: string }) => {
@@ -902,7 +1802,13 @@ export default function DashboardPage() {
 
     return () => {
       socket.off('message:new');
+      socket.off('message:status');
+      socket.off('wa:presence');
       socket.off('message:draft');
+      socket.off('message:draft-removed');
+      socket.off('conversation:updated');
+      socket.off('conversation:sla-breach');
+      socket.off('conversation:sla-cleared');
       socket.off('hermes:alert');
     };
   }, [loadList]);
@@ -920,19 +1826,82 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleSend(text: string) {
+  // Upload a file from the admin's device (multipart) and send it.
+  async function handleUploadMedia(file: File, caption: string) {
+    if (!selectedId) return;
+    const form = new FormData();
+    form.append('file', file);
+    if (caption) form.append('caption', caption);
+    try {
+      await uploadFile(`/conversations/${selectedId}/media/upload`, form);
+      await loadConv(selectedId);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal upload media');
+      throw e; // let the modal keep itself open on failure
+    }
+  }
+
+  async function handleSend(text: string, quotedMessageId?: string) {
     if (!selectedId) return;
     setSending(true);
     try {
       await api(`/conversations/${selectedId}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, ...(quotedMessageId ? { quotedMessageId } : {}) }),
       });
       await loadConv(selectedId);
     } catch (e) {
+      if (selectedId) await loadConv(selectedId);
       setToast(e instanceof Error ? e.message : 'Gagal mengirim');
     } finally {
       setSending(false);
+    }
+  }
+
+  // Conversation workflow status (open/pending/resolved).
+  async function handleStatusChange(status: string) {
+    if (!conv) return;
+    try {
+      await api(`/conversations/${conv.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      });
+      setConv((prev) => (prev ? { ...prev, status } : prev));
+      loadList();
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal mengubah status');
+    }
+  }
+
+  // Replace the conversation's custom labels.
+  async function handleSetLabels(labels: string[]) {
+    if (!conv) return;
+    // Optimistic update so chips appear instantly.
+    setConv((prev) => (prev ? { ...prev, labels } : prev));
+    try {
+      await api(`/conversations/${conv.id}/labels`, {
+        method: 'PATCH',
+        body: JSON.stringify({ labels }),
+      });
+      loadList();
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal menyimpan label');
+      loadConv(conv.id); // revert to server truth
+    }
+  }
+
+  // Assign / unassign the conversation to an admin.
+  async function handleAssign(adminId: string | null) {
+    if (!conv) return;
+    try {
+      const updated = await api<{ assignedAdmin: AdminUser | null }>(`/conversations/${conv.id}/assign`, {
+        method: 'PATCH',
+        body: JSON.stringify({ adminId }),
+      });
+      setConv((prev) => (prev ? { ...prev, assignedAdmin: updated.assignedAdmin } : prev));
+      loadList();
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal menugaskan');
     }
   }
 
@@ -983,19 +1952,55 @@ export default function DashboardPage() {
     }
   }
 
-  // Stub: approve/block draft — in real flow you'd call hermes endpoint
+  // Approve a supervised draft → actually sends it to the customer.
   async function handleApproveDraft(msgId: string) {
-    setToast(`Draft approved (msg ${msgId.slice(0, 8)})`);
+    if (!selectedId) return;
+    try {
+      await api(`/conversations/${selectedId}/messages/${msgId}/approve`, { method: 'POST' });
+      await loadConv(selectedId);
+      loadList();
+      setToast('Draft terkirim ke customer.');
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal mengirim draft');
+    }
   }
 
+  // Block a supervised draft → discards it, never sent.
   async function handleBlockDraft(msgId: string) {
-    setToast(`Draft blocked (msg ${msgId.slice(0, 8)})`);
+    if (!selectedId) return;
+    try {
+      await api(`/conversations/${selectedId}/messages/${msgId}/block`, { method: 'POST' });
+      await loadConv(selectedId);
+      setToast('Draft dibatalkan.');
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal membatalkan draft');
+    }
+  }
+
+  // Ask the AI for a suggested reply (used during takeover). Returns the text
+  // so the input box can be pre-filled for the admin to edit before sending.
+  async function handleSuggest(): Promise<string | null> {
+    if (!selectedId) return null;
+    setSuggesting(true);
+    try {
+      const res = await api<{ text: string }>(`/ai/generate-draft`, {
+        method: 'POST',
+        body: JSON.stringify({ conversationId: selectedId }),
+      });
+      return res.text;
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Gagal membuat saran AI');
+      return null;
+    } finally {
+      setSuggesting(false);
+    }
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-900 text-gray-100">
-      <Sidebar />
-      <div className="flex flex-1 overflow-hidden">
+    <AppLayout>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-3">
+        <OperationalQueueBar conversations={conversations} accounts={accounts} />
+        <div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <LeftPanel
         conversations={conversations}
         selectedId={selectedId}
@@ -1004,25 +2009,44 @@ export default function DashboardPage() {
         search={search}
         onFilterChange={setFilter}
         onSearchChange={setSearch}
+        accounts={accounts}
+        accountId={accountId}
+        onAccountChange={setAccountId}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        labelFilter={labelFilter}
+        onLabelFilterChange={setLabelFilter}
       />
       <CenterPanel
         conv={conv}
         onSend={handleSend}
         onSendMedia={handleSendMedia}
+        onUploadMedia={handleUploadMedia}
         onTakeover={handleTakeover}
         onReturnToAi={handleReturnToAi}
         onToggleAi={handleToggleAi}
         onApproveDraft={handleApproveDraft}
         onBlockDraft={handleBlockDraft}
+        onSuggest={handleSuggest}
+        suggesting={suggesting}
         sending={sending}
+        typing={typing}
+        quickReplies={quickReplies}
+        onLoadOlder={handleLoadOlder}
+        accountStatus={conv ? accounts.find((a) => a.id === conv.whatsappAccount.id)?.sessionStatus : undefined}
       />
       <RightPanel
         conv={conv}
+        admins={admins}
         onAiModeChange={handleAiModeChange}
         onAddNote={handleAddNote}
+        onStatusChange={handleStatusChange}
+        onAssign={handleAssign}
+        onSetLabels={handleSetLabels}
       />
-      {toast && <Toast msg={toast} onDismiss={() => setToast(null)} />}
+        </div>
+        {toast && <Toast msg={toast} onDismiss={() => setToast(null)} />}
       </div>
-    </div>
+    </AppLayout>
   );
 }

@@ -11,6 +11,13 @@ export type AppRole = 'owner' | 'supervisor' | 'admin' | 'viewer';
 export const ROLES_KEY = 'roles';
 export const Roles = (...roles: AppRole[]) => SetMetadata(ROLES_KEY, roles);
 
+const roleHierarchy: Record<AppRole, number> = {
+  owner: 4,
+  supervisor: 3,
+  admin: 2,
+  viewer: 1,
+};
+
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
@@ -20,9 +27,11 @@ export class RolesGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (!required || required.length === 0) return true;
+    if (!required || required.length === 0) return false;
 
     const { user } = context.switchToHttp().getRequest();
-    return user && required.includes(user.role);
+    const userLevel = roleHierarchy[user?.role as AppRole] ?? 0;
+    const minimumLevel = Math.min(...required.map((role) => roleHierarchy[role]));
+    return userLevel >= minimumLevel;
   }
 }

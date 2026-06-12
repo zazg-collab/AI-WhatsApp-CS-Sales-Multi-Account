@@ -103,7 +103,7 @@ export class HermesService {
     });
 
     if (ACTIONABLE.includes(decision) || riskLevel === RiskLevel.critical) {
-      this.events.emit('hermes:alert', { conversationId, review });
+      this.events.emitToAccount(conversation.whatsappAccountId, 'hermes:alert', { conversationId, review });
       // Audit actionable Hermes decisions.
       if (
         decision === HermesDecision.block ||

@@ -1,0 +1,54 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+
+jobs:
+  docker:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Docker registry repo names must be lowercase; github.repository is
+      # "filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account" (mixed case), which
+      # makes buildx fail with "repository name must be lowercase".
+      - name: Compute lowercase image name
+        id: image
+        run: echo "repo=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.image.outputs.repo }}/api:${{ github.sha }}
+            ghcr.io/${{ steps.image.outputs.repo }}/api:latest
+
+      - name: Build and push Web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.image.outputs.repo }}/web:${{ github.sha }}
+            ghcr.io/${{ steps.image.outputs.repo }}/web:latest
