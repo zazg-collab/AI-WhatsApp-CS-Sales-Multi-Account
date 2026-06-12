@@ -184,7 +184,7 @@ function PersonaModal({
             <button type="button" onClick={onClose} className="rounded px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
               Batal
             </button>
-            <button type="submit" disabled={loading} className="rounded bg-wa-accent px-4 py-2 text-sm font-medium text-black disabled:opacity-50">
+            <button type="submit" disabled={loading} className="rounded bg-hermes-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
               {loading ? 'Menyimpan...' : 'Buat Persona'}
             </button>
           </div>
@@ -299,7 +299,7 @@ function BotModal({
                 <button
                   type="button"
                   onClick={() => setShowPersonaModal(true)}
-                  className="text-xs text-wa-accent hover:underline"
+                  className="text-xs text-hermes-600 hover:underline"
                 >
                   + Buat Persona Baru
                 </button>
@@ -374,7 +374,7 @@ function BotModal({
               <button type="button" onClick={onClose} className="rounded px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
                 Batal
               </button>
-              <button type="submit" disabled={loading} className="rounded bg-wa-accent px-4 py-2 text-sm font-medium text-black disabled:opacity-50">
+              <button type="submit" disabled={loading} className="rounded bg-hermes-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
                 {loading ? 'Menyimpan...' : 'Simpan'}
               </button>
             </div>
@@ -399,7 +399,7 @@ function BotModal({
                       ) : (
                         <button
                           onClick={() => handleAssign(a.id)}
-                          className="rounded bg-wa-accent px-2 py-0.5 text-xs font-medium text-black"
+                          className="rounded bg-hermes-600 px-2 py-0.5 text-xs font-medium text-white"
                         >
                           Assign
                         </button>
@@ -545,10 +545,10 @@ export default function BotsPage() {
   return (
     <AppLayout><main className="mx-auto max-w-4xl p-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-wa-accent">Bot Manager</h1>
+        <h1 className="text-xl font-semibold text-hermes-600">Bot Manager</h1>
         <button
           onClick={() => setEditBot(null)}
-          className="rounded bg-wa-accent px-4 py-2 text-sm font-medium text-black"
+          className="rounded bg-hermes-600 px-4 py-2 text-sm font-medium text-white"
         >
           + Buat Bot
         </button>

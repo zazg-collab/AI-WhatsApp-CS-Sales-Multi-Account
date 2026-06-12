@@ -81,7 +81,7 @@ export default function HermesPage() {
 
   return (
     <AppLayout><main className="mx-auto max-w-4xl p-8">
-      <h1 className="mb-6 text-xl font-semibold text-wa-accent">
+      <h1 className="mb-6 text-xl font-semibold text-hermes-600">
         Hermes Monitoring
       </h1>
 
@@ -125,7 +125,7 @@ export default function HermesPage() {
           />
           <button
             disabled={asking}
-            className="rounded bg-wa-accent px-4 text-sm font-medium text-black disabled:opacity-50"
+            className="rounded bg-hermes-600 px-4 text-sm font-medium text-white disabled:opacity-50"
           >
             Tanya
           </button>
@@ -170,7 +170,7 @@ export default function HermesPage() {
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg bg-white dark:bg-wa-panel p-4">
-      <p className="text-2xl font-semibold text-wa-accent">{value}</p>
+      <p className="text-2xl font-semibold text-hermes-600">{value}</p>
       <p className="text-xs text-gray-600 dark:text-gray-400">{label}</p>
     </div>
   );

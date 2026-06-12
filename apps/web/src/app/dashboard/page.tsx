@@ -308,12 +308,12 @@ function LeftPanel({
       {/* Header */}
       <div className="border-b border-gray-200 dark:border-black/30 p-3">
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-wa-accent">Percakapan</h2>
+          <h2 className="text-sm font-semibold text-hermes-600">Percakapan</h2>
           {/* New chat — WhatsApp desktop style */}
           <button
             onClick={onNewChat}
             title="Chat baru"
-            className="flex h-7 w-7 items-center justify-center rounded-lg bg-wa-accent text-white transition-colors hover:bg-wa-accent/90"
+            className="flex h-7 w-7 items-center justify-center rounded-lg bg-hermes-600 text-white transition-colors hover:bg-hermes-700"
           >
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -369,7 +369,7 @@ function LeftPanel({
             key={t.key}
             onClick={() => onFilterChange(t.key)}
             className={`shrink-0 rounded px-2 py-1 text-xs font-medium transition-colors ${
-              filter === t.key ? 'bg-wa-accent text-black' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+              filter === t.key ? 'bg-hermes-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
             }`}
           >
             {t.label}
@@ -391,7 +391,7 @@ function LeftPanel({
               key={c.id}
               onClick={() => onSelect(c.id)}
               className={`w-full border-b border-gray-100 px-3 py-3 text-left transition-colors hover:bg-gray-50 dark:border-black/20 dark:hover:bg-black/20 ${
-                selectedId === c.id ? 'bg-wa-accent/10 dark:bg-black/30' : ''
+                selectedId === c.id ? 'bg-hermes-50 dark:bg-black/30' : ''
               }`}
             >
               <div className="flex items-start gap-3">
@@ -431,7 +431,7 @@ function LeftPanel({
                     </div>
                   )}
                   {!accountId && (
-                    <p className="mt-0.5 truncate text-[10px] text-wa-accent/70">
+                    <p className="mt-0.5 truncate text-[10px] text-hermes-500">
                       via {c.whatsappAccount.accountName}
                     </p>
                   )}
@@ -439,7 +439,7 @@ function LeftPanel({
                 <div className="flex flex-col items-end gap-1">
                   <span className="text-xs text-gray-500">{fmtTime(c.lastMessageAt)}</span>
                   {c.unreadCount && c.unreadCount > 0 ? (
-                    <span className="min-w-[18px] rounded-full bg-wa-accent px-1.5 text-center text-[11px] font-semibold text-black">
+                    <span className="min-w-[18px] rounded-full bg-hermes-600 px-1.5 text-center text-[11px] font-semibold text-white">
                       {c.unreadCount > 99 ? '99+' : c.unreadCount}
                     </span>
                   ) : null}
@@ -529,12 +529,12 @@ function NewChatModal({
               className="w-full rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-900 outline-none placeholder:text-gray-500 dark:bg-gray-900 dark:text-gray-100"
             />
           </div>
-          {err && <p className="rounded-lg bg-pastel-red px-3 py-2 text-xs text-pastel-redInk">{err}</p>}
+          {err && <p className="rounded-lg bg-danger-50 px-3 py-2 text-xs text-danger-700">{err}</p>}
           <div className="flex gap-2 pt-1">
             <button
               onClick={handleStart}
               disabled={!accId || !phone.trim() || busy}
-              className="flex-1 rounded-lg bg-wa-accent py-2 text-sm font-semibold text-white transition-colors hover:bg-wa-accent/90 disabled:opacity-50"
+              className="flex-1 rounded-lg bg-hermes-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-hermes-700 disabled:opacity-50"
             >
               {busy ? 'Membuka…' : 'Buka Chat'}
             </button>
@@ -974,7 +974,7 @@ function CenterPanel({
             </div>
             <p className="text-xs text-gray-600 dark:text-gray-400">
               {typing ? (
-                <span className="text-wa-accent">sedang mengetik…</span>
+                <span className="text-hermes-600">sedang mengetik…</span>
               ) : (
                 conv.customer.phoneNumber
               )}
@@ -987,7 +987,7 @@ function CenterPanel({
             title="Cari dalam percakapan"
             className={`rounded px-2.5 py-1 text-xs font-medium ring-1 ${
               searchOpen
-                ? 'bg-wa-accent text-black ring-wa-accent'
+                ? 'bg-hermes-600 text-white ring-hermes-500'
                 : 'text-gray-700 dark:text-gray-300 ring-gray-300 dark:ring-gray-600 hover:ring-gray-400'
             }`}
           >
@@ -1109,9 +1109,9 @@ function CenterPanel({
                   isCustomer
                     ? 'rounded-tl-sm border border-gray-200 bg-white text-gray-900 dark:border-transparent dark:bg-[#1f2c34] dark:text-gray-100'
                     : isDraft
-                    ? 'rounded-tr-sm border border-amber-300 bg-pastel-yellow text-pastel-yellowInk dark:border-yellow-600 dark:bg-yellow-900/60 dark:text-yellow-100'
+                    ? 'rounded-tr-sm border border-amber-300 bg-review-50 text-review-700 dark:border-yellow-600 dark:bg-yellow-900/60 dark:text-yellow-100'
                     : 'rounded-tr-sm bg-[#d9fdd3] text-gray-900 dark:bg-[#005c4b] dark:text-gray-100'
-                } ${highlightId === m.id ? 'ring-2 ring-wa-accent' : ''}`}
+                } ${highlightId === m.id ? 'ring-2 ring-hermes-500' : ''}`}
               >
                 {isDraft && (
                   <div className="mb-1 flex items-center gap-1 text-xs text-yellow-400">
@@ -1122,9 +1122,9 @@ function CenterPanel({
                 {quoted && (
                   <button
                     onClick={() => jumpToMessage(quoted.id)}
-                    className="mb-1 block w-full rounded border-l-2 border-wa-accent bg-black/5 dark:bg-black/20 px-2 py-1 text-left"
+                    className="mb-1 block w-full rounded border-l-2 border-hermes-500 bg-black/5 dark:bg-black/20 px-2 py-1 text-left"
                   >
-                    <span className="block text-[10px] font-medium text-wa-accent">
+                    <span className="block text-[10px] font-medium text-hermes-600">
                       {senderLabel(quoted.senderType, conv.customer.name)}
                     </span>
                     <span className="block truncate text-xs text-gray-600 dark:text-gray-400">
@@ -1238,9 +1238,9 @@ function CenterPanel({
           )}
           {/* Quoted reply preview */}
           {replyTo && (
-            <div className="mb-2 flex items-start gap-2 rounded border-l-2 border-wa-accent bg-black/5 dark:bg-black/20 px-2 py-1.5">
+            <div className="mb-2 flex items-start gap-2 rounded border-l-2 border-hermes-500 bg-black/5 dark:bg-black/20 px-2 py-1.5">
               <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-medium text-wa-accent">
+                <p className="text-[10px] font-medium text-hermes-600">
                   Membalas {senderLabel(replyTo.senderType, conv.customer.name)}
                 </p>
                 <p className="truncate text-xs text-gray-600 dark:text-gray-400">
@@ -1295,7 +1295,7 @@ function CenterPanel({
             <button
               onClick={handleSend}
               disabled={!text.trim() || sending}
-              className="rounded bg-wa-accent px-4 font-medium text-black disabled:opacity-50"
+              className="rounded bg-hermes-600 px-4 font-medium text-white disabled:opacity-50"
             >
               {sending ? '...' : 'Kirim'}
             </button>
@@ -1583,7 +1583,7 @@ function RightPanel({
                 setNote('');
               }
             }}
-            className="rounded bg-wa-accent px-2 py-1 text-xs font-medium text-black"
+            className="rounded bg-hermes-600 px-2 py-1 text-xs font-medium text-white"
           >
             +
           </button>

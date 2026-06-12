@@ -33,7 +33,7 @@ export default function AiSettingsPage() {
 
   return (
     <AppLayout><main className="mx-auto max-w-2xl p-8">
-      <h1 className="mb-6 text-xl font-semibold text-wa-accent">
+      <h1 className="mb-6 text-xl font-semibold text-hermes-600">
         Pengaturan AI
       </h1>
 
@@ -55,7 +55,7 @@ export default function AiSettingsPage() {
       <button
         onClick={loadModels}
         disabled={loading}
-        className="mb-4 rounded bg-wa-accent px-4 py-2 font-medium text-black disabled:opacity-50"
+        className="mb-4 rounded bg-hermes-600 px-4 py-2 font-medium text-white disabled:opacity-50"
       >
         {loading ? 'Memuat...' : 'Muat model dari Base URL'}
       </button>

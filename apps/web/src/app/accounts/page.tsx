@@ -61,7 +61,7 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
     <div className="mt-3 border-t border-gray-200 dark:border-black/30 pt-3">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="text-xs text-wa-accent hover:underline"
+        className="text-xs text-hermes-600 hover:underline"
       >
         {open ? '▾' : '▸'} Jam operasional & auto-away
         {account.businessHoursEnabled ? ' (aktif)' : ''}
@@ -83,7 +83,7 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
               <button
                 key={d}
                 onClick={() => toggleDay(d)}
-                className={`rounded px-2 py-1 text-xs ${days.includes(d) ? 'bg-wa-accent text-black' : 'bg-black/5 dark:bg-black/30 text-gray-600 dark:text-gray-400'}`}
+                className={`rounded px-2 py-1 text-xs ${days.includes(d) ? 'bg-hermes-600 text-white' : 'bg-black/5 dark:bg-black/30 text-gray-600 dark:text-gray-400'}`}
               >
                 {label}
               </button>
@@ -104,7 +104,7 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
             />
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={save} disabled={saving} className="rounded bg-wa-accent px-3 py-1 text-xs font-medium text-black disabled:opacity-50">
+            <button onClick={save} disabled={saving} className="rounded bg-hermes-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-50">
               {saving ? 'Menyimpan...' : 'Simpan'}
             </button>
             {saved && <span className="text-xs text-emerald-400">Tersimpan ✓</span>}
@@ -164,7 +164,7 @@ export default function AccountsPage() {
 
   return (
     <AppLayout><main className="mx-auto max-w-3xl p-8">
-      <h1 className="mb-6 text-xl font-semibold text-wa-accent">
+      <h1 className="mb-6 text-xl font-semibold text-hermes-600">
         Nomor WhatsApp
       </h1>
 
@@ -183,7 +183,7 @@ export default function AccountsPage() {
           className="flex-1 rounded bg-white dark:bg-wa-panel px-3 py-2 outline-none"
           required
         />
-        <button className="rounded bg-wa-accent px-4 font-medium text-black">
+        <button className="rounded bg-hermes-600 px-4 font-medium text-white">
           Tambah
         </button>
       </form>

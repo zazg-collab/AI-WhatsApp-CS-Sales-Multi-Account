@@ -113,7 +113,7 @@ export default function KnowledgePage() {
   return (
     <AppLayout><main className="mx-auto flex max-w-5xl gap-6 p-8">
       <aside className="w-64 shrink-0">
-        <h1 className="mb-4 text-lg font-semibold text-wa-accent">
+        <h1 className="mb-4 text-lg font-semibold text-hermes-600">
           Knowledge Base
         </h1>
         <form onSubmit={createBase} className="mb-4 space-y-2">
@@ -124,7 +124,7 @@ export default function KnowledgePage() {
             className="w-full rounded bg-white dark:bg-wa-panel px-3 py-2 text-sm outline-none"
             required
           />
-          <button className="w-full rounded bg-wa-accent py-2 text-sm font-medium text-black">
+          <button className="w-full rounded bg-hermes-600 py-2 text-sm font-medium text-white">
             Buat
           </button>
         </form>
@@ -134,7 +134,7 @@ export default function KnowledgePage() {
               <button
                 onClick={() => loadBase(b.id)}
                 className={`w-full rounded px-3 py-2 text-left text-sm ${
-                  selected === b.id ? 'bg-wa-accent text-black' : 'bg-white dark:bg-wa-panel'
+                  selected === b.id ? 'bg-hermes-600 text-white' : 'bg-white dark:bg-wa-panel'
                 }`}
               >
                 {b.name}{' '}
@@ -158,7 +158,7 @@ export default function KnowledgePage() {
                 Isi diekstrak otomatis menjadi item aktif dan dipotong menjadi beberapa item bila dokumen besar.
               </p>
               <div className="flex flex-wrap items-center gap-2">
-                <label className={`cursor-pointer rounded bg-wa-accent px-3 py-2 text-sm font-medium text-black ${ingesting ? 'opacity-50' : ''}`}>
+                <label className={`cursor-pointer rounded bg-hermes-600 px-3 py-2 text-sm font-medium text-white ${ingesting ? 'opacity-50' : ''}`}>
                   {ingesting ? 'Memproses...' : 'Upload file'}
                   <input
                     ref={fileRef}
@@ -182,7 +182,7 @@ export default function KnowledgePage() {
                   />
                   <button
                     disabled={!ingestUrl.trim() || ingesting}
-                    className="rounded bg-wa-accent px-3 py-2 text-sm font-medium text-black disabled:opacity-50"
+                    className="rounded bg-hermes-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
                   >
                     Ambil URL
                   </button>
@@ -218,7 +218,7 @@ export default function KnowledgePage() {
                 className="h-24 w-full rounded bg-white dark:bg-wa-panel px-3 py-2 text-sm outline-none"
                 required
               />
-              <button className="rounded bg-wa-accent px-4 py-2 text-sm font-medium text-black">
+              <button className="rounded bg-hermes-600 px-4 py-2 text-sm font-medium text-white">
                 Tambah item
               </button>
             </form>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ShieldCheck } from 'lucide-react';
 import { api, setToken } from '@/lib/api';
 
 export default function LoginPage() {
@@ -34,8 +35,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Brand mark */}
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-wa-accent text-xl text-white shadow-card">
-            &#9889;
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-hermes-600 text-white shadow-card">
+            <ShieldCheck className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
           </span>
           <div>
             <h1 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">
@@ -57,7 +58,7 @@ export default function LoginPage() {
               placeholder="owner@hermes.local"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-wa-accent dark:border-gray-700 dark:bg-black/30 dark:text-gray-100"
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-hermes-400 dark:border-gray-700 dark:bg-black/30 dark:text-gray-100"
               required
             />
           </div>
@@ -69,17 +70,17 @@ export default function LoginPage() {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-wa-accent dark:border-gray-700 dark:bg-black/30 dark:text-gray-100"
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-hermes-400 dark:border-gray-700 dark:bg-black/30 dark:text-gray-100"
               required
             />
           </div>
           {error && (
-            <p className="rounded-lg bg-pastel-red px-3 py-2 text-sm text-pastel-redInk">{error}</p>
+            <p className="rounded-lg bg-danger-50 px-3 py-2 text-sm text-danger-700">{error}</p>
           )}
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-wa-accent py-2.5 text-sm font-semibold text-white transition-colors hover:bg-wa-accent/90 disabled:opacity-50"
+            className="w-full rounded-lg bg-hermes-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-hermes-700 disabled:opacity-50"
           >
             {loading ? 'Memproses…' : 'Masuk'}
           </button>
