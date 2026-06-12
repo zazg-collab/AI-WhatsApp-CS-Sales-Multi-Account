@@ -45,6 +45,7 @@ const config: Config = {
           700: '#4338ca',
           800: '#3730a3',
           900: '#312e81',
+          950: '#1e1b4b',
         },
         // WhatsApp channel green — restricted to channel + success usage.
         channel: {
@@ -58,17 +59,23 @@ const config: Config = {
         review: {
           50: '#fffbeb',
           100: '#fef3c7',
+          200: '#fde68a',
+          400: '#fbbf24',
           500: '#f59e0b',
           600: '#d97706',
           700: '#b45309',
+          900: '#451a03',
         },
         // Blocked / failed (red).
         danger: {
           50: '#fef2f2',
           100: '#fee2e2',
+          200: '#fecaca',
+          400: '#f87171',
           500: '#ef4444',
           600: '#dc2626',
           700: '#b91c1c',
+          900: '#450a0a',
         },
         // Back-compat: older pages reference `wa.accent` (channel green).
         wa: { bg: '#0b141a', panel: '#111b21', accent: '#1da765' },

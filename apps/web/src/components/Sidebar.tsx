@@ -105,29 +105,29 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen w-16 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950 lg:w-60">
-      {/* Brand — Hermes mark in indigo. */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-gray-100 px-3 dark:border-gray-800 lg:px-4">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-hermes-600 text-white">
-          <ShieldCheck className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
+    <aside className="flex h-screen w-14 flex-col border-r border-gray-200/60 bg-gray-950 dark:border-gray-800 lg:w-56">
+      {/* Brand */}
+      <div className="flex h-14 items-center gap-2.5 border-b border-white/[0.06] px-3 lg:px-4">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-hermes-400 to-hermes-700 shadow-[0_2px_8px_rgba(99,102,241,0.5)]">
+          <ShieldCheck className="h-[17px] w-[17px] text-white" strokeWidth={2} aria-hidden="true" />
         </span>
         <span className="hidden min-w-0 lg:block">
-          <span className="block truncate text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+          <span className="block truncate text-[13px] font-bold tracking-tight text-white">
             Hermes
           </span>
-          <span className="block truncate text-[11px] text-gray-400">Control Center</span>
+          <span className="block truncate text-[10px] font-medium text-gray-500 uppercase tracking-widest">Control Center</span>
         </span>
       </div>
 
       {/* Nav */}
-      <nav className="scrollbar-thin flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3 lg:px-3">
+      <nav className="scrollbar-thin flex flex-1 flex-col gap-5 overflow-y-auto px-2 py-4 lg:px-2.5">
         {sections.map((section, i) => {
           const visible = section.items.filter((it) => canView(userRole, it.requiredRole));
           if (visible.length === 0) return null;
           return (
             <div key={i} className="flex flex-col gap-0.5">
               {section.heading && (
-                <span className="mb-1 hidden px-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400 lg:block">
+                <span className="mb-1.5 hidden px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-600 lg:block">
                   {section.heading}
                 </span>
               )}
@@ -142,21 +142,21 @@ export function Sidebar() {
                     title={item.label}
                     aria-current={isActive ? 'page' : undefined}
                     className={cn(
-                      'group relative flex items-center justify-center gap-2.5 rounded-lg px-2 py-2 text-[13px] font-medium transition-colors lg:justify-start lg:px-2.5',
+                      'group flex items-center justify-center gap-2.5 rounded-lg px-2 py-2 text-[13px] font-medium transition-all duration-150 lg:justify-start lg:px-2.5',
                       isActive
-                        ? 'bg-hermes-50 text-hermes-700 dark:bg-hermes-900/40 dark:text-hermes-200'
-                        : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100',
+                        ? 'bg-hermes-600/20 text-hermes-300 ring-1 ring-hermes-500/30'
+                        : 'text-gray-500 hover:bg-white/[0.06] hover:text-gray-200',
                     )}
                   >
-                    {isActive && (
-                      <span className="absolute left-0 top-1/2 hidden h-5 w-0.5 -translate-y-1/2 rounded-full bg-hermes-600 lg:block" />
-                    )}
                     <Icon
-                      className="h-[18px] w-[18px] shrink-0"
-                      strokeWidth={isActive ? 2 : 1.75}
+                      className={cn('h-[17px] w-[17px] shrink-0 transition-colors', isActive ? 'text-hermes-400' : 'text-gray-500 group-hover:text-gray-300')}
+                      strokeWidth={isActive ? 2.25 : 1.75}
                       aria-hidden="true"
                     />
                     <span className="hidden lg:block">{item.label}</span>
+                    {isActive && (
+                      <span className="ml-auto hidden h-1.5 w-1.5 shrink-0 rounded-full bg-hermes-400 lg:block" />
+                    )}
                   </Link>
                 );
               })}
@@ -165,17 +165,15 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Footer controls */}
-      <div className="border-t border-gray-100 px-2 py-2 dark:border-gray-800 lg:px-3">
-        <div className="mb-1">
-          <ThemeToggle />
-        </div>
+      {/* Footer */}
+      <div className="border-t border-white/[0.06] px-2 py-3 lg:px-2.5">
+        <ThemeToggle />
         <button
           onClick={handleLogout}
           title="Sign out"
-          className="flex w-full items-center justify-center gap-2.5 rounded-lg px-2 py-2 text-[13px] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 lg:justify-start lg:px-2.5"
+          className="mt-0.5 flex w-full items-center justify-center gap-2.5 rounded-lg px-2 py-2 text-[13px] font-medium text-gray-600 transition-colors hover:bg-white/[0.06] hover:text-gray-300 lg:justify-start lg:px-2.5"
         >
-          <LogOut className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
+          <LogOut className="h-[17px] w-[17px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
           <span className="hidden lg:block">Sign out</span>
         </button>
       </div>

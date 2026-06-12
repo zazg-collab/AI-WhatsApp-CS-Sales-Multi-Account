@@ -1,6 +1,5 @@
 import * as React from 'react';
 
-/** Consistent top bar for full-page surfaces. Title left, actions right. */
 export function PageHeader({
   title,
   subtitle,
@@ -11,13 +10,13 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-gray-200 bg-white px-5 dark:border-gray-800 dark:bg-gray-900">
+    <header className="glass-surface flex h-14 shrink-0 items-center justify-between gap-4 px-5 z-10">
       <div className="min-w-0">
-        <h1 className="truncate text-[15px] font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+        <h1 className="truncate text-[15px] font-bold tracking-tight text-gray-900 dark:text-gray-50">
           {title}
         </h1>
         {subtitle && (
-          <p className="truncate text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
+          <p className="truncate text-[11px] text-gray-400 dark:text-gray-500">{subtitle}</p>
         )}
       </div>
       {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}

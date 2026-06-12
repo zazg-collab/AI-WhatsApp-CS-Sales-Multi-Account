@@ -193,10 +193,10 @@ export default function OverviewPage() {
         </Link>
       </PageHeader>
 
-      <div className="scrollbar-thin flex-1 overflow-y-auto p-5">
-        {/* Attention queues — top priority. */}
+      <div className="scrollbar-thin flex-1 overflow-y-auto p-5 space-y-6">
+        {/* Attention queues */}
         <section aria-labelledby="queues-h">
-          <h2 id="queues-h" className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+          <h2 id="queues-h" className="mb-3 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-400">
             Attention required
           </h2>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
@@ -205,20 +205,22 @@ export default function OverviewPage() {
               const muted = q.count === 0;
               return (
                 <Link key={q.key} href={q.href} className="group">
-                  <Card className="h-full p-3.5 transition-colors hover:border-gray-300 dark:hover:border-gray-700">
+                  <Card className="h-full p-4 transition-all duration-200 group-hover:scale-[1.01] group-hover:border-gray-300 dark:group-hover:border-gray-700">
                     <div className="flex items-start justify-between">
-                      <Icon
-                        className={`h-[18px] w-[18px] ${muted ? 'text-gray-300' : toneRing[q.tone]}`}
-                        strokeWidth={1.75}
-                        aria-hidden="true"
-                      />
-                      <ArrowUpRight className="h-4 w-4 text-gray-300 transition-colors group-hover:text-gray-500" strokeWidth={1.75} aria-hidden="true" />
+                      <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${muted ? 'bg-gray-100 dark:bg-gray-800' : q.tone === 'danger' ? 'bg-danger-50 dark:bg-danger-900/30' : 'bg-review-50 dark:bg-review-900/30'}`}>
+                        <Icon
+                          className={`h-4 w-4 ${muted ? 'text-gray-300' : toneRing[q.tone]}`}
+                          strokeWidth={1.75}
+                          aria-hidden="true"
+                        />
+                      </span>
+                      <ArrowUpRight className="h-3.5 w-3.5 text-gray-300 transition-colors group-hover:text-gray-500" strokeWidth={1.75} aria-hidden="true" />
                     </div>
-                    <p className={`mt-3 text-2xl font-semibold tabular-nums ${muted ? 'text-gray-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                    <p className={`mt-3 text-3xl font-bold tabular-nums tracking-tight ${muted ? 'text-gray-300' : 'text-gray-900 dark:text-gray-100'}`}>
                       {loading ? '—' : q.count}
                     </p>
-                    <p className="mt-0.5 text-[13px] font-medium text-gray-700 dark:text-gray-200">{q.label}</p>
-                    <p className="mt-0.5 text-xs text-gray-400">{q.hint}</p>
+                    <p className="mt-0.5 text-[12px] font-semibold text-gray-700 dark:text-gray-200">{q.label}</p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">{q.hint}</p>
                   </Card>
                 </Link>
               );
@@ -226,25 +228,30 @@ export default function OverviewPage() {
           </div>
         </section>
 
-        {/* Needs-attention conversation list. */}
-        <section className="mt-6" aria-labelledby="attn-h">
+        {/* Needs-attention conversation list */}
+        <section aria-labelledby="attn-h">
           <Card>
             <CardHeader>
               <CardTitle id="attn-h">Conversations needing a decision</CardTitle>
-              <Link href="/inbox" className="inline-flex items-center gap-1 text-xs font-medium text-hermes-600 hover:text-hermes-700">
+              <Link href="/inbox" className="inline-flex items-center gap-1 rounded-lg bg-hermes-50 px-2.5 py-1 text-[12px] font-semibold text-hermes-700 hover:bg-hermes-100 dark:bg-hermes-900/30 dark:text-hermes-300 dark:hover:bg-hermes-900/50">
                 Open inbox
-                <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                <ArrowUpRight className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
               </Link>
             </CardHeader>
             {loading ? (
-              <p className="px-4 py-6 text-sm text-gray-400">Loading…</p>
+              <div className="space-y-1 p-2">
+                {[1,2,3].map(n => <div key={n} className="h-14 rounded-lg animate-shimmer" />)}
+              </div>
             ) : attention.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <ShieldCheck className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
-                <p className="text-sm text-gray-400">Nothing waiting on a human right now.</p>
+              <div className="flex flex-col items-center justify-center py-14 text-center">
+                <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-channel-50 dark:bg-channel-900/20">
+                  <ShieldCheck className="h-5 w-5 text-channel-600 dark:text-channel-500" strokeWidth={1.75} aria-hidden="true" />
+                </span>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">All clear</p>
+                <p className="mt-1 text-xs text-gray-400">Nothing waiting on a human right now.</p>
               </div>
             ) : (
-              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+              <ul className="divide-y divide-gray-50 dark:divide-gray-800/80">
                 {attention.map((c) => {
                   const state = deriveState(c);
                   const meta = stateMeta[state];
@@ -254,25 +261,25 @@ export default function OverviewPage() {
                     <li key={c.id}>
                       <Link
                         href={`/inbox?conversation=${c.id}`}
-                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                        className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40"
                       >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[13px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-hermes-100 to-gray-100 text-[12px] font-bold text-hermes-700 dark:from-hermes-900/40 dark:to-gray-800 dark:text-hermes-300">
                           {initials(c.customer.name, c.customer.phoneNumber)}
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{name}</p>
-                            <span className="truncate text-xs text-gray-400">{c.whatsappAccount.accountName}</span>
+                            <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{name}</p>
+                            <span className="truncate text-[11px] text-gray-400">{c.whatsappAccount.accountName}</span>
                           </div>
-                          <p className="truncate text-[13px] text-gray-500 dark:text-gray-400">
+                          <p className="truncate text-[12px] text-gray-500 dark:text-gray-400">
                             {c.lastMessage ?? 'No messages yet'}
                           </p>
                         </div>
                         <Badge tone={meta.tone}>
-                          <Icon className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                          <Icon className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
                           {meta.label}
                         </Badge>
-                        <span className="w-8 shrink-0 text-right text-xs tabular-nums text-gray-400">
+                        <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-gray-400">
                           {relTime(c.lastMessageAt)}
                         </span>
                       </Link>
@@ -284,17 +291,17 @@ export default function OverviewPage() {
           </Card>
         </section>
 
-        {/* Analytics — below actionable items. */}
-        <section className="mt-6" aria-labelledby="metrics-h">
-          <h2 id="metrics-h" className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+        {/* Analytics */}
+        <section aria-labelledby="metrics-h">
+          <h2 id="metrics-h" className="mb-3 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-400">
             Today at a glance
           </h2>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {metrics.map((m) => (
-              <Card key={m.label} className="p-3.5">
-                <p className="text-xs text-gray-500 dark:text-gray-400">{m.label}</p>
-                <span className="mt-1.5 block text-2xl font-semibold tabular-nums text-gray-900 dark:text-gray-100">
-                  {loading ? '—' : m.value}
+              <Card key={m.label} className="p-4">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">{m.label}</p>
+                <span className="mt-2 block text-3xl font-bold tabular-nums tracking-tight text-gray-900 dark:text-gray-100">
+                  {loading ? <span className="text-gray-300">—</span> : m.value}
                 </span>
               </Card>
             ))}

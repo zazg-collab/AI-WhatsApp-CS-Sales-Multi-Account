@@ -12,22 +12,20 @@ body {
 }
 
 @layer base {
-  /* Tabular figures + sensible defaults for a data-heavy, editorial UI. */
   body {
     font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Tighter, intentional headings. */
   h1, h2, h3 {
-    letter-spacing: -0.02em;
+    letter-spacing: -0.025em;
   }
 
-  /* On-brand focus ring — Hermes indigo, calm and consistent. */
   :focus-visible {
     outline: 2px solid theme('colors.hermes.500');
     outline-offset: 2px;
+    border-radius: 4px;
   }
 
   ::selection {
@@ -41,7 +39,6 @@ body {
 }
 
 @layer components {
-  /* WhatsApp chat wallpaper — subtle dotted texture, light by default. */
   .wa-chat-surface {
     background-color: #efeae2;
     background-image: radial-gradient(circle at 1px 1px, rgba(17, 15, 12, 0.04) 1px, transparent 0);
@@ -51,21 +48,61 @@ body {
     background-color: #0b141a;
     background-image: radial-gradient(circle at 1px 1px, rgba(233, 237, 239, 0.045) 1px, transparent 0);
   }
+
+  /* Glassmorphism surface — PageHeader */
+  .glass-surface {
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    background-color: rgba(255, 255, 255, 0.9);
+    border-bottom: 1px solid rgba(226, 232, 240, 0.7);
+  }
+  .dark .glass-surface {
+    background-color: rgba(15, 23, 42, 0.88);
+    border-bottom-color: rgba(30, 41, 59, 0.7);
+  }
 }
 
 @layer utilities {
-  /* Thin, unobtrusive scrollbars matching the warm palette. */
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: theme('colors.gray.300') transparent;
+    scrollbar-color: theme('colors.gray.200') transparent;
   }
-  .scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scrollbar-thin::-webkit-scrollbar { width: 5px; height: 5px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: theme('colors.gray.300');
+    background-color: theme('colors.gray.200');
     border-radius: 9999px;
   }
   .dark .scrollbar-thin { scrollbar-color: theme('colors.gray.700') transparent; }
   .dark .scrollbar-thin::-webkit-scrollbar-thumb { background-color: theme('colors.gray.700'); }
+
+  /* Page entrance animation */
+  .animate-fade-in {
+    animation: fadeIn 0.22s ease-out both;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Gradient text utility */
+  .text-gradient {
+    background: linear-gradient(135deg, theme('colors.hermes.500'), theme('colors.hermes.700'));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Shimmer skeleton */
+  .animate-shimmer {
+    background: linear-gradient(90deg, #f1f5f9 25%, #f8fafc 50%, #f1f5f9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
