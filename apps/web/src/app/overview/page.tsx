@@ -10,7 +10,6 @@ import {
   Clock,
   ArrowUpRight,
   ChartNoAxesCombined,
-  Bot,
   Hand,
 } from 'lucide-react';
 import { api } from '@/lib/api';
