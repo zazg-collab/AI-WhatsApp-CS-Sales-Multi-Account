@@ -1,9 +1,22 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import {
+  ChevronDown,
+  ChevronRight,
+  CircleCheck,
+  Plus,
+  Smartphone,
+  Unplug,
+  QrCode,
+} from 'lucide-react';
 import { api, hasRole } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { AppLayout } from '@/components/AppLayout';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 
 interface Account {
   id: string;
@@ -18,7 +31,21 @@ interface Account {
   awayMessage?: string | null;
 }
 
-const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+type BadgeTone = 'success' | 'review' | 'danger' | 'neutral';
+
+// Session status maps to the semantic connection scale.
+const statusTone: Record<string, BadgeTone> = {
+  connected: 'success',
+  qr_required: 'review',
+  connecting: 'review',
+  disconnected: 'danger',
+  banned: 'danger',
+};
+
+const inputClass =
+  'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
@@ -58,56 +85,70 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
   }
 
   return (
-    <div className="mt-3 border-t border-gray-200 dark:border-black/30 pt-3">
+    <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="text-xs text-wa-accent hover:underline"
+        className="flex items-center gap-1 text-xs font-medium text-hermes-600 hover:text-hermes-700"
       >
-        {open ? '▾' : '▸'} Jam operasional & auto-away
-        {account.businessHoursEnabled ? ' (aktif)' : ''}
+        {open ? (
+          <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+        )}
+        Business hours &amp; auto-away
+        {account.businessHoursEnabled ? ' (active)' : ''}
       </button>
       {open && (
         <div className="mt-3 space-y-3 text-sm">
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-            <span>Aktifkan jam operasional</span>
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="accent-hermes-600" />
+            <span className="text-gray-700 dark:text-gray-300">Enable business hours</span>
           </label>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-gray-600 dark:text-gray-400">Jam</span>
-            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="rounded bg-black/5 dark:bg-black/30 px-2 py-1" />
-            <span className="text-gray-500">–</span>
-            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded bg-black/5 dark:bg-black/30 px-2 py-1" />
+            <span className="text-xs text-gray-500">Hours</span>
+            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className={inputClass} />
+            <span className="text-gray-400">–</span>
+            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className={inputClass} />
           </div>
           <div className="flex flex-wrap gap-1">
             {DAY_LABELS.map((label, d) => (
               <button
                 key={d}
                 onClick={() => toggleDay(d)}
-                className={`rounded px-2 py-1 text-xs ${days.includes(d) ? 'bg-wa-accent text-black' : 'bg-black/5 dark:bg-black/30 text-gray-600 dark:text-gray-400'}`}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                  days.includes(d)
+                    ? 'bg-hermes-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
+                }`}
               >
                 {label}
               </button>
             ))}
           </div>
           <div>
-            <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Timezone</label>
-            <input value={tz} onChange={(e) => setTz(e.target.value)} placeholder="Asia/Jakarta" className="w-full rounded bg-black/5 dark:bg-black/30 px-2 py-1" />
+            <label className="mb-1 block text-xs text-gray-500">Timezone</label>
+            <input value={tz} onChange={(e) => setTz(e.target.value)} placeholder="Asia/Jakarta" className={`w-full ${inputClass}`} />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Pesan auto-away (di luar jam, saat AI tidak ON)</label>
+            <label className="mb-1 block text-xs text-gray-500">Auto-away message (outside hours, when AI is not ON)</label>
             <textarea
               rows={2}
               value={away}
               onChange={(e) => setAway(e.target.value)}
-              placeholder="Halo kak, saat ini di luar jam operasional. Kami balas pada jam kerja ya 🙏"
-              className="w-full resize-none rounded bg-black/5 dark:bg-black/30 px-2 py-1"
+              placeholder="Hi, we're outside business hours right now. We'll reply during working hours."
+              className={`w-full resize-none ${inputClass}`}
             />
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={save} disabled={saving} className="rounded bg-wa-accent px-3 py-1 text-xs font-medium text-black disabled:opacity-50">
-              {saving ? 'Menyimpan...' : 'Simpan'}
-            </button>
-            {saved && <span className="text-xs text-emerald-400">Tersimpan ✓</span>}
+            <Button size="sm" onClick={save} disabled={saving}>
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+            {saved && (
+              <span className="flex items-center gap-1 text-xs text-channel-700">
+                <CircleCheck className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                Saved
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -121,7 +162,7 @@ export default function AccountsPage() {
   const [phone, setPhone] = useState('');
   const [qr, setQr] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-  // M7: the QR grants full control of a WhatsApp number — only admins+ may scan.
+  // The QR grants full control of a WhatsApp number — only admins+ may scan.
   const canScan = hasRole('admin');
   const canEditHours = hasRole('supervisor');
 
@@ -129,7 +170,7 @@ export default function AccountsPage() {
     try {
       setAccounts(await api<Account[]>('/wa/accounts'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat');
+      setError(err instanceof Error ? err.message : 'Failed to load');
     }
   }, []);
 
@@ -158,68 +199,67 @@ export default function AccountsPage() {
       setPhone('');
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal menambah');
+      setError(err instanceof Error ? err.message : 'Failed to add account');
     }
   }
 
   return (
-    <AppLayout><main className="mx-auto max-w-3xl p-8">
-      <h1 className="mb-6 text-xl font-semibold text-wa-accent">
-        Nomor WhatsApp
-      </h1>
+    <AppLayout>
+      <PageHeader title="Accounts" subtitle="WhatsApp numbers, connection status, and hours" />
 
-      <form onSubmit={addAccount} className="mb-8 flex gap-2">
-        <input
-          placeholder="Nama akun"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="flex-1 rounded bg-white dark:bg-wa-panel px-3 py-2 outline-none"
-          required
-        />
-        <input
-          placeholder="Nomor (mis. 628123...)"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          className="flex-1 rounded bg-white dark:bg-wa-panel px-3 py-2 outline-none"
-          required
-        />
-        <button className="rounded bg-wa-accent px-4 font-medium text-black">
-          Tambah
-        </button>
-      </form>
+      <div className="scrollbar-thin mx-auto w-full max-w-3xl flex-1 overflow-y-auto p-5">
+        <Card className="mb-5 p-4">
+          <form onSubmit={addAccount} className="flex flex-wrap gap-2">
+            <input placeholder="Account name" value={name} onChange={(e) => setName(e.target.value)} className={`flex-1 ${inputClass}`} required />
+            <input placeholder="Number (e.g. 628123…)" value={phone} onChange={(e) => setPhone(e.target.value)} className={`flex-1 ${inputClass}`} required />
+            <Button type="submit" size="md">
+              <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              Add account
+            </Button>
+          </form>
+        </Card>
 
-      {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
+        {error && <p className="mb-4 text-sm text-danger-600">{error}</p>}
 
-      <ul className="space-y-4">
-        {accounts.map((a) => (
-          <li key={a.id} className="rounded-lg bg-white dark:bg-wa-panel p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">{a.accountName}</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">{a.phoneNumber}</p>
-              </div>
-              <span className="rounded bg-black/10 dark:bg-black/40 px-2 py-1 text-xs">
-                {a.sessionStatus}
-              </span>
-            </div>
-            {a.sessionStatus === 'qr_required' &&
-              (canScan && qr[a.id] ? (
-                <img
-                  src={qr[a.id]}
-                  alt="QR"
-                  className="mt-4 h-48 w-48 rounded bg-white p-2"
-                />
-              ) : (
-                !canScan && (
-                  <p className="mt-4 text-xs text-gray-600 dark:text-gray-400">
-                    Menunggu admin untuk memindai QR.
-                  </p>
-                )
-              ))}
-            {canEditHours && <BusinessHoursEditor account={a} onSaved={load} />}
-          </li>
-        ))}
-      </ul>
-    </main></AppLayout>
+        <ul className="space-y-3">
+          {accounts.map((a) => {
+            const disconnected = a.sessionStatus === 'disconnected' || a.sessionStatus === 'banned';
+            return (
+              <li key={a.id}>
+                <Card className="p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800">
+                        <Smartphone className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
+                      </span>
+                      <div>
+                        <p className="font-medium text-gray-900 dark:text-gray-100">{a.accountName}</p>
+                        <p className="text-xs text-gray-400">{a.phoneNumber}</p>
+                      </div>
+                    </div>
+                    <Badge tone={statusTone[a.sessionStatus] ?? 'neutral'}>
+                      {disconnected && <Unplug className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />}
+                      {a.sessionStatus}
+                    </Badge>
+                  </div>
+                  {a.sessionStatus === 'qr_required' &&
+                    (canScan && qr[a.id] ? (
+                      <img src={qr[a.id]} alt="WhatsApp QR code" className="mt-4 h-48 w-48 rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-700" />
+                    ) : (
+                      !canScan && (
+                        <p className="mt-4 flex items-center gap-1.5 text-xs text-gray-500">
+                          <QrCode className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                          Waiting for an admin to scan the QR code.
+                        </p>
+                      )
+                    ))}
+                  {canEditHours && <BusinessHoursEditor account={a} onSaved={load} />}
+                </Card>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </AppLayout>
   );
 }

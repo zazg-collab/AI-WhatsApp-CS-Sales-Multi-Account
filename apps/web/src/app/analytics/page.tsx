@@ -1,8 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Download } from 'lucide-react';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 
 interface Summary {
   totalConversations: number;
@@ -29,6 +33,20 @@ interface AiModeItem {
   mode: string;
   count: number;
   percentage: number;
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+
+function exportCsv(path: string, filename: string) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('hermes_token') : '';
+  fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } })
+    .then((r) => r.blob())
+    .then((blob) => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    });
 }
 
 export default function AnalyticsPage() {
@@ -63,19 +81,20 @@ export default function AnalyticsPage() {
 
   const maxVolume = Math.max(...messageVolume.map((d) => d.count), 1);
 
+  // Lead stages + AI modes carry semantic meaning — keep distinct hues.
   const leadColors: Record<string, string> = {
-    cold: 'bg-blue-500',
-    warm: 'bg-yellow-500',
-    hot: 'bg-orange-500',
-    very_hot: 'bg-red-500',
+    cold: 'bg-hermes-400',
+    warm: 'bg-review-500',
+    hot: 'bg-review-600',
+    very_hot: 'bg-danger-500',
   };
 
   const modeColors: Record<string, string> = {
-    ai_on: 'bg-green-500',
-    ai_off: 'bg-gray-300 dark:bg-gray-500',
-    ai_draft: 'bg-yellow-500',
-    ai_supervised: 'bg-blue-500',
-    ai_paused: 'bg-red-500',
+    ai_on: 'bg-channel-500',
+    ai_off: 'bg-gray-300 dark:bg-gray-600',
+    ai_draft: 'bg-review-500',
+    ai_supervised: 'bg-hermes-500',
+    ai_paused: 'bg-danger-500',
   };
 
   const modeLabels: Record<string, string> = {
@@ -88,173 +107,113 @@ export default function AnalyticsPage() {
 
   return (
     <AppLayout>
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Analytics</h1>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
-                const url = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/customers/export`;
-                fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-                  .then((r) => r.blob())
-                  .then((blob) => {
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(blob);
-                    a.download = 'customers.csv';
-                    a.click();
-                  });
-              }}
-              className="rounded bg-emerald-700 px-3 py-1.5 text-xs font-medium text-emerald-100 hover:bg-emerald-600"
-            >
-              Export Customers CSV
-            </button>
-            <button
-              onClick={() => {
-                const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
-                const url = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/conversations/export`;
-                fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-                  .then((r) => r.blob())
-                  .then((blob) => {
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(blob);
-                    a.download = 'conversations.csv';
-                    a.click();
-                  });
-              }}
-              className="rounded bg-blue-700 px-3 py-1.5 text-xs font-medium text-blue-100 hover:bg-blue-600"
-            >
-              Export Conversations CSV
-            </button>
-          </div>
-        </div>
+      <PageHeader title="Analytics" subtitle="Sales and conversation trends">
+        <Button variant="outline" size="sm" onClick={() => exportCsv('/customers/export', 'customers.csv')}>
+          <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          Customers CSV
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => exportCsv('/conversations/export', 'conversations.csv')}>
+          <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          Conversations CSV
+        </Button>
+      </PageHeader>
 
+      <div className="scrollbar-thin flex-1 overflow-y-auto p-5">
         {loading ? (
-          <p className="text-sm text-gray-600 dark:text-gray-400">Memuat data...</p>
+          <p className="text-sm text-gray-500">Loading…</p>
         ) : (
           <>
-            {/* Summary Cards */}
             {summary && (
-              <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-                <SummaryCard label="Total Conversations" value={summary.totalConversations} color="text-gray-900 dark:text-gray-100" />
-                <SummaryCard label="Active (Waiting Admin)" value={summary.activeConversations} color="text-orange-400" />
-                <SummaryCard label="AI ON" value={summary.aiOnConversations} color="text-green-400" />
-                <SummaryCard label="Pending Follow-ups" value={summary.pendingFollowUps} color="text-yellow-400" />
-                <SummaryCard label="Messages (24h)" value={summary.messagesLast24h} color="text-blue-400" />
+              <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                <SummaryCard label="Total conversations" value={summary.totalConversations} />
+                <SummaryCard label="Waiting on admin" value={summary.activeConversations} tone="text-review-600" />
+                <SummaryCard label="AI on" value={summary.aiOnConversations} tone="text-channel-700" />
+                <SummaryCard label="Pending follow-ups" value={summary.pendingFollowUps} tone="text-review-600" />
+                <SummaryCard label="Messages (24h)" value={summary.messagesLast24h} tone="text-hermes-600" />
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              {/* Lead Funnel */}
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
-                  Lead Funnel
-                </h2>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <Panel title="Lead funnel">
                 {leadFunnel.length === 0 ? (
-                  <p className="text-sm text-gray-500">Belum ada data</p>
+                  <Empty />
                 ) : (
                   <div className="space-y-3">
                     {leadFunnel.map((item) => {
                       const total = leadFunnel.reduce((s, i) => s + i.count, 0);
                       const pct = total > 0 ? Math.round((item.count / total) * 100) : 0;
                       return (
-                        <div key={item.stage}>
-                          <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="font-medium text-gray-700 dark:text-gray-300">
-                              {item.stage.replace('_', ' ').toUpperCase()}
-                            </span>
-                            <span className="text-gray-600 dark:text-gray-400">{item.count} ({pct}%)</span>
-                          </div>
-                          <div className="h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
-                            <div
-                              className={`h-2.5 rounded-full ${leadColors[item.stage] ?? 'bg-gray-300 dark:bg-gray-500'}`}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
+                        <Bar
+                          key={item.stage}
+                          label={item.stage.replace('_', ' ').toUpperCase()}
+                          meta={`${item.count} (${pct}%)`}
+                          pct={pct}
+                          color={leadColors[item.stage] ?? 'bg-gray-300 dark:bg-gray-600'}
+                        />
                       );
                     })}
                   </div>
                 )}
-              </div>
+              </Panel>
 
-              {/* AI Mode Breakdown */}
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
-                  AI Mode Breakdown
-                </h2>
+              <Panel title="AI mode breakdown">
                 {aiModeBreakdown.length === 0 ? (
-                  <p className="text-sm text-gray-500">Belum ada data</p>
+                  <Empty />
                 ) : (
                   <div className="space-y-3">
                     {aiModeBreakdown.map((item) => (
-                      <div key={item.mode}>
-                        <div className="mb-1 flex items-center justify-between text-xs">
-                          <span className="font-medium text-gray-700 dark:text-gray-300">
-                            {modeLabels[item.mode] ?? item.mode}
-                          </span>
-                          <span className="text-gray-600 dark:text-gray-400">{item.count} ({item.percentage}%)</span>
-                        </div>
-                        <div className="h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700">
-                          <div
-                            className={`h-2.5 rounded-full ${modeColors[item.mode] ?? 'bg-gray-300 dark:bg-gray-500'}`}
-                            style={{ width: `${item.percentage}%` }}
-                          />
-                        </div>
-                      </div>
+                      <Bar
+                        key={item.mode}
+                        label={modeLabels[item.mode] ?? item.mode}
+                        meta={`${item.count} (${item.percentage}%)`}
+                        pct={item.percentage}
+                        color={modeColors[item.mode] ?? 'bg-gray-300 dark:bg-gray-600'}
+                      />
                     ))}
                   </div>
                 )}
-              </div>
+              </Panel>
 
-              {/* Message Volume (last 7 days) */}
-              <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 lg:col-span-2">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
-                  Message Volume (Last 7 Days)
-                </h2>
+              <Panel title="Message volume — last 7 days" className="lg:col-span-2">
                 {messageVolume.length === 0 ? (
-                  <p className="text-sm text-gray-500">Belum ada data</p>
+                  <Empty />
                 ) : (
                   <div className="flex h-40 items-end gap-2">
                     {messageVolume.map((item) => {
                       const heightPct = Math.round((item.count / maxVolume) * 100);
-                      const dayLabel = new Date(item.date + 'T00:00:00').toLocaleDateString('id', {
+                      const dayLabel = new Date(item.date + 'T00:00:00').toLocaleDateString(undefined, {
                         day: '2-digit',
                         month: 'short',
                       });
                       return (
                         <div key={item.date} className="flex flex-1 flex-col items-center gap-1">
-                          <span className="text-xs text-gray-600 dark:text-gray-400">{item.count}</span>
+                          <span className="text-xs tabular-nums text-gray-500">{item.count}</span>
                           <div className="flex w-full flex-col justify-end" style={{ height: '100px' }}>
                             <div
-                              className="w-full rounded-t bg-emerald-600"
+                              className="w-full rounded-t bg-hermes-600"
                               style={{ height: `${Math.max(heightPct, item.count > 0 ? 4 : 0)}%` }}
                             />
                           </div>
-                          <span className="text-xs text-gray-500">{dayLabel}</span>
+                          <span className="text-xs text-gray-400">{dayLabel}</span>
                         </div>
                       );
                     })}
                   </div>
                 )}
-              </div>
+              </Panel>
 
-              {/* Top Accounts */}
               {summary && summary.topAccounts.length > 0 && (
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 lg:col-span-2">
-                  <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
-                    Top Accounts (Last 7 Days)
-                  </h2>
-                  <div className="space-y-2">
+                <Panel title="Top accounts — last 7 days" className="lg:col-span-2">
+                  <div className="space-y-1">
                     {summary.topAccounts.map((acc, i) => (
-                      <div key={acc.id} className="flex items-center gap-3 text-sm">
-                        <span className="w-5 text-center text-xs text-gray-500">{i + 1}</span>
+                      <div key={acc.id} className="flex items-center gap-3 rounded-md px-1 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <span className="w-5 text-center text-xs tabular-nums text-gray-400">{i + 1}</span>
                         <span className="flex-1 text-gray-800 dark:text-gray-200">{acc.name}</span>
-                        <span className="text-gray-600 dark:text-gray-400">{acc.messageCount} msgs</span>
+                        <span className="tabular-nums text-gray-500 dark:text-gray-400">{acc.messageCount} msgs</span>
                       </div>
                     ))}
                   </div>
-                </div>
+                </Panel>
               )}
             </div>
           </>
@@ -264,11 +223,48 @@ export default function AnalyticsPage() {
   );
 }
 
-function SummaryCard({ label, value, color }: { label: string; value: number; color: string }) {
+function SummaryCard({ label, value, tone }: { label: string; value: number; tone?: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-      <p className="mb-1 text-xs text-gray-600 dark:text-gray-400">{label}</p>
-      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+    <Card className="p-3.5">
+      <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold tabular-nums ${tone ?? 'text-gray-900 dark:text-gray-100'}`}>
+        {value}
+      </p>
+    </Card>
+  );
+}
+
+function Panel({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <Card className={`p-5 ${className ?? ''}`}>
+      <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{title}</h2>
+      {children}
+    </Card>
+  );
+}
+
+function Bar({ label, meta, pct, color }: { label: string; meta: string; pct: number; color: string }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <span className="font-medium text-gray-700 dark:text-gray-300">{label}</span>
+        <span className="tabular-nums text-gray-500 dark:text-gray-400">{meta}</span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-gray-100 dark:bg-gray-800">
+        <div className={`h-2 rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
+}
+
+function Empty() {
+  return <p className="text-sm text-gray-400">No data yet</p>;
 }

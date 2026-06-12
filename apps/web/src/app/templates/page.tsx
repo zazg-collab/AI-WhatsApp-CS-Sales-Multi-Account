@@ -1,8 +1,13 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { AppLayout } from '@/components/AppLayout';
 import { api } from '@/lib/api';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 
 interface WaAccount {
   id: string;
@@ -20,6 +25,9 @@ interface QuickReply {
 }
 
 const EMPTY = { title: '', content: '', shortcut: '', whatsappAccountId: '' };
+
+const inputClass =
+  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 export default function TemplatesPage() {
   const [items, setItems] = useState<QuickReply[]>([]);
@@ -39,7 +47,7 @@ export default function TemplatesPage() {
       setItems(list);
       setAccounts(accs);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal memuat template');
+      setError(e instanceof Error ? e.message : 'Failed to load templates');
     } finally {
       setLoading(false);
     }
@@ -54,7 +62,7 @@ export default function TemplatesPage() {
 
   async function handleSubmit() {
     if (!form.title.trim() || !form.content.trim()) {
-      setError('Judul dan isi wajib diisi');
+      setError('Title and content are required');
       return;
     }
     setError(null);
@@ -76,7 +84,7 @@ export default function TemplatesPage() {
       resetForm();
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal menyimpan template');
+      setError(e instanceof Error ? e.message : 'Failed to save template');
     }
   }
 
@@ -91,147 +99,139 @@ export default function TemplatesPage() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Hapus template ini?')) return;
+    if (!confirm('Delete this template?')) return;
     try {
       await api(`/quick-replies/${id}`, { method: 'DELETE' });
       if (editingId === id) resetForm();
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal menghapus');
+      setError(e instanceof Error ? e.message : 'Failed to delete');
     }
   }
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4">
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Template Pesan</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Balasan siap pakai untuk CS. Ketik <code className="text-emerald-400">/shortcut</code> di kolom chat untuk memilih cepat.
+      <PageHeader
+        title="Templates"
+        subtitle="Ready-to-use CS replies — type /shortcut in the composer to insert"
+      />
+
+      <main className="scrollbar-thin flex-1 overflow-y-auto p-5">
+        {error && (
+          <p className="mb-4 rounded-lg border border-danger-100 bg-danger-50 p-3 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-700/10 dark:text-danger-500">
+            {error}
           </p>
-        </header>
+        )}
 
-        <main className="flex-1 overflow-y-auto p-6">
-          {error && (
-            <p className="mb-4 rounded border border-red-800 bg-red-950/40 p-3 text-sm text-red-200">{error}</p>
-          )}
-
-          <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-            {/* Form */}
-            <section className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5">
-              <h2 className="mb-3 font-semibold text-gray-900 dark:text-gray-100">
-                {editingId ? 'Edit Template' : 'Template Baru'}
-              </h2>
-              <div className="space-y-3">
-                <div>
-                  <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Judul</label>
+        <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
+          {/* Form */}
+          <Card className="h-fit p-5">
+            <h2 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {editingId ? 'Edit template' : 'New template'}
+            </h2>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">Title</label>
+                <input
+                  value={form.title}
+                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                  placeholder="e.g. Greeting"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">Shortcut (optional)</label>
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-400">/</span>
                   <input
-                    value={form.title}
-                    onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                    placeholder="mis. Salam pembuka"
-                    className="w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
+                    value={form.shortcut}
+                    onChange={(e) => setForm((f) => ({ ...f, shortcut: e.target.value }))}
+                    placeholder="greeting"
+                    className={inputClass}
                   />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Shortcut (opsional)</label>
-                  <div className="flex items-center gap-1">
-                    <span className="text-gray-500">/</span>
-                    <input
-                      value={form.shortcut}
-                      onChange={(e) => setForm((f) => ({ ...f, shortcut: e.target.value }))}
-                      placeholder="salam"
-                      className="w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Akun</label>
-                  <select
-                    value={form.whatsappAccountId}
-                    onChange={(e) => setForm((f) => ({ ...f, whatsappAccountId: e.target.value }))}
-                    className="w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-                  >
-                    <option value="">Global (semua akun)</option>
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>{a.accountName}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Isi pesan</label>
-                  <textarea
-                    rows={5}
-                    value={form.content}
-                    onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-                    placeholder="Halo kak, terima kasih sudah menghubungi kami…"
-                    className="w-full resize-none rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleSubmit}
-                    className="flex-1 rounded bg-emerald-600 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-                  >
-                    {editingId ? 'Simpan' : 'Tambah'}
-                  </button>
-                  {editingId && (
-                    <button
-                      onClick={resetForm}
-                      className="rounded bg-gray-200 dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600"
-                    >
-                      Batal
-                    </button>
-                  )}
                 </div>
               </div>
-            </section>
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">Account</label>
+                <select
+                  value={form.whatsappAccountId}
+                  onChange={(e) => setForm((f) => ({ ...f, whatsappAccountId: e.target.value }))}
+                  className={inputClass}
+                >
+                  <option value="">Global (all accounts)</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>{a.accountName}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">Message</label>
+                <textarea
+                  rows={5}
+                  value={form.content}
+                  onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+                  placeholder="Hi, thanks for reaching out to us…"
+                  className={`resize-none ${inputClass}`}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleSubmit} className="flex-1">
+                  {editingId ? (
+                    <>
+                      <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      Save
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      Add
+                    </>
+                  )}
+                </Button>
+                {editingId && (
+                  <Button variant="outline" onClick={resetForm}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </div>
+          </Card>
 
-            {/* List */}
-            <section className="space-y-3">
-              {loading ? (
-                <p className="text-sm text-gray-600 dark:text-gray-400">Memuat…</p>
-              ) : items.length === 0 ? (
-                <p className="text-sm text-gray-500">Belum ada template.</p>
-              ) : (
-                items.map((item) => (
-                  <div key={item.id} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-gray-900 dark:text-gray-100">{item.title}</span>
-                          {item.shortcut && (
-                            <span className="rounded bg-emerald-900 px-1.5 py-0.5 text-xs text-emerald-200">
-                              /{item.shortcut}
-                            </span>
-                          )}
-                          <span className="rounded bg-gray-200 dark:bg-gray-700 px-1.5 py-0.5 text-[10px] text-gray-700 dark:text-gray-300">
-                            {item.whatsappAccount?.accountName ?? 'Global'}
-                          </span>
-                        </div>
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-400">{item.content}</p>
+          {/* List */}
+          <section className="space-y-2">
+            {loading ? (
+              <p className="text-sm text-gray-500">Loading…</p>
+            ) : items.length === 0 ? (
+              <Card className="py-12 text-center text-sm text-gray-400">No templates yet.</Card>
+            ) : (
+              items.map((item) => (
+                <Card key={item.id} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{item.title}</span>
+                        {item.shortcut && <Badge tone="hermes">/{item.shortcut}</Badge>}
+                        <Badge tone="neutral">{item.whatsappAccount?.accountName ?? 'Global'}</Badge>
                       </div>
-                      <div className="flex shrink-0 gap-2">
-                        <button
-                          onClick={() => startEdit(item)}
-                          className="rounded bg-gray-200 dark:bg-gray-700 px-2 py-1 text-xs text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="rounded bg-red-800 px-2 py-1 text-xs text-red-100 hover:bg-red-700"
-                        >
-                          Hapus
-                        </button>
-                      </div>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-400">{item.content}</p>
+                    </div>
+                    <div className="flex shrink-0 gap-1.5">
+                      <Button variant="outline" size="sm" onClick={() => startEdit(item)}>
+                        <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                        Edit
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
+                        <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                        Delete
+                      </Button>
                     </div>
                   </div>
-                ))
-              )}
-            </section>
-          </div>
-        </main>
-      </div>
+                </Card>
+              ))
+            )}
+          </section>
+        </div>
+      </main>
     </AppLayout>
   );
 }

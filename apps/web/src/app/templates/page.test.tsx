@@ -33,9 +33,9 @@ describe('TemplatesPage', () => {
     apiMock.mockImplementation(routed);
     render(<TemplatesPage />);
     await screen.findByText('Salam');
-    await userEvent.type(screen.getByPlaceholderText('mis. Salam pembuka'), 'Tutup');
-    await userEvent.type(screen.getByPlaceholderText('Halo kak, terima kasih sudah menghubungi kami…'), 'Terima kasih kak');
-    await userEvent.click(screen.getByText('Tambah'));
+    await userEvent.type(screen.getByPlaceholderText('e.g. Greeting'), 'Tutup');
+    await userEvent.type(screen.getByPlaceholderText('Hi, thanks for reaching out to us…'), 'Terima kasih kak');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
     await waitFor(() =>
       expect(apiMock).toHaveBeenCalledWith('/quick-replies', expect.objectContaining({ method: 'POST' })),
     );

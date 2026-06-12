@@ -1,8 +1,13 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { Plus, Pencil, Trash2, UsersRound } from 'lucide-react';
 import { api, getToken } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 
 interface User {
   id: string;
@@ -18,6 +23,19 @@ interface AuthUser {
   role: 'owner' | 'supervisor' | 'admin' | 'viewer';
 }
 
+type BadgeTone = 'danger' | 'review' | 'hermes' | 'neutral' | 'success';
+
+const roleTone: Record<string, BadgeTone> = {
+  owner: 'danger',
+  supervisor: 'review',
+  admin: 'hermes',
+  viewer: 'neutral',
+};
+
+const inputClass =
+  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+const labelClass = 'mb-1 block text-sm text-gray-600 dark:text-gray-300';
+
 function getRoleFromToken(): AuthUser | null {
   if (typeof window === 'undefined') return null;
   const token = getToken();
@@ -32,25 +50,15 @@ function getRoleFromToken(): AuthUser | null {
   }
 }
 
-function roleColor(role: string) {
-  const colors: Record<string, string> = {
-    owner: 'bg-red-700',
-    supervisor: 'bg-orange-700',
-    admin: 'bg-blue-700',
-    viewer: 'bg-gray-200 dark:bg-gray-700',
-  };
-  return colors[role] || 'bg-gray-200 dark:bg-gray-700';
+function Overlay({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 dark:bg-gray-950/60">
+      {children}
+    </div>
+  );
 }
 
-function CreateUserModal({
-  onClose,
-  onSuccess,
-  isLoading,
-}: {
-  onClose: () => void;
-  onSuccess: () => void;
-  isLoading: boolean;
-}) {
+function CreateUserModal({ onClose, onSuccess, isLoading }: { onClose: () => void; onSuccess: () => void; isLoading: boolean }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -60,21 +68,14 @@ function CreateUserModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-
     if (!email.trim() || !password.trim()) {
       setError('Email and password are required');
       return;
     }
-
     try {
       await api('/users', {
         method: 'POST',
-        body: JSON.stringify({
-          name: name.trim() || undefined,
-          email: email.trim(),
-          password: password.trim(),
-          role,
-        }),
+        body: JSON.stringify({ name: name.trim() || undefined, email: email.trim(), password: password.trim(), role }),
       });
       onSuccess();
       onClose();
@@ -84,50 +85,26 @@ function CreateUserModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60">
-      <div className="w-96 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6">
-        <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">Create User</h3>
-        {error && <p className="mb-4 rounded bg-red-900/30 p-2 text-sm text-red-300">{error}</p>}
+    <Overlay>
+      <Card className="w-96 p-6 shadow-pop">
+        <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-gray-100">Create user</h3>
+        {error && <p className="mb-4 rounded-lg bg-danger-50 p-2 text-sm text-danger-700 dark:bg-danger-700/10 dark:text-danger-500">{error}</p>}
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="mb-1 block text-sm text-gray-700 dark:text-gray-300">Name (optional)</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="John Doe"
-              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-            />
+            <label className={labelClass}>Name (optional)</label>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="John Doe" className={inputClass} />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-gray-700 dark:text-gray-300">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="user@example.com"
-              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-              required
-            />
+            <label className={labelClass}>Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" className={inputClass} required />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-gray-700 dark:text-gray-300">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
-              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-              required
-            />
+            <label className={labelClass}>Password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" className={inputClass} required />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-gray-700 dark:text-gray-300">Role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as any)}
-              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-            >
+            <label className={labelClass}>Role</label>
+            <select value={role} onChange={(e) => setRole(e.target.value as any)} className={inputClass}>
               <option value="admin">Admin</option>
               <option value="supervisor">Supervisor</option>
               <option value="owner">Owner</option>
@@ -135,38 +112,16 @@ function CreateUserModal({
             </select>
           </div>
           <div className="flex gap-2 pt-2">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="flex-1 rounded bg-emerald-600 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-emerald-500"
-            >
-              {isLoading ? 'Creating...' : 'Create'}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded bg-gray-200 dark:bg-gray-700 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600"
-            >
-              Cancel
-            </button>
+            <Button type="submit" disabled={isLoading} className="flex-1">{isLoading ? 'Creating…' : 'Create'}</Button>
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
           </div>
         </form>
-      </div>
-    </div>
+      </Card>
+    </Overlay>
   );
 }
 
-function EditUserModal({
-  user,
-  onClose,
-  onSuccess,
-  isLoading,
-}: {
-  user: User;
-  onClose: () => void;
-  onSuccess: () => void;
-  isLoading: boolean;
-}) {
+function EditUserModal({ user, onClose, onSuccess, isLoading }: { user: User; onClose: () => void; onSuccess: () => void; isLoading: boolean }) {
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
   const [role, setRole] = useState(user.role);
@@ -175,15 +130,10 @@ function EditUserModal({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-
     try {
       await api(`/users/${user.id}`, {
         method: 'PATCH',
-        body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim(),
-          role,
-        }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), role }),
       });
       onSuccess();
       onClose();
@@ -193,36 +143,22 @@ function EditUserModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60">
-      <div className="w-96 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6">
-        <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-gray-100">Edit User</h3>
-        {error && <p className="mb-4 rounded bg-red-900/30 p-2 text-sm text-red-300">{error}</p>}
+    <Overlay>
+      <Card className="w-96 p-6 shadow-pop">
+        <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-gray-100">Edit user</h3>
+        {error && <p className="mb-4 rounded-lg bg-danger-50 p-2 text-sm text-danger-700 dark:bg-danger-700/10 dark:text-danger-500">{error}</p>}
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="mb-1 block text-sm text-gray-700 dark:text-gray-300">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-            />
+            <label className={labelClass}>Name</label>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-gray-700 dark:text-gray-300">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-            />
+            <label className={labelClass}>Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-gray-700 dark:text-gray-300">Role</label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as any)}
-              className="w-full rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none"
-            >
+            <label className={labelClass}>Role</label>
+            <select value={role} onChange={(e) => setRole(e.target.value as any)} className={inputClass}>
               <option value="admin">Admin</option>
               <option value="supervisor">Supervisor</option>
               <option value="owner">Owner</option>
@@ -230,62 +166,32 @@ function EditUserModal({
             </select>
           </div>
           <div className="flex gap-2 pt-2">
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="flex-1 rounded bg-emerald-600 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-emerald-500"
-            >
-              {isLoading ? 'Saving...' : 'Save'}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded bg-gray-200 dark:bg-gray-700 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600"
-            >
-              Cancel
-            </button>
+            <Button type="submit" disabled={isLoading} className="flex-1">{isLoading ? 'Saving…' : 'Save'}</Button>
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
           </div>
         </form>
-      </div>
-    </div>
+      </Card>
+    </Overlay>
   );
 }
 
-function DeleteConfirmModal({
-  user,
-  onClose,
-  onConfirm,
-  isLoading,
-}: {
-  user: User;
-  onClose: () => void;
-  onConfirm: () => void;
-  isLoading: boolean;
-}) {
+function DeleteConfirmModal({ user, onClose, onConfirm, isLoading }: { user: User; onClose: () => void; onConfirm: () => void; isLoading: boolean }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60">
-      <div className="w-80 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6">
-        <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-gray-100">Delete User</h3>
+    <Overlay>
+      <Card className="w-80 p-6 shadow-pop">
+        <h3 className="mb-2 text-base font-semibold text-gray-900 dark:text-gray-100">Delete user</h3>
         <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-          Are you sure you want to delete <span className="font-medium">{user.email}</span>? This action cannot be undone.
+          Are you sure you want to delete <span className="font-medium text-gray-800 dark:text-gray-200">{user.email}</span>? This action cannot be undone.
         </p>
         <div className="flex gap-2">
-          <button
-            onClick={onConfirm}
-            disabled={isLoading}
-            className="flex-1 rounded bg-red-700 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-red-600"
-          >
-            {isLoading ? 'Deleting...' : 'Delete'}
-          </button>
-          <button
-            onClick={onClose}
-            className="flex-1 rounded bg-gray-200 dark:bg-gray-700 py-2 text-sm font-medium text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600"
-          >
-            Cancel
-          </button>
+          <Button variant="danger" onClick={onConfirm} disabled={isLoading} className="flex-1">
+            <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            {isLoading ? 'Deleting…' : 'Delete'}
+          </Button>
+          <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
         </div>
-      </div>
-    </div>
+      </Card>
+    </Overlay>
   );
 }
 
@@ -311,17 +217,15 @@ export default function UsersPage() {
   }, []);
 
   useEffect(() => {
-    const auth = getRoleFromToken();
-    setAuthUser(auth);
+    setAuthUser(getRoleFromToken());
     loadUsers();
   }, [loadUsers]);
 
-  // Check if user is authorized
   if (!authUser || (authUser.role !== 'owner' && authUser.role !== 'supervisor')) {
     return (
       <AppLayout>
-        <div className="flex items-center justify-center flex-1">
-          <p className="text-gray-600 dark:text-gray-400">You do not have permission to view this page.</p>
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-gray-500">You do not have permission to view this page.</p>
         </div>
       </AppLayout>
     );
@@ -342,111 +246,75 @@ export default function UsersPage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Header */}
-        <div className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Users</h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Manage system users and roles</p>
-            </div>
-            {authUser?.role === 'owner' && (
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
-              >
-                + Create User
-              </button>
-            )}
-          </div>
-        </div>
+      <PageHeader title="Team" subtitle="Manage system users and roles">
+        {authUser?.role === 'owner' && (
+          <Button size="sm" onClick={() => setShowCreateModal(true)}>
+            <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            Create user
+          </Button>
+        )}
+      </PageHeader>
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-6">
-          {loading ? (
-            <p className="text-gray-600 dark:text-gray-400">Loading users...</p>
-          ) : users.length === 0 ? (
-            <p className="text-gray-600 dark:text-gray-400">No users found.</p>
-          ) : (
-            <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-              <table className="w-full text-sm">
-                <thead className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Email</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Name</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Role</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Status</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700 dark:text-gray-300">Created At</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-700 dark:text-gray-300">Actions</th>
+      <div className="scrollbar-thin flex-1 overflow-auto p-5">
+        {loading ? (
+          <p className="text-sm text-gray-500">Loading users…</p>
+        ) : users.length === 0 ? (
+          <Card className="flex flex-col items-center justify-center py-16 text-center">
+            <UsersRound className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+            <p className="text-sm text-gray-400">No users found.</p>
+          </Card>
+        ) : (
+          <Card className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
+                  <th className="px-4 py-3 font-medium">Email</th>
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">Role</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Created</th>
+                  <th className="px-4 py-3 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40">
+                    <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{user.email}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{user.name}</td>
+                    <td className="px-4 py-3">
+                      <Badge tone={roleTone[user.role] ?? 'neutral'}>{user.role}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge tone={user.status === 'active' ? 'success' : 'danger'}>{user.status}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{new Date(user.createdAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-1.5">
+                        {authUser?.role === 'owner' && (
+                          <>
+                            <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>
+                              <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                              Edit
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setDeletingUser(user)} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
+                              <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                              Delete
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {users.map((user) => (
-                    <tr key={user.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-100/50 dark:hover:bg-gray-800/50">
-                      <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{user.email}</td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{user.name}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-block rounded px-2 py-1 text-xs font-medium text-white ${roleColor(user.role)}`}>
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{user.status}</td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                        {new Date(user.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          {authUser?.role === 'owner' && (
-                            <>
-                              <button
-                                onClick={() => setEditingUser(user)}
-                                className="rounded bg-blue-700/20 px-2 py-1 text-xs text-blue-300 hover:bg-blue-700/40"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => setDeletingUser(user)}
-                                className="rounded bg-red-700/20 px-2 py-1 text-xs text-red-300 hover:bg-red-700/40"
-                              >
-                                Delete
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        )}
       </div>
 
-      {/* Modals */}
-      {showCreateModal && (
-        <CreateUserModal
-          onClose={() => setShowCreateModal(false)}
-          onSuccess={loadUsers}
-          isLoading={isSubmitting}
-        />
-      )}
-      {editingUser && (
-        <EditUserModal
-          user={editingUser}
-          onClose={() => setEditingUser(null)}
-          onSuccess={loadUsers}
-          isLoading={isSubmitting}
-        />
-      )}
-      {deletingUser && (
-        <DeleteConfirmModal
-          user={deletingUser}
-          onClose={() => setDeletingUser(null)}
-          onConfirm={() => handleDelete(deletingUser)}
-          isLoading={isSubmitting}
-        />
-      )}
+      {showCreateModal && <CreateUserModal onClose={() => setShowCreateModal(false)} onSuccess={loadUsers} isLoading={isSubmitting} />}
+      {editingUser && <EditUserModal user={editingUser} onClose={() => setEditingUser(null)} onSuccess={loadUsers} isLoading={isSubmitting} />}
+      {deletingUser && <DeleteConfirmModal user={deletingUser} onClose={() => setDeletingUser(null)} onConfirm={() => handleDelete(deletingUser)} isLoading={isSubmitting} />}
     </AppLayout>
   );
 }

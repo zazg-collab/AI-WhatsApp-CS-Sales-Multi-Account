@@ -32,7 +32,7 @@ describe('CampaignsPage', () => {
   it('renders the create form fields', async () => {
     apiMock.mockResolvedValue([]);
     render(<CampaignsPage />);
-    expect(await screen.findByPlaceholderText('Nama campaign')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Tulis pesan campaign...')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('Campaign name')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Campaign message/)).toBeInTheDocument();
   });
 });
