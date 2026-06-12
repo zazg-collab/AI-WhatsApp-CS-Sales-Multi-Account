@@ -57,6 +57,75 @@ export class ConversationsService {
   }
 
   async list(filters: ListFilters) {
+    return this.runList(filters);
+  }
+
+  /**
+   * Start (or reopen) a chat with an arbitrary phone number — the WhatsApp
+   * desktop "new chat" flow. Upserts the customer and reuses an existing
+   * conversation when one exists.
+   */
+  async startConversation(
+    accountId: string,
+    phoneNumber: string,
+    name: string | undefined,
+    adminId: string,
+  ) {
+    // Normalise to digits; Indonesian convention: leading 0 → 62.
+    let digits = phoneNumber.replace(/[^\d]/g, '');
+    if (digits.startsWith('0')) digits = `62${digits.slice(1)}`;
+    if (digits.length < 8 || digits.length > 15) {
+      throw new BadRequestException('Nomor telepon tidak valid (8–15 digit)');
+    }
+
+    const account = await this.prisma.whatsappAccount.findUnique({ where: { id: accountId } });
+    if (!account) throw new NotFoundException('WhatsApp account not found');
+
+    const customer = await this.prisma.customer.upsert({
+      where: { phoneNumber_sourceAccountId: { phoneNumber: digits, sourceAccountId: accountId } },
+      update: { ...(name ? { name } : {}) },
+      create: {
+        name: name ?? null,
+        phoneNumber: digits,
+        sourceAccountId: accountId,
+        assignedAdminId: account.assignedAdminId ?? adminId,
+      },
+    });
+
+    let conversation = await this.prisma.conversation.findFirst({
+      where: { customerId: customer.id, whatsappAccountId: accountId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!conversation) {
+      conversation = await this.prisma.conversation.create({
+        data: {
+          customerId: customer.id,
+          whatsappAccountId: accountId,
+          botId: account.assignedBotId,
+          // Admin is starting this chat deliberately — keep the bot out of the
+          // way until they decide otherwise.
+          aiMode: AiMode.ai_off,
+          assignedAdminId: adminId,
+        },
+      });
+      this.events.emitToAccount(accountId, 'conversation:updated', {
+        conversationId: conversation.id,
+        status: conversation.status,
+        assignedAdmin: null,
+      });
+    }
+
+    await logAudit(this.prisma, {
+      userId: adminId,
+      action: 'conversation_start',
+      entityType: 'conversation',
+      entityId: conversation.id,
+      newValue: { phoneNumber: digits },
+    });
+    return { id: conversation.id, customerId: customer.id };
+  }
+
+  private async runList(filters: ListFilters) {
     const { accountId, aiMode, status, assignedAdminId, label, search, needsAttention, page = 1, limit = 50 } = filters;
     const where: Prisma.ConversationWhereInput = {};
 

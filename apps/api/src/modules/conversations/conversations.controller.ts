@@ -28,6 +28,7 @@ import { AssignConversationDto } from './dto/assign-conversation.dto';
 import { LabelsDto } from './dto/labels.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { SendMediaDto } from './dto/send-media.dto';
+import { StartConversationDto } from './dto/start-conversation.dto';
 import { AiMode, ConversationStatus } from '@hermes/database';
 import { csvRow } from '../../common/csv.util';
 
@@ -64,6 +65,13 @@ export class ConversationsController {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="conversations.csv"');
     res.send(header + rows);
+  }
+
+  @ApiOperation({ summary: 'Start/open a chat with any phone number (WhatsApp-desktop style)' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Post('start')
+  start(@Body() dto: StartConversationDto, @CurrentUser() user: AuthUser) {
+    return this.conversations.startConversation(dto.accountId, dto.phoneNumber, dto.name, user.id);
   }
 
   @ApiOperation({ summary: 'List conversations with optional filters' })

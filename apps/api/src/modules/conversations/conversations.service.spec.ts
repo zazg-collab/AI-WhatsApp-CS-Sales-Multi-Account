@@ -19,6 +19,7 @@ describe('ConversationsService', () => {
         count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         update: jest.fn().mockResolvedValue({ id: 'c1' }),
       },
       message: {
@@ -31,6 +32,12 @@ describe('ConversationsService', () => {
       },
       user: {
         findFirst: jest.fn(),
+      },
+      customer: {
+        upsert: jest.fn().mockResolvedValue({ id: 'cu1', phoneNumber: '628123' }),
+      },
+      whatsappAccount: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'a1', assignedBotId: null, assignedAdminId: null, aiMode: 'ai_draft' }),
       },
     };
     wa = {
@@ -417,6 +424,33 @@ describe('ConversationsService', () => {
       await service.update('c1', { aiMode: AiMode.ai_on, csatScore: 5, unreadCount: 0 } as any);
       const data = prisma.conversation.update.mock.calls[0][0].data;
       expect(data).toEqual({ aiMode: AiMode.ai_on });
+    });
+  });
+
+  describe('startConversation', () => {
+    it('normalises 08xx to 628xx, upserts customer, creates an ai_off conversation', async () => {
+      prisma.conversation.findFirst.mockResolvedValue(null);
+      prisma.conversation.create = jest.fn().mockResolvedValue({ id: 'c9', status: 'open' });
+      const r = await service.startConversation('a1', '0812-345 678', 'Budi', 'admin1');
+      const up = prisma.customer.upsert.mock.calls[0][0];
+      expect(up.where.phoneNumber_sourceAccountId.phoneNumber).toBe('62812345678');
+      expect(prisma.conversation.create.mock.calls[0][0].data.aiMode).toBe('ai_off');
+      expect(prisma.conversation.create.mock.calls[0][0].data.assignedAdminId).toBe('admin1');
+      expect(r).toEqual({ id: 'c9', customerId: 'cu1' });
+    });
+    it('reuses an existing conversation', async () => {
+      prisma.conversation.findFirst.mockResolvedValue({ id: 'c5' });
+      prisma.conversation.create = jest.fn();
+      const r = await service.startConversation('a1', '628123456789', undefined, 'admin1');
+      expect(prisma.conversation.create).not.toHaveBeenCalled();
+      expect(r.id).toBe('c5');
+    });
+    it('rejects an invalid phone number', async () => {
+      await expect(service.startConversation('a1', '12', undefined, 'admin1')).rejects.toThrow(BadRequestException);
+    });
+    it('throws when the account is unknown', async () => {
+      prisma.whatsappAccount.findUnique.mockResolvedValue(null);
+      await expect(service.startConversation('a1', '628123456789', undefined, 'admin1')).rejects.toThrow(NotFoundException);
     });
   });
 

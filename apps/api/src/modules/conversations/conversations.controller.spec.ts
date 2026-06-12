@@ -95,6 +95,12 @@ describe('ConversationsController', () => {
     expect(svc.sendMedia).toHaveBeenCalled();
   });
 
+  it('start delegates with the current user', () => {
+    svc.startConversation = jest.fn().mockResolvedValue({ id: 'c1' });
+    controller.start({ accountId: 'a1', phoneNumber: '0812345678', name: 'Budi' } as any, { id: 'u1' } as any);
+    expect(svc.startConversation).toHaveBeenCalledWith('a1', '0812345678', 'Budi', 'u1');
+  });
+
   it('export writes CSV', async () => {
     svc.exportList.mockResolvedValue([
       { id: 'c1', customer: { name: 'A"B', phoneNumber: '628', leadStage: 'hot' },

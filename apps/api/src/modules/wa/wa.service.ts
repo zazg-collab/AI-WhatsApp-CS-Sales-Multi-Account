@@ -172,6 +172,32 @@ export class WaService implements OnModuleInit {
       }
     });
 
+    // Baileys delivers the *initial* history sync (negotiated at QR pairing
+    // when syncFullHistory is on) through this event — NOT messages.upsert.
+    // Without this handler the phone's existing chats never reach the app.
+    sock.ev.on('messaging-history.set', async ({ messages, contacts, isLatest }) => {
+      this.logger.log(
+        `History sync ${accountId}: ${messages?.length ?? 0} messages, ${contacts?.length ?? 0} contacts${isLatest ? ' (latest)' : ''}`,
+      );
+      // Contact-book names enrich customers that have no pushName yet.
+      for (const c of contacts ?? []) {
+        if (!c.id || !isDirectChatJid(c.id)) continue;
+        const name = c.name ?? c.notify;
+        if (!name) continue;
+        await this.prisma.customer
+          .updateMany({
+            where: { phoneNumber: jidToPhone(c.id), sourceAccountId: accountId, name: null },
+            data: { name },
+          })
+          .catch(() => undefined);
+      }
+      for (const m of messages ?? []) {
+        await this.handleIncoming(accountId, m, { suppressAutomation: true }).catch((err) =>
+          this.logger.warn(`History ingest failed for ${m.key?.id}: ${err}`),
+        );
+      }
+    });
+
     // Customer typing/online indicator → live to the dashboard (scoped to account).
     sock.ev.on('presence.update', ({ id, presences }) => {
       if (!isDirectChatJid(id)) return;
@@ -388,9 +414,12 @@ export class WaService implements OnModuleInit {
 
     // Download inbound media to WA_MEDIA_DIR and reference it as /media/<file>.
     // Failure is non-fatal: the message is still ingested, just without media.
+    // History backfill skips downloads entirely: old media keys are usually
+    // expired and thousands of fetches would stall the sync.
     let mediaUrl: string | undefined;
-    if (type === MessageType.image || type === MessageType.video ||
-        type === MessageType.audio || type === MessageType.document) {
+    if (!opts.suppressAutomation &&
+        (type === MessageType.image || type === MessageType.video ||
+         type === MessageType.audio || type === MessageType.document)) {
       mediaUrl = await this.downloadInboundMedia(m).catch((err) => {
         this.logger.warn(`Media download failed for ${m.key.id}: ${err}`);
         return undefined;
