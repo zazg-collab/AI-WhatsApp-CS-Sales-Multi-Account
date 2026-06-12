@@ -20,6 +20,12 @@ import {
   CircleX,
   RotateCcw,
   Inbox as InboxIcon,
+  Paperclip,
+  UserRound,
+  UserX,
+  Image as ImageIcon,
+  FileText,
+  Video,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
@@ -161,9 +167,17 @@ function InboxInner() {
   const [composer, setComposer] = useState('');
   const [sending, setSending] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [showAssign, setShowAssign] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Data loading ───────────────────────────────────────────────────
+  useEffect(() => {
+    api<{ users: AdminUser[] }>('/users').then((d) => setAdmins(d.users)).catch(() => {});
+  }, []);
+
   const loadList = useCallback(async () => {
     const params = new URLSearchParams({ limit: '50' });
     if (debounced.trim()) params.set('search', debounced.trim());
@@ -272,6 +286,32 @@ function InboxInner() {
     setComposer(m.content ?? '');
     timelineRef.current?.querySelector('textarea')?.focus();
   };
+
+  const assignAdmin = (adminId: string | null) =>
+    act(() => {
+      setShowAssign(false);
+      return api(`/conversations/${activeId}/assign`, { method: 'PATCH', body: JSON.stringify({ adminId }) });
+    });
+
+  async function handleMediaFile(file: File) {
+    if (!activeId || uploadingMedia) return;
+    setUploadingMedia(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/conversations/${activeId}/media/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      if (activeId) await loadConv(activeId);
+      await loadList();
+    } finally {
+      setUploadingMedia(false);
+    }
+  }
 
   // ── Client-side chip filtering ─────────────────────────────────────
   const visible = list.filter((c) => {
@@ -457,7 +497,7 @@ function InboxInner() {
                             AI generated
                           </span>
                         )}
-                        <p>{m.content ?? <span className="italic opacity-70">[{m.messageType}]</span>}</p>
+                        <MediaContent message={m} />
                         <span className={cn('mt-1 block text-right text-[10px] tabular-nums', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>
                           {clockTime(m.createdAt)}
                         </span>
@@ -469,6 +509,29 @@ function InboxInner() {
 
               <div className="shrink-0 border-t border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
                 <div className="flex items-end gap-2">
+                  <button
+                    type="button"
+                    title="Attach media"
+                    disabled={uploadingMedia}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                  >
+                    {uploadingMedia
+                      ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-hermes-500" />
+                      : <Paperclip className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    }
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleMediaFile(f);
+                      e.target.value = '';
+                    }}
+                  />
                   <textarea
                     rows={1}
                     value={composer}
@@ -521,6 +584,60 @@ function InboxInner() {
                   <div className="mt-2 flex flex-wrap gap-1">
                     {active.customer.tags.map((t) => <Badge key={t} tone="neutral">{t}</Badge>)}
                   </div>
+                )}
+              </div>
+
+              {/* Assigned admin */}
+              <div className="border-b border-gray-100 p-4 dark:border-gray-800">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
+                    <UserRound className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                    Assigned to
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAssign((v) => !v)}
+                    className="text-[11px] font-medium text-hermes-600 hover:text-hermes-700"
+                  >
+                    {showAssign ? 'Cancel' : 'Change'}
+                  </button>
+                </div>
+                {showAssign ? (
+                  <div className="space-y-1">
+                    <button
+                      onClick={() => assignAdmin(null)}
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10"
+                    >
+                      <UserX className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                      Unassign
+                    </button>
+                    {admins.map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => assignAdmin(a.id)}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-gray-700 dark:text-gray-200',
+                          active.assignedAdmin?.id === a.id
+                            ? 'bg-hermes-50 font-medium text-hermes-700 dark:bg-hermes-900/20'
+                            : 'hover:bg-gray-50 dark:hover:bg-gray-800',
+                        )}
+                      >
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-200 text-[10px] font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                          {(a.name || '?')[0].toUpperCase()}
+                        </span>
+                        {a.name || a.id}
+                      </button>
+                    ))}
+                  </div>
+                ) : active.assignedAdmin ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-hermes-100 text-[11px] font-semibold text-hermes-700 dark:bg-hermes-900/40 dark:text-hermes-300">
+                      {(active.assignedAdmin.name || '?')[0].toUpperCase()}
+                    </span>
+                    {active.assignedAdmin.name}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">Unassigned</p>
                 )}
               </div>
 
@@ -643,6 +760,35 @@ function InboxInner() {
       </div>
     </AppLayout>
   );
+}
+
+// Render message content: text, or a media placeholder for non-text types.
+function MediaContent({ message: m }: { message: Message }) {
+  if (m.messageType === 'image') {
+    return (
+      <span className="flex items-center gap-1.5 italic opacity-80">
+        <ImageIcon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+        {m.content ?? 'Image'}
+      </span>
+    );
+  }
+  if (m.messageType === 'video') {
+    return (
+      <span className="flex items-center gap-1.5 italic opacity-80">
+        <Video className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+        {m.content ?? 'Video'}
+      </span>
+    );
+  }
+  if (m.messageType === 'document' || m.messageType === 'audio') {
+    return (
+      <span className="flex items-center gap-1.5 italic opacity-80">
+        <FileText className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+        {m.content ?? m.messageType}
+      </span>
+    );
+  }
+  return <p>{m.content ?? <span className="italic opacity-70">[{m.messageType}]</span>}</p>;
 }
 
 // Build a small, truthful audit trail from what the conversation actually shows.
