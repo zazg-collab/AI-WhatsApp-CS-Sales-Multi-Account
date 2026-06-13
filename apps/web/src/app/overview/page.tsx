@@ -106,23 +106,29 @@ export default function OverviewPage() {
   const [accounts, setAccounts] = useState<WaAccount[]>([]);
   const [attention, setAttention] = useState<ConvSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [s, r, a, acc, conv] = await Promise.all([
-      api<Summary>('/dashboard/summary').catch(() => null),
-      api<DailyReport>('/hermes/reports/daily').catch(() => null),
-      api<Alert[]>('/hermes/alerts').catch(() => []),
-      api<WaAccount[]>('/wa/accounts').catch(() => []),
-      api<{ items: ConvSummary[] }>('/conversations?needsAttention=true&limit=25')
-        .then((d) => d.items)
-        .catch(() => []),
-    ]);
-    setSummary(s);
-    setReport(r);
-    setAlerts(a);
-    setAccounts(acc);
-    setAttention(conv);
-    setLoading(false);
+    setLoading(true);
+    setError(null);
+    try {
+      const [s, r, a, acc, conv] = await Promise.all([
+        api<Summary>('/dashboard/summary'),
+        api<DailyReport>('/hermes/reports/daily'),
+        api<Alert[]>('/hermes/alerts'),
+        api<WaAccount[]>('/wa/accounts'),
+        api<{ items: ConvSummary[] }>('/conversations?needsAttention=true&limit=25').then((d) => d.items),
+      ]);
+      setSummary(s);
+      setReport(r);
+      setAlerts(a);
+      setAccounts(acc);
+      setAttention(conv);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load overview from API');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -194,6 +200,12 @@ export default function OverviewPage() {
       </PageHeader>
 
       <div className="scrollbar-thin flex-1 overflow-y-auto p-5 space-y-6">
+        {error ? (
+          <Card className="border-danger-200 bg-danger-50 p-4 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">
+            {error}
+          </Card>
+        ) : (
+          <>
         {/* Attention queues */}
         <section aria-labelledby="queues-h">
           <h2 id="queues-h" className="mb-3 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-400">
@@ -205,7 +217,7 @@ export default function OverviewPage() {
               const muted = q.count === 0;
               return (
                 <Link key={q.key} href={q.href} className="group">
-                  <Card className="h-full p-4 transition-all duration-200 group-hover:scale-[1.01] group-hover:border-gray-300 dark:group-hover:border-gray-700">
+                  <Card className="h-full p-4 transition-colors duration-200 group-hover:border-gray-300 dark:group-hover:border-gray-700">
                     <div className="flex items-start justify-between">
                       <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${muted ? 'bg-gray-100 dark:bg-gray-800' : q.tone === 'danger' ? 'bg-danger-50 dark:bg-danger-900/30' : 'bg-review-50 dark:bg-review-900/30'}`}>
                         <Icon
@@ -263,7 +275,7 @@ export default function OverviewPage() {
                         href={`/inbox?conversation=${c.id}`}
                         className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40"
                       >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-hermes-100 to-gray-100 text-[12px] font-bold text-hermes-700 dark:from-hermes-900/40 dark:to-gray-800 dark:text-hermes-300">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-hermes-100 bg-hermes-50 text-[12px] font-bold text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-300">
                           {initials(c.customer.name, c.customer.phoneNumber)}
                         </span>
                         <div className="min-w-0 flex-1">
@@ -307,6 +319,8 @@ export default function OverviewPage() {
             ))}
           </div>
         </section>
+          </>
+        )}
       </div>
     </AppLayout>
   );

@@ -1,5 +1,5 @@
 import {
-  Bot,
+  Workflow,
   ShieldCheck,
   TriangleAlert,
   Hand,
@@ -26,7 +26,7 @@ const map: Record<
   StatusKind,
   { label: string; icon: LucideIcon; tone: 'hermes' | 'review' | 'danger' | 'success' | 'neutral' }
 > = {
-  'ai-generated': { label: 'AI generated', icon: Bot, tone: 'hermes' },
+  'ai-generated': { label: 'AI generated', icon: Workflow, tone: 'hermes' },
   'hermes-reviewed': { label: 'Hermes reviewed', icon: ShieldCheck, tone: 'hermes' },
   'needs-review': { label: 'Needs review', icon: TriangleAlert, tone: 'review' },
   'human-takeover': { label: 'Human takeover', icon: Hand, tone: 'neutral' },

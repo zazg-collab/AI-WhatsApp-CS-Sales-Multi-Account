@@ -46,6 +46,7 @@ export default function HermesPage() {
   const [question, setQuestion] = useState('');
   const [chat, setChat] = useState<{ q: string; a: string }[]>([]);
   const [asking, setAsking] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function ask(e: React.FormEvent) {
     e.preventDefault();
@@ -67,12 +68,17 @@ export default function HermesPage() {
   }
 
   const load = useCallback(async () => {
-    const [a, r] = await Promise.all([
-      api<Review[]>('/hermes/alerts').catch(() => []),
-      api<DailyReport>('/hermes/reports/daily').catch(() => null),
-    ]);
-    setAlerts(a);
-    setReport(r);
+    setLoadError(null);
+    try {
+      const [a, r] = await Promise.all([
+        api<Review[]>('/hermes/alerts'),
+        api<DailyReport>('/hermes/reports/daily'),
+      ]);
+      setAlerts(a);
+      setReport(r);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Failed to load Hermes review data from API');
+    }
   }, []);
 
   useEffect(() => {
@@ -95,7 +101,12 @@ export default function HermesPage() {
       <PageHeader title="Hermes Review" subtitle="AI supervision, risk alerts, and daily report" />
 
       <div className="scrollbar-thin mx-auto w-full max-w-4xl flex-1 overflow-y-auto p-5">
-        {report && (
+        {loadError && (
+          <Card className="mb-5 border-danger-200 bg-danger-50 p-4 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">
+            {loadError}
+          </Card>
+        )}
+        {!loadError && report && (
           <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Messages today" value={report.totalMessages} />
             <Stat label="New customers" value={report.newCustomers} />
@@ -139,6 +150,8 @@ export default function HermesPage() {
           </form>
         </Card>
 
+        {!loadError && (
+          <>
         <h2 className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
           Active alerts
           <Badge tone={alerts.length > 0 ? 'review' : 'neutral'}>{alerts.length}</Badge>
@@ -175,6 +188,8 @@ export default function HermesPage() {
             </li>
           )}
         </ul>
+          </>
+        )}
       </div>
     </AppLayout>
   );

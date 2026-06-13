@@ -14,7 +14,7 @@ import {
   UsersRound,
   Settings,
   Smartphone,
-  Bot,
+  Workflow,
   Activity,
   LogOut,
   BookText,
@@ -85,7 +85,7 @@ const sections: NavSection[] = [
     heading: 'Operations',
     items: [
       { href: '/accounts', label: 'Accounts', icon: Smartphone },
-      { href: '/bots', label: 'Bots & Personas', icon: Bot },
+      { href: '/bots', label: 'Automation Mode', icon: Workflow },
       { href: '/templates', label: 'Templates', icon: BookText },
       { href: '/audit', label: 'Audit Log', icon: History, requiredRole: 'supervisor' },
       { href: '/admin/users', label: 'Team', icon: UsersRound, requiredRole: 'supervisor' },
@@ -105,17 +105,17 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex h-screen w-14 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 lg:w-56">
+    <aside className="flex h-full w-14 flex-col rounded border border-gray-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900 lg:w-60">
       {/* Brand */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-gray-100 px-3 dark:border-gray-800 lg:px-4">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-hermes-600 text-white">
+      <div className="flex h-16 items-center gap-2.5 border-b border-gray-100 px-3 dark:border-gray-800 lg:px-4">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-hermes-700 text-white">
           <ShieldCheck className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
         </span>
         <span className="hidden min-w-0 lg:block">
           <span className="block truncate text-sm font-semibold tracking-tight text-gray-900 dark:text-gray-100">
-            Hermes
+            Hermes AI
           </span>
-          <span className="block truncate text-[11px] text-gray-400">Control Center</span>
+          <span className="block truncate text-[11px] text-gray-400">Sales & Service Ops</span>
         </span>
       </div>
 
@@ -142,9 +142,9 @@ export function Sidebar() {
                     title={item.label}
                     aria-current={isActive ? 'page' : undefined}
                     className={cn(
-                      'group relative flex items-center justify-center gap-2.5 rounded-lg px-2 py-2 text-[13px] font-medium transition-colors duration-150 lg:justify-start lg:px-2.5',
+                      'group relative flex items-center justify-center gap-2.5 rounded px-2 py-2 text-[13px] font-medium transition-colors duration-150 lg:justify-start lg:px-2.5',
                       isActive
-                        ? 'bg-hermes-50 text-hermes-700 dark:bg-hermes-900/40 dark:text-hermes-300'
+                        ? 'bg-hermes-50 text-hermes-700 ring-1 ring-hermes-100 dark:bg-hermes-900/40 dark:text-hermes-300 dark:ring-hermes-800/60'
                         : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100',
                     )}
                   >

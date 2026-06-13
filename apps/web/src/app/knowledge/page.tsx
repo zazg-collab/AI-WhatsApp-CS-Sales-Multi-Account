@@ -36,16 +36,27 @@ export default function KnowledgePage() {
   const [ingestUrl, setIngestUrl] = useState('');
   const [ingesting, setIngesting] = useState(false);
   const [ingestMsg, setIngestMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadBases = useCallback(async () => {
-    setBases(await api<Base[]>('/knowledge-bases').catch(() => []));
+    setError(null);
+    try {
+      setBases(await api<Base[]>('/knowledge-bases'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load knowledge bases from API');
+    }
   }, []);
 
   const loadBase = useCallback(async (id: string) => {
     setSelected(id);
-    const base = await api<{ items: Item[] }>(`/knowledge-bases/${id}`);
-    setItems(base.items);
+    setError(null);
+    try {
+      const base = await api<{ items: Item[] }>(`/knowledge-bases/${id}`);
+      setItems(base.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load knowledge base from API');
+    }
   }, []);
 
   useEffect(() => {
@@ -120,6 +131,11 @@ export default function KnowledgePage() {
       <PageHeader title="Knowledge Base" subtitle="Sources that ground the AI's answers" />
 
       <div className="scrollbar-thin flex flex-1 gap-5 overflow-y-auto p-5">
+        {error && (
+          <Card className="fixed right-5 top-20 z-20 border-danger-200 bg-danger-50 p-3 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">
+            {error}
+          </Card>
+        )}
         {/* Bases list */}
         <aside className="w-64 shrink-0 space-y-4">
           <Card className="p-3">
