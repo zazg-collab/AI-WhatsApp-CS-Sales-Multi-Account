@@ -6,14 +6,9 @@ import {
   Param,
   Patch,
   Post,
-  Query,
-  UploadedFile,
   UseGuards,
-  UseInterceptors,
-  BadRequestException,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiConsumes, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
@@ -21,7 +16,6 @@ import { WaService } from './wa.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
-import { UpdateProfileDto, SendStatusDto } from './dto/profile.dto';
 import { logAudit } from '../../common/audit.util';
 
 // PRD 14.2 — WhatsApp accounts (Baileys gateway).
@@ -93,6 +87,20 @@ export class WaController {
     return { success: true };
   }
 
+  @ApiOperation({ summary: 'Log out WhatsApp session (disconnect without deleting account)' })
+  @Roles('owner', 'supervisor')
+  @Post(':id/logout')
+  async logout(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    await this.wa.logout(id);
+    await logAudit(this.prisma, {
+      userId: user.id,
+      action: 'account_logout',
+      entityType: 'whatsapp_account',
+      entityId: id,
+    });
+    return { success: true };
+  }
+
   @ApiOperation({ summary: 'Update a WhatsApp account' })
   @Roles('owner', 'supervisor')
   @Patch(':id')
@@ -115,95 +123,21 @@ export class WaController {
     return account;
   }
 
-  @ApiOperation({ summary: 'Delete a WhatsApp account and all related data' })
+  @ApiOperation({ summary: 'Log out and delete a WhatsApp account' })
   @Roles('owner', 'supervisor')
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    await this.wa.deleteAccount(id, user.id);
-    return { success: true };
-  }
-
-  @ApiOperation({ summary: 'Update the WhatsApp profile (name and/or status)' })
-  @Roles('owner', 'supervisor')
-  @Patch(':id/profile')
-  async updateProfile(
-    @Param('id') id: string,
-    @Body() dto: UpdateProfileDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    if (dto.name) await this.wa.updateProfileName(id, dto.name);
-    if (dto.status) await this.wa.updateProfileStatus(id, dto.status);
+    // Log out the Baileys session (removes linked device from phone).
+    await this.wa.logout(id).catch(() => undefined);
+    // Delete the account record and all related data (cascade).
+    const account = await this.prisma.whatsappAccount.delete({ where: { id } });
     await logAudit(this.prisma, {
       userId: user.id,
-      action: 'profile_update',
+      action: 'account_delete',
       entityType: 'whatsapp_account',
       entityId: id,
-      newValue: { name: dto.name, status: dto.status },
+      oldValue: { accountName: account.accountName, phoneNumber: account.phoneNumber },
     });
     return { success: true };
-  }
-
-  @ApiOperation({ summary: 'Update the WhatsApp profile picture' })
-  @ApiConsumes('multipart/form-data')
-  @Roles('owner', 'supervisor')
-  @Patch(':id/profile/picture')
-  @UseInterceptors(FileInterceptor('file'))
-  async updateProfilePicture(
-    @Param('id') id: string,
-    @UploadedFile() file: { buffer: Buffer } | undefined,
-    @CurrentUser() user: AuthUser,
-  ) {
-    if (!file?.buffer?.length) throw new BadRequestException('No image uploaded');
-    await this.wa.updateProfilePicture(id, file.buffer);
-    await logAudit(this.prisma, {
-      userId: user.id,
-      action: 'profile_picture_update',
-      entityType: 'whatsapp_account',
-      entityId: id,
-    });
-    return { success: true };
-  }
-
-  @ApiOperation({ summary: 'Post a WhatsApp status/story (broadcast to all contacts)' })
-  @Roles('owner', 'supervisor', 'admin')
-  @Post(':id/status')
-  async sendStatus(
-    @Param('id') id: string,
-    @Body() dto: SendStatusDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    if (!dto.text && !dto.imageUrl) {
-      throw new BadRequestException('Provide text or imageUrl');
-    }
-    let imageBuffer: Buffer | undefined;
-    if (dto.imageUrl) {
-      const res = await fetch(dto.imageUrl);
-      if (!res.ok) throw new BadRequestException('Failed to fetch image');
-      imageBuffer = Buffer.from(await res.arrayBuffer());
-    }
-    const externalId = await this.wa.sendStatus(id, {
-      text: dto.text,
-      image: imageBuffer,
-      caption: dto.caption,
-    });
-    await logAudit(this.prisma, {
-      userId: user.id,
-      action: 'status_post',
-      entityType: 'whatsapp_account',
-      entityId: id,
-      newValue: { externalId },
-    });
-    return { success: true, externalId };
-  }
-
-  @ApiOperation({ summary: 'Search messages across all chats for this account' })
-  @Roles('viewer')
-  @Get(':id/messages/search')
-  async searchMessages(
-    @Param('id') id: string,
-    @Query('q') q: string,
-    @Query('limit') limit?: string,
-  ) {
-    return this.wa.searchAllMessages(id, q, limit ? parseInt(limit, 10) : 50);
   }
 }

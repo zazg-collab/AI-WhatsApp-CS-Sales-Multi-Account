@@ -98,20 +98,6 @@ export class CustomersController {
     return this.customers.addNote(id, dto.note, user.id);
   }
 
-  @ApiOperation({ summary: 'Block a customer at WhatsApp level (syncs optedOut)' })
-  @Post(':id/block')
-  @Roles('owner', 'supervisor', 'admin')
-  blockContact(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.customers.blockContact(id, user.id);
-  }
-
-  @ApiOperation({ summary: 'Unblock a previously blocked customer at WhatsApp level' })
-  @Post(':id/unblock')
-  @Roles('owner', 'supervisor', 'admin')
-  unblockContact(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.customers.unblockContact(id, user.id);
-  }
-
   @ApiOperation({ summary: 'Get unified timeline for a customer' })
   @Roles('viewer')
   @Get(':id/timeline')

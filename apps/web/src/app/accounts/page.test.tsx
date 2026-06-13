@@ -53,12 +53,12 @@ describe('AccountsPage', () => {
     apiMock.mockResolvedValueOnce({}); // POST
     apiMock.mockResolvedValueOnce([]); // reload
 
-    await userEvent.type(screen.getByPlaceholderText('Nama akun'), 'New Acc');
+    await userEvent.type(screen.getByPlaceholderText('Account name'), 'New Acc');
     await userEvent.type(
-      screen.getByPlaceholderText('Nomor (mis. 628123...)'),
+      screen.getByPlaceholderText('Number (e.g. 628123…)'),
       '628999',
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Tambah' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add account' }));
 
     await waitFor(() => {
       expect(apiMock).toHaveBeenCalledWith('/wa/accounts', {
@@ -88,7 +88,7 @@ describe('AccountsPage', () => {
 
     socketHandlers['wa:qr']({ accountId: '1', qr: 'data:image/png;base64,xx' });
 
-    const img = await screen.findByAltText('QR');
+    const img = await screen.findByAltText('WhatsApp QR code');
     expect(img).toHaveAttribute('src', 'data:image/png;base64,xx');
   });
 });

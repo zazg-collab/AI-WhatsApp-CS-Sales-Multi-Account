@@ -6,7 +6,6 @@ describe('CustomersService', () => {
   let service: CustomersService;
   let prisma: any;
   let audit: any;
-  let wa: any;
 
   beforeEach(() => {
     prisma = {
@@ -23,8 +22,7 @@ describe('CustomersService', () => {
       $transaction: jest.fn((ps: any[]) => Promise.all(ps)),
     };
     audit = { log: jest.fn().mockResolvedValue({}) };
-    wa = { blockContact: jest.fn(), unblockContact: jest.fn() };
-    service = new CustomersService(prisma, audit, wa);
+    service = new CustomersService(prisma, audit);
   });
 
   describe('list', () => {

@@ -14,23 +14,10 @@ function baseUrl(): string {
 
 export function getSocket(): Socket {
   if (!socket) {
+    // The gateway now requires a JWT (C1) — pass it in the handshake auth.
     socket = io(`${baseUrl()}/events`, {
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'],
       auth: { token: getToken() ?? '' },
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 10,
-    });
-
-    socket.on('connect', () => {
-      console.log('[socket] connected', socket?.id);
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('[socket] connect_error:', err.message);
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.warn('[socket] disconnected:', reason);
     });
   }
   return socket;

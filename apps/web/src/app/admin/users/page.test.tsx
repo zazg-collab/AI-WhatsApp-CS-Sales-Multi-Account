@@ -23,9 +23,9 @@ describe('UsersPage', () => {
       users: [{ id: 'u1', name: 'Owner', email: 'o@x.com', role: 'owner' }],
     });
     render(<UsersPage />);
-    expect(await screen.findByRole('heading', { name: 'Users' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Team' })).toBeInTheDocument();
     expect(await screen.findByText('Owner')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Create User/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Create user/ })).toBeInTheDocument();
   });
 
   it('blocks unauthorized roles', async () => {

@@ -1,11 +1,13 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
+RUN apk add --no-cache openssl
 COPY package*.json ./
 COPY packages/database/package*.json ./packages/database/
 COPY apps/api/package*.json ./apps/api/
 RUN npm ci
 COPY . .
-RUN npm run db:generate
+ENV PRISMA_CLI_BINARY_TARGETS="linux-musl-openssl-3.0.x"
+RUN npx --prefix packages/database prisma generate --schema packages/database/prisma/schema.prisma
 RUN npm run build --workspace=@hermes/api
 
 FROM node:20-alpine AS runner

@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hermes}
       POSTGRES_DB: ${POSTGRES_DB:-hermes}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - hermes_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - hermes_redisdata:/data
     healthcheck:
@@ -43,6 +43,9 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-hermes}:${POSTGRES_PASSWORD:-hermes}@postgres:5432/${POSTGRES_DB:-hermes}?schema=public&connection_limit=10&pool_timeout=20
       REDIS_URL: redis://redis:6379
+    volumes:
+      - ./.wa-sessions:/app/.wa-sessions
+      - ./.wa-media:/app/.wa-media
     depends_on:
       postgres:
         condition: service_healthy

@@ -7,7 +7,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Interval } from '@nestjs/schedule';
 import { join } from 'path';
-import { rm } from 'fs/promises';
 import * as QRCode from 'qrcode';
 import pino from 'pino';
 import makeWASocket, {
@@ -34,7 +33,7 @@ import { MessageIngestService } from './message-ingest.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { AiService } from '../ai/ai.service';
 import { HermesService } from '../hermes/hermes.service';
-import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, extForMimetype, typingDelay, backoffDelay } from './wa.util';
+import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, isLidJid, extForMimetype, typingDelay, backoffDelay } from './wa.util';
 import { MediaStorageService } from '../media/media-storage.service';
 import { logAudit } from '../../common/audit.util';
 import { isWithinBusinessHours } from '../../common/business-hours.util';
@@ -42,6 +41,8 @@ import { isWithinBusinessHours } from '../../common/business-hours.util';
 interface Session {
   sock: WASocket;
   qr?: string; // latest QR as data-URL PNG
+  /** phone→lid mapping from Baileys events for resolving linked device JIDs. */
+  lidMap: Map<string, string>; // lid → phoneJid
 }
 
 /**
@@ -107,7 +108,7 @@ export class WaService implements OnModuleInit {
     const sock = makeWASocket({
       version,
       auth: state,
-      logger: pino({ level: 'silent' }) as never,
+      logger: pino({ level: 'warn' }) as never,
       printQRInTerminal: false,
       // Request WhatsApp history chunks so the app mirrors chats sent/read on the phone.
       // macOS/desktop browser identity is required by Baileys for full history sync.
@@ -115,12 +116,29 @@ export class WaService implements OnModuleInit {
       browser: Browsers.macOS('Desktop'),
     });
 
-    this.sessions.set(accountId, { sock });
+    this.sessions.set(accountId, { sock, lidMap: new Map() });
 
     sock.ev.on('creds.update', saveCreds);
 
+    // Build a lid→phoneJid mapping from Baileys contact events.
+    // Linked devices receive @lid JIDs; this map lets us resolve them to phone JIDs.
+    const populateLidMap = (contacts: { id?: string; lid?: string }[]) => {
+      const session = this.sessions.get(accountId);
+      if (!session) return;
+      for (const c of contacts) {
+        if (c.id && c.lid && c.id.endsWith('@s.whatsapp.net')) {
+          session.lidMap.set(c.lid, c.id);
+        }
+      }
+    };
+
+    sock.ev.on('contacts.upsert', (contacts) => {
+      populateLidMap(contacts as { id?: string; lid?: string }[]);
+    });
+
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
+      this.logger.log(`connection.update [${accountId}]: connection=${connection}, qr=${!!qr}, lastDisconnect=${lastDisconnect?.error?.message ?? 'none'}`);
 
       if (qr) {
         const dataUrl = await QRCode.toDataURL(qr);
@@ -167,8 +185,10 @@ export class WaService implements OnModuleInit {
       // notify = live traffic; append = history/backfill from the linked phone.
       // We persist both so the dashboard mirrors WhatsApp, but suppress AI/away
       // automation for backfilled history to avoid replying to old chats.
+      this.logger.log(`messages.upsert [${accountId}]: type=${type}, count=${messages?.length ?? 0}`);
       if (type !== 'notify' && type !== 'append') return;
       for (const m of messages) {
+        this.logger.log(`Processing message [${accountId}]: jid=${m.key?.remoteJid}, fromMe=${m.key?.fromMe}, id=${m.key?.id}`);
         await this.handleIncoming(accountId, m, { suppressAutomation: type !== 'notify' });
       }
     });
@@ -180,7 +200,8 @@ export class WaService implements OnModuleInit {
       this.logger.log(
         `History sync ${accountId}: ${messages?.length ?? 0} messages, ${contacts?.length ?? 0} contacts${isLatest ? ' (latest)' : ''}`,
       );
-      // Contact-book names enrich customers that have no pushName yet.
+      // Build LID→phone mapping from history contacts and update customer names.
+      populateLidMap(contacts as { id?: string; lid?: string }[]);
       for (const c of contacts ?? []) {
         if (!c.id || !isDirectChatJid(c.id)) continue;
         const name = c.name ?? c.notify;
@@ -202,11 +223,12 @@ export class WaService implements OnModuleInit {
     // Customer typing/online indicator → live to the dashboard (scoped to account).
     sock.ev.on('presence.update', ({ id, presences }) => {
       if (!isDirectChatJid(id)) return;
+      const resolvedId = this.resolveJid(accountId, id);
       const state = presences?.[id]?.lastKnownPresence;
       const typing = state === 'composing' || state === 'recording';
       this.events.emitToAccount(accountId, 'wa:presence', {
         accountId,
-        phone: jidToPhone(id),
+        phone: jidToPhone(resolvedId),
         typing,
         presence: state ?? 'unavailable',
       });
@@ -537,22 +559,27 @@ export class WaService implements OnModuleInit {
   ) {
     if (!m.key.remoteJid) return;
     // Only 1-on-1 chats (M1): drop groups, broadcast lists, newsletters.
-    if (!isDirectChatJid(m.key.remoteJid)) return;
+    if (!isDirectChatJid(m.key.remoteJid)) {
+      this.logger.log(`handleIncoming [${accountId}]: dropped non-direct JID: ${m.key.remoteJid}`);
+      return;
+    }
+
+    // Resolve @lid JIDs to phone numbers via Baileys contact store.
+    const remoteJid = await this.resolveJid(accountId, m.key.remoteJid);
 
     const fromMe = m.key.fromMe === true;
 
-    const pollMsg = m.message?.pollCreationMessage ?? m.message?.pollCreationMessageV2;
-    const pollText = pollMsg
-      ? `📊 Poll: ${pollMsg.name ?? ''}\n${(pollMsg.options ?? []).map((v) => `• ${v?.optionName ?? ''}`).join('\n')}`
-      : undefined;
+    const locationText = m.message?.locationMessage
+      ? `📍 ${m.message.locationMessage.degreesLatitude?.toFixed(6)}, ${m.message.locationMessage.degreesLongitude?.toFixed(6)}`
+      : '';
 
     const text =
-      pollText ??
       m.message?.conversation ??
       m.message?.extendedTextMessage?.text ??
       m.message?.imageMessage?.caption ??
       m.message?.videoMessage?.caption ??
       m.message?.documentMessage?.caption ??
+      locationText ??
       '';
 
     const type = this.resolveType(m);
@@ -565,8 +592,7 @@ export class WaService implements OnModuleInit {
     let mediaUrl: string | undefined;
     if (!opts.suppressAutomation &&
         (type === MessageType.image || type === MessageType.video ||
-         type === MessageType.audio || type === MessageType.document ||
-         type === MessageType.sticker || type === MessageType.location)) {
+         type === MessageType.audio || type === MessageType.voice || type === MessageType.document)) {
       mediaUrl = await this.downloadInboundMedia(m).catch((err) => {
         this.logger.warn(`Media download failed for ${m.key.id}: ${err}`);
         return undefined;
@@ -583,7 +609,7 @@ export class WaService implements OnModuleInit {
 
     const result = await this.ingest.ingest({
       accountId,
-      remoteJid: m.key.remoteJid,
+      remoteJid,
       externalId: m.key.id ?? '',
       pushName: m.pushName ?? undefined,
       text,
@@ -611,6 +637,26 @@ export class WaService implements OnModuleInit {
         this.logger.error(`Auto-reply failed: ${err}`),
       );
     }
+  }
+
+  /**
+   * Resolve @lid JIDs to phone-based @s.whatsapp.net JIDs.
+   * Linked devices receive messages with @lid identifiers instead of phone JIDs.
+   * We maintain a lidMap from Baileys contact events to perform the mapping.
+   * Falls back to the original JID if no mapping is found.
+   */
+  private resolveJid(accountId: string, jid: string): string {
+    if (!isLidJid(jid)) return jid;
+
+    const session = this.sessions.get(accountId);
+    if (!session) return jid;
+
+    const resolved = session.lidMap.get(jid);
+    if (resolved) return resolved;
+
+    // No resolution found — keep the @lid (messages will still appear, just
+    // with the LID as the customer identifier).
+    return jid;
   }
 
   /** Store a customer's WhatsApp avatar and notify the dashboard. */
@@ -827,8 +873,7 @@ export class WaService implements OnModuleInit {
       m.message?.imageMessage?.mimetype ??
       m.message?.videoMessage?.mimetype ??
       m.message?.audioMessage?.mimetype ??
-      m.message?.documentMessage?.mimetype ??
-      m.message?.stickerMessage?.mimetype;
+      m.message?.documentMessage?.mimetype;
     const { url } = await this.storage.save(buffer, extForMimetype(mime));
     return url;
   }
@@ -837,12 +882,12 @@ export class WaService implements OnModuleInit {
     const msg = m.message;
     if (msg?.imageMessage) return MessageType.image;
     if (msg?.videoMessage) return MessageType.video;
+    // PTT = Push-To-Talk (voice message)
+    if (msg?.audioMessage?.ptt === true) return MessageType.voice;
     if (msg?.audioMessage) return MessageType.audio;
     if (msg?.documentMessage) return MessageType.document;
     if (msg?.stickerMessage) return MessageType.sticker;
     if (msg?.locationMessage) return MessageType.location;
-    if (msg?.pollCreationMessage || msg?.pollCreationMessageV2) return MessageType.text;
-    if (msg?.pollUpdateMessage) return MessageType.system;
     return MessageType.text;
   }
 
@@ -919,7 +964,7 @@ export class WaService implements OnModuleInit {
         fileName: caption ?? 'file',
       };
     } else if (mediaType === 'audio') {
-      content = { audio: { url }, mimetype: 'audio/mpeg', ptt: true };
+      content = { audio: { url }, mimetype: 'audio/mpeg' };
     } else {
       content = { video: { url }, caption: caption ?? '' };
     }
@@ -996,6 +1041,46 @@ export class WaService implements OnModuleInit {
     }
   }
 
+  /** Send a voice message (PTT = push-to-talk). */
+  async sendVoice(
+    accountId: string,
+    phone: string,
+    audioBuffer: Buffer,
+    mimetype = 'audio/ogg; codecs=opus',
+  ): Promise<string | null> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(phone);
+    await this.throttleSend(accountId);
+    await humanDelay();
+
+    const sent = await session.sock.sendMessage(jid, {
+      audio: audioBuffer,
+      mimetype,
+      ptt: true,
+    } as never);
+    return sent?.key.id ?? null;
+  }
+
+  /** Send a location message. */
+  async sendLocation(
+    accountId: string,
+    phone: string,
+    latitude: number,
+    longitude: number,
+  ): Promise<string | null> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(phone);
+    await this.throttleSend(accountId);
+    await humanDelay();
+
+    const sent = await session.sock.sendMessage(jid, {
+      location: { degreesLatitude: latitude, degreesLongitude: longitude },
+    } as never);
+    return sent?.key.id ?? null;
+  }
+
   /** React to a message with an emoji (empty string clears our reaction). */
   async sendReaction(accountId: string, phone: string, externalId: string, emoji: string) {
     const session = this.sessions.get(accountId);
@@ -1025,302 +1110,6 @@ export class WaService implements OnModuleInit {
     await session.sock.sendMessage(jid, {
       delete: { remoteJid: jid, id: externalId, fromMe },
     } as never);
-  }
-
-  /** Send a poll message with selectable options. */
-  async sendPoll(
-    accountId: string,
-    phone: string,
-    name: string,
-    options: string[],
-    selectableCount = 1,
-  ): Promise<string | null> {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await this.throttleSend(accountId);
-    await humanDelay();
-
-    const sent = await session.sock.sendMessage(jid, {
-      poll: {
-        name,
-        values: options.map((opt) => ({ optionName: opt })),
-        selectableCount,
-      },
-    } as never);
-    return sent?.key.id ?? null;
-  }
-
-  /** Archive a chat (move to archived in WhatsApp). */
-  async archiveChat(accountId: string, phone: string, archive = true) {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await session.sock.chatModify({ archive, lastMessages: [] }, jid);
-  }
-
-  /** Pin a chat to the top of the WhatsApp chat list. */
-  async pinChat(accountId: string, phone: string, pin = true) {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await session.sock.chatModify({ pin }, jid);
-  }
-
-  /** Block a contact at WhatsApp level (prevents them from messaging us). */
-  async blockContact(accountId: string, phone: string) {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await session.sock.updateBlockStatus(jid, 'block');
-  }
-
-  /** Unblock a previously blocked contact at WhatsApp level. */
-  async unblockContact(accountId: string, phone: string) {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await session.sock.updateBlockStatus(jid, 'unblock');
-  }
-
-  /** Send a location pin to a contact. */
-  async sendLocation(
-    accountId: string,
-    phone: string,
-    latitude: number,
-    longitude: number,
-    name?: string,
-  ): Promise<string | null> {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await this.throttleSend(accountId);
-    await humanDelay();
-
-    const sent = await session.sock.sendMessage(jid, {
-      location: { latitude, longitude, name: name ?? '' },
-    } as never);
-    return sent?.key.id ?? null;
-  }
-
-  /** Send a contact/vCard to a contact. */
-  async sendContact(
-    accountId: string,
-    phone: string,
-    contacts: Array<{ name: string; phone: string }>,
-  ): Promise<string | null> {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await this.throttleSend(accountId);
-    await humanDelay();
-
-    const vcards = contacts.map((c) => {
-      const digits = c.phone.replace(/\D/g, '');
-      return `BEGIN:VCARD\nVERSION:3.0\nFN:${c.name}\nTEL;type=CELL;type=VOICE;waid=${digits}:+${digits}\nEND:VCARD`;
-    });
-
-    const sent = await session.sock.sendMessage(jid, {
-      contacts: {
-        displayName: contacts.map((c) => c.name).join(', '),
-        contacts: vcards.map((vcard) => ({ vcard })),
-      },
-    } as never);
-    return sent?.key.id ?? null;
-  }
-
-  /** Send a sticker from a buffer (WebP format required by WhatsApp). */
-  async sendStickerBuffer(
-    accountId: string,
-    phone: string,
-    buffer: Buffer,
-    mimetype: string,
-  ): Promise<string | null> {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await this.throttleSend(accountId);
-    await humanDelay();
-
-    const sent = await session.sock.sendMessage(jid, {
-      sticker: buffer,
-      mimetype: mimetype || 'image/webp',
-    } as never);
-    return sent?.key.id ?? null;
-  }
-
-  /** Send a media message with optional view-once flag. */
-  async sendMediaViewOnce(
-    accountId: string,
-    phone: string,
-    mediaType: 'image' | 'video',
-    url: string,
-    caption?: string,
-  ): Promise<string | null> {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await this.throttleSend(accountId);
-    await humanDelay();
-
-    const content: Record<string, unknown> = mediaType === 'image'
-      ? { image: { url }, caption: caption ?? '', viewOnce: true }
-      : { video: { url }, caption: caption ?? '', viewOnce: true };
-
-    const sent = await session.sock.sendMessage(jid, content as never);
-    return sent?.key.id ?? null;
-  }
-
-  /** Mute or unmute a chat for 8 hours (WA default). */
-  async muteChat(accountId: string, phone: string, mute = true) {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    // Mute for 8 hours in milliseconds; passing null unmutes.
-    const muteUntil = mute ? Date.now() + 8 * 60 * 60 * 1000 : null;
-    await session.sock.chatModify({ mute: muteUntil } as never, jid);
-  }
-
-  /** Update the account's WhatsApp profile picture. */
-  async updateProfilePicture(accountId: string, buffer: Buffer) {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const myJid = session.sock.user?.id ?? session.sock.user?.lid;
-    if (!myJid) throw new NotFoundException(`Account ${accountId} has no user JID`);
-    await session.sock.updateProfilePicture(myJid, buffer);
-  }
-
-  /** Update the account's WhatsApp display name. */
-  async updateProfileName(accountId: string, name: string) {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    await session.sock.updateProfileName(name);
-  }
-
-  /** Update the account's WhatsApp "About" status text. */
-  async updateProfileStatus(accountId: string, status: string) {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    await session.sock.updateProfileStatus(status);
-  }
-
-  /** Post a text or image status/story (broadcast to all contacts). */
-  async sendStatus(
-    accountId: string,
-    content: { text?: string; image?: Buffer; caption?: string },
-  ): Promise<string | null> {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-
-    const statusJid = 'status@broadcast';
-    let msg: Record<string, unknown>;
-    if (content.image) {
-      msg = { image: content.image, caption: content.caption ?? '' };
-    } else {
-      msg = { text: content.text ?? '' };
-    }
-
-    const sent = await session.sock.sendMessage(statusJid, msg as never);
-    return sent?.key.id ?? null;
-  }
-
-  /** Enable or disable disappearing messages for a chat (24h default). */
-  async setDisappearingMessages(accountId: string, phone: string, enable = true, duration = 24 * 60 * 60) {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    // Duration in seconds; 0 disables disappearing messages.
-    await session.sock.sendMessage(jid, {
-      disappearingMessagesInChat: enable ? duration : 0,
-    } as never);
-  }
-
-  /** Mark a chat as unread on WhatsApp (blue dot indicator). */
-  async markChatUnread(accountId: string, phone: string) {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await session.sock.chatModify({ markRead: false, lastMessages: [] }, jid);
-  }
-
-  /** Delete a chat from WhatsApp (removes from phone, not from our DB). */
-  async deleteChat(accountId: string, phone: string) {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await session.sock.chatModify({ delete: true, lastMessages: [] }, jid);
-  }
-
-  /** Forward a message to another phone number. */
-  async forwardMessage(
-    accountId: string,
-    fromPhone: string,
-    toPhone: string,
-    externalId: string,
-  ): Promise<string | null> {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-
-    const fromJid = phoneToJid(fromPhone);
-    const toJid = phoneToJid(toPhone);
-
-    const sent = await session.sock.sendMessage(toJid, {
-      forward: {
-        key: { remoteJid: fromJid, id: externalId, fromMe: false },
-        message: {},
-      },
-    } as never);
-    return sent?.key.id ?? null;
-  }
-
-  /** Send a live location (real-time tracking for delivery, etc.). */
-  async sendLiveLocation(
-    accountId: string,
-    phone: string,
-    latitude: number,
-    longitude: number,
-    durationSec = 600,
-  ): Promise<string | null> {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await this.throttleSend(accountId);
-    await humanDelay();
-
-    const sent = await session.sock.sendMessage(jid, {
-      location: { latitude, longitude, live: durationSec },
-    } as never);
-    return sent?.key.id ?? null;
-  }
-
-  /** Search messages across all conversations for an account. */
-  async searchAllMessages(accountId: string, query: string, limit = 50) {
-    const q = query.trim().slice(0, 200);
-    if (!q) return [];
-
-    const messages = await this.prisma.message.findMany({
-      where: {
-        conversation: { whatsappAccountId: accountId },
-        content: { contains: q, mode: 'insensitive' },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: Math.min(limit, 100),
-      select: {
-        id: true,
-        content: true,
-        senderType: true,
-        messageType: true,
-        createdAt: true,
-        conversationId: true,
-        conversation: {
-          select: {
-            id: true,
-            customer: { select: { name: true, phoneNumber: true } },
-          },
-        },
-      },
-    });
-    return messages;
   }
 
   /** Log AI mode change to audit trail. */
@@ -1361,46 +1150,26 @@ export class WaService implements OnModuleInit {
   }
 
   /**
-   * Permanently delete a WhatsApp account: end session, remove auth files,
-   * cascade-delete related records, then remove from DB.
+   * Log out a WhatsApp account: close the Baileys socket, wipe the auth
+   * state on disk, and mark the account disconnected. The admin can then
+   * delete the account row or re-scan a fresh QR.
    */
-  async deleteAccount(accountId: string, userId?: string) {
-    // 1. End live session if any
+  async logout(accountId: string): Promise<void> {
     const session = this.sessions.get(accountId);
     if (session) {
       try {
-        session.sock.end(undefined);
-      } catch { /* ignore */ }
+        // Baileys logout() sends a proper logout to WhatsApp servers so the
+        // linked device is removed from the phone's device list.
+        await session.sock.logout();
+      } catch {
+        // Best-effort: if logout fails (already disconnected), just end.
+        try { session.sock.end(undefined); } catch { /* ignore */ }
+      }
       this.sessions.delete(accountId);
     }
     this.reconnectAttempts.delete(accountId);
     this.reconnectingSince.delete(accountId);
-    this.sendTimestamps.delete(accountId);
-
-    // 2. Remove persisted auth files
-    await rm(join(this.sessionDir, accountId), { recursive: true, force: true }).catch(() => undefined);
-
-    // 3. Remove DB records in dependency order
-    await this.prisma.$transaction([
-      this.prisma.campaign.deleteMany({ where: { whatsappAccountId: accountId } }),
-      this.prisma.quickReply.deleteMany({ where: { whatsappAccountId: accountId } }),
-      this.prisma.conversation.deleteMany({ where: { whatsappAccountId: accountId } }),
-      this.prisma.customer.updateMany({
-        where: { sourceAccountId: accountId },
-        data: { sourceAccountId: null },
-      }),
-      this.prisma.whatsappAccount.delete({ where: { id: accountId } }),
-    ]);
-
-    // 4. Audit log
-    if (userId) {
-      await logAudit(this.prisma, {
-        userId,
-        action: 'account_delete',
-        entityType: 'whatsapp_account',
-        entityId: accountId,
-      });
-    }
+    await this.setStatus(accountId, SessionStatus.disconnected);
   }
 
   private async setStatus(accountId: string, status: SessionStatus) {

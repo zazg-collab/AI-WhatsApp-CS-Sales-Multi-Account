@@ -622,420 +622,6 @@ export class ConversationsService {
     return updated;
   }
 
-  /** Send a poll message through WhatsApp. */
-  async sendPoll(
-    id: string,
-    adminId: string,
-    question: string,
-    options: string[],
-    selectableCount = 1,
-  ) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      include: { customer: true },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    const externalId = await this.wa.sendPoll(
-      conversation.whatsappAccountId,
-      conversation.customer.phoneNumber,
-      question,
-      options,
-      selectableCount,
-    );
-
-    const content = `📊 Poll: ${question}\n${options.map((o) => `• ${o}`).join('\n')}`;
-    const message = await this.prisma.message.create({
-      data: {
-        conversationId: id,
-        senderType: SenderType.admin,
-        senderId: adminId,
-        content,
-        status: 'sent',
-        externalId,
-      },
-    });
-
-    await this.prisma.conversation.update({
-      where: { id },
-      data: { lastMessage: `[Poll] ${question}`, lastMessageAt: new Date() },
-    });
-
-    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message });
-    return message;
-  }
-
-  /** Archive or unarchive a conversation's WhatsApp chat. */
-  async archiveChat(id: string, archive: boolean, actorId?: string) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      include: { customer: { select: { phoneNumber: true } } },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    await this.wa.archiveChat(conversation.whatsappAccountId, conversation.customer.phoneNumber, archive);
-
-    await logAudit(this.prisma, {
-      userId: actorId,
-      action: archive ? 'chat_archive' : 'chat_unarchive',
-      entityType: 'conversation',
-      entityId: id,
-    });
-    return { archived: archive };
-  }
-
-  /** Pin or unpin a conversation's WhatsApp chat. */
-  async pinChat(id: string, pin: boolean, actorId?: string) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      include: { customer: { select: { phoneNumber: true } } },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    await this.wa.pinChat(conversation.whatsappAccountId, conversation.customer.phoneNumber, pin);
-
-    await logAudit(this.prisma, {
-      userId: actorId,
-      action: pin ? 'chat_pin' : 'chat_unpin',
-      entityType: 'conversation',
-      entityId: id,
-    });
-    return { pinned: pin };
-  }
-
-  /** Send a location pin to a conversation. */
-  async sendLocation(
-    id: string,
-    adminId: string,
-    latitude: number,
-    longitude: number,
-    name?: string,
-  ) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      include: { customer: true },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    const externalId = await this.wa.sendLocation(
-      conversation.whatsappAccountId,
-      conversation.customer.phoneNumber,
-      latitude,
-      longitude,
-      name,
-    );
-
-    const content = name
-      ? `📍 ${name} (${latitude}, ${longitude})`
-      : `📍 ${latitude}, ${longitude}`;
-    const message = await this.prisma.message.create({
-      data: {
-        conversationId: id,
-        senderType: SenderType.admin,
-        senderId: adminId,
-        messageType: MessageType.location,
-        content,
-        status: 'sent',
-        externalId,
-      },
-    });
-
-    await this.prisma.conversation.update({
-      where: { id },
-      data: { lastMessage: '[Lokasi]', lastMessageAt: new Date() },
-    });
-
-    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message });
-    return message;
-  }
-
-  /** Send contact/vCard(s) to a conversation. */
-  async sendContact(
-    id: string,
-    adminId: string,
-    contacts: Array<{ name: string; phone: string }>,
-  ) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      include: { customer: true },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    const externalId = await this.wa.sendContact(
-      conversation.whatsappAccountId,
-      conversation.customer.phoneNumber,
-      contacts,
-    );
-
-    const names = contacts.map((c) => c.name).join(', ');
-    const message = await this.prisma.message.create({
-      data: {
-        conversationId: id,
-        senderType: SenderType.admin,
-        senderId: adminId,
-        content: `[Kontak] ${names}`,
-        status: 'sent',
-        externalId,
-      },
-    });
-
-    await this.prisma.conversation.update({
-      where: { id },
-      data: { lastMessage: `[Kontak] ${names}`, lastMessageAt: new Date() },
-    });
-
-    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message });
-    return message;
-  }
-
-  /** Send a sticker to a conversation. */
-  async sendSticker(
-    id: string,
-    adminId: string,
-    file: { buffer: Buffer; mimetype: string },
-  ) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      include: { customer: true },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    const { url } = await this.storage.save(file.buffer, 'webp');
-    const externalId = await this.wa.sendStickerBuffer(
-      conversation.whatsappAccountId,
-      conversation.customer.phoneNumber,
-      file.buffer,
-      file.mimetype,
-    );
-
-    const message = await this.prisma.message.create({
-      data: {
-        conversationId: id,
-        senderType: SenderType.admin,
-        senderId: adminId,
-        messageType: MessageType.sticker,
-        content: '[Stiker]',
-        mediaUrl: url,
-        status: 'sent',
-        externalId,
-      },
-    });
-
-    await this.prisma.conversation.update({
-      where: { id },
-      data: { lastMessage: '[Stiker]', lastMessageAt: new Date() },
-    });
-
-    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message });
-    return message;
-  }
-
-  /** Send a view-once media (image/video) to a conversation. */
-  async sendViewOnce(
-    id: string,
-    adminId: string,
-    mediaType: 'image' | 'video',
-    url: string,
-    caption?: string,
-  ) {
-    assertSafeMediaUrl(url);
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      include: { customer: true },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    const externalId = await this.wa.sendMediaViewOnce(
-      conversation.whatsappAccountId,
-      conversation.customer.phoneNumber,
-      mediaType,
-      url,
-      caption,
-    );
-
-    const typeMap: Record<string, MessageType> = { image: MessageType.image, video: MessageType.video };
-    const message = await this.prisma.message.create({
-      data: {
-        conversationId: id,
-        senderType: SenderType.admin,
-        senderId: adminId,
-        messageType: typeMap[mediaType] ?? MessageType.image,
-        content: caption ?? null,
-        mediaUrl: url,
-        status: 'sent',
-        externalId,
-      },
-    });
-
-    await this.prisma.conversation.update({
-      where: { id },
-      data: { lastMessage: `[View-Once ${mediaType}] ${caption ?? ''}`, lastMessageAt: new Date() },
-    });
-
-    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message });
-    return message;
-  }
-
-  /** Mute/unmute a conversation's WhatsApp notifications. */
-  async muteChat(id: string, mute: boolean, actorId?: string) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      include: { customer: { select: { phoneNumber: true } } },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    await this.wa.muteChat(conversation.whatsappAccountId, conversation.customer.phoneNumber, mute);
-
-    await logAudit(this.prisma, {
-      userId: actorId,
-      action: mute ? 'chat_mute' : 'chat_unmute',
-      entityType: 'conversation',
-      entityId: id,
-    });
-    return { muted: mute };
-  }
-
-  /** Enable/disable disappearing messages for a conversation. */
-  async setDisappearingMessages(id: string, enable: boolean, duration?: number, actorId?: string) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      include: { customer: { select: { phoneNumber: true } } },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    await this.wa.setDisappearingMessages(
-      conversation.whatsappAccountId,
-      conversation.customer.phoneNumber,
-      enable,
-      duration,
-    );
-
-    await logAudit(this.prisma, {
-      userId: actorId,
-      action: enable ? 'disappearing_messages_enable' : 'disappearing_messages_disable',
-      entityType: 'conversation',
-      entityId: id,
-      newValue: { duration },
-    });
-    return { disappearingMessages: enable };
-  }
-
-  /** Mark a conversation as unread on WhatsApp. */
-  async markChatUnread(id: string, actorId?: string) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      include: { customer: { select: { phoneNumber: true } } },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    await this.wa.markChatUnread(conversation.whatsappAccountId, conversation.customer.phoneNumber);
-
-    await logAudit(this.prisma, {
-      userId: actorId,
-      action: 'chat_mark_unread',
-      entityType: 'conversation',
-      entityId: id,
-    });
-    return { markedUnread: true };
-  }
-
-  /** Delete a conversation from WhatsApp (our DB record is preserved). */
-  async deleteChat(id: string, actorId?: string) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      include: { customer: { select: { phoneNumber: true } } },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    await this.wa.deleteChat(conversation.whatsappAccountId, conversation.customer.phoneNumber);
-
-    await logAudit(this.prisma, {
-      userId: actorId,
-      action: 'chat_delete_wa',
-      entityType: 'conversation',
-      entityId: id,
-    });
-    return { deletedFromWa: true };
-  }
-
-  /** Forward a message from one conversation to a phone number. */
-  async forwardMessage(id: string, messageId: string, toPhone: string, adminId: string) {
-    const { conversation, message } = await this.messageWithRoute(id, messageId);
-    if (!message.externalId) throw new BadRequestException('Message has no WhatsApp id');
-
-    const externalId = await this.wa.forwardMessage(
-      conversation.whatsappAccountId,
-      conversation.customer.phoneNumber,
-      toPhone,
-      message.externalId,
-    );
-
-    const forwarded = await this.prisma.message.create({
-      data: {
-        conversationId: id,
-        senderType: SenderType.admin,
-        senderId: adminId,
-        content: `[Diteruskan] ${message.content ?? ''}`,
-        status: 'sent',
-        externalId,
-      },
-    });
-
-    await logAudit(this.prisma, {
-      userId: adminId,
-      action: 'message_forward',
-      entityType: 'message',
-      entityId: messageId,
-      newValue: { toPhone, forwardedMessageId: forwarded.id },
-    });
-
-    return forwarded;
-  }
-
-  /** Send a live location to a conversation. */
-  async sendLiveLocation(
-    id: string,
-    adminId: string,
-    latitude: number,
-    longitude: number,
-    durationSec = 600,
-  ) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      include: { customer: true },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
-
-    const externalId = await this.wa.sendLiveLocation(
-      conversation.whatsappAccountId,
-      conversation.customer.phoneNumber,
-      latitude,
-      longitude,
-      durationSec,
-    );
-
-    const content = `📍 Live Location (${durationSec}s)`;
-    const message = await this.prisma.message.create({
-      data: {
-        conversationId: id,
-        senderType: SenderType.admin,
-        senderId: adminId,
-        messageType: MessageType.location,
-        content,
-        status: 'sent',
-        externalId,
-      },
-    });
-
-    await this.prisma.conversation.update({
-      where: { id },
-      data: { lastMessage: '[Live Location]', lastMessageAt: new Date() },
-    });
-
-    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId: id, message });
-    return message;
-  }
-
   /** Full-text search within one conversation's messages (most recent first). */
   async searchMessages(id: string, query: string, limit = 50) {
     // A9: cap the needle so an absurdly long query can't be shipped into ILIKE.
@@ -1298,5 +884,69 @@ export class ConversationsService {
       ...(dto.takeoverStatus !== undefined ? { takeoverStatus: dto.takeoverStatus } : {}),
     };
     return this.prisma.conversation.update({ where: { id }, data });
+  }
+
+  /** Send a location (latitude, longitude) to a conversation. */
+  async sendLocation(conversationId: string, adminId: string, latitude: number, longitude: number) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: { customer: { select: { phoneNumber: true } } },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const externalId = await this.wa.sendLocation(
+      conversation.whatsappAccountId,
+      conversation.customer.phoneNumber,
+      latitude,
+      longitude,
+    );
+
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId,
+        senderType: SenderType.admin,
+        senderId: adminId,
+        messageType: MessageType.location,
+        content: `📍 ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+        status: MessageStatus.sent,
+        externalId,
+      },
+    });
+
+    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId, message });
+    await logAudit(this.prisma, { userId: adminId, action: 'message_send', entityType: 'message', entityId: message.id, newValue: { type: 'location' } });
+    return message;
+  }
+
+  /** Send a voice message (PTT) to a conversation. */
+  async sendVoice(conversationId: string, adminId: string, file: { buffer: Buffer; mimetype: string }) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: { customer: { select: { phoneNumber: true } } },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const externalId = await this.wa.sendVoice(
+      conversation.whatsappAccountId,
+      conversation.customer.phoneNumber,
+      file.buffer,
+      file.mimetype,
+    );
+
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId,
+        senderType: SenderType.admin,
+        senderId: adminId,
+        messageType: MessageType.voice,
+        content: '🎙️ Voice message',
+        status: MessageStatus.sent,
+        externalId,
+      },
+    });
+
+    this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId, message });
+    await logAudit(this.prisma, { userId: adminId, action: 'message_send', entityType: 'message', entityId: message.id, newValue: { type: 'voice' } });
+    return message;
   }
 }
