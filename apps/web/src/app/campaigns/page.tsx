@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { AppLayout } from '@/components/AppLayout';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { api, getToken } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -214,6 +215,7 @@ export default function CampaignsPage() {
 
   return (
     <AppLayout>
+      <PageHeader title="Campaigns" subtitle="Controlled outbound WhatsApp messaging with approval & rate limits" />
       <div className="flex flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         {/* Left: create + list */}
         <aside className="scrollbar-thin w-full shrink-0 overflow-y-auto border-b border-gray-200 bg-white p-4 md:w-96 md:border-b-0 md:border-r dark:border-gray-800 dark:bg-gray-900">
