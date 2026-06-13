@@ -388,11 +388,6 @@ function CenterPanel({
   const canSend = conv.aiMode === 'ai_off' || isAdmin;
   const isSupervisedPending = conv.aiMode === 'ai_supervised';
 
-  // find draft messages for supervised mode
-  const draftMessages = conv.messages.filter(
-    (m) => m.senderType === 'ai' && m.status === 'pending' && isSupervisedPending,
-  );
-
   return (
     <section className="flex flex-1 flex-col overflow-hidden">
       {/* Header */}
