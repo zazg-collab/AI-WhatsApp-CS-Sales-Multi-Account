@@ -69,13 +69,6 @@ enum LeadStage {
   very_hot
 }
 
-/// Workflow status of a conversation, set by admins (open → pending → resolved).
-enum ConversationStatus {
-  open
-  pending
-  resolved
-}
-
 enum TakeoverStatus {
   ai_active
   admin_takeover
@@ -134,27 +127,6 @@ enum FollowUpStatus {
   done
 }
 
-enum CampaignStatus {
-  draft
-  pending_approval
-  approved
-  scheduled
-  running
-  paused
-  completed
-  cancelled
-  failed
-}
-
-enum CampaignRecipientStatus {
-  pending
-  queued
-  sending
-  sent
-  failed
-  skipped
-}
-
 // ── Models ────────────────────────────────────────────────
 
 model User {
@@ -166,18 +138,14 @@ model User {
   status       UserStatus @default(active)
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
-  deletedAt    DateTime?  @map("deleted_at")
 
   assignedAccounts WhatsappAccount[] @relation("AccountAdmin")
   assignedCustomers Customer[]       @relation("CustomerAdmin")
   conversations    Conversation[]    @relation("ConversationAdmin")
   followUps        FollowUp[]
   auditLogs        AuditLog[]
-  createdCampaigns Campaign[]       @relation("CampaignCreatedBy")
-  approvedCampaigns Campaign[]      @relation("CampaignApprovedBy")
   createdKnowledge KnowledgeBase[]   @relation("KnowledgeCreatedBy")
   approvedKnowledge KnowledgeBase[]  @relation("KnowledgeApprovedBy")
-  quickReplies     QuickReply[]
 
   @@map("users")
 }
@@ -192,14 +160,6 @@ model WhatsappAccount {
   assignedAdminId String?       @map("assigned_admin_id")
   aiMode          AiMode        @default(ai_draft) @map("ai_mode")
   isActive        Boolean       @default(true) @map("is_active")
-  // Business hours + auto-away (outside hours): SLA pauses, an away message
-  // is sent (when the bot isn't on ai_on).
-  businessHoursEnabled Boolean  @default(false) @map("business_hours_enabled")
-  businessHoursStart   String?  @map("business_hours_start") // "HH:MM"
-  businessHoursEnd     String?  @map("business_hours_end")   // "HH:MM"
-  businessDays         Int[]    @default([1, 2, 3, 4, 5]) @map("business_days") // 0=Sun..6=Sat
-  businessTimezone     String?  @map("business_timezone")
-  awayMessage          String?  @map("away_message")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
@@ -207,8 +167,6 @@ model WhatsappAccount {
   assignedAdmin User?          @relation("AccountAdmin", fields: [assignedAdminId], references: [id])
   customers     Customer[]
   conversations Conversation[]
-  campaigns     Campaign[]
-  quickReplies  QuickReply[]
 
   @@map("whatsapp_accounts")
 }
@@ -298,17 +256,14 @@ model Customer {
   leadStage       LeadStage @default(cold) @map("lead_stage")
   tags            String[]  @default([])
   notes           String?
-  optedOut        Boolean   @default(false) @map("opted_out")
-  optedOutAt      DateTime? @map("opted_out_at")
   lastMessageAt   DateTime? @map("last_message_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   sourceAccount WhatsappAccount? @relation(fields: [sourceAccountId], references: [id])
   assignedAdmin User?            @relation("CustomerAdmin", fields: [assignedAdminId], references: [id])
-  conversations      Conversation[]
-  followUps          FollowUp[]
-  campaignRecipients CampaignRecipient[]
+  conversations Conversation[]
+  followUps     FollowUp[]
 
   @@unique([phoneNumber, sourceAccountId])
   @@index([leadStage])
@@ -321,16 +276,7 @@ model Conversation {
   whatsappAccountId String         @map("whatsapp_account_id")
   botId             String?        @map("bot_id")
   aiMode            AiMode         @default(ai_draft) @map("ai_mode")
-  previousAiMode    AiMode?        @map("previous_ai_mode")
   takeoverStatus    TakeoverStatus @default(ai_active) @map("takeover_status")
-  status            ConversationStatus @default(open)
-  unreadCount       Int            @default(0) @map("unread_count")
-  slaBreachedAt     DateTime?      @map("sla_breached_at")
-  labels            String[]       @default([])
-  lastAwayAt        DateTime?      @map("last_away_at")
-  csatScore         Int?           @map("csat_score")
-  csatRequestedAt   DateTime?      @map("csat_requested_at")
-  csatRespondedAt   DateTime?      @map("csat_responded_at")
   assignedAdminId   String?        @map("assigned_admin_id")
   lastMessage       String?        @map("last_message")
   lastMessageAt     DateTime?      @map("last_message_at")
@@ -344,7 +290,6 @@ model Conversation {
   messages        Message[]
   hermesReviews   HermesReview[]
   followUps       FollowUp[]
-  campaignRecipients CampaignRecipient[]
 
   @@index([whatsappAccountId])
   @@index([customerId])
@@ -363,15 +308,11 @@ model Message {
   aiGenerated    Boolean       @default(false) @map("ai_generated")
   hermesReviewId String?       @unique @map("hermes_review_id")
   externalId     String?       @map("external_id")
-  quotedMessageId String?      @map("quoted_message_id")
   createdAt      DateTime      @default(now()) @map("created_at")
 
   conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   hermesReview HermesReview? @relation(fields: [hermesReviewId], references: [id])
-  quotedMessage Message?     @relation("MessageQuote", fields: [quotedMessageId], references: [id], onDelete: SetNull)
-  quotedBy      Message[]    @relation("MessageQuote")
 
-  @@unique([conversationId, externalId])
   @@index([conversationId])
   @@map("messages")
 }
@@ -415,78 +356,6 @@ model FollowUp {
 
   @@index([scheduledAt])
   @@map("follow_ups")
-}
-
-
-model Campaign {
-  id                  String         @id @default(uuid())
-  name                String
-  messageTemplate     String         @map("message_template")
-  targetFilter        Json?          @map("target_filter")
-  status              CampaignStatus @default(draft)
-  whatsappAccountId   String         @map("whatsapp_account_id")
-  createdById         String?        @map("created_by_id")
-  approvedById        String?        @map("approved_by_id")
-  scheduledAt         DateTime?      @map("scheduled_at")
-  startedAt           DateTime?      @map("started_at")
-  completedAt         DateTime?      @map("completed_at")
-  rateLimitPerMinute  Int            @default(6) @map("rate_limit_per_minute")
-  humanDelayMinMs     Int            @default(5000) @map("human_delay_min_ms")
-  humanDelayMaxMs     Int            @default(20000) @map("human_delay_max_ms")
-  createdAt           DateTime       @default(now()) @map("created_at")
-  updatedAt           DateTime       @updatedAt @map("updated_at")
-
-  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id])
-  createdBy       User?           @relation("CampaignCreatedBy", fields: [createdById], references: [id])
-  approvedBy      User?           @relation("CampaignApprovedBy", fields: [approvedById], references: [id])
-  recipients      CampaignRecipient[]
-
-  @@index([status])
-  @@index([whatsappAccountId])
-  @@map("campaigns")
-}
-
-model CampaignRecipient {
-  id             String                  @id @default(uuid())
-  campaignId     String                  @map("campaign_id")
-  customerId      String                  @map("customer_id")
-  conversationId  String?                 @map("conversation_id")
-  phoneNumber     String                  @map("phone_number")
-  status          CampaignRecipientStatus @default(pending)
-  idempotencyKey  String                  @unique @map("idempotency_key")
-  sentMessageId   String?                 @map("sent_message_id")
-  error           String?
-  sentAt          DateTime?               @map("sent_at")
-  createdAt       DateTime                @default(now()) @map("created_at")
-  updatedAt       DateTime                @updatedAt @map("updated_at")
-
-  campaign     Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  conversation Conversation? @relation(fields: [conversationId], references: [id])
-
-  @@unique([campaignId, customerId])
-  @@index([campaignId, status])
-  @@index([customerId])
-  @@map("campaign_recipients")
-}
-
-/// Canned reply / message template. Scoped to one WhatsApp account, or global
-/// when whatsappAccountId is null. Optionally triggered by a "/shortcut".
-model QuickReply {
-  id                String   @id @default(uuid())
-  title             String
-  content           String
-  shortcut          String?
-  whatsappAccountId String?  @map("whatsapp_account_id")
-  createdById       String?  @map("created_by_id")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-
-  whatsappAccount WhatsappAccount? @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
-  createdBy       User?            @relation(fields: [createdById], references: [id])
-
-  @@index([whatsappAccountId])
-  @@map("quick_replies")
 }
 
 model AuditLog {

@@ -9,33 +9,21 @@ Do not drop production features that already exist on `main`. For every conflict
 This makes `main` the source of truth for the conflicted files during merge resolution, including:
 
 - conversation, WhatsApp, and audit behavior from the current main branch;
-- page implementations and tests for monitoring, templates, settings, home, AppLayout, Sidebar, and ThemeToggle;
-- dependency lockfile and Prisma schema changes already present on main.
+- page implementations and tests from the current main branch;
+- dependency manifest, dependency lockfile and Prisma schema changes already present on main.
 
-## UI/UX scope retained in this branch
+## Latest conflict batch
 
-Hermes UI polish that is not in the reported conflict set remains in non-conflicting files. Page-level UI work that conflicted with `main` was intentionally removed from this branch so the current main implementation can be preserved and redesigned incrementally after the merge is clean.
+The final batch reported by GitHub was:
 
-## Files checked manually
-
-The latest conflict batch handled here included:
-
-- `apps/web/src/app/monitoring/page.test.tsx`
-- `apps/web/src/app/monitoring/page.tsx`
-- `apps/web/src/app/page.test.tsx`
-- `apps/web/src/app/page.tsx`
-- `apps/web/src/app/settings/ai/page.test.tsx`
-- `apps/web/src/app/settings/ai/page.tsx`
-- `apps/web/src/app/templates/page.test.tsx`
-- `apps/web/src/app/templates/page.tsx`
-- `apps/web/src/components/AppLayout.test.tsx`
-- `apps/web/src/components/AppLayout.tsx`
-- `apps/web/src/components/Sidebar.test.tsx`
-- `apps/web/src/components/Sidebar.tsx`
-- `apps/web/src/components/ThemeToggle.tsx`
-- `apps/web/tailwind.config.ts`
 - `package-lock.json`
+- `package.json`
 - `packages/database/prisma/schema.prisma`
-- `scripts/qa-check.mjs`
 
-No conflict markers should remain in the working tree. After a real remote `main` is available locally, run the final merge/rebase and keep `main` content for these files unless a new non-conflicting integration is needed.
+All three files were reset out of this branch so the merge can keep `main`'s current dependency and database model state. This avoids losing production schema fields or dependency updates that already exist on `main`.
+
+## Important local validation note
+
+The local workspace does not have a configured `origin/main`, so the exact GitHub `main` tree is not available inside this container. Local API builds can therefore fail if branch API code expects schema fields that only exist on the real remote `main`. The intended final merge resolution is to keep the real `main` versions of the manifest, lockfile, and Prisma schema, then regenerate Prisma and run the full CI matrix.
+
+No conflict markers should remain in the working tree. After a real remote `main` is available locally, run the final merge/rebase and keep `main` content for the files above unless a new non-conflicting integration is needed.
