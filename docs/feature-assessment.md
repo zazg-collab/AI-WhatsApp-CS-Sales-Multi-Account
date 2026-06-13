@@ -83,6 +83,35 @@ Pertahankan ruang lingkup; hindari menambah kompleksitas yang tak terpakai:
 
 ---
 
+## 3b. Status implementasi (update)
+
+Dikerjakan & diverifikasi runtime di iterasi ini:
+
+- ✅ **Quick-reply di composer inbox** (tombol ⚡ + ekspansi shortcut `/nama`).
+- ✅ **Centang status pengiriman** (pending/sent/delivered/read/failed) di gelembung.
+- ✅ **Drawer navigasi mobile** + **badge unread** di nav Inbox
+  (`GET /conversations/unread-count`, terverifikasi).
+- ✅ **Indikator koneksi realtime** (Live / Reconnecting…) di header inbox.
+- ✅ **Penjadwalan pesan personal** — UI baru di inbox (tombol "Schedule")
+  memakai backend follow-up yang sudah ada (`POST /follow-ups`, queue delayed
+  job, kirim otomatis via Baileys, cancel). Validasi 400/404 terverifikasi.
+- ✅ **Auto-reply di luar jam operasional** — ternyata SUDAH lengkap end-to-end
+  (`maybeAutoAway` + `awayMessage` + `isWithinBusinessHours`, dengan cooldown);
+  UI ada di halaman Accounts. Tidak perlu dibangun ulang.
+- ✅ **Perbaikan 429 & WebSocket** — debounce reload dari event + fallback
+  polling transport.
+
+### Catatan keamanan dependency (perlu keputusan)
+
+- `npm audit`: 38 kerentanan (2 kritis, 10 high). `npm audit fix` non-breaking
+  gagal karena konflik peer-dep; sebagian besar butuh `npm audit fix --force`
+  (berisiko bump major NestJS/Next — jangan dijalankan tanpa uji regresi).
+- Kerentanan **kritis pada `xlsx`** (dipakai untuk ingest Excel di Knowledge)
+  **tidak ada perbaikan di npm registry**. Mitigasi: migrasi ke versi resmi
+  SheetJS dari CDN mereka atau ganti ke `exceljs`. Karena file di-upload oleh
+  admin (semi-tepercaya) risikonya menengah, tapi tetap perlu ditangani sebelum
+  produksi.
+
 ## 4. Catatan QA / kualitas
 
 - **Responsivitas**: inbox kini master-detail di HP; panel lebar-tetap

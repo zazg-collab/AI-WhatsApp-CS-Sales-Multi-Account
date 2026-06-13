@@ -30,6 +30,7 @@ import {
   CheckCheck,
   Check,
   Zap,
+  CalendarClock,
   UserPlus,
   PhoneCall,
 } from 'lucide-react';
@@ -220,6 +221,12 @@ function InboxInner() {
   const [sendError, setSendError] = useState<string | null>(null);
   const [quickReplies, setQuickReplies] = useState<{ id: string; title: string; content: string; shortcut: string | null }[]>([]);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState('');
+  const [scheduleMsg, setScheduleMsg] = useState('');
+  const [scheduleErr, setScheduleErr] = useState<string | null>(null);
+  const [followUps, setFollowUps] = useState<{ id: string; scheduledAt: string; messageTemplate: string | null; status: string }[]>([]);
+  const [liveConnected, setLiveConnected] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
   const [showAssign, setShowAssign] = useState(false);
   const [quoteMessage, setQuoteMessage] = useState<Message | null>(null);
@@ -278,6 +285,15 @@ function InboxInner() {
     }
   }, []);
 
+  const loadFollowUps = useCallback(async (convId: string) => {
+    try {
+      const r = await api<{ id: string; scheduledAt: string; messageTemplate: string | null; status: string }[]>(`/follow-ups?conversationId=${convId}`);
+      setFollowUps(Array.isArray(r) ? r : []);
+    } catch {
+      setFollowUps([]);
+    }
+  }, []);
+
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 300);
     return () => clearTimeout(t);
@@ -292,9 +308,14 @@ function InboxInner() {
   }, []);
 
   useEffect(() => {
-    if (activeId) loadConv(activeId);
-    else setConv(null);
-  }, [activeId, loadConv]);
+    if (activeId) {
+      loadConv(activeId);
+      loadFollowUps(activeId);
+    } else {
+      setConv(null);
+      setFollowUps([]);
+    }
+  }, [activeId, loadConv, loadFollowUps]);
 
   useEffect(() => {
     setLabelDraft(conv?.labels?.join(', ') ?? '');
@@ -310,6 +331,11 @@ function InboxInner() {
   // ── Live updates ───────────────────────────────────────────────────
   useEffect(() => {
     const socket = getSocket();
+    setLiveConnected(socket.connected);
+    const onConnect = () => setLiveConnected(true);
+    const onDisconnect = () => setLiveConnected(false);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
     // Coalesce bursts of live events (e.g. WhatsApp history sync fires many
     // message:new at once) so we don't flood the API and trip rate limits.
     let listTimer: ReturnType<typeof setTimeout> | null = null;
@@ -355,6 +381,8 @@ function InboxInner() {
     return () => {
       if (listTimer) clearTimeout(listTimer);
       if (convTimer) clearTimeout(convTimer);
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
       socket.off('message:new', onNew);
       socket.off('message:draft', onDraft);
       socket.off('message:draft-removed', onDraftRemoved);
@@ -396,12 +424,46 @@ function InboxInner() {
     }
   }
 
-  function applyQuickReply(content: string) {
+  function fillTokens(content: string) {
     const name = active?.customer.name || '';
     const phone = active?.customer.phoneNumber || '';
-    const filled = content.replace(/\{\{\s*name\s*\}\}/gi, name).replace(/\{\{\s*phone\s*\}\}/gi, phone);
+    return content.replace(/\{\{\s*name\s*\}\}/gi, name).replace(/\{\{\s*phone\s*\}\}/gi, phone);
+  }
+
+  function applyQuickReply(content: string) {
+    const filled = fillTokens(content);
     setComposer((prev) => (prev.trim() ? `${prev} ${filled}` : filled));
     setShowQuickReplies(false);
+  }
+
+  async function scheduleFollowUp() {
+    if (!activeId || !scheduleAt || !scheduleMsg.trim()) return;
+    setScheduleErr(null);
+    try {
+      await api('/follow-ups', {
+        method: 'POST',
+        body: JSON.stringify({
+          conversationId: activeId,
+          scheduledAt: new Date(scheduleAt).toISOString(),
+          message: scheduleMsg.trim(),
+        }),
+      });
+      setScheduleMsg('');
+      setScheduleAt('');
+      setShowSchedule(false);
+      await loadFollowUps(activeId);
+    } catch (err) {
+      setScheduleErr(err instanceof Error ? err.message : 'Failed to schedule message');
+    }
+  }
+
+  async function cancelFollowUp(id: string) {
+    try {
+      await api(`/follow-ups/${id}/cancel`, { method: 'PATCH' });
+      if (activeId) await loadFollowUps(activeId);
+    } catch {
+      /* ignore */
+    }
   }
 
   async function act(fn: () => Promise<unknown>) {
@@ -625,7 +687,7 @@ function InboxInner() {
         </section>
 
         {/* ── Panel 2: timeline + composer ───────────────────────────── */}
-        <section className={cn('operations-surface min-w-0 flex-1 flex-col border-y border-gray-200 dark:border-gray-800', activeId ? 'flex' : 'hidden md:flex')}>
+        <section className={cn('operations-surface relative min-w-0 flex-1 flex-col border-y border-gray-200 dark:border-gray-800', activeId ? 'flex' : 'hidden md:flex')}>
           {!active ? (
             <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
               <InboxIcon className="mb-2 h-7 w-7 text-gray-300" strokeWidth={1.5} aria-hidden="true" />
@@ -662,6 +724,13 @@ function InboxInner() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <span
+                    className="flex items-center gap-1 text-[11px] font-medium text-gray-400"
+                    title={liveConnected ? 'Realtime connected' : 'Realtime reconnecting…'}
+                  >
+                    <span className={cn('h-2 w-2 rounded-full', liveConnected ? 'bg-channel-500' : 'animate-pulse bg-review-500')} />
+                    <span className="hidden sm:inline">{liveConnected ? 'Live' : 'Reconnecting…'}</span>
+                  </span>
                   <Badge tone="hermes">
                     <Workflow className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
                     {aiModeLabel[active.aiMode] ?? active.aiMode}
@@ -684,6 +753,10 @@ function InboxInner() {
                   <Button variant="outline" size="sm" onClick={escalate} disabled={busy}>
                     <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                     Escalate
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => { setShowSchedule(true); setScheduleErr(null); }}>
+                    <CalendarClock className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    Schedule
                   </Button>
                 </div>
               </div>
@@ -858,7 +931,16 @@ function InboxInner() {
                   <textarea
                     rows={1}
                     value={composer}
-                    onChange={(e) => setComposer(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      // Expand "/shortcut " into the quick reply content as you type.
+                      const m = v.match(/^\/(\S+)\s$/);
+                      if (m) {
+                        const qr = quickReplies.find((q) => q.shortcut?.toLowerCase() === m[1].toLowerCase());
+                        if (qr) { setComposer(fillTokens(qr.content)); return; }
+                      }
+                      setComposer(v);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -874,6 +956,51 @@ function InboxInner() {
                   </Button>
                 </div>
               </div>
+
+              {showSchedule && (
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowSchedule(false)}>
+                  <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-700 dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+                    <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      <CalendarClock className="h-4 w-4 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
+                      Schedule a message
+                    </h3>
+                    <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">Send at</label>
+                    <input
+                      type="datetime-local"
+                      value={scheduleAt}
+                      onChange={(e) => setScheduleAt(e.target.value)}
+                      className="mb-3 w-full rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-[13px] text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    />
+                    <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">Message</label>
+                    <textarea
+                      rows={3}
+                      value={scheduleMsg}
+                      onChange={(e) => setScheduleMsg(e.target.value)}
+                      placeholder="Message to send automatically at the scheduled time"
+                      className="mb-2 w-full resize-none rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-[13px] text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    />
+                    {scheduleErr && <p className="mb-2 text-xs text-danger-600">{scheduleErr}</p>}
+                    {followUps.filter((f) => f.status === 'scheduled').length > 0 && (
+                      <div className="mb-3 space-y-1 border-t border-gray-100 pt-2 dark:border-gray-800">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Scheduled</p>
+                        {followUps.filter((f) => f.status === 'scheduled').map((f) => (
+                          <div key={f.id} className="flex items-center justify-between gap-2 text-[12px] text-gray-600 dark:text-gray-300">
+                            <span className="min-w-0 flex-1 truncate">{new Date(f.scheduledAt).toLocaleString()} — {f.messageTemplate}</span>
+                            <button type="button" onClick={() => cancelFollowUp(f.id)} className="shrink-0 text-danger-600 hover:underline">Cancel</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setShowSchedule(false)}>Close</Button>
+                      <Button size="sm" onClick={scheduleFollowUp} disabled={!scheduleAt || !scheduleMsg.trim()}>
+                        <CalendarClock className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                        Schedule
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </section>
