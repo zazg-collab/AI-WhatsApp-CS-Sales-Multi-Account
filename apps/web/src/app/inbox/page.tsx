@@ -301,6 +301,14 @@ function InboxInner() {
 
   useEffect(() => { loadList(); }, [loadList]);
 
+  // Ask once for browser notification permission so inbound messages can alert
+  // the agent when the tab is in the background.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
+
   useEffect(() => {
     api<{ id: string; title: string; content: string; shortcut: string | null }[]>('/quick-replies')
       .then((r) => setQuickReplies(Array.isArray(r) ? r : []))
@@ -359,6 +367,21 @@ function InboxInner() {
     const onNew = ({ conversationId, message }: { conversationId: string; message: Message }) => {
       upsert(conversationId, message);
       scheduleListReload();
+      // Notify when an inbound customer message arrives and the agent isn't
+      // already looking at that chat (tab hidden or a different conversation open).
+      if (
+        message.senderType === 'customer' &&
+        typeof window !== 'undefined' &&
+        'Notification' in window &&
+        Notification.permission === 'granted' &&
+        (document.hidden || conversationId !== activeId)
+      ) {
+        try {
+          new Notification('New WhatsApp message', { body: message.content ?? 'New message', tag: conversationId });
+        } catch {
+          /* ignore notification failures */
+        }
+      }
     };
     const onDraft = ({ conversationId, message }: { conversationId: string; message: Message }) => upsert(conversationId, message);
     const onDraftRemoved = ({ conversationId, messageId }: { conversationId: string; messageId: string }) =>
@@ -397,28 +420,46 @@ function InboxInner() {
   // ── Actions ────────────────────────────────────────────────────────
   async function sendMessage() {
     if (!activeId || !composer.trim() || sending) return;
+    const text = composer.trim();
     setSending(true);
     setSendError(null);
     try {
       if (editingMessage) {
         await api(`/conversations/${activeId}/messages/${editingMessage.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ text: composer.trim() }),
+          body: JSON.stringify({ text }),
         });
         setEditingMessage(null);
+        setComposer('');
+        await loadConv(activeId);
       } else {
-        await api(`/conversations/${activeId}/messages`, {
-          method: 'POST',
-          body: JSON.stringify({ text: composer.trim(), quotedMessageId: quoteMessage?.id }),
-        });
+        // Optimistic: show the message immediately as pending, then reconcile.
+        const tempId = `temp-${Date.now()}`;
+        const optimistic: Message = {
+          id: tempId,
+          senderType: 'admin',
+          content: text,
+          messageType: 'text',
+          status: 'pending',
+          aiGenerated: false,
+          createdAt: new Date().toISOString(),
+        };
+        const quotedId = quoteMessage?.id;
+        setConv((prev) => (prev && prev.id === activeId ? { ...prev, messages: [...prev.messages, optimistic] } : prev));
         setQuoteMessage(null);
+        setComposer('');
+        try {
+          await api(`/conversations/${activeId}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({ text, quotedMessageId: quotedId }),
+          });
+          await loadConv(activeId);
+        } catch (err) {
+          // Keep the message visible but mark it failed so the agent can retry.
+          setConv((prev) => (prev && prev.id === activeId ? { ...prev, messages: prev.messages.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m)) } : prev));
+          setSendError(err instanceof Error ? err.message : 'Failed to send message');
+        }
       }
-      setComposer('');
-      await loadConv(activeId);
-    } catch (err) {
-      // Refresh the timeline so an optimistic/failed message stays visible, then surface the error.
-      await loadConv(activeId);
-      setSendError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
       setSending(false);
     }
@@ -825,6 +866,10 @@ function InboxInner() {
                         )}
                         <div className={cn('mt-1 flex items-center justify-between gap-2 text-[10px] tabular-nums', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>
                           <div className="flex items-center gap-2">
+                            {m.id.startsWith('temp-') ? (
+                              <span>{m.status === 'failed' ? 'Not sent' : 'Sending…'}</span>
+                            ) : (
+                            <>
                             <button type="button" onClick={() => quoteReply(m)} className="hover:underline">Reply</button>
                             {!isCustomer && !m.deletedAt && <button type="button" onClick={() => editSentMessage(m)} className="hover:underline">Edit</button>}
                             {!m.deletedAt && <button type="button" onClick={() => deleteMessage(m.id)} className="hover:underline">Revoke</button>}
@@ -845,6 +890,8 @@ function InboxInner() {
                               </span>
                             )}
                             {m.reactions && Object.keys(m.reactions).length > 0 && <button type="button" onClick={() => clearReaction(m.id)} className="hover:underline">Clear reaction</button>}
+                            </>
+                            )}
                           </div>
                           <span className="flex items-center gap-1">
                             {clockTime(m.createdAt)}
