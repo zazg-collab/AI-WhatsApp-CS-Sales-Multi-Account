@@ -118,13 +118,31 @@ const conflictFiles = [
   'apps/web/src/app/knowledge/page.test.tsx',
   'apps/web/src/app/knowledge/page.tsx',
   'apps/web/src/app/layout.tsx',
+  'apps/web/src/app/monitoring/page.test.tsx',
+  'apps/web/src/app/monitoring/page.tsx',
+  'apps/web/src/app/page.test.tsx',
+  'apps/web/src/app/page.tsx',
+  'apps/web/src/app/settings/ai/page.test.tsx',
+  'apps/web/src/app/settings/ai/page.tsx',
+  'apps/web/src/app/templates/page.test.tsx',
+  'apps/web/src/app/templates/page.tsx',
+  'apps/web/src/components/AppLayout.test.tsx',
+  'apps/web/src/components/AppLayout.tsx',
+  'apps/web/src/components/Sidebar.test.tsx',
+  'apps/web/src/components/Sidebar.tsx',
+  'apps/web/src/components/ThemeToggle.tsx',
+  'apps/web/tailwind.config.ts',
+  'package-lock.json',
+  'packages/database/prisma/schema.prisma',
+  'scripts/qa-check.mjs',
 ];
+const conflictMarkerPattern = new RegExp('^(<{7}|={7}|>{7})', 'm');
 for (const file of conflictFiles) {
   if (!exists(file)) {
     continue;
   }
   const content = read(file);
-  assert.doesNotMatch(content, /<<<<<<<|=======|>>>>>>>/, `${file} must not contain merge conflict markers`);
+  assert.doesNotMatch(content, conflictMarkerPattern, `${file} must not contain merge conflict markers`);
 }
 
 const mergeNotes = read('docs/merge-conflict-resolution.md');
