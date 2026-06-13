@@ -6,7 +6,7 @@ import { setPathname } from '../../vitest.setup';
 describe('AppLayout', () => {
   beforeEach(() => {
     window.localStorage.clear();
-    setPathname('/dashboard');
+    setPathname('/overview');
   });
 
   it('renders the sidebar and its children', () => {
@@ -16,6 +16,6 @@ describe('AppLayout', () => {
       </AppLayout>,
     );
     expect(screen.getByText('Page body')).toBeInTheDocument();
-    expect(screen.getByText('Dashboard')).toBeInTheDocument(); // from Sidebar
+    expect(screen.getByText('Overview')).toBeInTheDocument(); // from Sidebar
   });
 });

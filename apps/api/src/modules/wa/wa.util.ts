@@ -10,7 +10,12 @@ export function jidToPhone(jid: string): string {
 }
 
 export function isDirectChatJid(jid: string): boolean {
-  return jid.endsWith('@s.whatsapp.net');
+  return jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
+}
+
+/** True when the JID is a WhatsApp Linked Device ID (not a phone-based JID). */
+export function isLidJid(jid: string): boolean {
+  return jid.endsWith('@lid');
 }
 
 /** Keywords (case-insensitive) that signal a customer wants to opt out. */

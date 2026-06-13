@@ -1,4 +1,4 @@
-const API_URL =
+export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
 /**
@@ -88,6 +88,19 @@ export async function uploadFile<T>(
     throw new Error(body.message ?? `Upload failed: ${res.status}`);
   }
   return res.json() as Promise<T>;
+}
+
+/** Download a backend file endpoint with the current JWT attached. */
+export async function downloadFile(path: string): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? `Download failed: ${res.status}`);
+  }
+  return res.blob();
 }
 
 export async function api<T>(

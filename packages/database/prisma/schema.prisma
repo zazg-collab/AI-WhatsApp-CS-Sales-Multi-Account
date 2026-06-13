@@ -3,7 +3,7 @@
 
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["linux-musl-openssl-3.0.x"]
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -340,7 +340,7 @@ model Conversation {
   updatedAt         DateTime       @updatedAt @map("updated_at")
 
   customer        Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id])
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
   bot             Bot?            @relation(fields: [botId], references: [id])
   assignedAdmin   User?           @relation("ConversationAdmin", fields: [assignedAdminId], references: [id])
   messages        Message[]
@@ -441,7 +441,7 @@ model Campaign {
   createdAt           DateTime       @default(now()) @map("created_at")
   updatedAt           DateTime       @updatedAt @map("updated_at")
 
-  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id])
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
   createdBy       User?           @relation("CampaignCreatedBy", fields: [createdById], references: [id])
   approvedBy      User?           @relation("CampaignApprovedBy", fields: [approvedById], references: [id])
   recipients      CampaignRecipient[]

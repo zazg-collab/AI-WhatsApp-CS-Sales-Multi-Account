@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
-import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 
+
 export const metadata: Metadata = {
-  title: 'Hermes Control Center',
-  description: 'AI WhatsApp CS & Sales Multi-Account',
+  title: 'Hermes — AI Sales & Customer Service Control Center',
+  description: 'Supervised, auditable AI operations center for multi-account WhatsApp.',
 };
 
 export default function RootLayout({
@@ -14,10 +14,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id" className={`${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={GeistMono.variable} suppressHydrationWarning>
       <head>
-        {/* Apply the saved theme before first paint to avoid a flash.
-            Light is the default; "dark" opts into the WhatsApp-night look. */}
+        {/* Apply the saved theme before first paint to avoid a flash. Light is default. */}
         <script
           dangerouslySetInnerHTML={{
             __html:
@@ -25,7 +24,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="bg-gray-50 font-sans text-gray-900 antialiased dark:bg-wa-bg dark:text-gray-100">
+      <body className="bg-gray-50 font-sans text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100">
         {children}
       </body>
     </html>

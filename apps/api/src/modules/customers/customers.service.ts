@@ -2,7 +2,6 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { LeadStage, Prisma } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { WaService } from '../wa/wa.service';
 import { BulkCustomerActionDto, UpdateCustomerDto } from './dto/customers.dto';
 
 interface ListFilters {
@@ -16,7 +15,6 @@ export class CustomersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly wa: WaService,
   ) {}
 
   list(filters: ListFilters) {
@@ -62,38 +60,6 @@ export class CustomersService {
     const notes = this.appendStampedNote(customer.notes, note);
     const updated = await this.prisma.customer.update({ where: { id }, data: { notes } });
     await this.audit.log(userId, 'customer_note_added', 'Customer', id, { note });
-    return updated;
-  }
-
-  /** Block a customer at WhatsApp level and sync the optedOut flag. */
-  async blockContact(id: string, userId?: string) {
-    const customer = await this.prisma.customer.findUnique({ where: { id } });
-    if (!customer) throw new NotFoundException('Customer not found');
-    if (!customer.sourceAccountId) {
-      throw new BadRequestException('Customer has no linked WhatsApp account');
-    }
-    await this.wa.blockContact(customer.sourceAccountId, customer.phoneNumber);
-    const updated = await this.prisma.customer.update({
-      where: { id },
-      data: { optedOut: true, optedOutAt: new Date() },
-    });
-    await this.audit.log(userId, 'customer_block', 'Customer', id);
-    return updated;
-  }
-
-  /** Unblock a customer at WhatsApp level and clear the optedOut flag. */
-  async unblockContact(id: string, userId?: string) {
-    const customer = await this.prisma.customer.findUnique({ where: { id } });
-    if (!customer) throw new NotFoundException('Customer not found');
-    if (!customer.sourceAccountId) {
-      throw new BadRequestException('Customer has no linked WhatsApp account');
-    }
-    await this.wa.unblockContact(customer.sourceAccountId, customer.phoneNumber);
-    const updated = await this.prisma.customer.update({
-      where: { id },
-      data: { optedOut: false, optedOutAt: null },
-    });
-    await this.audit.log(userId, 'customer_unblock', 'Customer', id);
     return updated;
   }
 
