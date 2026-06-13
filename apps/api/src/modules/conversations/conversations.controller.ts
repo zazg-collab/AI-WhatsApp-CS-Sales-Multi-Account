@@ -29,10 +29,9 @@ import { AssignConversationDto } from './dto/assign-conversation.dto';
 import { LabelsDto } from './dto/labels.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
 import { SendMediaDto } from './dto/send-media.dto';
+import { SendLocationDto } from './dto/send-location.dto';
 import { StartConversationDto } from './dto/start-conversation.dto';
 import { ReactionDto, EditMessageDto, ValidateNumberDto } from './dto/message-actions.dto';
-import { SendPollDto } from './dto/send-poll.dto';
-import { SendLocationDto, SendContactDto, SendViewOnceDto, DisappearingMessagesDto, ForwardMessageDto, LiveLocationDto } from './dto/wa-actions.dto';
 import { AiMode, ConversationStatus } from '@hermes/database';
 import { csvRow } from '../../common/csv.util';
 
@@ -326,46 +325,7 @@ export class ConversationsController {
     return this.conversations.sendUploadedMedia(id, user.id, file, caption);
   }
 
-  @ApiOperation({ summary: 'Send a poll with options to a conversation' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/poll')
-  sendPoll(
-    @Param('id') id: string,
-    @Body() dto: SendPollDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.sendPoll(id, user.id, dto.question, dto.options, dto.selectableCount);
-  }
-
-  @ApiOperation({ summary: 'Archive a WhatsApp chat (hide from main list)' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/archive')
-  archiveChat(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.archiveChat(id, true, user.id);
-  }
-
-  @ApiOperation({ summary: 'Unarchive a WhatsApp chat (restore to main list)' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/unarchive')
-  unarchiveChat(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.archiveChat(id, false, user.id);
-  }
-
-  @ApiOperation({ summary: 'Pin a WhatsApp chat to the top of the list' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/pin')
-  pinChat(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.pinChat(id, true, user.id);
-  }
-
-  @ApiOperation({ summary: 'Unpin a WhatsApp chat' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/unpin')
-  unpinChat(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.pinChat(id, false, user.id);
-  }
-
-  @ApiOperation({ summary: 'Send a location pin to a conversation' })
+  @ApiOperation({ summary: 'Send a location (latitude, longitude)' })
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/location')
   sendLocation(
@@ -373,104 +333,24 @@ export class ConversationsController {
     @Body() dto: SendLocationDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.sendLocation(id, user.id, dto.latitude, dto.longitude, dto.name);
+    return this.conversations.sendLocation(id, user.id, dto.latitude, dto.longitude);
   }
 
-  @ApiOperation({ summary: 'Send contact/vCard(s) to a conversation' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/contact')
-  sendContact(
-    @Param('id') id: string,
-    @Body() dto: SendContactDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.sendContact(id, user.id, dto.contacts);
-  }
-
-  @ApiOperation({ summary: 'Upload & send a sticker to a conversation' })
+  @ApiOperation({ summary: 'Upload & send a voice message (PTT) from the admin device' })
   @ApiConsumes('multipart/form-data')
   @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/sticker')
-  @UseInterceptors(FileInterceptor('file'))
-  sendSticker(
+  @Post(':id/voice/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: Number(process.env.WA_MEDIA_MAX_BYTES) || 25 * 1024 * 1024 },
+    }),
+  )
+  uploadVoice(
     @Param('id') id: string,
     @UploadedFile() file: { buffer: Buffer; mimetype: string } | undefined,
     @CurrentUser() user: AuthUser,
   ) {
-    if (!file?.buffer?.length) throw new BadRequestException('No sticker file uploaded');
-    return this.conversations.sendSticker(id, user.id, { buffer: file.buffer, mimetype: file.mimetype });
-  }
-
-  @ApiOperation({ summary: 'Send a view-once media (image/video) to a conversation' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/view-once')
-  sendViewOnce(
-    @Param('id') id: string,
-    @Body() dto: SendViewOnceDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.sendViewOnce(id, user.id, dto.mediaType, dto.url, dto.caption);
-  }
-
-  @ApiOperation({ summary: 'Mute a WhatsApp chat (8 hours)' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/mute')
-  muteChat(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.muteChat(id, true, user.id);
-  }
-
-  @ApiOperation({ summary: 'Unmute a WhatsApp chat' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/unmute')
-  unmuteChat(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.muteChat(id, false, user.id);
-  }
-
-  @ApiOperation({ summary: 'Enable/disable disappearing messages (24h default)' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/disappearing')
-  setDisappearingMessages(
-    @Param('id') id: string,
-    @Body() dto: DisappearingMessagesDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.setDisappearingMessages(id, dto.enable, dto.duration, user.id);
-  }
-
-  @ApiOperation({ summary: 'Mark a WhatsApp chat as unread' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/unread')
-  markChatUnread(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.markChatUnread(id, user.id);
-  }
-
-  @ApiOperation({ summary: 'Delete a chat from WhatsApp (DB record preserved)' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Delete(':id/wa-chat')
-  deleteChat(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.deleteChat(id, user.id);
-  }
-
-  @ApiOperation({ summary: 'Forward a message to another phone number' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/messages/:messageId/forward')
-  forwardMessage(
-    @Param('id') id: string,
-    @Param('messageId') messageId: string,
-    @Body() dto: ForwardMessageDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.forwardMessage(id, messageId, dto.toPhone, user.id);
-  }
-
-  @ApiOperation({ summary: 'Send a live location (real-time tracking)' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/live-location')
-  sendLiveLocation(
-    @Param('id') id: string,
-    @Body() dto: LiveLocationDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.sendLiveLocation(id, user.id, dto.latitude, dto.longitude, dto.durationSec);
+    if (!file?.buffer?.length) throw new BadRequestException('No file uploaded');
+    return this.conversations.sendVoice(id, user.id, file);
   }
 }
