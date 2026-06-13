@@ -569,12 +569,17 @@ export class WaService implements OnModuleInit {
 
     const fromMe = m.key.fromMe === true;
 
+    const locationText = m.message?.locationMessage
+      ? `📍 ${m.message.locationMessage.degreesLatitude?.toFixed(6)}, ${m.message.locationMessage.degreesLongitude?.toFixed(6)}`
+      : '';
+
     const text =
       m.message?.conversation ??
       m.message?.extendedTextMessage?.text ??
       m.message?.imageMessage?.caption ??
       m.message?.videoMessage?.caption ??
       m.message?.documentMessage?.caption ??
+      locationText ??
       '';
 
     const type = this.resolveType(m);
@@ -587,7 +592,7 @@ export class WaService implements OnModuleInit {
     let mediaUrl: string | undefined;
     if (!opts.suppressAutomation &&
         (type === MessageType.image || type === MessageType.video ||
-         type === MessageType.audio || type === MessageType.document)) {
+         type === MessageType.audio || type === MessageType.voice || type === MessageType.document)) {
       mediaUrl = await this.downloadInboundMedia(m).catch((err) => {
         this.logger.warn(`Media download failed for ${m.key.id}: ${err}`);
         return undefined;
