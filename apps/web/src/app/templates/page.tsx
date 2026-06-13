@@ -42,7 +42,7 @@ export default function TemplatesPage() {
     try {
       const [list, accs] = await Promise.all([
         api<QuickReply[]>('/quick-replies'),
-        api<WaAccount[]>('/wa/accounts').catch(() => []),
+        api<WaAccount[]>('/wa/accounts'),
       ]);
       setItems(list);
       setAccounts(accs);

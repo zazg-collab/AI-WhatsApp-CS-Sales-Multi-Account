@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, downloadFile } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -35,18 +35,13 @@ interface AiModeItem {
   percentage: number;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
-
-function exportCsv(path: string, filename: string) {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('hermes_token') : '';
-  fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } })
-    .then((r) => r.blob())
-    .then((blob) => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-    });
+async function exportCsv(path: string, filename: string) {
+  const blob = await downloadFile(path);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 export default function AnalyticsPage() {
@@ -55,10 +50,12 @@ export default function AnalyticsPage() {
   const [messageVolume, setMessageVolume] = useState<MessageVolumeItem[]>([]);
   const [aiModeBreakdown, setAiModeBreakdown] = useState<AiModeItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
+      setError(null);
       try {
         const [s, lf, mv, ai] = await Promise.all([
           api<Summary>('/dashboard/summary'),
@@ -70,8 +67,8 @@ export default function AnalyticsPage() {
         setLeadFunnel(lf);
         setMessageVolume(mv);
         setAiModeBreakdown(ai);
-      } catch {
-        // silently fail
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load analytics from API');
       } finally {
         setLoading(false);
       }
@@ -121,6 +118,10 @@ export default function AnalyticsPage() {
       <div className="scrollbar-thin flex-1 overflow-y-auto p-5">
         {loading ? (
           <p className="text-sm text-gray-500">Loading…</p>
+        ) : error ? (
+          <Card className="border-danger-200 bg-danger-50 p-4 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">
+            {error}
+          </Card>
         ) : (
           <>
             {summary && (

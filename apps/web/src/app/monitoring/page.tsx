@@ -100,6 +100,7 @@ export default function MonitoringPage() {
   const [workload, setWorkload] = useState<AdminWorkload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [workloadError, setWorkloadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -112,10 +113,12 @@ export default function MonitoringPage() {
       } finally {
         setLoading(false);
       }
+      setWorkloadError(null);
       try {
         setWorkload(await api<AdminWorkload>(`/dashboard/admin-workload?days=${days}`));
-      } catch {
+      } catch (err) {
         setWorkload(null);
+        setWorkloadError(err instanceof Error ? err.message : 'Failed to load admin workload from API');
       }
     }
     load();
@@ -147,6 +150,11 @@ export default function MonitoringPage() {
           </p>
         ) : data && (
           <div className="space-y-5">
+            {workloadError && (
+              <p className="rounded-lg border border-review-200 bg-review-50 p-4 text-sm text-review-700 dark:border-review-700/40 dark:bg-review-900/20 dark:text-review-400">
+                {workloadError}
+              </p>
+            )}
             <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
               <MetricCard label="Messages" value={data.totals.messages} hint={`${data.rangeDays} days`} />
               <MetricCard label="Conversations" value={data.totals.conversations} />

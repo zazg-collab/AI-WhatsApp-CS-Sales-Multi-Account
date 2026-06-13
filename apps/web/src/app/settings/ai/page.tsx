@@ -17,7 +17,7 @@ export default function AiSettingsPage() {
   useEffect(() => {
     api<{ baseUrl: string; defaultModel: string }>('/ai/config')
       .then(setConfig)
-      .catch(() => undefined);
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load AI config from API'));
   }, []);
 
   async function loadModels() {

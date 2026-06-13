@@ -6,7 +6,6 @@ import {
   Search,
   ShieldCheck,
   TriangleAlert,
-  Bot,
   Hand,
   Pencil,
   CircleCheck,
@@ -14,7 +13,7 @@ import {
   FileSearch,
   Send,
   Workflow,
-  Phone,
+  ScrollText,
   History,
   Clock,
   CircleX,
@@ -26,13 +25,18 @@ import {
   Image as ImageIcon,
   FileText,
   Video,
+  Tag,
+  CheckCheck,
+  UserPlus,
+  PhoneCall,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, uploadFile } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { AppLayout } from '@/components/AppLayout';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { StatusLabel, type StatusKind } from '@/components/ui/StatusLabel';
+import { WhatsAppMark } from '@/components/WhatsAppMark';
 import { cn } from '@/lib/cn';
 
 /**
@@ -45,6 +49,7 @@ import { cn } from '@/lib/cn';
  */
 
 interface AdminUser { id: string; name: string }
+interface WaAccount { id: string; accountName: string; phoneNumber: string }
 
 interface Message {
   id: string;
@@ -54,6 +59,10 @@ interface Message {
   status: string;
   aiGenerated: boolean;
   createdAt: string;
+  quotedMessage?: { id: string; content: string | null; senderType: string; messageType: string } | null;
+  reactions?: Record<string, string[]> | null;
+  editedAt?: string | null;
+  deletedAt?: string | null;
 }
 
 interface HermesReview {
@@ -91,6 +100,7 @@ interface ConvDetail {
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
   bot: { id: string; botName: string } | null;
   assignedAdmin?: AdminUser | null;
+  labels?: string[];
   messages: Message[];
   hermesReviews: HermesReview[];
 }
@@ -111,6 +121,30 @@ const aiModeLabel: Record<string, string> = {
   ai_supervised: 'AI Supervised',
   ai_paused: 'AI Paused',
 };
+
+
+const aiModeOptions = [
+  { value: 'ai_on', label: 'AI on' },
+  { value: 'ai_off', label: 'AI off' },
+  { value: 'ai_draft', label: 'AI draft' },
+  { value: 'ai_supervised', label: 'AI supervised' },
+  { value: 'ai_paused', label: 'AI paused' },
+];
+
+const statusOptions = [
+  { value: 'open', label: 'Open' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'resolved', label: 'Resolved' },
+];
+
+const reactionOptions = [
+  { emoji: '👍', label: 'Thumbs up' },
+  { emoji: '❤️', label: 'Heart' },
+  { emoji: '😂', label: 'Laugh' },
+  { emoji: '😮', label: 'Surprised' },
+  { emoji: '😢', label: 'Sad' },
+  { emoji: '🙏', label: 'Thanks' },
+];
 
 const riskTone: Record<string, 'success' | 'review' | 'danger'> = {
   low: 'success',
@@ -168,27 +202,65 @@ function InboxInner() {
   const [sending, setSending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [accounts, setAccounts] = useState<WaAccount[]>([]);
+  const [listError, setListError] = useState<string | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [adminError, setAdminError] = useState<string | null>(null);
   const [showAssign, setShowAssign] = useState(false);
+  const [quoteMessage, setQuoteMessage] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [labelDraft, setLabelDraft] = useState('');
+  const [startAccountId, setStartAccountId] = useState('');
+  const [startPhone, setStartPhone] = useState('');
+  const [startName, setStartName] = useState('');
+  const [startResult, setStartResult] = useState<string | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const reasoningRef = useRef<HTMLDivElement>(null);
+  const auditRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Data loading ───────────────────────────────────────────────────
   useEffect(() => {
-    api<{ users: AdminUser[] }>('/users').then((d) => setAdmins(d.users)).catch(() => {});
+    api<{ users: AdminUser[] }>('/users')
+      .then((d) => {
+        setAdmins(d.users);
+        setAdminError(null);
+      })
+      .catch((err) => setAdminError(err instanceof Error ? err.message : 'Failed to load team users from API'));
+  }, []);
+
+  useEffect(() => {
+    api<WaAccount[]>('/wa/accounts')
+      .then((items) => {
+        setAccounts(items);
+        if (items[0]) setStartAccountId((current) => current || items[0].id);
+      })
+      .catch((err) => setListError(err instanceof Error ? err.message : 'Failed to load WhatsApp accounts from API'));
   }, []);
 
   const loadList = useCallback(async () => {
     const params = new URLSearchParams({ limit: '50' });
     if (debounced.trim()) params.set('search', debounced.trim());
-    const data = await api<{ items: ConvSummary[] }>(`/conversations?${params}`).catch(() => ({ items: [] }));
-    setList(data.items);
+    try {
+      const data = await api<{ items: ConvSummary[] }>(`/conversations?${params}`);
+      setList(data.items);
+      setListError(null);
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : 'Failed to load conversations from API');
+    }
   }, [debounced]);
 
   const loadConv = useCallback(async (id: string) => {
-    const data = await api<ConvDetail>(`/conversations/${id}`).catch(() => null);
-    setConv(data);
-    api(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
+    try {
+      const data = await api<ConvDetail>(`/conversations/${id}`);
+      setConv(data);
+      setDetailError(null);
+      api(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
+    } catch (err) {
+      setConv(null);
+      setDetailError(err instanceof Error ? err.message : 'Failed to load conversation from API');
+    }
   }, []);
 
   useEffect(() => {
@@ -202,6 +274,12 @@ function InboxInner() {
     if (activeId) loadConv(activeId);
     else setConv(null);
   }, [activeId, loadConv]);
+
+  useEffect(() => {
+    setLabelDraft(conv?.labels?.join(', ') ?? '');
+    setQuoteMessage(null);
+    setEditingMessage(null);
+  }, [conv?.id, conv?.labels]);
 
   // Auto-scroll the timeline on new messages.
   useEffect(() => {
@@ -257,7 +335,19 @@ function InboxInner() {
     if (!activeId || !composer.trim() || sending) return;
     setSending(true);
     try {
-      await api(`/conversations/${activeId}/messages`, { method: 'POST', body: JSON.stringify({ text: composer.trim() }) });
+      if (editingMessage) {
+        await api(`/conversations/${activeId}/messages/${editingMessage.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ text: composer.trim() }),
+        });
+        setEditingMessage(null);
+      } else {
+        await api(`/conversations/${activeId}/messages`, {
+          method: 'POST',
+          body: JSON.stringify({ text: composer.trim(), quotedMessageId: quoteMessage?.id }),
+        });
+        setQuoteMessage(null);
+      }
       setComposer('');
       await loadConv(activeId);
     } finally {
@@ -284,8 +374,55 @@ function InboxInner() {
   const blockDraft = (msgId: string) => act(() => api(`/conversations/${activeId}/messages/${msgId}/block`, { method: 'POST' }));
   const editDraft = (m: Message) => {
     setComposer(m.content ?? '');
+    setQuoteMessage(null);
+    setEditingMessage(null);
     timelineRef.current?.querySelector('textarea')?.focus();
   };
+
+  const quoteReply = (m: Message) => {
+    setQuoteMessage(m);
+    setEditingMessage(null);
+    timelineRef.current?.querySelector('textarea')?.focus();
+  };
+
+  const editSentMessage = (m: Message) => {
+    setEditingMessage(m);
+    setQuoteMessage(null);
+    setComposer(m.content ?? '');
+    timelineRef.current?.querySelector('textarea')?.focus();
+  };
+
+  const deleteMessage = (msgId: string) => act(() => api(`/conversations/${activeId}/messages/${msgId}`, { method: 'DELETE' }));
+  const clearReaction = (msgId: string) => act(() => api(`/conversations/${activeId}/messages/${msgId}/react`, { method: 'POST', body: JSON.stringify({ emoji: '' }) }));
+  const reactToMessage = (msgId: string, emoji: string) => act(() => api(`/conversations/${activeId}/messages/${msgId}/react`, { method: 'POST', body: JSON.stringify({ emoji }) }));
+  const markRead = () => act(() => api(`/conversations/${activeId}/read`, { method: 'POST' }));
+  const setAiMode = (aiMode: string) => act(() => api(`/conversations/${activeId}/ai-mode`, { method: 'PATCH', body: JSON.stringify({ aiMode }) }));
+  const setWorkflowStatus = (status: string) => act(() => api(`/conversations/${activeId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }));
+  const saveLabels = () => act(() => api(`/conversations/${activeId}/labels`, {
+    method: 'PATCH',
+    body: JSON.stringify({ labels: labelDraft.split(',').map((label) => label.trim()).filter(Boolean) }),
+  }));
+
+  const validateNumber = () => act(async () => {
+    if (!startAccountId || !startPhone.trim()) return;
+    const result = await api<{ phoneNumber: string; exists: boolean }>('/conversations/validate-number', {
+      method: 'POST',
+      body: JSON.stringify({ accountId: startAccountId, phoneNumber: startPhone.trim() }),
+    });
+    setStartResult(`${result.phoneNumber} is ${result.exists ? 'registered' : 'not registered'} on WhatsApp`);
+  });
+
+  const startConversation = () => act(async () => {
+    if (!startAccountId || !startPhone.trim()) return;
+    const opened = await api<ConvDetail>('/conversations/start', {
+      method: 'POST',
+      body: JSON.stringify({ accountId: startAccountId, phoneNumber: startPhone.trim(), name: startName.trim() || undefined }),
+    });
+    setActiveId(opened.id);
+    setStartResult('Conversation opened from API');
+    setStartPhone('');
+    setStartName('');
+  });
 
   const assignAdmin = (adminId: string | null) =>
     act(() => {
@@ -299,13 +436,7 @@ function InboxInner() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/conversations/${activeId}/media/upload`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
+      await uploadFile(`/conversations/${activeId}/media/upload`, formData);
       if (activeId) await loadConv(activeId);
       await loadList();
     } finally {
@@ -327,9 +458,9 @@ function InboxInner() {
 
   return (
     <AppLayout>
-      <div className="flex h-full min-h-0 flex-1">
+      <div className="flex h-full min-h-0 flex-1 bg-gray-100 p-3 dark:bg-gray-950">
         {/* ── Panel 1: queue ──────────────────────────────────────── */}
-        <section className="flex w-72 shrink-0 flex-col border-r border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 xl:w-80">
+        <section className="flex w-72 shrink-0 flex-col rounded-l border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 xl:w-80">
           <div className="flex h-14 items-center gap-2 border-b border-gray-100 px-3 dark:border-gray-800">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
@@ -349,7 +480,7 @@ function InboxInner() {
                 key={f.key}
                 onClick={() => setFilter(f.key)}
                 className={cn(
-                  'shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors',
+                  'shrink-0 rounded px-2.5 py-1 text-xs font-medium transition-colors',
                   filter === f.key
                     ? 'bg-hermes-600 text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700',
@@ -360,9 +491,53 @@ function InboxInner() {
             ))}
           </div>
 
+          <div className="border-b border-gray-100 p-3 dark:border-gray-800">
+            <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-gray-700 dark:text-gray-200">
+              <UserPlus className="h-3.5 w-3.5 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
+              Start WhatsApp chat
+            </div>
+            <div className="space-y-2">
+              <select
+                value={startAccountId}
+                onChange={(e) => setStartAccountId(e.target.value)}
+                className="h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+              >
+                <option value="">Select account from API</option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>{account.accountName} ({account.phoneNumber})</option>
+                ))}
+              </select>
+              <input
+                value={startPhone}
+                onChange={(e) => setStartPhone(e.target.value)}
+                placeholder="Phone number"
+                className="h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              />
+              <input
+                value={startName}
+                onChange={(e) => setStartName(e.target.value)}
+                placeholder="Name from customer record"
+                className="h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" size="sm" onClick={validateNumber} disabled={busy || !startAccountId || !startPhone.trim()}>
+                  <PhoneCall className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  Validate
+                </Button>
+                <Button size="sm" onClick={startConversation} disabled={busy || !startAccountId || !startPhone.trim()}>
+                  <WhatsAppMark className="h-4 w-4" />
+                  Open
+                </Button>
+              </div>
+              {startResult && <p className="text-xs text-gray-500 dark:text-gray-400">{startResult}</p>}
+            </div>
+          </div>
+
           <ul className="scrollbar-thin flex-1 overflow-y-auto">
-            {visible.length === 0 && (
-              <li className="px-4 py-10 text-center text-sm text-gray-400">No conversations</li>
+            {listError ? (
+              <li className="px-4 py-10 text-center text-sm text-danger-600">{listError}</li>
+            ) : visible.length === 0 && (
+              <li className="px-4 py-10 text-center text-sm text-gray-400">No conversations returned by API</li>
             )}
             {visible.map((c) => {
               const isActive = c.id === activeId;
@@ -378,7 +553,7 @@ function InboxInner() {
                   >
                     <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[13px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                       {initials(c.customer.name, c.customer.phoneNumber)}
-                      <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-channel-500 dark:border-gray-900" title="WhatsApp" aria-label="WhatsApp channel" />
+                      <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border border-white bg-channel-500 text-white dark:border-gray-900" title="WhatsApp" aria-label="WhatsApp channel"><WhatsAppMark className="h-2.5 w-2.5" /></span>
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
@@ -401,11 +576,13 @@ function InboxInner() {
         </section>
 
         {/* ── Panel 2: timeline + composer ───────────────────────────── */}
-        <section className="flex min-w-0 flex-1 flex-col bg-gray-50 dark:bg-gray-950">
+        <section className="operations-surface flex min-w-0 flex-1 flex-col border-y border-gray-200 dark:border-gray-800">
           {!active ? (
             <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
               <InboxIcon className="mb-2 h-7 w-7 text-gray-300" strokeWidth={1.5} aria-hidden="true" />
-              <p className="text-sm">Select a conversation to begin.</p>
+              <p className={cn('text-sm', detailError && 'text-danger-600')}>
+                {detailError ?? 'Select a conversation to begin.'}
+              </p>
             </div>
           ) : (
             <>
@@ -420,7 +597,7 @@ function InboxInner() {
                     </p>
                     <div className="flex items-center gap-1.5 text-xs text-gray-400">
                       <Badge tone="channel">
-                        <Phone className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
+                        <WhatsAppMark className="h-3 w-3" />
                         WhatsApp
                       </Badge>
                       <span>{active.whatsappAccount.accountName}</span>
@@ -432,6 +609,10 @@ function InboxInner() {
                     <Workflow className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
                     {aiModeLabel[active.aiMode] ?? active.aiMode}
                   </Badge>
+                  <Button variant="outline" size="sm" onClick={markRead} disabled={busy}>
+                    <CheckCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    Mark Read
+                  </Button>
                   {takenOver ? (
                     <Button variant="outline" size="sm" onClick={returnToAi} disabled={busy}>
                       <RotateCcw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -474,7 +655,7 @@ function InboxInner() {
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => blockDraft(m.id)} disabled={busy} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
                               <CircleX className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                              Block
+                              Block Send
                             </Button>
                           </div>
                         </div>
@@ -491,16 +672,52 @@ function InboxInner() {
                             : 'rounded-tr-sm bg-hermes-600 text-white',
                         )}
                       >
+                        {m.deletedAt && (
+                          <span className="mb-1 block text-[10px] font-medium text-danger-100">Message revoked</span>
+                        )}
+                        {m.quotedMessage && (
+                          <div className={cn('mb-1 rounded border-l-2 px-2 py-1 text-[11px]', isCustomer ? 'border-gray-300 bg-gray-50 text-gray-500 dark:bg-gray-700/60' : 'border-hermes-200 bg-hermes-700/40 text-hermes-100')}>
+                            Reply to {m.quotedMessage.senderType}: {m.quotedMessage.content ?? m.quotedMessage.messageType}
+                          </div>
+                        )}
                         {m.aiGenerated && !isCustomer && (
                           <span className="mb-1 flex items-center gap-1 text-[10px] font-medium text-hermes-100">
-                            <Bot className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
+                            <Workflow className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
                             AI generated
                           </span>
                         )}
                         <MediaContent message={m} />
-                        <span className={cn('mt-1 block text-right text-[10px] tabular-nums', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>
-                          {clockTime(m.createdAt)}
-                        </span>
+                        {m.editedAt && <span className={cn('mt-1 block text-[10px]', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>Edited</span>}
+                        {m.reactions && Object.keys(m.reactions).length > 0 && (
+                          <span className={cn('mt-1 block text-[10px]', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>
+                            Reactions: {Object.keys(m.reactions).join(' ')}
+                          </span>
+                        )}
+                        <div className={cn('mt-1 flex items-center justify-between gap-2 text-[10px] tabular-nums', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => quoteReply(m)} className="hover:underline">Reply</button>
+                            {!isCustomer && !m.deletedAt && <button type="button" onClick={() => editSentMessage(m)} className="hover:underline">Edit</button>}
+                            {!m.deletedAt && <button type="button" onClick={() => deleteMessage(m.id)} className="hover:underline">Revoke</button>}
+                            {!m.deletedAt && (
+                              <span className="inline-flex items-center gap-1" aria-label="React to message">
+                                {reactionOptions.map((reaction) => (
+                                  <button
+                                    key={reaction.emoji}
+                                    type="button"
+                                    onClick={() => reactToMessage(m.id, reaction.emoji)}
+                                    className="rounded px-1 hover:bg-white/20"
+                                    aria-label={`React with ${reaction.label}`}
+                                    title={`React with ${reaction.label}`}
+                                  >
+                                    {reaction.emoji}
+                                  </button>
+                                ))}
+                              </span>
+                            )}
+                            {m.reactions && Object.keys(m.reactions).length > 0 && <button type="button" onClick={() => clearReaction(m.id)} className="hover:underline">Clear reaction</button>}
+                          </div>
+                          <span>{clockTime(m.createdAt)}</span>
+                        </div>
                       </div>
                     </div>
                   );
@@ -508,6 +725,14 @@ function InboxInner() {
               </div>
 
               <div className="shrink-0 border-t border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+                {(quoteMessage || editingMessage) && (
+                  <div className="mb-2 flex items-center justify-between rounded border border-hermes-200 bg-hermes-50 px-3 py-2 text-xs text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-300">
+                    <span>
+                      {editingMessage ? 'Editing sent message' : `Replying to ${quoteMessage?.senderType}`}: {(editingMessage ?? quoteMessage)?.content ?? (editingMessage ?? quoteMessage)?.messageType}
+                    </span>
+                    <button type="button" onClick={() => { setQuoteMessage(null); setEditingMessage(null); setComposer(''); }} className="font-semibold">Cancel</button>
+                  </div>
+                )}
                 <div className="flex items-end gap-2">
                   <button
                     type="button"
@@ -542,12 +767,12 @@ function InboxInner() {
                         sendMessage();
                       }
                     }}
-                    placeholder="Write a reply, or edit the AI draft above"
+                    placeholder={editingMessage ? 'Edit sent message through Baileys' : quoteMessage ? 'Reply with quoted message context' : 'Write a reply, or edit the AI draft above'}
                     className="scrollbar-thin max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                   />
                   <Button size="md" onClick={sendMessage} disabled={sending || !composer.trim()}>
                     <Send className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                    Send
+                    {editingMessage ? 'Save Edit' : 'Send'}
                   </Button>
                 </div>
               </div>
@@ -561,6 +786,26 @@ function InboxInner() {
             <div className="scrollbar-thin flex-1 overflow-y-auto">
               {/* Customer */}
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
+                <div className="mb-3 grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => reasoningRef.current?.scrollIntoView({ block: 'nearest' })}
+                  >
+                    <FileSearch className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    View Reasoning
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="justify-start"
+                    onClick={() => auditRef.current?.scrollIntoView({ block: 'nearest' })}
+                  >
+                    <ScrollText className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    View Audit Trail
+                  </Button>
+                </div>
                 <div className="flex items-center gap-3">
                   <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                     {initials(active.customer.name, active.customer.phoneNumber)}
@@ -587,6 +832,36 @@ function InboxInner() {
                 )}
               </div>
 
+
+              {/* Baileys controls */}
+              <div className="border-b border-gray-100 p-4 dark:border-gray-800">
+                <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
+                  <Tag className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                  WhatsApp native controls
+                </h3>
+                <div className="space-y-2 text-xs">
+                  <label className="block text-gray-500">
+                    AI mode
+                    <select value={active.aiMode} onChange={(e) => setAiMode(e.target.value)} className="mt-1 h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                      {aiModeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="block text-gray-500">
+                    Workflow status
+                    <select value={active.status} onChange={(e) => setWorkflowStatus(e.target.value)} className="mt-1 h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                      {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="block text-gray-500">
+                    Labels from API
+                    <div className="mt-1 flex gap-2">
+                      <input value={labelDraft} onChange={(e) => setLabelDraft(e.target.value)} placeholder="priority, renewal, billing" className="h-8 min-w-0 flex-1 rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+                      <Button size="sm" variant="outline" onClick={saveLabels} disabled={busy}>Save</Button>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               {/* Assigned admin */}
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
                 <div className="mb-2 flex items-center justify-between">
@@ -602,6 +877,7 @@ function InboxInner() {
                     {showAssign ? 'Cancel' : 'Change'}
                   </button>
                 </div>
+                {adminError && <p className="mb-2 text-xs text-danger-600">{adminError}</p>}
                 {showAssign ? (
                   <div className="space-y-1">
                     <button
@@ -642,7 +918,7 @@ function InboxInner() {
               </div>
 
               {/* Hermes review */}
-              <div className="border-b border-gray-100 p-4 dark:border-gray-800">
+              <div ref={reasoningRef} className="border-b border-gray-100 p-4 dark:border-gray-800">
                 <div className="mb-2.5 flex items-center justify-between">
                   <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                     <ShieldCheck className="h-4 w-4 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
@@ -656,7 +932,7 @@ function InboxInner() {
                   <>
                     <dl className="space-y-1.5 text-xs">
                       <div className="flex items-center justify-between">
-                        <dt className="text-gray-400">Confidence</dt>
+                        <dt className="text-gray-400">Review score</dt>
                         <dd className="font-medium tabular-nums text-gray-800 dark:text-gray-100">{review.confidenceScore}</dd>
                       </div>
                       <div className="flex items-center justify-between">
@@ -669,9 +945,13 @@ function InboxInner() {
                       </div>
                     </dl>
                     {review.reason && (
-                      <p className="mt-2.5 rounded-md bg-gray-50 px-2.5 py-2 text-xs leading-relaxed text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                      <div className="mt-2.5 rounded-md bg-gray-50 px-2.5 py-2 text-xs leading-relaxed text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                        <div className="mb-1 flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-200">
+                          <FileSearch className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                          Hermes reasoning
+                        </div>
                         {review.reason}
-                      </p>
+                      </div>
                     )}
                     {review.recommendation && (
                       <p className="mt-1.5 text-xs text-gray-500">Recommendation: {review.recommendation}</p>
@@ -713,8 +993,8 @@ function InboxInner() {
               {/* Answering bot */}
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
                 <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
-                  <Bot className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
-                  Answering bot
+                  <Workflow className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                  Automation mode
                 </h3>
                 {active.bot ? (
                   <div className="flex items-center justify-between rounded-md border border-gray-200 px-2.5 py-1.5 text-xs dark:border-gray-700">
@@ -722,15 +1002,15 @@ function InboxInner() {
                     <Badge tone="success">Active</Badge>
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">No bot assigned.</p>
+                  <p className="text-xs text-gray-400">No automation bot assigned.</p>
                 )}
               </div>
 
               {/* Audit timeline (derived from message facts) */}
-              <div className="p-4">
+              <div ref={auditRef} className="p-4">
                 <h3 className="mb-2.5 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
-                  <History className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
-                  Audit timeline
+                  <ScrollText className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                  View Audit Trail
                 </h3>
                 <ol className="space-y-3 text-xs">
                   {buildAudit(active).map((e, i) => {
@@ -793,9 +1073,9 @@ function MediaContent({ message: m }: { message: Message }) {
 
 // Build a small, truthful audit trail from what the conversation actually shows.
 function buildAudit(conv: ConvDetail) {
-  const out: { label: string; time: string | null; icon: typeof Bot; tone: string }[] = [];
+  const out: { label: string; time: string | null; icon: typeof Workflow; tone: string }[] = [];
   const firstAi = conv.messages.find((m) => m.aiGenerated);
-  if (firstAi) out.push({ label: 'AI generated a reply', time: firstAi.createdAt, icon: Bot, tone: 'text-hermes-600' });
+  if (firstAi) out.push({ label: 'AI generated a reply', time: firstAi.createdAt, icon: Workflow, tone: 'text-hermes-600' });
   if (conv.hermesReviews[0]) out.push({ label: `Hermes ${conv.hermesReviews[0].decision.replace('_', ' ')}`, time: null, icon: ShieldCheck, tone: 'text-review-600' });
   if (conv.takeoverStatus === 'admin_takeover') out.push({ label: 'Human took over', time: null, icon: Hand, tone: 'text-gray-500' });
   if (conv.assignedAdmin) out.push({ label: `Assigned to ${conv.assignedAdmin.name}`, time: null, icon: Hand, tone: 'text-gray-500' });

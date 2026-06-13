@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Bot as BotIcon, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Workflow, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -472,7 +472,7 @@ export default function BotsPage() {
           <p className="text-sm text-gray-500">Loading…</p>
         ) : bots.length === 0 ? (
           <Card className="flex flex-col items-center justify-center border-dashed py-16 text-center">
-            <BotIcon className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+            <Workflow className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
             <p className="text-sm text-gray-400">No bots yet. Create your first bot.</p>
           </Card>
         ) : (
