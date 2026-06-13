@@ -1,35 +1,41 @@
 # Merge conflict resolution notes
 
-This branch now uses a conflict-safe resolution strategy for the files that GitHub reported as conflicting with `main`.
+This branch uses a conflict-safe strategy for files GitHub reported as conflicting with `main`.
 
 ## Resolution principle
 
-Do not drop production features that already exist on `main`. The conflict files are reset to the current main baseline or removed from this branch when they did not exist in the local merge base, so this branch no longer tries to overwrite those files during the merge.
+Do not drop production features that already exist on `main`. For every conflict batch, branch-side edits in the reported files are reset to the local main baseline when that file existed in the baseline, or removed from this branch when the file did not exist in the local merge base.
 
-That means the final merge should keep `main` as the source of truth for:
+This makes `main` the source of truth for the conflicted files during merge resolution, including:
 
-- conversation search, filters, labels, status changes, media sends, quoted replies, AI draft approval/blocking, failed-send refresh, and dashboard live socket updates;
-- WhatsApp session lifecycle, reconnect/backoff, receipts, phone/history sync, inbound/outbound media handling, auto-away, CSAT capture, and idempotent message ingestion;
-- web page backend wiring for accounts, users, analytics, audit, bots, campaigns, customers, dashboard, Hermes, and knowledge pages;
-- frontend tests for the pages listed in the GitHub conflict report.
+- conversation, WhatsApp, and audit behavior from the current main branch;
+- page implementations and tests for monitoring, templates, settings, home, AppLayout, Sidebar, and ThemeToggle;
+- dependency lockfile and Prisma schema changes already present on main.
 
 ## UI/UX scope retained in this branch
 
-The Hermes AI Sales & Customer Service Control Center visual polish is intentionally isolated to shared shell components and non-conflicting styling files instead of page-level conflict files. The retained UI layer keeps:
+Hermes UI polish that is not in the reported conflict set remains in non-conflicting files. Page-level UI work that conflicted with `main` was intentionally removed from this branch so the current main implementation can be preserved and redesigned incrementally after the merge is clean.
 
-- the restrained enterprise visual language in `globals.css`;
-- the Lucide-style navigation/icon system in the shared sidebar and icon adapter;
-- the app shell, sidebar hierarchy, and theme controls outside the conflicted page files.
+## Files checked manually
 
-This keeps the redesign compatible with the latest `main` page implementations and avoids overwriting newer backend wiring or page features that may already exist on `main`.
+The latest conflict batch handled here included:
 
-## Files checked
+- `apps/web/src/app/monitoring/page.test.tsx`
+- `apps/web/src/app/monitoring/page.tsx`
+- `apps/web/src/app/page.test.tsx`
+- `apps/web/src/app/page.tsx`
+- `apps/web/src/app/settings/ai/page.test.tsx`
+- `apps/web/src/app/settings/ai/page.tsx`
+- `apps/web/src/app/templates/page.test.tsx`
+- `apps/web/src/app/templates/page.tsx`
+- `apps/web/src/components/AppLayout.test.tsx`
+- `apps/web/src/components/AppLayout.tsx`
+- `apps/web/src/components/Sidebar.test.tsx`
+- `apps/web/src/components/Sidebar.tsx`
+- `apps/web/src/components/ThemeToggle.tsx`
+- `apps/web/tailwind.config.ts`
+- `package-lock.json`
+- `packages/database/prisma/schema.prisma`
+- `scripts/qa-check.mjs`
 
-The automated QA check validates that every existing file listed in the GitHub conflict report is free of Git conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`). Files that are intentionally absent from this branch are skipped so `main` can keep its own versions during the merge.
-
-When resolving locally with the real remote configured, use this branch after rebasing or merging `main`, then run:
-
-```bash
-npm test
-npm run build --workspace=@hermes/web
-```
+No conflict markers should remain in the working tree. After a real remote `main` is available locally, run the final merge/rebase and keep `main` content for these files unless a new non-conflicting integration is needed.

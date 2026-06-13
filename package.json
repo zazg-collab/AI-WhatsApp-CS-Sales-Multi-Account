@@ -15,7 +15,7 @@
     "db:generate": "npm run generate --workspace=@hermes/database",
     "db:migrate": "npm run migrate --workspace=@hermes/database",
     "db:seed": "npm run seed --workspace=@hermes/database",
-    "test": "node scripts/qa-check.mjs"
+    "test": "node scripts/conflict-check.mjs"
   },
   "engines": {
     "node": ">=20"
