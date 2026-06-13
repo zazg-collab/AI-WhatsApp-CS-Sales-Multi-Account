@@ -214,9 +214,9 @@ export default function CampaignsPage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         {/* Left: create + list */}
-        <aside className="scrollbar-thin w-96 shrink-0 overflow-y-auto border-r border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+        <aside className="scrollbar-thin w-full shrink-0 overflow-y-auto border-b border-gray-200 bg-white p-4 md:w-96 md:border-b-0 md:border-r dark:border-gray-800 dark:bg-gray-900">
           <div className="mb-4">
             <h1 className="flex items-center gap-1.5 text-[15px] font-semibold tracking-tight text-gray-900 dark:text-gray-100">
               <Megaphone className="h-[18px] w-[18px] text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
@@ -398,7 +398,7 @@ export default function CampaignsPage() {
                 </div>
               </Card>
 
-              <section className="grid gap-3 md:grid-cols-5">
+              <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
                 {['pending', 'queued', 'sending', 'sent', 'failed'].map((status) => (
                   <Card key={status} className="p-4">
                     <div className="text-[11px] uppercase tracking-wider text-gray-400">{status}</div>

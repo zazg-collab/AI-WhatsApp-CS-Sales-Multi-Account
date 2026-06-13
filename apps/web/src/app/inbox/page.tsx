@@ -10,6 +10,7 @@ import {
   Pencil,
   CircleCheck,
   ArrowUpRight,
+  ArrowLeft,
   FileSearch,
   Send,
   Workflow,
@@ -205,6 +206,7 @@ function InboxInner() {
   const [accounts, setAccounts] = useState<WaAccount[]>([]);
   const [listError, setListError] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [adminError, setAdminError] = useState<string | null>(null);
   const [showAssign, setShowAssign] = useState(false);
   const [quoteMessage, setQuoteMessage] = useState<Message | null>(null);
@@ -334,6 +336,7 @@ function InboxInner() {
   async function sendMessage() {
     if (!activeId || !composer.trim() || sending) return;
     setSending(true);
+    setSendError(null);
     try {
       if (editingMessage) {
         await api(`/conversations/${activeId}/messages/${editingMessage.id}`, {
@@ -350,6 +353,10 @@ function InboxInner() {
       }
       setComposer('');
       await loadConv(activeId);
+    } catch (err) {
+      // Refresh the timeline so an optimistic/failed message stays visible, then surface the error.
+      await loadConv(activeId);
+      setSendError(err instanceof Error ? err.message : 'Failed to send message');
     } finally {
       setSending(false);
     }
@@ -460,7 +467,7 @@ function InboxInner() {
     <AppLayout>
       <div className="flex h-full min-h-0 flex-1 bg-gray-100 p-3 dark:bg-gray-950">
         {/* ── Panel 1: queue ──────────────────────────────────────── */}
-        <section className="flex w-72 shrink-0 flex-col rounded-l border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 xl:w-80">
+        <section className={cn('w-full shrink-0 flex-col rounded-l border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 md:flex md:w-72 xl:w-80', activeId ? 'hidden' : 'flex')}>
           <div className="flex h-14 items-center gap-2 border-b border-gray-100 px-3 dark:border-gray-800">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
@@ -576,7 +583,7 @@ function InboxInner() {
         </section>
 
         {/* ── Panel 2: timeline + composer ───────────────────────────── */}
-        <section className="operations-surface flex min-w-0 flex-1 flex-col border-y border-gray-200 dark:border-gray-800">
+        <section className={cn('operations-surface min-w-0 flex-1 flex-col border-y border-gray-200 dark:border-gray-800', activeId ? 'flex' : 'hidden md:flex')}>
           {!active ? (
             <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
               <InboxIcon className="mb-2 h-7 w-7 text-gray-300" strokeWidth={1.5} aria-hidden="true" />
@@ -588,6 +595,14 @@ function InboxInner() {
             <>
               <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 dark:border-gray-800 dark:bg-gray-900">
                 <div className="flex min-w-0 items-center gap-3">
+                  <button
+                    onClick={() => setActiveId(null)}
+                    className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 md:hidden"
+                    title="Back to conversations"
+                    aria-label="Back to conversations"
+                  >
+                    <ArrowLeft className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                  </button>
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-[13px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                     {initials(active.customer.name, active.customer.phoneNumber)}
                   </span>
@@ -725,6 +740,12 @@ function InboxInner() {
               </div>
 
               <div className="shrink-0 border-t border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+                {sendError && (
+                  <div className="mb-2 flex items-center justify-between rounded border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700 dark:border-danger-800 dark:bg-danger-900/30 dark:text-danger-300">
+                    <span>{sendError}</span>
+                    <button type="button" onClick={() => setSendError(null)} className="font-semibold">Dismiss</button>
+                  </div>
+                )}
                 {(quoteMessage || editingMessage) && (
                   <div className="mb-2 flex items-center justify-between rounded border border-hermes-200 bg-hermes-50 px-3 py-2 text-xs text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-300">
                     <span>

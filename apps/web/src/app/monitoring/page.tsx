@@ -155,7 +155,7 @@ export default function MonitoringPage() {
                 {workloadError}
               </p>
             )}
-            <section className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+            <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
               <MetricCard label="Messages" value={data.totals.messages} hint={`${data.rangeDays} days`} />
               <MetricCard label="Conversations" value={data.totals.conversations} />
               <MetricCard label="Customers" value={data.totals.customers} />
