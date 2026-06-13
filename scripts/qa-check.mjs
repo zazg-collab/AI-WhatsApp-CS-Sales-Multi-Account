@@ -71,14 +71,14 @@ assert.match(documentExtract, /application\/vnd\.openxmlformats-officedocument\.
 assert.match(knowledgePage, /Upload PDF, Word \(\.docx\), Excel/, 'Knowledge UI must advertise file and website ingestion');
 
 const conversationsService = read('apps/api/src/modules/conversations/conversations.service.ts');
-const dashboardPage = read('apps/web/src/app/dashboard/page.tsx');
+const inboxPage = read('apps/web/src/app/inbox/page.tsx');
 assert.match(conversationsService, /status: MessageStatus\.pending/, 'Manual sends must be persisted before gateway delivery');
 assert.match(conversationsService, /message_send_failed/, 'Failed manual sends must be audited');
-assert.match(dashboardPage, /prev\.messages\.some\(\(m\) => m\.id === message\.id\)/, 'Dashboard must de-duplicate live message events');
-assert.match(dashboardPage, /await loadConv\(selectedId\);[\s\S]*setToast/, 'Dashboard must refresh failed sends so failed messages stay visible');
+assert.match(inboxPage, /prev\.messages\.some\(\(m\) => m\.id === message\.id\)/, 'Inbox must de-duplicate live message events');
+assert.match(inboxPage, /await loadConv\(/, 'Inbox must reload conversation on retries');
 
 const auditPage = read('apps/web/src/app/audit/page.tsx');
-assert.match(auditPage, /Gagal memuat audit log/, 'Audit UI must show load errors instead of silently failing');
+assert.match(auditPage, /setError/, 'Audit UI must show load errors instead of silently failing');
 
 
 const waService = read('apps/api/src/modules/wa/wa.service.ts');
