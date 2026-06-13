@@ -49,7 +49,7 @@ const stageTone: Record<LeadStage, 'hermes' | 'review' | 'danger'> = {
 };
 
 const inputClass =
-  'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 function getRoleFromToken(): Role | null {
   if (typeof window === 'undefined') return null;

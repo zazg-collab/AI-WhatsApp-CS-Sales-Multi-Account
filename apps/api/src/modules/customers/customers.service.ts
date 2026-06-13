@@ -3,11 +3,28 @@ import { LeadStage, Prisma } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BulkCustomerActionDto, UpdateCustomerDto } from './dto/customers.dto';
+import { allowedAccountIds, type ScopedUser } from '../../common/account-scope.util';
 
 interface ListFilters {
   stage?: LeadStage;
   tag?: string;
   search?: string;
+  user?: ScopedUser;
+}
+
+/**
+ * For a scoped (admin) user, restrict customers to those sourced from an
+ * account they can access, plus unassigned-source and directly-assigned ones.
+ */
+function customerScopeWhere(scope: string[] | null, user?: ScopedUser): Prisma.CustomerWhereInput | null {
+  if (scope === null) return null;
+  return {
+    OR: [
+      { sourceAccountId: { in: scope } },
+      { sourceAccountId: null },
+      ...(user ? [{ assignedAdminId: user.id }] : []),
+    ],
+  };
 }
 
 @Injectable()
@@ -17,7 +34,7 @@ export class CustomersService {
     private readonly audit: AuditService,
   ) {}
 
-  list(filters: ListFilters) {
+  async list(filters: ListFilters) {
     const where: Prisma.CustomerWhereInput = {};
     if (filters.stage) where.leadStage = filters.stage;
     if (filters.tag) where.tags = { has: filters.tag };
@@ -27,6 +44,9 @@ export class CustomersService {
         { phoneNumber: { contains: filters.search } },
       ];
     }
+    const scope = await allowedAccountIds(this.prisma, filters.user);
+    const scopeWhere = customerScopeWhere(scope, filters.user);
+    if (scopeWhere) where.AND = scopeWhere;
     return this.prisma.customer.findMany({
       where,
       orderBy: { lastMessageAt: 'desc' },
@@ -37,7 +57,7 @@ export class CustomersService {
     });
   }
 
-  async get(id: string) {
+  async get(id: string, user?: ScopedUser) {
     const customer = await this.prisma.customer.findUnique({
       where: { id },
       include: {
@@ -46,6 +66,15 @@ export class CustomersService {
       },
     });
     if (!customer) throw new NotFoundException('Customer not found');
+    const scope = await allowedAccountIds(this.prisma, user);
+    if (
+      scope !== null &&
+      customer.sourceAccountId !== null &&
+      !scope.includes(customer.sourceAccountId) &&
+      customer.assignedAdminId !== user?.id
+    ) {
+      throw new NotFoundException('Customer not found');
+    }
     return customer;
   }
 

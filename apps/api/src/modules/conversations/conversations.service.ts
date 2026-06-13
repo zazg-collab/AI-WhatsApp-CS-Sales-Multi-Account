@@ -16,6 +16,7 @@ import { MediaStorageService } from '../media/media-storage.service';
 import { extForMimetype } from '../wa/wa.util';
 import { assertSafeMediaUrl } from '../../common/media-url.util';
 import { logAudit } from '../../common/audit.util';
+import { allowedAccountIds, accountFilter, type ScopedUser } from '../../common/account-scope.util';
 
 const DEFAULT_CSAT_MESSAGE =
   'Terima kasih sudah menghubungi kami 🙏 Boleh bantu beri nilai layanan kami? Balas angka 1–5 (1 = kurang, 5 = sangat puas).';
@@ -38,6 +39,7 @@ interface ListFilters {
   needsAttention?: boolean;
   page?: number;
   limit?: number;
+  user?: ScopedUser;
 }
 
 @Injectable()
@@ -61,8 +63,11 @@ export class ConversationsService {
   }
 
   /** Lightweight badge source: how many conversations have unread messages. */
-  async unreadCount() {
-    const count = await this.prisma.conversation.count({ where: { unreadCount: { gt: 0 } } });
+  async unreadCount(user?: ScopedUser) {
+    const where: Prisma.ConversationWhereInput = { unreadCount: { gt: 0 } };
+    const scope = await allowedAccountIds(this.prisma, user);
+    if (scope !== null) where.whatsappAccountId = { in: scope };
+    const count = await this.prisma.conversation.count({ where });
     return { count };
   }
 
@@ -142,10 +147,12 @@ export class ConversationsService {
   }
 
   private async runList(filters: ListFilters) {
-    const { accountId, aiMode, status, assignedAdminId, label, search, needsAttention, page = 1, limit = 50 } = filters;
+    const { accountId, aiMode, status, assignedAdminId, label, search, needsAttention, page = 1, limit = 50, user } = filters;
     const where: Prisma.ConversationWhereInput = {};
 
-    if (accountId) where.whatsappAccountId = accountId;
+    const scope = await allowedAccountIds(this.prisma, user);
+    const acct = accountFilter(scope, accountId);
+    if (acct !== undefined) where.whatsappAccountId = acct;
     if (aiMode) where.aiMode = aiMode;
     if (status) where.status = status;
     if (assignedAdminId) where.assignedAdminId = assignedAdminId;
@@ -184,7 +191,7 @@ export class ConversationsService {
     return { total, page, limit, items };
   }
 
-  async get(id: string, messageLimit = 100) {
+  async get(id: string, messageLimit = 100, user?: ScopedUser) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: {
@@ -199,6 +206,10 @@ export class ConversationsService {
       },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
+    const scope = await allowedAccountIds(this.prisma, user);
+    if (scope !== null && !scope.includes(conversation.whatsappAccountId)) {
+      throw new NotFoundException('Conversation not found');
+    }
 
     // Load the *most recent* page of messages (chat opens at the bottom).
     // Older messages are fetched on demand via getMessages (infinite scroll).

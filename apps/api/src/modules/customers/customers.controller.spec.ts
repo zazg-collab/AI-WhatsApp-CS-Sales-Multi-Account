@@ -19,14 +19,15 @@ describe('CustomersController', () => {
   });
 
   it('list/get/update/addNote/timeline/bulk delegate', () => {
-    controller.list(LeadStage.hot, 'vip', 'b');
-    controller.get('c1');
+    const user = { id: 'u1', role: 'owner' } as any;
+    controller.list(user, LeadStage.hot, 'vip', 'b');
+    controller.get('c1', user);
     controller.update('c1', { name: 'X' } as any);
     controller.addNote('c1', { note: 'n' } as any, { id: 'u1' } as any);
     controller.timeline('c1');
     controller.bulkAction({ customerIds: ['c1'] } as any, { id: 'u1' } as any);
-    expect(svc.list).toHaveBeenCalledWith({ stage: LeadStage.hot, tag: 'vip', search: 'b' });
-    expect(svc.get).toHaveBeenCalledWith('c1');
+    expect(svc.list).toHaveBeenCalledWith({ stage: LeadStage.hot, tag: 'vip', search: 'b', user });
+    expect(svc.get).toHaveBeenCalledWith('c1', user);
     expect(svc.update).toHaveBeenCalled();
     expect(svc.addNote).toHaveBeenCalledWith('c1', 'n', 'u1');
     expect(svc.timeline).toHaveBeenCalledWith('c1');

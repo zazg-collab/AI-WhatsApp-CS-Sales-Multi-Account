@@ -621,7 +621,7 @@ function InboxInner() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search conversations"
-                className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               />
             </div>
           </div>
@@ -995,7 +995,7 @@ function InboxInner() {
                       }
                     }}
                     placeholder={editingMessage ? 'Edit sent message through Baileys' : quoteMessage ? 'Reply with quoted message context' : 'Write a reply, or edit the AI draft above'}
-                    className="scrollbar-thin max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    className="scrollbar-thin max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                   />
                   <Button size="md" onClick={sendMessage} disabled={sending || !composer.trim()}>
                     <Send className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />

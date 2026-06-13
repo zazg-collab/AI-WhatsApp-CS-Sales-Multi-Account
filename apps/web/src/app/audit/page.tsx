@@ -22,7 +22,7 @@ interface AuditEntry {
 const PAGE_SIZE = 20;
 
 const inputClass =
-  'h-9 rounded-lg border border-gray-200 bg-white px-3 text-[13px] text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'h-9 rounded-lg border border-gray-200 bg-white px-3 text-[13px] text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 export default function AuditPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
