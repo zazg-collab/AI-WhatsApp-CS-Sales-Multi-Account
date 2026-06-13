@@ -219,16 +219,6 @@ export default function CampaignsPage() {
       <div className="flex flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         {/* Left: create + list */}
         <aside className="scrollbar-thin w-full shrink-0 overflow-y-auto border-b border-gray-200 bg-white p-4 md:w-96 md:border-b-0 md:border-r dark:border-gray-800 dark:bg-gray-900">
-          <div className="mb-4">
-            <h1 className="flex items-center gap-1.5 text-[15px] font-semibold tracking-tight text-gray-900 dark:text-gray-100">
-              <Megaphone className="h-[18px] w-[18px] text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
-              Campaigns
-            </h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Controlled messaging with approval, queue, rate limit, and audit.
-            </p>
-          </div>
-
           {canManage && (
             <Card className="mb-4 space-y-3 p-4">
               <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Create campaign draft</h2>

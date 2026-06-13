@@ -103,14 +103,16 @@ Dikerjakan & diverifikasi runtime di iterasi ini:
 
 ### Catatan keamanan dependency (perlu keputusan)
 
-- `npm audit`: 38 kerentanan (2 kritis, 10 high). `npm audit fix` non-breaking
-  gagal karena konflik peer-dep; sebagian besar butuh `npm audit fix --force`
-  (berisiko bump major NestJS/Next — jangan dijalankan tanpa uji regresi).
-- Kerentanan **kritis pada `xlsx`** (dipakai untuk ingest Excel di Knowledge)
-  **tidak ada perbaikan di npm registry**. Mitigasi: migrasi ke versi resmi
-  SheetJS dari CDN mereka atau ganti ke `exceljs`. Karena file di-upload oleh
-  admin (semi-tepercaya) risikonya menengah, tapi tetap perlu ditangani sebelum
-  produksi.
+- ✅ **Kerentanan kritis `xlsx` (runtime) sudah ditutup** — diganti ke `exceljs`
+  untuk parsing Excel di Knowledge. `.xlsx` tetap didukung; format lawas `.xls`
+  kini ditolak dengan pesan jelas (minta simpan sebagai `.xlsx`). Round-trip
+  ekstraksi terverifikasi.
+- ⚠️ Sisa kerentanan kritis tinggal di `vitest`/`@vitest/coverage-v8`
+  (**devDependency, test-runner — tidak dikirim ke produksi**). Perbaikannya
+  butuh bump major (vitest v4) yang merusak konfigurasi tes saat ini, jadi
+  ditunda; risiko produksinya nihil.
+- Sisa high lainnya (next, multer, lodash, @nestjs/*) butuh `npm audit fix
+  --force` (bump major) — tangani terjadwal dengan uji regresi, jangan sekaligus.
 
 ## 4. Catatan QA / kualitas
 

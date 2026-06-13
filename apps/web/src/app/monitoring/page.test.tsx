@@ -57,8 +57,10 @@ describe('MonitoringPage', () => {
   });
 
   it('shows error on failure', async () => {
-    apiMock.mockImplementationOnce(() => Promise.reject(new Error('metrics down')));
-    apiMock.mockImplementation(routed);
+    apiMock.mockImplementation((path?: string) => {
+      if ((path ?? '').includes('performance')) return Promise.reject(new Error('metrics down'));
+      return routed(path);
+    });
     render(<MonitoringPage />);
     expect(await screen.findByText('metrics down')).toBeInTheDocument();
   });
