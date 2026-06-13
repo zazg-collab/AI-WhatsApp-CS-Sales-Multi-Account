@@ -153,7 +153,7 @@ export default function MonitoringPage() {
               <MetricCard label="Customers" value={data.totals.customers} />
               <MetricCard label="Avg response" value={formatDuration(data.response.avgSeconds)} hint={`${data.response.sampleSize} samples`} />
               <MetricCard label="P95 response" value={formatDuration(data.response.p95Seconds)} />
-              <MetricCard label="AI confidence" value={`${data.aiQuality.avgConfidence}%`} hint={`Risk ${data.aiQuality.avgRisk}%`} />
+              <MetricCard label="AI review signal" value={data.aiQuality.avgConfidence} hint={`Risk score ${data.aiQuality.avgRisk}`} />
             </section>
 
             <section className="grid gap-4 xl:grid-cols-2">

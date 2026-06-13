@@ -129,7 +129,7 @@ export default function HermesPage() {
             <input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="e.g. Which bot is most problematic today?"
+              placeholder="e.g. Which automation mode needs review today?"
               className="h-9 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
             />
             <Button type="submit" size="md" disabled={asking}>
@@ -161,7 +161,7 @@ export default function HermesPage() {
                   <p className="mt-1 text-xs text-gray-500">Recommendation: {a.recommendation}</p>
                 )}
                 <p className="mt-1 text-xs tabular-nums text-gray-400">
-                  confidence {a.confidenceScore} · risk {a.riskScore}
+                  review signal {a.confidenceScore} · risk score {a.riskScore}
                 </p>
               </Card>
             </li>

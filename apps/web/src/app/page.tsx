@@ -2,14 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Zap, Bot, BarChart3 } from 'lucide-react';
+import { ShieldCheck, Workflow, ChartNoAxesCombined, History } from 'lucide-react';
 import { api, setToken } from '@/lib/api';
 
 const features = [
-  { icon: Bot, text: 'AI-powered multi-account WhatsApp management' },
-  { icon: ShieldCheck, text: 'Hermes supervisor reviews every message' },
-  { icon: BarChart3, text: 'Real-time analytics and lead scoring' },
-  { icon: Zap, text: 'Automated follow-ups and campaign delivery' },
+  { icon: Workflow, text: 'AI-assisted workflows with supervised sending controls' },
+  { icon: ShieldCheck, text: 'Hermes review for risk, quality, and policy fit' },
+  { icon: ChartNoAxesCombined, text: 'Operational analytics after urgent attention queues' },
+  { icon: History, text: 'Traceable audit trails for sensitive customer decisions' },
 ];
 
 export default function LoginPage() {
@@ -38,17 +38,12 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-[100dvh] overflow-hidden bg-gray-950">
+    <main className="flex min-h-[100dvh] overflow-hidden bg-gray-100">
       {/* Left brand panel */}
-      <div className="hidden lg:flex lg:w-[46%] flex-col justify-between p-10 relative overflow-hidden bg-gradient-to-br from-gray-950 via-hermes-950/20 to-gray-950">
-        {/* Decorative gradient orbs */}
-        <div className="pointer-events-none absolute -top-32 -left-32 h-80 w-80 rounded-full bg-hermes-600/20 blur-[80px]" />
-        <div className="pointer-events-none absolute bottom-0 right-0 h-96 w-96 rounded-full bg-hermes-800/15 blur-[100px]" />
-        <div className="pointer-events-none absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-600/10 blur-[60px]" />
-
+      <div className="hidden lg:flex lg:w-[46%] flex-col justify-between p-10 relative overflow-hidden border-r border-gray-200 bg-gray-950">
         {/* Logo */}
         <div className="relative flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-hermes-400 to-hermes-700 shadow-[0_4px_16px_rgba(99,102,241,0.5)]">
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-hermes-500/30 bg-hermes-700">
             <ShieldCheck className="h-5 w-5 text-white" strokeWidth={2.25} aria-hidden="true" />
           </span>
           <div>
@@ -62,10 +57,10 @@ export default function LoginPage() {
           <div>
             <h1 className="text-4xl font-bold text-white leading-tight tracking-tight">
               Manage every conversation,<br />
-              <span className="text-gradient">intelligently.</span>
+              <span className="text-hermes-300">with supervised control.</span>
             </h1>
             <p className="mt-4 text-[15px] text-gray-400 leading-relaxed max-w-sm">
-              Multi-account WhatsApp CS platform with AI supervision, real-time monitoring, and automated sales flows.
+              A calm, auditable AI operations center for WhatsApp sales, customer service, campaigns, and human escalation.
             </p>
           </div>
           <ul className="space-y-3">
@@ -82,16 +77,16 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="relative text-[11px] text-gray-700">
-          Powered by Hermes AI &mdash; Nous Research models
+          AI accelerates routine work. Humans retain control over sensitive decisions.
         </p>
       </div>
 
       {/* Right form panel */}
-      <div className="flex flex-1 items-center justify-center bg-white px-6 dark:bg-gray-900 lg:rounded-l-3xl">
+      <div className="flex flex-1 items-center justify-center bg-white px-6 dark:bg-gray-900 lg:rounded-l-lg">
         <div className="w-full max-w-sm animate-fade-in">
           {/* Mobile logo */}
           <div className="mb-8 flex flex-col items-center gap-2 text-center lg:hidden">
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-hermes-400 to-hermes-700 shadow-[0_4px_16px_rgba(99,102,241,0.4)]">
+            <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-hermes-500/30 bg-hermes-700">
               <ShieldCheck className="h-5 w-5 text-white" strokeWidth={2.25} aria-hidden="true" />
             </span>
             <h1 className="text-[17px] font-bold tracking-tight text-gray-900 dark:text-gray-100">Hermes Control Center</h1>
@@ -113,7 +108,7 @@ export default function LoginPage() {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-hermes-400 focus:bg-white focus:ring-2 focus:ring-hermes-400/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:bg-gray-750"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-hermes-400 focus:bg-white focus:ring-2 focus:ring-hermes-400/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:bg-gray-750"
                 required
               />
             </div>
@@ -127,13 +122,13 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-hermes-400 focus:bg-white focus:ring-2 focus:ring-hermes-400/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 outline-none transition-all focus:border-hermes-400 focus:bg-white focus:ring-2 focus:ring-hermes-400/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                 required
               />
             </div>
 
             {error && (
-              <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400">
+              <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400">
                 {error}
               </div>
             )}
@@ -141,7 +136,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-gradient-to-b from-hermes-500 to-hermes-700 py-3 text-sm font-semibold text-white shadow-[0_2px_8px_rgba(79,70,229,0.4),inset_0_1px_0_rgba(255,255,255,0.12)] transition-all hover:from-hermes-400 hover:to-hermes-600 active:scale-[0.98] disabled:opacity-60"
+              className="w-full rounded-lg border border-hermes-700 bg-hermes-700 py-3 text-sm font-semibold text-white shadow-card transition-colors hover:bg-hermes-800 disabled:opacity-60"
             >
               {loading ? 'Signing in…' : 'Sign in'}
             </button>

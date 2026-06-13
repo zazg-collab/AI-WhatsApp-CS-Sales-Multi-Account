@@ -263,7 +263,7 @@ export default function OverviewPage() {
                         href={`/inbox?conversation=${c.id}`}
                         className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40"
                       >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-hermes-100 to-gray-100 text-[12px] font-bold text-hermes-700 dark:from-hermes-900/40 dark:to-gray-800 dark:text-hermes-300">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hermes-100 bg-hermes-50 text-[12px] font-bold text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-300">
                           {initials(c.customer.name, c.customer.phoneNumber)}
                         </span>
                         <div className="min-w-0 flex-1">

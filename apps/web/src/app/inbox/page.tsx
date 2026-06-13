@@ -6,7 +6,6 @@ import {
   Search,
   ShieldCheck,
   TriangleAlert,
-  Bot,
   Hand,
   Pencil,
   CircleCheck,
@@ -485,15 +484,15 @@ function InboxInner() {
                     <div key={m.id} className={cn('flex', isCustomer ? 'justify-start' : 'justify-end')}>
                       <div
                         className={cn(
-                          'max-w-[68%] rounded-lg px-3 py-2 text-[13px] leading-relaxed shadow-card',
+                          'max-w-[68%] rounded-lg border px-3 py-2 text-[13px] leading-relaxed shadow-card',
                           isCustomer
-                            ? 'rounded-tl-sm bg-white text-gray-800 dark:bg-gray-800 dark:text-gray-100'
-                            : 'rounded-tr-sm bg-hermes-600 text-white',
+                            ? 'border-gray-200 bg-white text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100'
+                            : 'border-hermes-700 bg-hermes-700 text-white',
                         )}
                       >
                         {m.aiGenerated && !isCustomer && (
                           <span className="mb-1 flex items-center gap-1 text-[10px] font-medium text-hermes-100">
-                            <Bot className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
+                            <Workflow className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
                             AI generated
                           </span>
                         )}
@@ -656,7 +655,7 @@ function InboxInner() {
                   <>
                     <dl className="space-y-1.5 text-xs">
                       <div className="flex items-center justify-between">
-                        <dt className="text-gray-400">Confidence</dt>
+                        <dt className="text-gray-400">Review signal</dt>
                         <dd className="font-medium tabular-nums text-gray-800 dark:text-gray-100">{review.confidenceScore}</dd>
                       </div>
                       <div className="flex items-center justify-between">
@@ -713,8 +712,8 @@ function InboxInner() {
               {/* Answering bot */}
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
                 <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
-                  <Bot className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
-                  Answering bot
+                  <Workflow className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                  Automation mode
                 </h3>
                 {active.bot ? (
                   <div className="flex items-center justify-between rounded-md border border-gray-200 px-2.5 py-1.5 text-xs dark:border-gray-700">
@@ -722,7 +721,7 @@ function InboxInner() {
                     <Badge tone="success">Active</Badge>
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">No bot assigned.</p>
+                  <p className="text-xs text-gray-400">No automation profile assigned.</p>
                 )}
               </div>
 
@@ -793,9 +792,9 @@ function MediaContent({ message: m }: { message: Message }) {
 
 // Build a small, truthful audit trail from what the conversation actually shows.
 function buildAudit(conv: ConvDetail) {
-  const out: { label: string; time: string | null; icon: typeof Bot; tone: string }[] = [];
+  const out: { label: string; time: string | null; icon: typeof Workflow; tone: string }[] = [];
   const firstAi = conv.messages.find((m) => m.aiGenerated);
-  if (firstAi) out.push({ label: 'AI generated a reply', time: firstAi.createdAt, icon: Bot, tone: 'text-hermes-600' });
+  if (firstAi) out.push({ label: 'AI generated a reply', time: firstAi.createdAt, icon: Workflow, tone: 'text-hermes-600' });
   if (conv.hermesReviews[0]) out.push({ label: `Hermes ${conv.hermesReviews[0].decision.replace('_', ' ')}`, time: null, icon: ShieldCheck, tone: 'text-review-600' });
   if (conv.takeoverStatus === 'admin_takeover') out.push({ label: 'Human took over', time: null, icon: Hand, tone: 'text-gray-500' });
   if (conv.assignedAdmin) out.push({ label: `Assigned to ${conv.assignedAdmin.name}`, time: null, icon: Hand, tone: 'text-gray-500' });

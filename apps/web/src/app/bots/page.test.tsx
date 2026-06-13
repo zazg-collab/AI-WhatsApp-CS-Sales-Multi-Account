@@ -21,7 +21,7 @@ describe('BotsPage', () => {
       return Promise.resolve({});
     });
     render(<BotsPage />);
-    expect(await screen.findByRole('heading', { name: 'Bots & Personas' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Automation Modes' })).toBeInTheDocument();
     expect(await screen.findByText('Sales Bot')).toBeInTheDocument();
   });
 

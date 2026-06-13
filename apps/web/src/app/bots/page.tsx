@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Bot as BotIcon, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Workflow, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -131,7 +131,7 @@ function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <label className={labelClass}>Persona name</label>
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} placeholder="e.g. Cheerful Sales Bot" />
+            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} placeholder="e.g. Careful sales assistant" />
           </div>
           <div>
             <label className={labelClass}>Soul.md (personality)</label>
@@ -240,13 +240,13 @@ function BotModal({
       <Overlay>
         <Card className="w-full max-w-xl p-6 shadow-pop">
           <h2 className="mb-4 text-base font-semibold text-gray-900 dark:text-gray-100">
-            {bot ? `Edit bot: ${bot.botName}` : 'New bot'}
+            {bot ? `Edit automation mode: ${bot.botName}` : 'New automation mode'}
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label className={labelClass}>Bot name</label>
-              <input required value={form.botName} onChange={(e) => setForm({ ...form, botName: e.target.value })} className={inputClass} placeholder="e.g. Hermes Sales Bot" />
+              <label className={labelClass}>Automation mode name</label>
+              <input required value={form.botName} onChange={(e) => setForm({ ...form, botName: e.target.value })} className={inputClass} placeholder="e.g. Hermes supervised sales mode" />
             </div>
 
             <div>
@@ -451,10 +451,10 @@ export default function BotsPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Bots & Personas" subtitle="Configure chatbot brains and assign them to accounts">
+      <PageHeader title="Automation Modes" subtitle="Configure supervised AI behavior and assign it to accounts">
         <Button size="sm" onClick={() => setEditBot(null)}>
           <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          New bot
+          New automation mode
         </Button>
       </PageHeader>
 
@@ -472,8 +472,8 @@ export default function BotsPage() {
           <p className="text-sm text-gray-500">Loading…</p>
         ) : bots.length === 0 ? (
           <Card className="flex flex-col items-center justify-center border-dashed py-16 text-center">
-            <BotIcon className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
-            <p className="text-sm text-gray-400">No bots yet. Create your first bot.</p>
+            <Workflow className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+            <p className="text-sm text-gray-400">No automation modes yet. Create the first supervised mode.</p>
           </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">

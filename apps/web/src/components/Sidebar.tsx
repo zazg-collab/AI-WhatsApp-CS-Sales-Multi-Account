@@ -14,7 +14,7 @@ import {
   UsersRound,
   Settings,
   Smartphone,
-  Bot,
+  Workflow,
   Activity,
   LogOut,
   BookText,
@@ -85,7 +85,7 @@ const sections: NavSection[] = [
     heading: 'Operations',
     items: [
       { href: '/accounts', label: 'Accounts', icon: Smartphone },
-      { href: '/bots', label: 'Bots & Personas', icon: Bot },
+      { href: '/bots', label: 'Automation Modes', icon: Workflow },
       { href: '/templates', label: 'Templates', icon: BookText },
       { href: '/audit', label: 'Audit Log', icon: History, requiredRole: 'supervisor' },
       { href: '/admin/users', label: 'Team', icon: UsersRound, requiredRole: 'supervisor' },
