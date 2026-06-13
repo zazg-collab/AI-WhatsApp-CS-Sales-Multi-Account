@@ -60,6 +60,12 @@ export class ConversationsService {
     return this.runList(filters);
   }
 
+  /** Lightweight badge source: how many conversations have unread messages. */
+  async unreadCount() {
+    const count = await this.prisma.conversation.count({ where: { unreadCount: { gt: 0 } } });
+    return { count };
+  }
+
   /**
    * Start (or reopen) a chat with an arbitrary phone number — the WhatsApp
    * desktop "new chat" flow. Upserts the customer and reuses an existing

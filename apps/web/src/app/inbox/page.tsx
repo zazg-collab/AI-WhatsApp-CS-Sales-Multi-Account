@@ -28,6 +28,8 @@ import {
   Video,
   Tag,
   CheckCheck,
+  Check,
+  Zap,
   UserPlus,
   PhoneCall,
 } from 'lucide-react';
@@ -174,6 +176,15 @@ function clockTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
+// WhatsApp-style delivery ticks for outbound (admin/AI) messages.
+function StatusTick({ status }: { status: string }) {
+  if (status === 'pending') return <Clock className="h-3 w-3" strokeWidth={2} aria-label="pending" />;
+  if (status === 'failed') return <TriangleAlert className="h-3 w-3 text-danger-200" strokeWidth={2} aria-label="failed to send" />;
+  if (status === 'read') return <CheckCheck className="h-3.5 w-3.5 text-sky-300" strokeWidth={2.25} aria-label="read" />;
+  if (status === 'delivered') return <CheckCheck className="h-3.5 w-3.5" strokeWidth={2.25} aria-label="delivered" />;
+  return <Check className="h-3.5 w-3.5" strokeWidth={2.25} aria-label="sent" />;
+}
+
 // Per-conversation status label for the queue rows.
 function summaryStatus(c: ConvSummary): StatusKind {
   if (c.aiMode === 'ai_paused') return 'sending-blocked';
@@ -207,6 +218,8 @@ function InboxInner() {
   const [listError, setListError] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [quickReplies, setQuickReplies] = useState<{ id: string; title: string; content: string; shortcut: string | null }[]>([]);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
   const [showAssign, setShowAssign] = useState(false);
   const [quoteMessage, setQuoteMessage] = useState<Message | null>(null);
@@ -273,6 +286,12 @@ function InboxInner() {
   useEffect(() => { loadList(); }, [loadList]);
 
   useEffect(() => {
+    api<{ id: string; title: string; content: string; shortcut: string | null }[]>('/quick-replies')
+      .then((r) => setQuickReplies(Array.isArray(r) ? r : []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (activeId) loadConv(activeId);
     else setConv(null);
   }, [activeId, loadConv]);
@@ -291,6 +310,19 @@ function InboxInner() {
   // ── Live updates ───────────────────────────────────────────────────
   useEffect(() => {
     const socket = getSocket();
+    // Coalesce bursts of live events (e.g. WhatsApp history sync fires many
+    // message:new at once) so we don't flood the API and trip rate limits.
+    let listTimer: ReturnType<typeof setTimeout> | null = null;
+    let convTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleListReload = () => {
+      if (listTimer) clearTimeout(listTimer);
+      listTimer = setTimeout(() => loadList(), 500);
+    };
+    const scheduleConvReload = () => {
+      if (!activeId) return;
+      if (convTimer) clearTimeout(convTimer);
+      convTimer = setTimeout(() => loadConv(activeId), 500);
+    };
     const upsert = (conversationId: string, message: Message) => {
       setConv((prev) => {
         if (!prev || prev.id !== conversationId) return prev;
@@ -300,7 +332,7 @@ function InboxInner() {
     };
     const onNew = ({ conversationId, message }: { conversationId: string; message: Message }) => {
       upsert(conversationId, message);
-      loadList();
+      scheduleListReload();
     };
     const onDraft = ({ conversationId, message }: { conversationId: string; message: Message }) => upsert(conversationId, message);
     const onDraftRemoved = ({ conversationId, messageId }: { conversationId: string; messageId: string }) =>
@@ -308,8 +340,8 @@ function InboxInner() {
     const onStatus = ({ conversationId, messageId, status }: { conversationId: string; messageId: string; status: string }) =>
       setConv((prev) => (prev && prev.id === conversationId ? { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, status } : m)) } : prev));
     const onConvUpdate = () => {
-      loadList();
-      if (activeId) loadConv(activeId);
+      scheduleListReload();
+      scheduleConvReload();
     };
 
     socket.on('message:new', onNew);
@@ -321,6 +353,8 @@ function InboxInner() {
     socket.on('conversation:sla-cleared', onConvUpdate);
     socket.on('hermes:alert', onConvUpdate);
     return () => {
+      if (listTimer) clearTimeout(listTimer);
+      if (convTimer) clearTimeout(convTimer);
       socket.off('message:new', onNew);
       socket.off('message:draft', onDraft);
       socket.off('message:draft-removed', onDraftRemoved);
@@ -360,6 +394,14 @@ function InboxInner() {
     } finally {
       setSending(false);
     }
+  }
+
+  function applyQuickReply(content: string) {
+    const name = active?.customer.name || '';
+    const phone = active?.customer.phoneNumber || '';
+    const filled = content.replace(/\{\{\s*name\s*\}\}/gi, name).replace(/\{\{\s*phone\s*\}\}/gi, phone);
+    setComposer((prev) => (prev.trim() ? `${prev} ${filled}` : filled));
+    setShowQuickReplies(false);
   }
 
   async function act(fn: () => Promise<unknown>) {
@@ -731,7 +773,10 @@ function InboxInner() {
                             )}
                             {m.reactions && Object.keys(m.reactions).length > 0 && <button type="button" onClick={() => clearReaction(m.id)} className="hover:underline">Clear reaction</button>}
                           </div>
-                          <span>{clockTime(m.createdAt)}</span>
+                          <span className="flex items-center gap-1">
+                            {clockTime(m.createdAt)}
+                            {!isCustomer && <StatusTick status={m.status} />}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -755,6 +800,38 @@ function InboxInner() {
                   </div>
                 )}
                 <div className="flex items-end gap-2">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      title="Quick replies"
+                      onClick={() => setShowQuickReplies((v) => !v)}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    >
+                      <Zap className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    </button>
+                    {showQuickReplies && (
+                      <div className="absolute bottom-11 left-0 z-20 max-h-72 w-72 overflow-y-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                        {quickReplies.length === 0 ? (
+                          <p className="px-3 py-4 text-center text-xs text-gray-400">No quick replies. Add them under Templates.</p>
+                        ) : (
+                          quickReplies.map((q) => (
+                            <button
+                              key={q.id}
+                              type="button"
+                              onClick={() => applyQuickReply(q.content)}
+                              className="block w-full rounded px-2.5 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800"
+                            >
+                              <span className="flex items-center gap-1.5 text-[12px] font-semibold text-gray-800 dark:text-gray-100">
+                                {q.shortcut && <span className="rounded bg-hermes-50 px-1 text-[10px] text-hermes-700 dark:bg-hermes-900/40 dark:text-hermes-300">/{q.shortcut}</span>}
+                                {q.title}
+                              </span>
+                              <span className="mt-0.5 block truncate text-[11px] text-gray-500 dark:text-gray-400">{q.content}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
                     title="Attach media"

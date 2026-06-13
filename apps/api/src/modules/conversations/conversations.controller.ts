@@ -118,6 +118,13 @@ export class ConversationsController {
     return this.conversations.deleteMessage(id, messageId, user.id);
   }
 
+  @ApiOperation({ summary: 'Total number of conversations with unread messages' })
+  @Roles('viewer')
+  @Get('unread-count')
+  unreadCount() {
+    return this.conversations.unreadCount();
+  }
+
   @ApiOperation({ summary: 'List conversations with optional filters' })
   @Roles('viewer')
   @Get()
