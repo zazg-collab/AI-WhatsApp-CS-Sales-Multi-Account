@@ -10,6 +10,84 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Field, TextareaField, SelectField } from '@/components/ui/Field';
+import { useT, type Dict } from '@/lib/i18n';
+
+// ── i18n ───────────────────────────────────────────────────────────────────────
+
+const dict: Dict = {
+  // FormError fallbacks
+  errCreatePersona: { id: 'Gagal membuat persona', en: 'Failed to create persona' },
+  errSaveBot: { id: 'Gagal menyimpan bot', en: 'Failed to save bot' },
+  errAssignAccount: { id: 'Gagal menugaskan akun', en: 'Failed to assign account' },
+  errLoadData: { id: 'Gagal memuat data', en: 'Gagal memuat data' },
+  errDeleteBot: { id: 'Gagal menghapus bot', en: 'Failed to delete bot' },
+
+  // PersonaModal
+  personaTitle: { id: 'Persona baru', en: 'New persona' },
+  personaDesc: { id: 'Tentukan kepribadian bot yang dipakai untuk menjawab pelanggan.', en: 'Define the bot personality used to answer customers.' },
+  cancel: { id: 'Batal', en: 'Cancel' },
+  saving: { id: 'Menyimpan…', en: 'Saving…' },
+  createPersona: { id: 'Buat persona', en: 'Create persona' },
+  personaNameLabel: { id: 'Nama persona', en: 'Persona name' },
+  personaNamePlaceholder: { id: 'mis. Sales Bot Ceria', en: 'e.g. Cheerful Sales Bot' },
+  soulMdLabel: { id: 'Soul.md (kepribadian)', en: 'Soul.md (personality)' },
+  soulMdPlaceholder: { id: 'Kamu adalah asisten sales yang ramah…', en: 'You are a friendly sales assistant…' },
+  toneLabel: { id: 'Tone', en: 'Tone' },
+  tonePlaceholder: { id: 'ramah, formal…', en: 'friendly, formal…' },
+  styleLabel: { id: 'Gaya', en: 'Style' },
+  stylePlaceholder: { id: 'ringkas, detail…', en: 'concise, detailed…' },
+  rulesLabel: { id: 'Aturan', en: 'Rules' },
+  rulesPlaceholder: { id: 'Jangan sebut harga tanpa persetujuan admin…', en: 'Do not quote prices without admin approval…' },
+
+  // BotModal
+  editBotTitle: { id: 'Edit bot: {name}', en: 'Edit bot: {name}' },
+  newBotTitle: { id: 'Bot baru', en: 'New bot' },
+  botDesc: { id: 'Otak chatbot: persona, knowledge base, dan mode AI default.', en: 'Chatbot brain: persona, knowledge base, and default AI mode.' },
+  saveBot: { id: 'Simpan bot', en: 'Save bot' },
+  botNameLabel: { id: 'Nama bot', en: 'Bot name' },
+  botNamePlaceholder: { id: 'mis. Hermes Sales Bot', en: 'e.g. Hermes Sales Bot' },
+  personaLabel: { id: 'Persona', en: 'Persona' },
+  choosePersona: { id: 'Pilih persona…', en: 'Choose persona…' },
+  createNewPersona: { id: 'Buat persona baru', en: 'Create new persona' },
+  kbLabel: { id: 'Knowledge base', en: 'Knowledge base' },
+  chooseKb: { id: 'Pilih knowledge base…', en: 'Choose knowledge base…' },
+  defaultAiModeLabel: { id: 'Mode AI default', en: 'Default AI mode' },
+  aiModeOn: { id: 'AI ON', en: 'AI ON' },
+  aiModeOff: { id: 'AI OFF', en: 'AI OFF' },
+  aiModeDraft: { id: 'Draft', en: 'Draft' },
+  aiModeSupervised: { id: 'Supervised', en: 'Supervised' },
+  languageLabel: { id: 'Bahasa', en: 'Language' },
+  languageId: { id: 'Indonesia', en: 'Indonesian' },
+  languageEn: { id: 'English', en: 'English' },
+  statusLabel: { id: 'Status', en: 'Status' },
+  statusDraft: { id: 'Draft', en: 'Draft' },
+  statusActive: { id: 'Aktif', en: 'Active' },
+  statusInactive: { id: 'Nonaktif', en: 'Inactive' },
+  assignToAccounts: { id: 'Tugaskan ke akun WhatsApp', en: 'Assign to WhatsApp accounts' },
+  assigned: { id: 'Ditugaskan', en: 'Assigned' },
+  assign: { id: 'Tugaskan', en: 'Assign' },
+  noWaAccounts: { id: 'Belum ada akun WhatsApp.', en: 'No WhatsApp accounts yet.' },
+
+  // BotCard
+  noPersona: { id: 'Tanpa persona', en: 'No persona' },
+  noKb: { id: 'Tanpa KB', en: 'No KB' },
+  edit: { id: 'Edit', en: 'Edit' },
+  delete: { id: 'Hapus', en: 'Delete' },
+  defaultMode: { id: 'Mode default', en: 'Default mode' },
+  waAccounts: { id: 'Akun WhatsApp', en: 'WhatsApp accounts' },
+  noAssignedAccounts: { id: 'Belum ada akun yang ditugaskan.', en: 'No accounts assigned yet.' },
+
+  // Main page
+  pageSubtitle: { id: 'Atur otak chatbot dan tugaskan ke akun WhatsApp', en: 'Manage chatbot brains and assign them to WhatsApp accounts' },
+  newBotBtn: { id: 'Bot baru', en: 'New bot' },
+  closeNotif: { id: 'Tutup notifikasi', en: 'Close notification' },
+  noBots: { id: 'Belum ada bot', en: 'No bots yet' },
+  noBotsHint: { id: 'Buat bot pertama untuk mulai melayani pelanggan otomatis.', en: 'Create your first bot to start serving customers automatically.' },
+  deleteBotTitle: { id: 'Hapus bot', en: 'Delete bot' },
+  deleteBotBtn: { id: 'Hapus bot', en: 'Delete bot' },
+  deleteBotConfirmPre: { id: 'Hapus bot ', en: 'Delete bot ' },
+  deleteBotConfirmPost: { id: '? Tindakan ini tidak bisa dibatalkan.', en: '? This action cannot be undone.' },
+};
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -94,6 +172,7 @@ function FormError({ message }: { message: string }) {
 // ── PersonaModal ───────────────────────────────────────────────────────────────
 
 function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Persona) => void }) {
+  const t = useT(dict);
   const [form, setForm] = useState<PersonaFormData>({ name: '', soulMd: '', tone: '', style: '', rules: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +194,7 @@ function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
       });
       onCreated(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal membuat persona');
+      setError(err instanceof Error ? err.message : t('errCreatePersona'));
     } finally {
       setLoading(false);
     }
@@ -125,23 +204,23 @@ function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     <Modal
       open
       onClose={onClose}
-      title="Persona baru"
-      description="Tentukan kepribadian bot yang dipakai untuk menjawab pelanggan."
+      title={t('personaTitle')}
+      description={t('personaDesc')}
       footer={
         <>
-          <Button type="button" variant="ghost" onClick={onClose}>Batal</Button>
-          <Button type="submit" form="persona-form" disabled={loading}>{loading ? 'Menyimpan…' : 'Buat persona'}</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('cancel')}</Button>
+          <Button type="submit" form="persona-form" disabled={loading}>{loading ? t('saving') : t('createPersona')}</Button>
         </>
       }
     >
       <form id="persona-form" onSubmit={handleSubmit} className="space-y-3">
-        <Field label="Nama persona" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="mis. Sales Bot Ceria" />
-        <TextareaField label="Soul.md (kepribadian)" required rows={5} value={form.soulMd} onChange={(e) => setForm({ ...form, soulMd: e.target.value })} placeholder="Kamu adalah asisten sales yang ramah…" className="resize-none" />
+        <Field label={t('personaNameLabel')} required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('personaNamePlaceholder')} />
+        <TextareaField label={t('soulMdLabel')} required rows={5} value={form.soulMd} onChange={(e) => setForm({ ...form, soulMd: e.target.value })} placeholder={t('soulMdPlaceholder')} className="resize-none" />
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Tone" value={form.tone} onChange={(e) => setForm({ ...form, tone: e.target.value })} placeholder="ramah, formal…" />
-          <Field label="Gaya" value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })} placeholder="ringkas, detail…" />
+          <Field label={t('toneLabel')} value={form.tone} onChange={(e) => setForm({ ...form, tone: e.target.value })} placeholder={t('tonePlaceholder')} />
+          <Field label={t('styleLabel')} value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })} placeholder={t('stylePlaceholder')} />
         </div>
-        <TextareaField label="Aturan" rows={2} value={form.rules} onChange={(e) => setForm({ ...form, rules: e.target.value })} placeholder="Jangan sebut harga tanpa persetujuan admin…" className="resize-none" />
+        <TextareaField label={t('rulesLabel')} rows={2} value={form.rules} onChange={(e) => setForm({ ...form, rules: e.target.value })} placeholder={t('rulesPlaceholder')} className="resize-none" />
         {error && <FormError message={error} />}
       </form>
     </Modal>
@@ -165,6 +244,7 @@ function BotModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const t = useT(dict);
   const [form, setForm] = useState<BotFormData>({
     botName: bot?.botName ?? '',
     personaId: bot?.persona?.id ?? '',
@@ -198,7 +278,7 @@ function BotModal({
       }
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal menyimpan bot');
+      setError(err instanceof Error ? err.message : t('errSaveBot'));
     } finally {
       setLoading(false);
     }
@@ -210,15 +290,15 @@ function BotModal({
       await api(`/bots/${bot.id}/assign/${accountId}`, { method: 'POST' });
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal menugaskan akun');
+      setError(err instanceof Error ? err.message : t('errAssignAccount'));
     }
   }
 
   const aiModes = [
-    { value: 'ai_on', label: 'AI ON' },
-    { value: 'ai_off', label: 'AI OFF' },
-    { value: 'ai_draft', label: 'Draft' },
-    { value: 'ai_supervised', label: 'Supervised' },
+    { value: 'ai_on', label: t('aiModeOn') },
+    { value: 'ai_off', label: t('aiModeOff') },
+    { value: 'ai_draft', label: t('aiModeDraft') },
+    { value: 'ai_supervised', label: t('aiModeSupervised') },
   ];
 
   return (
@@ -227,52 +307,52 @@ function BotModal({
         open
         onClose={onClose}
         size="lg"
-        title={bot ? `Edit bot: ${bot.botName}` : 'Bot baru'}
-        description="Otak chatbot: persona, knowledge base, dan mode AI default."
+        title={bot ? t('editBotTitle', { name: bot.botName }) : t('newBotTitle')}
+        description={t('botDesc')}
         footer={
           <>
-            <Button type="button" variant="ghost" onClick={onClose}>Batal</Button>
-            <Button type="submit" form="bot-form" disabled={loading}>{loading ? 'Menyimpan…' : 'Simpan bot'}</Button>
+            <Button type="button" variant="ghost" onClick={onClose}>{t('cancel')}</Button>
+            <Button type="submit" form="bot-form" disabled={loading}>{loading ? t('saving') : t('saveBot')}</Button>
           </>
         }
       >
         <form id="bot-form" onSubmit={handleSubmit} className="space-y-3">
-          <Field label="Nama bot" required value={form.botName} onChange={(e) => setForm({ ...form, botName: e.target.value })} placeholder="mis. Hermes Sales Bot" />
+          <Field label={t('botNameLabel')} required value={form.botName} onChange={(e) => setForm({ ...form, botName: e.target.value })} placeholder={t('botNamePlaceholder')} />
 
           <div>
-            <SelectField label="Persona" value={form.personaId} onChange={(e) => setForm({ ...form, personaId: e.target.value })}>
-              <option value="">Pilih persona…</option>
+            <SelectField label={t('personaLabel')} value={form.personaId} onChange={(e) => setForm({ ...form, personaId: e.target.value })}>
+              <option value="">{t('choosePersona')}</option>
               {localPersonas.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </SelectField>
             <button type="button" onClick={() => setShowPersonaModal(true)} className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-hermes-700 hover:text-hermes-800">
               <Plus className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-              Buat persona baru
+              {t('createNewPersona')}
             </button>
           </div>
 
-          <SelectField label="Knowledge base" value={form.knowledgeBaseId} onChange={(e) => setForm({ ...form, knowledgeBaseId: e.target.value })}>
-            <option value="">Pilih knowledge base…</option>
+          <SelectField label={t('kbLabel')} value={form.knowledgeBaseId} onChange={(e) => setForm({ ...form, knowledgeBaseId: e.target.value })}>
+            <option value="">{t('chooseKb')}</option>
             {knowledgeBases.map((kb) => (
               <option key={kb.id} value={kb.id}>{kb.name}</option>
             ))}
           </SelectField>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <SelectField label="Mode AI default" value={form.defaultAiMode} onChange={(e) => setForm({ ...form, defaultAiMode: e.target.value })}>
+            <SelectField label={t('defaultAiModeLabel')} value={form.defaultAiMode} onChange={(e) => setForm({ ...form, defaultAiMode: e.target.value })}>
               {aiModes.map((m) => (
                 <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </SelectField>
-            <SelectField label="Bahasa" value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })}>
-              <option value="id">Indonesia</option>
-              <option value="en">English</option>
+            <SelectField label={t('languageLabel')} value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })}>
+              <option value="id">{t('languageId')}</option>
+              <option value="en">{t('languageEn')}</option>
             </SelectField>
-            <SelectField label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-              <option value="draft">Draft</option>
-              <option value="active">Aktif</option>
-              <option value="inactive">Nonaktif</option>
+            <SelectField label={t('statusLabel')} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <option value="draft">{t('statusDraft')}</option>
+              <option value="active">{t('statusActive')}</option>
+              <option value="inactive">{t('statusInactive')}</option>
             </SelectField>
           </div>
 
@@ -282,7 +362,7 @@ function BotModal({
         {/* Assign accounts — only when editing */}
         {bot && (
           <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-800">
-            <h3 className="mb-2 text-xs font-semibold text-gray-500">Tugaskan ke akun WhatsApp</h3>
+            <h3 className="mb-2 text-xs font-semibold text-gray-500">{t('assignToAccounts')}</h3>
             <div className="space-y-1.5">
               {accounts.map((a) => {
                 const assigned = bot.accounts.some((ba) => ba.id === a.id);
@@ -294,14 +374,14 @@ function BotModal({
                       <span className="text-xs text-gray-400">{a.phoneNumber}</span>
                     </div>
                     {assigned ? (
-                      <Badge tone="success">Ditugaskan</Badge>
+                      <Badge tone="success">{t('assigned')}</Badge>
                     ) : (
-                      <Button size="sm" onClick={() => handleAssign(a.id)}>Tugaskan</Button>
+                      <Button size="sm" onClick={() => handleAssign(a.id)}>{t('assign')}</Button>
                     )}
                   </div>
                 );
               })}
-              {accounts.length === 0 && <p className="text-xs text-gray-400">Belum ada akun WhatsApp.</p>}
+              {accounts.length === 0 && <p className="text-xs text-gray-400">{t('noWaAccounts')}</p>}
             </div>
           </div>
         )}
@@ -324,6 +404,7 @@ function BotModal({
 // ── Bot Card ───────────────────────────────────────────────────────────────────
 
 function BotCard({ bot, onEdit, onDelete }: { bot: Bot; onEdit: () => void; onDelete: () => void }) {
+  const t = useT(dict);
   return (
     <Card className="p-4">
       <div className="mb-3 flex items-start justify-between gap-2">
@@ -333,31 +414,31 @@ function BotCard({ bot, onEdit, onDelete }: { bot: Bot; onEdit: () => void; onDe
             <Badge tone={statusTone[bot.status] ?? 'neutral'}>{bot.status}</Badge>
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            <Badge tone="neutral">{bot.persona?.name ?? 'Tanpa persona'}</Badge>
-            <Badge tone="neutral">{bot.knowledgeBase?.name ?? 'Tanpa KB'}</Badge>
+            <Badge tone="neutral">{bot.persona?.name ?? t('noPersona')}</Badge>
+            <Badge tone="neutral">{bot.knowledgeBase?.name ?? t('noKb')}</Badge>
             <Badge tone="neutral">{bot.language.toUpperCase()}</Badge>
           </div>
         </div>
         <div className="flex shrink-0 gap-1.5">
           <Button variant="outline" size="sm" onClick={onEdit}>
             <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-            Edit
+            {t('edit')}
           </Button>
           <Button variant="ghost" size="sm" onClick={onDelete} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
             <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-            Hapus
+            {t('delete')}
           </Button>
         </div>
       </div>
 
       <div className="mb-2 flex items-center gap-1.5 text-xs text-gray-500">
-        Mode default
+        {t('defaultMode')}
         <Badge tone="hermes">{bot.defaultAiMode}</Badge>
       </div>
 
       {bot.accounts.length > 0 ? (
         <div>
-          <p className="mb-1 text-xs text-gray-400">Akun WhatsApp</p>
+          <p className="mb-1 text-xs text-gray-400">{t('waAccounts')}</p>
           <div className="flex flex-wrap gap-1">
             {bot.accounts.map((a) => (
               <span key={a.id} className="flex items-center gap-1 rounded-md bg-gray-50 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
@@ -368,7 +449,7 @@ function BotCard({ bot, onEdit, onDelete }: { bot: Bot; onEdit: () => void; onDe
           </div>
         </div>
       ) : (
-        <p className="text-xs text-gray-400">Belum ada akun yang ditugaskan.</p>
+        <p className="text-xs text-gray-400">{t('noAssignedAccounts')}</p>
       )}
     </Card>
   );
@@ -377,6 +458,7 @@ function BotCard({ bot, onEdit, onDelete }: { bot: Bot; onEdit: () => void; onDe
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function BotsPage() {
+  const t = useT(dict);
   const [bots, setBots] = useState<Bot[]>([]);
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
@@ -400,7 +482,7 @@ export default function BotsPage() {
       setKbs(kbsData.items ?? (kbsData as unknown as KnowledgeBase[]));
       setAccounts(accountsData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat data');
+      setError(err instanceof Error ? err.message : t('errLoadData'));
     } finally {
       setLoading(false);
     }
@@ -414,16 +496,16 @@ export default function BotsPage() {
       setConfirmDelete(null);
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal menghapus bot');
+      setError(err instanceof Error ? err.message : t('errDeleteBot'));
     }
   }
 
   return (
     <AppLayout>
-      <PageHeader title="Bots & Personas" subtitle="Atur otak chatbot dan tugaskan ke akun WhatsApp">
+      <PageHeader title="Bots & Personas" subtitle={t('pageSubtitle')}>
         <Button size="sm" onClick={() => setEditBot(null)}>
           <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          Bot baru
+          {t('newBotBtn')}
         </Button>
       </PageHeader>
 
@@ -431,7 +513,7 @@ export default function BotsPage() {
         {error && (
           <div className="mb-4 flex items-center justify-between rounded-lg border border-danger-100 bg-danger-50 px-3 py-2 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-700/10 dark:text-danger-500">
             {error}
-            <button onClick={() => setError(null)} aria-label="Tutup notifikasi">
+            <button onClick={() => setError(null)} aria-label={t('closeNotif')}>
               <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
             </button>
           </div>
@@ -444,11 +526,11 @@ export default function BotsPage() {
         ) : bots.length === 0 ? (
           <Card className="flex flex-col items-center justify-center border-dashed py-16 text-center">
             <Workflow className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Belum ada bot</p>
-            <p className="mt-1 text-[13px] text-gray-400">Buat bot pertama untuk mulai melayani pelanggan otomatis.</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('noBots')}</p>
+            <p className="mt-1 text-[13px] text-gray-400">{t('noBotsHint')}</p>
             <Button size="sm" className="mt-4" onClick={() => setEditBot(null)}>
               <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-              Bot baru
+              {t('newBotBtn')}
             </Button>
           </Card>
         ) : (
@@ -477,20 +559,20 @@ export default function BotsPage() {
           <Modal
             open
             size="sm"
-            title="Hapus bot"
+            title={t('deleteBotTitle')}
             onClose={() => setConfirmDelete(null)}
             footer={
               <>
-                <Button variant="ghost" onClick={() => setConfirmDelete(null)}>Batal</Button>
+                <Button variant="ghost" onClick={() => setConfirmDelete(null)}>{t('cancel')}</Button>
                 <Button variant="danger" onClick={() => handleDelete(confirmDelete)}>
                   <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                  Hapus bot
+                  {t('deleteBotBtn')}
                 </Button>
               </>
             }
           >
             <p className="text-sm text-gray-700 dark:text-gray-200">
-              Hapus bot <strong>{confirmDelete.botName}</strong>? Tindakan ini tidak bisa dibatalkan.
+              {t('deleteBotConfirmPre')}<strong>{confirmDelete.botName}</strong>{t('deleteBotConfirmPost')}
             </p>
           </Modal>
         )}

@@ -10,6 +10,63 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Field, SelectField } from '@/components/ui/Field';
+import { useT, type Dict } from '@/lib/i18n';
+
+// ── i18n ───────────────────────────────────────────────────────────────────────
+
+const dict: Dict = {
+  // Role options
+  roleAdmin: { id: 'Admin', en: 'Admin' },
+  roleSupervisor: { id: 'Supervisor', en: 'Supervisor' },
+  roleOwner: { id: 'Owner', en: 'Owner' },
+  roleViewer: { id: 'Viewer', en: 'Viewer' },
+
+  // Shared
+  cancel: { id: 'Batal', en: 'Cancel' },
+  saving: { id: 'Menyimpan…', en: 'Saving…' },
+  roleLabel: { id: 'Role', en: 'Role' },
+  emailLabel: { id: 'Email', en: 'Email' },
+
+  // CreateUserModal
+  errEmailPasswordRequired: { id: 'Email dan password wajib diisi', en: 'Email and password are required' },
+  errCreateUser: { id: 'Gagal membuat pengguna', en: 'Failed to create user' },
+  createUserTitle: { id: 'Tambah pengguna', en: 'Add user' },
+  createUserDesc: { id: 'Buat akun untuk anggota tim baru.', en: 'Create an account for a new team member.' },
+  createUserBtn: { id: 'Buat pengguna', en: 'Create user' },
+  nameOptionalLabel: { id: 'Nama (opsional)', en: 'Name (optional)' },
+  passwordLabel: { id: 'Password', en: 'Password' },
+  passwordPlaceholder: { id: 'Minimal 8 karakter', en: 'At least 8 characters' },
+  passwordHint: { id: 'Minimal 8 karakter.', en: 'At least 8 characters.' },
+
+  // EditUserModal
+  errUpdateUser: { id: 'Gagal memperbarui pengguna', en: 'Failed to update user' },
+  editUserTitle: { id: 'Edit pengguna', en: 'Edit user' },
+  saveChanges: { id: 'Simpan perubahan', en: 'Save changes' },
+  nameLabel: { id: 'Nama', en: 'Name' },
+
+  // DeleteConfirmModal
+  deleteUserTitle: { id: 'Hapus pengguna', en: 'Delete user' },
+  deleting: { id: 'Menghapus…', en: 'Deleting…' },
+  deleteUserBtn: { id: 'Hapus pengguna', en: 'Delete user' },
+  deleteConfirmPre: { id: 'Yakin ingin menghapus ', en: 'Are you sure you want to delete ' },
+  deleteConfirmPost: { id: '? Tindakan ini tidak bisa dibatalkan.', en: '? This action cannot be undone.' },
+
+  // Main page
+  errLoadUsers: { id: 'Gagal memuat daftar pengguna', en: 'Failed to load the user list' },
+  errDeleteUser: { id: 'Gagal menghapus pengguna', en: 'Failed to delete user' },
+  pageSubtitle: { id: 'Kelola pengguna sistem dan hak aksesnya', en: 'Manage system users and their access rights' },
+  accessRestricted: { id: 'Akses dibatasi', en: 'Access restricted' },
+  noPermissionHint: { id: 'You do not have permission to view this page. Hubungi owner untuk meminta akses manajemen tim.', en: 'You do not have permission to view this page. Contact the owner to request team management access.' },
+  tryAgain: { id: 'Coba lagi', en: 'Try again' },
+  noUsers: { id: 'Belum ada pengguna', en: 'No users yet' },
+  noUsersHint: { id: 'Tambahkan anggota tim pertama untuk mulai berkolaborasi.', en: 'Add your first team member to start collaborating.' },
+  thNama: { id: 'Nama', en: 'Name' },
+  thStatus: { id: 'Status', en: 'Status' },
+  thDibuat: { id: 'Dibuat', en: 'Created' },
+  thAksi: { id: 'Aksi', en: 'Actions' },
+  edit: { id: 'Edit', en: 'Edit' },
+  delete: { id: 'Hapus', en: 'Delete' },
+};
 
 interface User {
   id: string;
@@ -34,14 +91,17 @@ const roleTone: Record<string, BadgeTone> = {
   viewer: 'neutral',
 };
 
-const roleOptions = (
-  <>
-    <option value="admin">Admin</option>
-    <option value="supervisor">Supervisor</option>
-    <option value="owner">Owner</option>
-    <option value="viewer">Viewer</option>
-  </>
-);
+function RoleOptions() {
+  const t = useT(dict);
+  return (
+    <>
+      <option value="admin">{t('roleAdmin')}</option>
+      <option value="supervisor">{t('roleSupervisor')}</option>
+      <option value="owner">{t('roleOwner')}</option>
+      <option value="viewer">{t('roleViewer')}</option>
+    </>
+  );
+}
 
 function getRoleFromToken(): AuthUser | null {
   if (typeof window === 'undefined') return null;
@@ -66,6 +126,7 @@ function FormError({ message }: { message: string }) {
 }
 
 function CreateUserModal({ onClose, onSuccess, isLoading }: { onClose: () => void; onSuccess: () => void; isLoading: boolean }) {
+  const t = useT(dict);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -76,7 +137,7 @@ function CreateUserModal({ onClose, onSuccess, isLoading }: { onClose: () => voi
     e.preventDefault();
     setError('');
     if (!email.trim() || !password.trim()) {
-      setError('Email dan password wajib diisi');
+      setError(t('errEmailPasswordRequired'));
       return;
     }
     try {
@@ -87,7 +148,7 @@ function CreateUserModal({ onClose, onSuccess, isLoading }: { onClose: () => voi
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal membuat pengguna');
+      setError(err instanceof Error ? err.message : t('errCreateUser'));
     }
   }
 
@@ -95,27 +156,28 @@ function CreateUserModal({ onClose, onSuccess, isLoading }: { onClose: () => voi
     <Modal
       open
       onClose={onClose}
-      title="Tambah pengguna"
-      description="Buat akun untuk anggota tim baru."
+      title={t('createUserTitle')}
+      description={t('createUserDesc')}
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>Batal</Button>
-          <Button type="submit" form="create-user-form" disabled={isLoading}>{isLoading ? 'Menyimpan…' : 'Buat pengguna'}</Button>
+          <Button variant="outline" onClick={onClose}>{t('cancel')}</Button>
+          <Button type="submit" form="create-user-form" disabled={isLoading}>{isLoading ? t('saving') : t('createUserBtn')}</Button>
         </>
       }
     >
       {error && <FormError message={error} />}
       <form id="create-user-form" onSubmit={handleSubmit} className="space-y-3">
-        <Field label="Nama (opsional)" value={name} onChange={(e) => setName(e.target.value)} placeholder="John Doe" />
-        <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" />
-        <Field label="Password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimal 8 karakter" hint="Minimal 8 karakter." />
-        <SelectField label="Role" value={role} onChange={(e) => setRole(e.target.value as typeof role)}>{roleOptions}</SelectField>
+        <Field label={t('nameOptionalLabel')} value={name} onChange={(e) => setName(e.target.value)} placeholder="John Doe" />
+        <Field label={t('emailLabel')} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" />
+        <Field label={t('passwordLabel')} type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('passwordPlaceholder')} hint={t('passwordHint')} />
+        <SelectField label={t('roleLabel')} value={role} onChange={(e) => setRole(e.target.value as typeof role)}><RoleOptions /></SelectField>
       </form>
     </Modal>
   );
 }
 
 function EditUserModal({ user, onClose, onSuccess, isLoading }: { user: User; onClose: () => void; onSuccess: () => void; isLoading: boolean }) {
+  const t = useT(dict);
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
   const [role, setRole] = useState(user.role);
@@ -132,7 +194,7 @@ function EditUserModal({ user, onClose, onSuccess, isLoading }: { user: User; on
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memperbarui pengguna');
+      setError(err instanceof Error ? err.message : t('errUpdateUser'));
     }
   }
 
@@ -140,50 +202,52 @@ function EditUserModal({ user, onClose, onSuccess, isLoading }: { user: User; on
     <Modal
       open
       onClose={onClose}
-      title="Edit pengguna"
+      title={t('editUserTitle')}
       description={user.email}
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>Batal</Button>
-          <Button type="submit" form="edit-user-form" disabled={isLoading}>{isLoading ? 'Menyimpan…' : 'Simpan perubahan'}</Button>
+          <Button variant="outline" onClick={onClose}>{t('cancel')}</Button>
+          <Button type="submit" form="edit-user-form" disabled={isLoading}>{isLoading ? t('saving') : t('saveChanges')}</Button>
         </>
       }
     >
       {error && <FormError message={error} />}
       <form id="edit-user-form" onSubmit={handleSubmit} className="space-y-3">
-        <Field label="Nama" value={name} onChange={(e) => setName(e.target.value)} />
-        <Field label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <SelectField label="Role" value={role} onChange={(e) => setRole(e.target.value as typeof role)}>{roleOptions}</SelectField>
+        <Field label={t('nameLabel')} value={name} onChange={(e) => setName(e.target.value)} />
+        <Field label={t('emailLabel')} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <SelectField label={t('roleLabel')} value={role} onChange={(e) => setRole(e.target.value as typeof role)}><RoleOptions /></SelectField>
       </form>
     </Modal>
   );
 }
 
 function DeleteConfirmModal({ user, onClose, onConfirm, isLoading }: { user: User; onClose: () => void; onConfirm: () => void; isLoading: boolean }) {
+  const t = useT(dict);
   return (
     <Modal
       open
       onClose={onClose}
       size="sm"
-      title="Hapus pengguna"
+      title={t('deleteUserTitle')}
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>Batal</Button>
+          <Button variant="outline" onClick={onClose}>{t('cancel')}</Button>
           <Button variant="danger" onClick={onConfirm} disabled={isLoading}>
             <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-            {isLoading ? 'Menghapus…' : 'Hapus pengguna'}
+            {isLoading ? t('deleting') : t('deleteUserBtn')}
           </Button>
         </>
       }
     >
       <p className="text-sm text-gray-600 dark:text-gray-400">
-        Yakin ingin menghapus <span className="font-semibold text-gray-900 dark:text-gray-100">{user.email}</span>? Tindakan ini tidak bisa dibatalkan.
+        {t('deleteConfirmPre')}<span className="font-semibold text-gray-900 dark:text-gray-100">{user.email}</span>{t('deleteConfirmPost')}
       </p>
     </Modal>
   );
 }
 
 export default function UsersPage() {
+  const t = useT(dict);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -200,7 +264,7 @@ export default function UsersPage() {
       const data = await api<{ users: User[] }>('/users');
       setUsers(data.users);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat daftar pengguna');
+      setError(err instanceof Error ? err.message : t('errLoadUsers'));
     } finally {
       setLoading(false);
     }
@@ -218,9 +282,9 @@ export default function UsersPage() {
           <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-review-50 dark:bg-review-900/20">
             <ShieldAlert className="h-5 w-5 text-review-600" strokeWidth={1.75} aria-hidden="true" />
           </span>
-          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Akses dibatasi</p>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t('accessRestricted')}</p>
           <p className="mt-1 max-w-sm text-[13px] text-gray-500">
-            You do not have permission to view this page. Hubungi owner untuk meminta akses manajemen tim.
+            {t('noPermissionHint')}
           </p>
         </div>
       </AppLayout>
@@ -234,7 +298,7 @@ export default function UsersPage() {
       setDeletingUser(null);
       await loadUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal menghapus pengguna');
+      setError(err instanceof Error ? err.message : t('errDeleteUser'));
     } finally {
       setIsSubmitting(false);
     }
@@ -242,7 +306,7 @@ export default function UsersPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Team" subtitle="Kelola pengguna sistem dan hak aksesnya">
+      <PageHeader title="Team" subtitle={t('pageSubtitle')}>
         {authUser?.role === 'owner' && (
           <Button size="sm" onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -255,7 +319,7 @@ export default function UsersPage() {
         {error && (
           <Card className="mb-4 border-danger-200 bg-danger-50 p-4 dark:border-danger-700/40 dark:bg-danger-900/20">
             <p className="text-[13px] font-medium text-danger-700 dark:text-danger-400">{error}</p>
-            <button onClick={loadUsers} className="mt-2 text-[13px] font-semibold text-danger-700 underline dark:text-danger-400">Coba lagi</button>
+            <button onClick={loadUsers} className="mt-2 text-[13px] font-semibold text-danger-700 underline dark:text-danger-400">{t('tryAgain')}</button>
           </Card>
         )}
         {loading ? (
@@ -265,8 +329,8 @@ export default function UsersPage() {
         ) : users.length === 0 ? (
           <Card className="flex flex-col items-center justify-center py-16 text-center">
             <UsersRound className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Belum ada pengguna</p>
-            <p className="mt-1 text-[13px] text-gray-400">Tambahkan anggota tim pertama untuk mulai berkolaborasi.</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('noUsers')}</p>
+            <p className="mt-1 text-[13px] text-gray-400">{t('noUsersHint')}</p>
             {authUser?.role === 'owner' && (
               <Button size="sm" className="mt-4" onClick={() => setShowCreateModal(true)}>
                 <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -279,12 +343,12 @@ export default function UsersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Nama</th>
-                  <th className="px-4 py-3 font-medium">Role</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Dibuat</th>
-                  <th className="px-4 py-3 text-right font-medium">Aksi</th>
+                  <th className="px-4 py-3 font-medium">{t('emailLabel')}</th>
+                  <th className="px-4 py-3 font-medium">{t('thNama')}</th>
+                  <th className="px-4 py-3 font-medium">{t('roleLabel')}</th>
+                  <th className="px-4 py-3 font-medium">{t('thStatus')}</th>
+                  <th className="px-4 py-3 font-medium">{t('thDibuat')}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t('thAksi')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -305,11 +369,11 @@ export default function UsersPage() {
                           <>
                             <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>
                               <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                              Edit
+                              {t('edit')}
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => setDeletingUser(user)} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
                               <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                              Hapus
+                              {t('delete')}
                             </Button>
                           </>
                         )}
