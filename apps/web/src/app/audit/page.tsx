@@ -20,7 +20,7 @@ const dict: Dict = {
   dariTanggal: { id: 'Dari tanggal', en: 'From date' },
   sampaiTanggal: { id: 'Sampai tanggal', en: 'To date' },
   cobaLagi: { id: 'Coba lagi', en: 'Try again' },
-  errLoad: { id: 'Gagal memuat audit log — periksa koneksi lalu coba lagi.', en: 'Failed to load the audit log — check your connection and try again.' },
+  errLoad: { id: 'Gagal memuat audit log — periksa koneksi lalu coba lagi.', en: 'Failed to load audit log — check your connection and try again.' },
   colWaktu: { id: 'Waktu', en: 'Time' },
   colPengguna: { id: 'Pengguna', en: 'User' },
   colEntitas: { id: 'Entitas', en: 'Entity' },

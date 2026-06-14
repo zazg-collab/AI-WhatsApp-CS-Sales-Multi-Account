@@ -40,8 +40,8 @@ const dict: Dict = {
   },
   importHeading: { id: 'Impor knowledge', en: 'Import knowledge' },
   importHint: {
-    id: 'Unggah PDF, Word, Excel, CSV, TXT, Markdown, HTML, atau tarik dari halaman web / file URL publik. Konten diekstrak menjadi item aktif, dipecah otomatis bila terlalu panjang.',
-    en: 'Upload PDF, Word, Excel, CSV, TXT, Markdown, HTML, or pull from a web page / public file URL. The content is extracted into active items, split automatically when too long.',
+    id: 'Unggah PDF, Word (.docx), Excel, CSV, TXT, Markdown, HTML, atau tarik dari halaman web / file URL publik. Konten diekstrak menjadi item aktif, dipecah otomatis bila terlalu panjang.',
+    en: 'Upload PDF, Word (.docx), Excel, CSV, TXT, Markdown, HTML, or pull from a web page / public file URL. The content is extracted into active items, split automatically when too long.',
   },
   processing: { id: 'Memproses…', en: 'Processing…' },
   uploadFile: { id: 'Unggah file', en: 'Upload file' },
@@ -211,7 +211,7 @@ export default function KnowledgePage() {
     <AppLayout>
       <PageHeader title={t('pageTitle')} subtitle={t('pageSubtitle')} />
 
-      <div className="scrollbar-thin flex flex-1 gap-5 overflow-y-auto p-5">
+      <div className="scrollbar-thin flex flex-1 flex-col gap-5 overflow-y-auto p-5 md:flex-row">
         {error && (
           <Card className="fixed right-5 top-20 z-20 border-danger-200 bg-danger-50 p-3 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">
             <p className="font-medium">{error}</p>
@@ -224,7 +224,7 @@ export default function KnowledgePage() {
           </Card>
         )}
         {/* Bases list */}
-        <aside className="w-64 shrink-0 space-y-4">
+        <aside className="w-full shrink-0 space-y-4 md:w-64">
           <Card className="p-3">
             <form onSubmit={createBase} className="space-y-2">
               <Field

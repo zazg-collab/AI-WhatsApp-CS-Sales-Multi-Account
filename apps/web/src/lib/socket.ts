@@ -16,8 +16,14 @@ export function getSocket(): Socket {
   if (!socket) {
     // The gateway now requires a JWT (C1) — pass it in the handshake auth.
     socket = io(`${baseUrl()}/events`, {
-      transports: ['websocket'],
+      // Allow polling as a fallback so the connection still works behind proxies
+      // or when the websocket upgrade is blocked; socket.io upgrades to ws when it can.
+      transports: ['websocket', 'polling'],
       auth: { token: getToken() ?? '' },
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
     });
   }
   return socket;

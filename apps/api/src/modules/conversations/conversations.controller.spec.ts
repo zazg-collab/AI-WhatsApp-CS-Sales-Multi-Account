@@ -23,12 +23,14 @@ describe('ConversationsController', () => {
     controller = new ConversationsController(svc);
   });
 
+  const USER = { id: 'u1', role: 'owner' } as any;
+
   it('list parses query params', () => {
-    controller.list('a1', AiMode.ai_on, ConversationStatus.open, 'u1', 'vip', 'budi', 'true', '2', '10');
+    controller.list(USER, 'a1', AiMode.ai_on, ConversationStatus.open, 'u1', 'vip', 'budi', 'true', '2', '10');
     expect(svc.list).toHaveBeenCalledWith({
       accountId: 'a1', aiMode: AiMode.ai_on, status: ConversationStatus.open,
       assignedAdminId: 'u1', label: 'vip', search: 'budi',
-      needsAttention: true, page: 2, limit: 10,
+      needsAttention: true, page: 2, limit: 10, user: USER,
     });
   });
 
@@ -39,7 +41,7 @@ describe('ConversationsController', () => {
   });
 
   it('list rejects an invalid status', () => {
-    expect(() => controller.list(undefined, undefined, 'bogus' as any)).toThrow();
+    expect(() => controller.list(USER, undefined, undefined, 'bogus' as any)).toThrow();
   });
 
   it('searchMessages delegates with defaults', () => {
@@ -60,14 +62,14 @@ describe('ConversationsController', () => {
   });
 
   it('list defaults page/limit', () => {
-    controller.list();
+    controller.list(USER);
     expect(svc.list.mock.calls[0][0].page).toBe(1);
     expect(svc.list.mock.calls[0][0].limit).toBe(50);
   });
 
   it('get parses message limit', () => {
-    controller.get('c1', '20');
-    expect(svc.get).toHaveBeenCalledWith('c1', 20);
+    controller.get(USER, 'c1', '20');
+    expect(svc.get).toHaveBeenCalledWith('c1', 20, USER);
   });
 
   it('getMessages forwards the cursor + limit', () => {

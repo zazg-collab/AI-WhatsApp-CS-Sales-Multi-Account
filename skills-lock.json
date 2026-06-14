@@ -78,6 +78,18 @@
       "sourceType": "github",
       "skillPath": "skills/stitch-skill/SKILL.md",
       "computedHash": "13322f38406cd3abf16ba45e35bdc9b18002d0153a79b4612b97aefc65d5a335"
+    },
+    "fullstack-ai-slop-audit": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/fullstack-ai-slop-audit/SKILL.md",
+      "computedHash": "fb4831a2bf28da27a617e3e7229215bd289e98e8f4716ca86c6d31c55aafbf2e"
+    },
+    "frontend-uiux-ai-slop-audit": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/frontend-uiux-ai-slop-audit/SKILL.md",
+      "computedHash": "6f9115d89c2443601c953ba9bbe331357a3b081ae008351cd889510edc0aad92"
     }
   }
 }

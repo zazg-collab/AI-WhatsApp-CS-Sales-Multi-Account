@@ -102,7 +102,7 @@ describe('CampaignsController', () => {
   const c = new CampaignsController(svc);
   const u = { id: 'u1' } as any;
   it('delegates', () => {
-    c.list('draft'); c.preview({ whatsappAccountId: 'a1' } as any); c.create({} as any, u); c.get('cmp1');
+    c.list(u, 'draft'); c.preview({ whatsappAccountId: 'a1' } as any); c.create({} as any, u); c.get('cmp1', u);
     c.update('cmp1', {} as any, u); c.submit('cmp1', u); c.approve('cmp1', u);
     c.start('cmp1', u); c.pause('cmp1', u); c.cancel('cmp1', u); c.retryFailed('cmp1', u);
     expect(svc.preview).toHaveBeenCalledWith('a1', {});
