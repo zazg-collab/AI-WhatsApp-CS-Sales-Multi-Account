@@ -45,7 +45,7 @@ const statusTone: Record<string, BadgeTone> = {
 };
 
 const inputClass =
-  'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
@@ -209,9 +209,9 @@ export default function AccountsPage() {
 
       <div className="scrollbar-thin mx-auto w-full max-w-3xl flex-1 overflow-y-auto p-5">
         <Card className="mb-5 p-4">
-          <form onSubmit={addAccount} className="flex flex-wrap gap-2">
-            <input placeholder="Account name" value={name} onChange={(e) => setName(e.target.value)} className={`flex-1 ${inputClass}`} required />
-            <input placeholder="Number (e.g. 628123…)" value={phone} onChange={(e) => setPhone(e.target.value)} className={`flex-1 ${inputClass}`} required />
+          <form onSubmit={addAccount} className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <input placeholder="Account name" value={name} onChange={(e) => setName(e.target.value)} className={`w-full sm:flex-1 ${inputClass}`} required />
+            <input placeholder="Number (e.g. 628123…)" value={phone} onChange={(e) => setPhone(e.target.value)} className={`w-full sm:flex-1 ${inputClass}`} required />
             <Button type="submit" size="md">
               <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
               Add account

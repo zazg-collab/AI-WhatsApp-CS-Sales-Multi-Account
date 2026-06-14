@@ -16,8 +16,12 @@ describe('getSocket', () => {
     const { getSocket } = await import('./socket');
     getSocket();
     expect(ioMock).toHaveBeenCalledWith('http://localhost:3001/events', {
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
       auth: { token: 'test-token' },
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
     });
   });
 

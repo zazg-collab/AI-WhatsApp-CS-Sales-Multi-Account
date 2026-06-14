@@ -118,10 +118,18 @@ export class ConversationsController {
     return this.conversations.deleteMessage(id, messageId, user.id);
   }
 
+  @ApiOperation({ summary: 'Total number of conversations with unread messages' })
+  @Roles('viewer')
+  @Get('unread-count')
+  unreadCount(@CurrentUser() user: AuthUser) {
+    return this.conversations.unreadCount(user);
+  }
+
   @ApiOperation({ summary: 'List conversations with optional filters' })
   @Roles('viewer')
   @Get()
   list(
+    @CurrentUser() user: AuthUser,
     @Query('accountId') accountId?: string,
     @Query('aiMode') aiMode?: AiMode,
     @Query('status') status?: ConversationStatus,
@@ -145,6 +153,7 @@ export class ConversationsController {
       needsAttention: needsAttention === 'true',
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 50,
+      user,
     });
   }
 
@@ -163,12 +172,14 @@ export class ConversationsController {
   @Roles('viewer')
   @Get(':id')
   get(
+    @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Query('messageLimit') messageLimit?: string,
   ) {
     return this.conversations.get(
       id,
       messageLimit ? parseInt(messageLimit, 10) : 100,
+      user,
     );
   }
 

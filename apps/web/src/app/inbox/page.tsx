@@ -10,6 +10,7 @@ import {
   Pencil,
   CircleCheck,
   ArrowUpRight,
+  ArrowLeft,
   FileSearch,
   Send,
   Workflow,
@@ -27,6 +28,9 @@ import {
   Video,
   Tag,
   CheckCheck,
+  Check,
+  Zap,
+  CalendarClock,
   UserPlus,
   PhoneCall,
 } from 'lucide-react';
@@ -173,6 +177,15 @@ function clockTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
+// WhatsApp-style delivery ticks for outbound (admin/AI) messages.
+function StatusTick({ status }: { status: string }) {
+  if (status === 'pending') return <Clock className="h-3 w-3" strokeWidth={2} aria-label="pending" />;
+  if (status === 'failed') return <TriangleAlert className="h-3 w-3 text-danger-200" strokeWidth={2} aria-label="failed to send" />;
+  if (status === 'read') return <CheckCheck className="h-3.5 w-3.5 text-sky-300" strokeWidth={2.25} aria-label="read" />;
+  if (status === 'delivered') return <CheckCheck className="h-3.5 w-3.5" strokeWidth={2.25} aria-label="delivered" />;
+  return <Check className="h-3.5 w-3.5" strokeWidth={2.25} aria-label="sent" />;
+}
+
 // Per-conversation status label for the queue rows.
 function summaryStatus(c: ConvSummary): StatusKind {
   if (c.aiMode === 'ai_paused') return 'sending-blocked';
@@ -205,6 +218,15 @@ function InboxInner() {
   const [accounts, setAccounts] = useState<WaAccount[]>([]);
   const [listError, setListError] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [quickReplies, setQuickReplies] = useState<{ id: string; title: string; content: string; shortcut: string | null }[]>([]);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState('');
+  const [scheduleMsg, setScheduleMsg] = useState('');
+  const [scheduleErr, setScheduleErr] = useState<string | null>(null);
+  const [followUps, setFollowUps] = useState<{ id: string; scheduledAt: string; messageTemplate: string | null; status: string }[]>([]);
+  const [liveConnected, setLiveConnected] = useState(false);
   const [adminError, setAdminError] = useState<string | null>(null);
   const [showAssign, setShowAssign] = useState(false);
   const [quoteMessage, setQuoteMessage] = useState<Message | null>(null);
@@ -264,6 +286,15 @@ function InboxInner() {
     }
   }, []);
 
+  const loadFollowUps = useCallback(async (convId: string) => {
+    try {
+      const r = await api<{ id: string; scheduledAt: string; messageTemplate: string | null; status: string }[]>(`/follow-ups?conversationId=${convId}`);
+      setFollowUps(Array.isArray(r) ? r : []);
+    } catch {
+      setFollowUps([]);
+    }
+  }, []);
+
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 300);
     return () => clearTimeout(t);
@@ -271,10 +302,39 @@ function InboxInner() {
 
   useEffect(() => { loadList(); }, [loadList]);
 
+  // Ask once for browser notification permission so inbound messages can alert
+  // the agent when the tab is in the background.
   useEffect(() => {
-    if (activeId) loadConv(activeId);
-    else setConv(null);
-  }, [activeId, loadConv]);
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
+
+  // Close the schedule modal on Escape (a11y).
+  useEffect(() => {
+    if (!showSchedule) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowSchedule(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showSchedule]);
+
+  useEffect(() => {
+    api<{ id: string; title: string; content: string; shortcut: string | null }[]>('/quick-replies')
+      .then((r) => setQuickReplies(Array.isArray(r) ? r : []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (activeId) {
+      loadConv(activeId);
+      loadFollowUps(activeId);
+    } else {
+      setConv(null);
+      setFollowUps([]);
+    }
+  }, [activeId, loadConv, loadFollowUps]);
 
   useEffect(() => {
     setLabelDraft(conv?.labels?.join(', ') ?? '');
@@ -290,6 +350,24 @@ function InboxInner() {
   // ── Live updates ───────────────────────────────────────────────────
   useEffect(() => {
     const socket = getSocket();
+    setLiveConnected(socket.connected);
+    const onConnect = () => setLiveConnected(true);
+    const onDisconnect = () => setLiveConnected(false);
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    // Coalesce bursts of live events (e.g. WhatsApp history sync fires many
+    // message:new at once) so we don't flood the API and trip rate limits.
+    let listTimer: ReturnType<typeof setTimeout> | null = null;
+    let convTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleListReload = () => {
+      if (listTimer) clearTimeout(listTimer);
+      listTimer = setTimeout(() => loadList(), 500);
+    };
+    const scheduleConvReload = () => {
+      if (!activeId) return;
+      if (convTimer) clearTimeout(convTimer);
+      convTimer = setTimeout(() => loadConv(activeId), 500);
+    };
     const upsert = (conversationId: string, message: Message) => {
       setConv((prev) => {
         if (!prev || prev.id !== conversationId) return prev;
@@ -299,7 +377,22 @@ function InboxInner() {
     };
     const onNew = ({ conversationId, message }: { conversationId: string; message: Message }) => {
       upsert(conversationId, message);
-      loadList();
+      scheduleListReload();
+      // Notify when an inbound customer message arrives and the agent isn't
+      // already looking at that chat (tab hidden or a different conversation open).
+      if (
+        message.senderType === 'customer' &&
+        typeof window !== 'undefined' &&
+        'Notification' in window &&
+        Notification.permission === 'granted' &&
+        (document.hidden || conversationId !== activeId)
+      ) {
+        try {
+          new Notification('New WhatsApp message', { body: message.content ?? 'New message', tag: conversationId });
+        } catch {
+          /* ignore notification failures */
+        }
+      }
     };
     const onDraft = ({ conversationId, message }: { conversationId: string; message: Message }) => upsert(conversationId, message);
     const onDraftRemoved = ({ conversationId, messageId }: { conversationId: string; messageId: string }) =>
@@ -307,8 +400,8 @@ function InboxInner() {
     const onStatus = ({ conversationId, messageId, status }: { conversationId: string; messageId: string; status: string }) =>
       setConv((prev) => (prev && prev.id === conversationId ? { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, status } : m)) } : prev));
     const onConvUpdate = () => {
-      loadList();
-      if (activeId) loadConv(activeId);
+      scheduleListReload();
+      scheduleConvReload();
     };
 
     socket.on('message:new', onNew);
@@ -320,6 +413,10 @@ function InboxInner() {
     socket.on('conversation:sla-cleared', onConvUpdate);
     socket.on('hermes:alert', onConvUpdate);
     return () => {
+      if (listTimer) clearTimeout(listTimer);
+      if (convTimer) clearTimeout(convTimer);
+      socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
       socket.off('message:new', onNew);
       socket.off('message:draft', onDraft);
       socket.off('message:draft-removed', onDraftRemoved);
@@ -334,25 +431,90 @@ function InboxInner() {
   // ── Actions ────────────────────────────────────────────────────────
   async function sendMessage() {
     if (!activeId || !composer.trim() || sending) return;
+    const text = composer.trim();
     setSending(true);
+    setSendError(null);
     try {
       if (editingMessage) {
         await api(`/conversations/${activeId}/messages/${editingMessage.id}`, {
           method: 'PATCH',
-          body: JSON.stringify({ text: composer.trim() }),
+          body: JSON.stringify({ text }),
         });
         setEditingMessage(null);
+        setComposer('');
+        await loadConv(activeId);
       } else {
-        await api(`/conversations/${activeId}/messages`, {
-          method: 'POST',
-          body: JSON.stringify({ text: composer.trim(), quotedMessageId: quoteMessage?.id }),
-        });
+        // Optimistic: show the message immediately as pending, then reconcile.
+        const tempId = `temp-${Date.now()}`;
+        const optimistic: Message = {
+          id: tempId,
+          senderType: 'admin',
+          content: text,
+          messageType: 'text',
+          status: 'pending',
+          aiGenerated: false,
+          createdAt: new Date().toISOString(),
+        };
+        const quotedId = quoteMessage?.id;
+        setConv((prev) => (prev && prev.id === activeId ? { ...prev, messages: [...prev.messages, optimistic] } : prev));
         setQuoteMessage(null);
+        setComposer('');
+        try {
+          await api(`/conversations/${activeId}/messages`, {
+            method: 'POST',
+            body: JSON.stringify({ text, quotedMessageId: quotedId }),
+          });
+          await loadConv(activeId);
+        } catch (err) {
+          // Keep the message visible but mark it failed so the agent can retry.
+          setConv((prev) => (prev && prev.id === activeId ? { ...prev, messages: prev.messages.map((m) => (m.id === tempId ? { ...m, status: 'failed' } : m)) } : prev));
+          setSendError(err instanceof Error ? err.message : 'Failed to send message');
+        }
       }
-      setComposer('');
-      await loadConv(activeId);
     } finally {
       setSending(false);
+    }
+  }
+
+  function fillTokens(content: string) {
+    const name = active?.customer.name || '';
+    const phone = active?.customer.phoneNumber || '';
+    return content.replace(/\{\{\s*name\s*\}\}/gi, name).replace(/\{\{\s*phone\s*\}\}/gi, phone);
+  }
+
+  function applyQuickReply(content: string) {
+    const filled = fillTokens(content);
+    setComposer((prev) => (prev.trim() ? `${prev} ${filled}` : filled));
+    setShowQuickReplies(false);
+  }
+
+  async function scheduleFollowUp() {
+    if (!activeId || !scheduleAt || !scheduleMsg.trim()) return;
+    setScheduleErr(null);
+    try {
+      await api('/follow-ups', {
+        method: 'POST',
+        body: JSON.stringify({
+          conversationId: activeId,
+          scheduledAt: new Date(scheduleAt).toISOString(),
+          message: scheduleMsg.trim(),
+        }),
+      });
+      setScheduleMsg('');
+      setScheduleAt('');
+      setShowSchedule(false);
+      await loadFollowUps(activeId);
+    } catch (err) {
+      setScheduleErr(err instanceof Error ? err.message : 'Failed to schedule message');
+    }
+  }
+
+  async function cancelFollowUp(id: string) {
+    try {
+      await api(`/follow-ups/${id}/cancel`, { method: 'PATCH' });
+      if (activeId) await loadFollowUps(activeId);
+    } catch {
+      /* ignore */
     }
   }
 
@@ -461,7 +623,7 @@ function InboxInner() {
     <AppLayout>
       <div className="flex h-full min-h-0 flex-1 bg-gray-100 p-3 dark:bg-gray-950">
         {/* ── Panel 1: queue ──────────────────────────────────────── */}
-        <section className="flex w-72 shrink-0 flex-col rounded-l border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 xl:w-80">
+        <section className={cn('w-full shrink-0 flex-col rounded-l border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 md:flex md:w-72 xl:w-80', activeId ? 'hidden' : 'flex')}>
           <div className="flex h-14 items-center gap-2 border-b border-gray-100 px-3 dark:border-gray-800">
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
@@ -470,7 +632,7 @@ function InboxInner() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search conversations"
-                className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               />
             </div>
           </div>
@@ -577,7 +739,7 @@ function InboxInner() {
         </section>
 
         {/* ── Panel 2: timeline + composer ───────────────────────────── */}
-        <section className="operations-surface flex min-w-0 flex-1 flex-col border-y border-gray-200 dark:border-gray-800">
+        <section className={cn('operations-surface relative min-w-0 flex-1 flex-col border-y border-gray-200 dark:border-gray-800', activeId ? 'flex' : 'hidden md:flex')}>
           {!active ? (
             <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
               <InboxIcon className="mb-2 h-7 w-7 text-gray-300" strokeWidth={1.5} aria-hidden="true" />
@@ -589,6 +751,14 @@ function InboxInner() {
             <>
               <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 dark:border-gray-800 dark:bg-gray-900">
                 <div className="flex min-w-0 items-center gap-3">
+                  <button
+                    onClick={() => setActiveId(null)}
+                    className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 md:hidden"
+                    title="Back to conversations"
+                    aria-label="Back to conversations"
+                  >
+                    <ArrowLeft className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                  </button>
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-[13px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                     {initials(active.customer.name, active.customer.phoneNumber)}
                   </span>
@@ -606,6 +776,13 @@ function InboxInner() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <span
+                    className="flex items-center gap-1 text-[11px] font-medium text-gray-400"
+                    title={liveConnected ? 'Realtime connected' : 'Realtime reconnecting…'}
+                  >
+                    <span className={cn('h-2 w-2 rounded-full', liveConnected ? 'bg-channel-500' : 'animate-pulse bg-review-500')} />
+                    <span className="hidden sm:inline">{liveConnected ? 'Live' : 'Reconnecting…'}</span>
+                  </span>
                   <Badge tone="hermes">
                     <Workflow className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
                     {aiModeLabel[active.aiMode] ?? active.aiMode}
@@ -628,6 +805,10 @@ function InboxInner() {
                   <Button variant="outline" size="sm" onClick={escalate} disabled={busy}>
                     <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                     Escalate
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => { setShowSchedule(true); setScheduleErr(null); }}>
+                    <CalendarClock className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    Schedule
                   </Button>
                 </div>
               </div>
@@ -696,6 +877,10 @@ function InboxInner() {
                         )}
                         <div className={cn('mt-1 flex items-center justify-between gap-2 text-[10px] tabular-nums', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>
                           <div className="flex items-center gap-2">
+                            {m.id.startsWith('temp-') ? (
+                              <span>{m.status === 'failed' ? 'Not sent' : 'Sending…'}</span>
+                            ) : (
+                            <>
                             <button type="button" onClick={() => quoteReply(m)} className="hover:underline">Reply</button>
                             {!isCustomer && !m.deletedAt && <button type="button" onClick={() => editSentMessage(m)} className="hover:underline">Edit</button>}
                             {!m.deletedAt && <button type="button" onClick={() => deleteMessage(m.id)} className="hover:underline">Revoke</button>}
@@ -716,8 +901,13 @@ function InboxInner() {
                               </span>
                             )}
                             {m.reactions && Object.keys(m.reactions).length > 0 && <button type="button" onClick={() => clearReaction(m.id)} className="hover:underline">Clear reaction</button>}
+                            </>
+                            )}
                           </div>
-                          <span>{clockTime(m.createdAt)}</span>
+                          <span className="flex items-center gap-1">
+                            {clockTime(m.createdAt)}
+                            {!isCustomer && <StatusTick status={m.status} />}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -726,6 +916,12 @@ function InboxInner() {
               </div>
 
               <div className="shrink-0 border-t border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+                {sendError && (
+                  <div className="mb-2 flex items-center justify-between rounded border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700 dark:border-danger-800 dark:bg-danger-900/30 dark:text-danger-300">
+                    <span>{sendError}</span>
+                    <button type="button" onClick={() => setSendError(null)} className="font-semibold">Dismiss</button>
+                  </div>
+                )}
                 {(quoteMessage || editingMessage) && (
                   <div className="mb-2 flex items-center justify-between rounded border border-hermes-200 bg-hermes-50 px-3 py-2 text-xs text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-300">
                     <span>
@@ -735,6 +931,38 @@ function InboxInner() {
                   </div>
                 )}
                 <div className="flex items-end gap-2">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      title="Quick replies"
+                      onClick={() => setShowQuickReplies((v) => !v)}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    >
+                      <Zap className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    </button>
+                    {showQuickReplies && (
+                      <div className="absolute bottom-11 left-0 z-20 max-h-72 w-72 overflow-y-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                        {quickReplies.length === 0 ? (
+                          <p className="px-3 py-4 text-center text-xs text-gray-400">No quick replies. Add them under Templates.</p>
+                        ) : (
+                          quickReplies.map((q) => (
+                            <button
+                              key={q.id}
+                              type="button"
+                              onClick={() => applyQuickReply(q.content)}
+                              className="block w-full rounded px-2.5 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-800"
+                            >
+                              <span className="flex items-center gap-1.5 text-[12px] font-semibold text-gray-800 dark:text-gray-100">
+                                {q.shortcut && <span className="rounded bg-hermes-50 px-1 text-[10px] text-hermes-700 dark:bg-hermes-900/40 dark:text-hermes-300">/{q.shortcut}</span>}
+                                {q.title}
+                              </span>
+                              <span className="mt-0.5 block truncate text-[11px] text-gray-500 dark:text-gray-400">{q.content}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <button
                     type="button"
                     title="Attach media"
@@ -762,7 +990,16 @@ function InboxInner() {
                     ref={composerRef}
                     rows={1}
                     value={composer}
-                    onChange={(e) => setComposer(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      // Expand "/shortcut " into the quick reply content as you type.
+                      const m = v.match(/^\/(\S+)\s$/);
+                      if (m) {
+                        const qr = quickReplies.find((q) => q.shortcut?.toLowerCase() === m[1].toLowerCase());
+                        if (qr) { setComposer(fillTokens(qr.content)); return; }
+                      }
+                      setComposer(v);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
@@ -770,7 +1007,7 @@ function InboxInner() {
                       }
                     }}
                     placeholder={editingMessage ? 'Edit sent message through Baileys' : quoteMessage ? 'Reply with quoted message context' : 'Write a reply, or edit the AI draft above'}
-                    className="scrollbar-thin max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    className="scrollbar-thin max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                   />
                   <Button size="md" onClick={sendMessage} disabled={sending || !composer.trim()}>
                     <Send className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -778,6 +1015,54 @@ function InboxInner() {
                   </Button>
                 </div>
               </div>
+
+              {showSchedule && (
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowSchedule(false)}>
+                  <div role="dialog" aria-modal="true" aria-labelledby="schedule-title" className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-700 dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+                    <h3 id="schedule-title" className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      <CalendarClock className="h-4 w-4 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
+                      Schedule a message
+                    </h3>
+                    <label htmlFor="schedule-at" className="mb-1 block text-xs text-gray-500 dark:text-gray-400">Send at</label>
+                    <input
+                      id="schedule-at"
+                      type="datetime-local"
+                      autoFocus
+                      value={scheduleAt}
+                      onChange={(e) => setScheduleAt(e.target.value)}
+                      className="mb-3 w-full rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-[13px] text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    />
+                    <label htmlFor="schedule-msg" className="mb-1 block text-xs text-gray-500 dark:text-gray-400">Message</label>
+                    <textarea
+                      id="schedule-msg"
+                      rows={3}
+                      value={scheduleMsg}
+                      onChange={(e) => setScheduleMsg(e.target.value)}
+                      placeholder="Message to send automatically at the scheduled time"
+                      className="mb-2 w-full resize-none rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-[13px] text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    />
+                    {scheduleErr && <p className="mb-2 text-xs text-danger-600">{scheduleErr}</p>}
+                    {followUps.filter((f) => f.status === 'scheduled').length > 0 && (
+                      <div className="mb-3 space-y-1 border-t border-gray-100 pt-2 dark:border-gray-800">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Scheduled</p>
+                        {followUps.filter((f) => f.status === 'scheduled').map((f) => (
+                          <div key={f.id} className="flex items-center justify-between gap-2 text-[12px] text-gray-600 dark:text-gray-300">
+                            <span className="min-w-0 flex-1 truncate">{new Date(f.scheduledAt).toLocaleString()} — {f.messageTemplate}</span>
+                            <button type="button" onClick={() => cancelFollowUp(f.id)} className="shrink-0 text-danger-600 hover:underline">Cancel</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setShowSchedule(false)}>Close</Button>
+                      <Button size="sm" onClick={scheduleFollowUp} disabled={!scheduleAt || !scheduleMsg.trim()}>
+                        <CalendarClock className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                        Schedule
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </section>
