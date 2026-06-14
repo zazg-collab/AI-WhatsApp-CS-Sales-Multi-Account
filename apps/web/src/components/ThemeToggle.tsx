@@ -31,7 +31,7 @@ export function ThemeToggle() {
       onClick={toggle}
       title={label}
       aria-label={label}
-      className="flex w-full items-center justify-center gap-2.5 rounded-md px-2 py-2 text-[13px] font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100 lg:justify-start lg:px-2.5"
+      className="flex w-full items-center justify-center gap-2.5 rounded-md px-2 py-2 text-[13px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50 lg:justify-start lg:px-2.5"
     >
       {dark ? (
         <Sun className="h-[17px] w-[17px] shrink-0" strokeWidth={1.75} aria-hidden="true" />

@@ -1,17 +1,21 @@
 import type { Config } from 'tailwindcss';
 
 /**
- * Hermes Control Center — calm enterprise operations language.
+ * Hermes — SalesOps Premium / WhatsApp Sales Control Desk.
  *
- * Palette intent (see product brief):
- *  - neutral slate backgrounds + white surfaces, subtle borders, minimal shadow
- *  - `hermes` deep indigo  → the AI / supervisor accent (primary actions, AI presence)
- *  - `channel` WhatsApp green → ONLY channel indicators + success states
+ * Palette intent (see premium-salesops-uiux-theme skill):
+ *  - clean white workspace on a soft slate background, subtle borders, minimal shadow
+ *  - `hermes` teal  → primary actions, active nav, focus, "operate now" accent
+ *  - `accent` blue  → AI / informational presence (drafts, AI-generated, hints)
+ *  - `channel` WhatsApp green → channel indicators + success states
  *  - `review` amber → review-required states
  *  - `danger` red → blocked / failed states
+ *  - `critical` deep red → escalated / takeover-required states
  *
- * We retint Tailwind's `gray` to a cool slate so every existing `gray-*`
- * usage in older pages shifts to the new neutral family at once.
+ * The `hermes` scale is intentionally named (not `teal`) so retinting it here
+ * re-themes every existing `bg-hermes-*` / `text-hermes-*` usage at once with
+ * no class renames. We also retint Tailwind's `gray` to a cool slate so every
+ * `gray-*` usage shifts to the SalesOps neutral family in one place.
  */
 const config: Config = {
   content: ['./src/**/*.{ts,tsx}'],
@@ -33,19 +37,33 @@ const config: Config = {
           900: '#0f172a',
           950: '#020617',
         },
-        // Deep indigo — Hermes AI / supervisor accent.
+        // Teal — primary actions, active nav, focus. The SalesOps "operate" accent.
+        // (Named `hermes`, not `teal`, so retinting re-themes the whole app.)
         hermes: {
-          50: '#eef2ff',
-          100: '#e0e7ff',
-          200: '#c7d2fe',
-          300: '#a5b4fc',
-          400: '#818cf8',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81',
-          950: '#1e1b4b',
+          50: '#f0fdfa',
+          100: '#ccfbf1',
+          200: '#99f6e4',
+          300: '#5eead4',
+          400: '#2dd4bf',
+          500: '#14b8a6',
+          600: '#0d9488',
+          700: '#0f766e',
+          800: '#115e59',
+          900: '#134e4a',
+          950: '#042f2e',
+        },
+        // Blue — AI / informational presence (drafts, AI-generated, hints).
+        accent: {
+          50: '#eff6ff',
+          100: '#dbeafe',
+          200: '#bfdbfe',
+          300: '#93c5fd',
+          400: '#60a5fa',
+          500: '#3b82f6',
+          600: '#2563eb',
+          700: '#1d4ed8',
+          800: '#1e40af',
+          900: '#1e3a8a',
         },
         // WhatsApp channel green — restricted to channel + success usage.
         channel: {
@@ -75,6 +93,17 @@ const config: Config = {
           500: '#ef4444',
           600: '#dc2626',
           700: '#b91c1c',
+          900: '#450a0a',
+        },
+        // Escalated / takeover-required (deep red) — one step past `danger`.
+        critical: {
+          50: '#fef2f2',
+          100: '#fee2e2',
+          200: '#fecaca',
+          400: '#dc2626',
+          500: '#b91c1c',
+          600: '#991b1b',
+          700: '#7f1d1d',
           900: '#450a0a',
         },
         // Back-compat: older pages reference `wa.accent` (channel green).
