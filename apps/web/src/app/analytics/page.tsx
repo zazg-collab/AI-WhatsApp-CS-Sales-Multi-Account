@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
 import { api, downloadFile } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
@@ -52,29 +52,30 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const [s, lf, mv, ai] = await Promise.all([
-          api<Summary>('/dashboard/summary'),
-          api<LeadFunnelItem[]>('/dashboard/lead-funnel'),
-          api<MessageVolumeItem[]>('/dashboard/message-volume?days=7'),
-          api<AiModeItem[]>('/dashboard/ai-mode-breakdown'),
-        ]);
-        setSummary(s);
-        setLeadFunnel(lf);
-        setMessageVolume(mv);
-        setAiModeBreakdown(ai);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load analytics from API');
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [s, lf, mv, ai] = await Promise.all([
+        api<Summary>('/dashboard/summary'),
+        api<LeadFunnelItem[]>('/dashboard/lead-funnel'),
+        api<MessageVolumeItem[]>('/dashboard/message-volume?days=7'),
+        api<AiModeItem[]>('/dashboard/ai-mode-breakdown'),
+      ]);
+      setSummary(s);
+      setLeadFunnel(lf);
+      setMessageVolume(mv);
+      setAiModeBreakdown(ai);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal memuat analitik dari API.');
+    } finally {
+      setLoading(false);
     }
-    load();
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const maxVolume = Math.max(...messageVolume.map((d) => d.count), 1);
 
@@ -97,45 +98,62 @@ export default function AnalyticsPage() {
   const modeLabels: Record<string, string> = {
     ai_on: 'AI ON',
     ai_off: 'AI OFF',
-    ai_draft: 'Draft',
-    ai_supervised: 'Supervised',
-    ai_paused: 'Paused',
+    ai_draft: 'Draf',
+    ai_supervised: 'Diawasi',
+    ai_paused: 'Dijeda',
   };
 
   return (
     <AppLayout>
-      <PageHeader title="Analytics" subtitle="Sales and conversation trends">
+      <PageHeader title="Analytics" subtitle="Tren penjualan dan percakapan">
         <Button variant="outline" size="sm" onClick={() => exportCsv('/customers/export', 'customers.csv')}>
           <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          Customers CSV
+          Ekspor pelanggan CSV
         </Button>
         <Button variant="outline" size="sm" onClick={() => exportCsv('/conversations/export', 'conversations.csv')}>
           <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          Conversations CSV
+          Ekspor percakapan CSV
         </Button>
       </PageHeader>
 
       <div className="scrollbar-thin flex-1 overflow-y-auto p-5">
         {loading ? (
-          <p className="text-sm text-gray-500">Loading…</p>
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <div key={n} className="h-[72px] rounded animate-shimmer" />
+              ))}
+            </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {[1, 2, 3, 4].map((n) => (
+                <div key={n} className="h-48 rounded animate-shimmer" />
+              ))}
+            </div>
+          </div>
         ) : error ? (
-          <Card className="border-danger-200 bg-danger-50 p-4 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">
-            {error}
+          <Card className="border-danger-200 bg-danger-50 p-4 dark:border-danger-700/40 dark:bg-danger-900/20">
+            <p className="text-sm font-medium text-danger-700 dark:text-danger-400">{error}</p>
+            <p className="mt-1 text-xs text-danger-600/80 dark:text-danger-400/80">
+              Data analitik tidak dapat dimuat. Periksa koneksi API lalu coba lagi.
+            </p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={load}>
+              Coba lagi
+            </Button>
           </Card>
         ) : (
           <>
             {summary && (
               <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-                <SummaryCard label="Total conversations" value={summary.totalConversations} />
-                <SummaryCard label="Waiting on admin" value={summary.activeConversations} tone="text-review-600" />
-                <SummaryCard label="AI on" value={summary.aiOnConversations} tone="text-channel-700" />
-                <SummaryCard label="Pending follow-ups" value={summary.pendingFollowUps} tone="text-review-600" />
-                <SummaryCard label="Messages (24h)" value={summary.messagesLast24h} tone="text-hermes-600" />
+                <SummaryCard label="Total percakapan" value={summary.totalConversations} />
+                <SummaryCard label="Menunggu admin" value={summary.activeConversations} tone="text-review-600" />
+                <SummaryCard label="AI aktif" value={summary.aiOnConversations} tone="text-channel-700" />
+                <SummaryCard label="Follow-up tertunda" value={summary.pendingFollowUps} tone="text-review-600" />
+                <SummaryCard label="Pesan (24 jam)" value={summary.messagesLast24h} tone="text-hermes-600" />
               </div>
             )}
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <Panel title="Lead funnel">
+              <Panel title="Corong lead">
                 {leadFunnel.length === 0 ? (
                   <Empty />
                 ) : (
@@ -157,7 +175,7 @@ export default function AnalyticsPage() {
                 )}
               </Panel>
 
-              <Panel title="AI mode breakdown">
+              <Panel title="Distribusi mode AI">
                 {aiModeBreakdown.length === 0 ? (
                   <Empty />
                 ) : (
@@ -175,7 +193,7 @@ export default function AnalyticsPage() {
                 )}
               </Panel>
 
-              <Panel title="Message volume — last 7 days" className="lg:col-span-2">
+              <Panel title="Volume pesan — 7 hari terakhir" className="lg:col-span-2">
                 {messageVolume.length === 0 ? (
                   <Empty />
                 ) : (
@@ -204,13 +222,13 @@ export default function AnalyticsPage() {
               </Panel>
 
               {summary && summary.topAccounts.length > 0 && (
-                <Panel title="Top accounts — last 7 days" className="lg:col-span-2">
+                <Panel title="Akun teraktif — 7 hari terakhir" className="lg:col-span-2">
                   <div className="space-y-1">
                     {summary.topAccounts.map((acc, i) => (
                       <div key={acc.id} className="flex items-center gap-3 rounded-md px-1 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50">
                         <span className="w-5 text-center text-xs tabular-nums text-gray-400">{i + 1}</span>
                         <span className="flex-1 text-gray-800 dark:text-gray-200">{acc.name}</span>
-                        <span className="tabular-nums text-gray-500 dark:text-gray-400">{acc.messageCount} msgs</span>
+                        <span className="tabular-nums text-gray-500 dark:text-gray-400">{acc.messageCount} pesan</span>
                       </div>
                     ))}
                   </div>
@@ -267,5 +285,5 @@ function Bar({ label, meta, pct, color }: { label: string; meta: string; pct: nu
 }
 
 function Empty() {
-  return <p className="text-sm text-gray-400">No data yet</p>;
+  return <p className="text-sm text-gray-400">Belum ada data untuk ditampilkan.</p>;
 }

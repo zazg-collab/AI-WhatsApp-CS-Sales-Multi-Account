@@ -30,14 +30,32 @@ interface DailyReport {
   reviewsByDecision: Record<string, number>;
 }
 
-type BadgeTone = 'success' | 'review' | 'danger';
+type BadgeTone = 'success' | 'review' | 'danger' | 'critical';
 
-// Risk levels map to the semantic severity scale.
+// Risk levels map to the semantic severity scale: higher risk reads hotter.
 const RISK_TONE: Record<string, BadgeTone> = {
   low: 'success',
   medium: 'review',
-  high: 'review',
-  critical: 'danger',
+  high: 'danger',
+  critical: 'critical',
+};
+
+// Hermes decisions carry consequence — escalations read as danger/critical,
+// draft/hold as review (amber), approve as success.
+const DECISION_TONE: Record<string, BadgeTone> = {
+  approve: 'success',
+  draft: 'review',
+  block: 'danger',
+  pause_ai: 'critical',
+  takeover_required: 'critical',
+};
+
+const DECISION_LABEL: Record<string, string> = {
+  approve: 'Disetujui',
+  draft: 'Tahan jadi draf',
+  block: 'Diblokir',
+  pause_ai: 'AI dijeda',
+  takeover_required: 'Ambil alih',
 };
 
 export default function HermesPage() {
@@ -47,6 +65,7 @@ export default function HermesPage() {
   const [chat, setChat] = useState<{ q: string; a: string }[]>([]);
   const [asking, setAsking] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   async function ask(e: React.FormEvent) {
     e.preventDefault();
@@ -61,7 +80,10 @@ export default function HermesPage() {
       });
       setChat((prev) => [...prev, { q, a: res.answer }]);
     } catch (err) {
-      setChat((prev) => [...prev, { q, a: err instanceof Error ? err.message : 'Failed to get answer' }]);
+      setChat((prev) => [
+        ...prev,
+        { q, a: err instanceof Error ? err.message : 'Hermes gagal menjawab. Coba lagi.' },
+      ]);
     } finally {
       setAsking(false);
     }
@@ -77,7 +99,13 @@ export default function HermesPage() {
       setAlerts(a);
       setReport(r);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to load Hermes review data from API');
+      setLoadError(
+        err instanceof Error
+          ? err.message
+          : 'Gagal memuat data pengawasan Hermes dari API.',
+      );
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -98,20 +126,39 @@ export default function HermesPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Hermes Review" subtitle="AI supervision, risk alerts, and daily report" />
+      <PageHeader
+        title="Hermes Review"
+        subtitle="Pengawasan AI, peringatan risiko, dan laporan harian"
+      />
 
       <div className="scrollbar-thin mx-auto w-full max-w-4xl flex-1 overflow-y-auto p-5">
         {loadError && (
-          <Card className="mb-5 border-danger-200 bg-danger-50 p-4 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">
-            {loadError}
+          <Card className="mb-5 border-danger-200 bg-danger-50 p-4 dark:border-danger-700/40 dark:bg-danger-900/20">
+            <p className="text-sm font-medium text-danger-700 dark:text-danger-400">{loadError}</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={load}>
+              Coba lagi
+            </Button>
           </Card>
         )}
+
+        {loading && !loadError && (
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} className="h-[68px] rounded animate-shimmer" />
+            ))}
+          </div>
+        )}
+
         {!loadError && report && (
           <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Messages today" value={report.totalMessages} />
-            <Stat label="New customers" value={report.newCustomers} />
-            <Stat label="Hot leads" value={report.hotLeads} />
-            <Stat label="Held / blocked" value={heldOrBlocked} tone="text-danger-600" />
+            <Stat label="Pelanggan baru" value={report.newCustomers} />
+            <Stat label="Lead panas" value={report.hotLeads} />
+            <Stat
+              label="Ditahan / diblokir"
+              value={heldOrBlocked}
+              tone={heldOrBlocked > 0 ? 'text-danger-600' : undefined}
+            />
           </div>
         )}
 
@@ -119,10 +166,15 @@ export default function HermesPage() {
         <Card className="mb-5 p-4">
           <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
             <ShieldCheck className="h-4 w-4 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
-            Ask Hermes
-            <Badge tone="hermes">Supervisor assistant</Badge>
+            Tanya Hermes
+            <Badge tone="hermes">Asisten supervisor</Badge>
           </h2>
           <div className="mb-3 space-y-3">
+            {chat.length === 0 && !asking && (
+              <p className="text-sm text-gray-400">
+                Tanyakan kondisi lintas-bot, mis. bot mana yang paling bermasalah hari ini.
+              </p>
+            )}
             {chat.map((c, i) => (
               <div key={i} className="space-y-1">
                 <p className="flex items-start gap-1.5 text-sm text-gray-500 dark:text-gray-400">
@@ -134,60 +186,76 @@ export default function HermesPage() {
                 </p>
               </div>
             ))}
-            {asking && <p className="text-sm text-gray-400">Hermes is thinking…</p>}
+            {asking && <p className="text-sm text-gray-400">Hermes sedang menganalisis…</p>}
           </div>
           <form onSubmit={ask} className="flex gap-2">
             <input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="e.g. Which bot is most problematic today?"
+              aria-label="Pertanyaan untuk Hermes"
+              placeholder="mis. Bot mana yang paling bermasalah hari ini?"
               className="h-9 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
             />
             <Button type="submit" size="md" disabled={asking}>
               <Send className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-              Ask
+              Tanya
             </Button>
           </form>
         </Card>
 
-        {!loadError && (
+        {loading && !loadError && (
+          <div className="space-y-2">
+            {[1, 2].map((n) => (
+              <div key={n} className="h-24 rounded animate-shimmer" />
+            ))}
+          </div>
+        )}
+
+        {!loadError && !loading && (
           <>
-        <h2 className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-          Active alerts
-          <Badge tone={alerts.length > 0 ? 'review' : 'neutral'}>{alerts.length}</Badge>
-        </h2>
-        <ul className="space-y-2">
-          {alerts.map((a) => (
-            <li key={a.id}>
-              <Card className="p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-gray-900 dark:text-gray-100">
-                    {a.conversation?.customer?.name ?? a.conversation?.customer?.phoneNumber ?? 'Customer'}
-                  </span>
-                  <Badge tone={RISK_TONE[a.riskLevel] ?? 'neutral'}>
-                    <TriangleAlert className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-                    {a.riskLevel} · {a.decision}
-                  </Badge>
-                </div>
-                <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{a.reason}</p>
-                {a.recommendation && (
-                  <p className="mt-1 text-xs text-gray-500">Recommendation: {a.recommendation}</p>
-                )}
-                <p className="mt-1 text-xs tabular-nums text-gray-400">
-                  confidence {a.confidenceScore} · risk {a.riskScore}
-                </p>
-              </Card>
-            </li>
-          ))}
-          {alerts.length === 0 && (
-            <li>
-              <Card className="flex flex-col items-center justify-center py-12 text-center">
-                <ShieldCheck className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
-                <p className="text-sm text-gray-400">No active alerts.</p>
-              </Card>
-            </li>
-          )}
-        </ul>
+            <h2 className="mb-2.5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+              Peringatan aktif
+              <Badge tone={alerts.length > 0 ? 'review' : 'neutral'}>{alerts.length}</Badge>
+            </h2>
+            <ul className="space-y-2">
+              {alerts.map((a) => (
+                <li key={a.id}>
+                  <Card className="p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
+                        {a.conversation?.customer?.name ??
+                          a.conversation?.customer?.phoneNumber ??
+                          'Pelanggan'}
+                      </span>
+                      <Badge tone={DECISION_TONE[a.decision] ?? RISK_TONE[a.riskLevel] ?? 'neutral'}>
+                        <TriangleAlert className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                        {a.riskLevel} · {DECISION_LABEL[a.decision] ?? a.decision}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{a.reason}</p>
+                    {a.recommendation && (
+                      <p className="mt-1 text-xs text-gray-500">Rekomendasi: {a.recommendation}</p>
+                    )}
+                    <p className="mt-1 text-xs tabular-nums text-gray-400">
+                      keyakinan {a.confidenceScore} · risiko {a.riskScore}
+                    </p>
+                  </Card>
+                </li>
+              ))}
+              {alerts.length === 0 && (
+                <li>
+                  <Card className="flex flex-col items-center justify-center py-12 text-center">
+                    <ShieldCheck className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+                    <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                      Tidak ada peringatan aktif.
+                    </p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      Semua percakapan dalam batas aman. Hermes akan memberi tahu saat ada risiko.
+                    </p>
+                  </Card>
+                </li>
+              )}
+            </ul>
           </>
         )}
       </div>
