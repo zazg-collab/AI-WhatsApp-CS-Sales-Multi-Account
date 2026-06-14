@@ -1,6 +1,12 @@
 import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
 import { GeistMono } from 'geist/font/mono';
 import './globals.css';
+
+// The design language calls for Inter as the UI typeface. Load it here and
+// expose it as a CSS variable so Tailwind's `font-sans` resolves to it
+// (tailwind.config.ts references `var(--font-inter)`).
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
 
 
 export const metadata: Metadata = {
@@ -14,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={GeistMono.variable} suppressHydrationWarning>
+    <html lang="en" className={`${inter.variable} ${GeistMono.variable}`} suppressHydrationWarning>
       <head>
         {/* Apply the saved theme before first paint to avoid a flash. Light is default. */}
         <script

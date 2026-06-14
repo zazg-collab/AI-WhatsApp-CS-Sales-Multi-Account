@@ -216,6 +216,7 @@ function InboxInner() {
   const [startResult, setStartResult] = useState<string | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const reasoningRef = useRef<HTMLDivElement>(null);
   const auditRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -376,20 +377,20 @@ function InboxInner() {
     setComposer(m.content ?? '');
     setQuoteMessage(null);
     setEditingMessage(null);
-    timelineRef.current?.querySelector('textarea')?.focus();
+    composerRef.current?.focus();
   };
 
   const quoteReply = (m: Message) => {
     setQuoteMessage(m);
     setEditingMessage(null);
-    timelineRef.current?.querySelector('textarea')?.focus();
+    composerRef.current?.focus();
   };
 
   const editSentMessage = (m: Message) => {
     setEditingMessage(m);
     setQuoteMessage(null);
     setComposer(m.content ?? '');
-    timelineRef.current?.querySelector('textarea')?.focus();
+    composerRef.current?.focus();
   };
 
   const deleteMessage = (msgId: string) => act(() => api(`/conversations/${activeId}/messages/${msgId}`, { method: 'DELETE' }));
@@ -758,6 +759,7 @@ function InboxInner() {
                     }}
                   />
                   <textarea
+                    ref={composerRef}
                     rows={1}
                     value={composer}
                     onChange={(e) => setComposer(e.target.value)}
