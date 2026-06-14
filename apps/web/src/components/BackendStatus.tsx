@@ -41,7 +41,7 @@ export function BackendStatus() {
   }, []);
 
   const Icon = state === 'offline' ? Unplug : ServerCog;
-  const label = state === 'checking' ? 'Checking API' : state === 'online' ? 'API online' : 'API offline';
+  const label = state === 'checking' ? 'Cek API' : state === 'online' ? 'API aktif' : 'API mati';
 
   return (
     <span

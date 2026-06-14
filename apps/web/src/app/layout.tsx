@@ -4,8 +4,8 @@ import './globals.css';
 
 
 export const metadata: Metadata = {
-  title: 'Hermes — AI Sales & Customer Service Control Center',
-  description: 'Supervised, auditable AI operations center for multi-account WhatsApp.',
+  title: 'Hermes — Sales & CS Control Desk',
+  description: 'Pusat operasi AI yang tersupervisi dan terlacak untuk banyak akun WhatsApp.',
 };
 
 export default function RootLayout({
@@ -14,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={GeistMono.variable} suppressHydrationWarning>
+    <html lang="id" className={GeistMono.variable} suppressHydrationWarning>
       <head>
         {/* Apply the saved theme before first paint to avoid a flash. Light is default. */}
         <script
