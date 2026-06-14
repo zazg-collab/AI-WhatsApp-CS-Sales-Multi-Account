@@ -304,3 +304,15 @@ Phase 1 (build first):
 - AI draft generation: < 10s
 - Auto-reply sent: < 15s
 - Dashboard initial load: < 5s
+
+## Audit skills
+
+Two local audit skills live under `.agents/skills/` (registered in `skills-lock.json`):
+
+- **`fullstack-ai-slop-audit`** — backend + frontend + AI layer + security +
+  database + production readiness.
+- **`frontend-uiux-ai-slop-audit`** — frontend/UI-UX only: dashboards, landing
+  pages, forms, tables/lists, chat UI, microcopy, responsive behavior,
+  accessibility, and component-system quality. Use this before merging changes
+  that affect page layout, admin dashboards, chat/conversation UI, forms,
+  tables/lists, component systems, responsive behavior, accessibility, or microcopy.

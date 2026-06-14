@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { AppLayout } from '@/components/AppLayout';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { api, getToken } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -60,7 +61,7 @@ const statusTone: Record<string, BadgeTone> = {
 };
 
 const inputClass =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 function getRoleFromToken(): Role | null {
   if (typeof window === 'undefined') return null;
@@ -214,19 +215,10 @@ export default function CampaignsPage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 overflow-hidden">
+      <PageHeader title="Campaigns" subtitle="Controlled outbound WhatsApp messaging with approval & rate limits" />
+      <div className="flex flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         {/* Left: create + list */}
-        <aside className="scrollbar-thin w-96 shrink-0 overflow-y-auto border-r border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-          <div className="mb-4">
-            <h1 className="flex items-center gap-1.5 text-[15px] font-semibold tracking-tight text-gray-900 dark:text-gray-100">
-              <Megaphone className="h-[18px] w-[18px] text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
-              Campaigns
-            </h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Controlled messaging with approval, queue, rate limit, and audit.
-            </p>
-          </div>
-
+        <aside className="scrollbar-thin w-full shrink-0 overflow-y-auto border-b border-gray-200 bg-white p-4 md:w-96 md:border-b-0 md:border-r dark:border-gray-800 dark:bg-gray-900">
           {canManage && (
             <Card className="mb-4 space-y-3 p-4">
               <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Create campaign draft</h2>
@@ -398,7 +390,7 @@ export default function CampaignsPage() {
                 </div>
               </Card>
 
-              <section className="grid gap-3 md:grid-cols-5">
+              <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
                 {['pending', 'queued', 'sending', 'sent', 'failed'].map((status) => (
                   <Card key={status} className="p-4">
                     <div className="text-[11px] uppercase tracking-wider text-gray-400">{status}</div>

@@ -27,7 +27,7 @@ interface QuickReply {
 const EMPTY = { title: '', content: '', shortcut: '', whatsappAccountId: '' };
 
 const inputClass =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 export default function TemplatesPage() {
   const [items, setItems] = useState<QuickReply[]>([]);

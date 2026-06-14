@@ -56,6 +56,7 @@ export class AiController {
   }
 
   @ApiOperation({ summary: 'Analyze customer sentiment for a conversation' })
+  @Roles('admin', 'supervisor', 'owner')
   @Post('sentiment')
   sentiment(@Body() dto: ConversationRefDto) {
     return this.ai.analyzeSentiment(dto.conversationId);

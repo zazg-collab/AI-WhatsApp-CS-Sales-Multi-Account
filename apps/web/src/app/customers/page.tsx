@@ -49,7 +49,7 @@ const stageTone: Record<LeadStage, 'hermes' | 'review' | 'danger'> = {
 };
 
 const inputClass =
-  'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 function getRoleFromToken(): Role | null {
   if (typeof window === 'undefined') return null;
@@ -84,6 +84,9 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 50;
 
   const canBulkEdit = role === 'owner' || role === 'supervisor' || role === 'admin';
   const canLoadAdmins = role === 'owner' || role === 'supervisor';
@@ -98,15 +101,23 @@ export default function CustomersPage() {
       if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
       if (stageFilter) params.set('stage', stageFilter);
       if (tagFilter.trim()) params.set('tag', tagFilter.trim());
-      const query = params.toString();
-      const data = await api<Customer[]>(`/customers${query ? `?${query}` : ''}`);
-      setCustomers(data);
-      setSelectedIds((current) => current.filter((id) => data.some((customer) => customer.id === id)));
+      params.set('page', String(page));
+      params.set('limit', String(pageSize));
+      const data = await api<{ items: Customer[]; total: number }>(`/customers?${params.toString()}`);
+      const items = data.items ?? [];
+      setCustomers(items);
+      setTotal(data.total ?? items.length);
+      setSelectedIds((current) => current.filter((id) => items.some((customer) => customer.id === id)));
     } catch (err) {
       setToast(err instanceof Error ? err.message : 'Failed to load customers');
     } finally {
       setLoading(false);
     }
+  }, [debouncedSearch, stageFilter, tagFilter, page]);
+
+  // Reset to the first page whenever filters change.
+  useEffect(() => {
+    setPage(1);
   }, [debouncedSearch, stageFilter, tagFilter]);
 
   useEffect(() => {
@@ -346,6 +357,22 @@ export default function CustomersPage() {
                 </tbody>
               </table>
             </Card>
+          )}
+
+          {total > pageSize && (
+            <div className="flex items-center justify-between gap-3 text-sm text-gray-500 dark:text-gray-400">
+              <span className="tabular-nums">
+                {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                  Previous
+                </Button>
+                <Button variant="outline" size="sm" disabled={page * pageSize >= total || loading} onClick={() => setPage((p) => p + 1)}>
+                  Next
+                </Button>
+              </div>
+            </div>
           )}
         </div>
       </div>

@@ -25,7 +25,7 @@ interface Item {
 }
 
 const inputClass =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 export default function KnowledgePage() {
   const [bases, setBases] = useState<Base[]>([]);
@@ -130,14 +130,14 @@ export default function KnowledgePage() {
     <AppLayout>
       <PageHeader title="Knowledge Base" subtitle="Sources that ground the AI's answers" />
 
-      <div className="scrollbar-thin flex flex-1 gap-5 overflow-y-auto p-5">
+      <div className="scrollbar-thin flex flex-1 flex-col gap-5 overflow-y-auto p-5 md:flex-row">
         {error && (
           <Card className="fixed right-5 top-20 z-20 border-danger-200 bg-danger-50 p-3 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">
             {error}
           </Card>
         )}
         {/* Bases list */}
-        <aside className="w-64 shrink-0 space-y-4">
+        <aside className="w-full shrink-0 space-y-4 md:w-64">
           <Card className="p-3">
             <form onSubmit={createBase} className="space-y-2">
               <input
@@ -185,8 +185,8 @@ export default function KnowledgePage() {
                   Import knowledge
                 </h2>
                 <p className="mb-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                  Upload PDF, Word, Excel, CSV, TXT, Markdown, HTML, or pull from a public web
-                  page / file URL. Content is extracted into active items, split when large.
+                  Upload PDF, Word (.docx), Excel, CSV, TXT, Markdown, HTML, or pull from a public
+                  web page / file URL. Content is extracted into active items, split when large.
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <label

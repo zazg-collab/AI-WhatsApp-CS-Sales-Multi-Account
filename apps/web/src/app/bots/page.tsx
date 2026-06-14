@@ -63,7 +63,7 @@ interface PersonaFormData {
 // ── Shared styles ────────────────────────────────────────────────────────────────
 
 const inputClass =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 const labelClass = 'mb-1 block text-xs text-gray-500';
 
@@ -96,10 +96,21 @@ function Overlay({ children }: { children: React.ReactNode }) {
 
 // ── PersonaModal ───────────────────────────────────────────────────────────────
 
+function useEscapeToClose(onClose: () => void) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+}
+
 function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Persona) => void }) {
   const [form, setForm] = useState<PersonaFormData>({ name: '', soulMd: '', tone: '', style: '', rules: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  useEscapeToClose(onClose);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -191,6 +202,8 @@ function BotModal({
   const [error, setError] = useState<string | null>(null);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [localPersonas, setLocalPersonas] = useState(personas);
+  // Persona modal handles its own Escape; only bind here when it's not open.
+  useEscapeToClose(showPersonaModal ? () => {} : onClose);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

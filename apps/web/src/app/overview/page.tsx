@@ -208,7 +208,7 @@ export default function OverviewPage() {
           <>
         {/* Attention queues */}
         <section aria-labelledby="queues-h">
-          <h2 id="queues-h" className="mb-3 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-400">
+          <h2 id="queues-h" className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
             Attention required
           </h2>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
