@@ -48,6 +48,13 @@ const stageTone: Record<LeadStage, 'hermes' | 'review' | 'danger'> = {
   very_hot: 'danger',
 };
 
+const stageLabel: Record<LeadStage, string> = {
+  cold: 'Cold',
+  warm: 'Warm',
+  hot: 'Hot',
+  very_hot: 'Very Hot',
+};
+
 const inputClass =
   'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
@@ -103,7 +110,7 @@ export default function CustomersPage() {
       setCustomers(data);
       setSelectedIds((current) => current.filter((id) => data.some((customer) => customer.id === id)));
     } catch (err) {
-      setToast(err instanceof Error ? err.message : 'Failed to load customers');
+      setToast(err instanceof Error ? err.message : 'Gagal memuat data pelanggan dari API. Coba muat ulang.');
     } finally {
       setLoading(false);
     }
@@ -154,7 +161,7 @@ export default function CustomersPage() {
     if (bulkNote.trim()) payload.note = bulkNote.trim();
 
     if (Object.keys(payload).length === 1) {
-      setToast('Select at least one bulk action.');
+      setToast('Pilih minimal satu aksi massal sebelum menerapkan.');
       return;
     }
 
@@ -164,7 +171,7 @@ export default function CustomersPage() {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      setToast(`${result.updatedCount} customers updated.`);
+      setToast(`${result.updatedCount} pelanggan berhasil diperbarui.`);
       setBulkStage('');
       setBulkTags('');
       setAssignedAdminId('');
@@ -172,7 +179,7 @@ export default function CustomersPage() {
       setSelectedIds([]);
       await loadCustomers();
     } catch (err) {
-      setToast(err instanceof Error ? err.message : 'Bulk action failed');
+      setToast(err instanceof Error ? err.message : 'Aksi massal gagal diterapkan. Coba lagi.');
     } finally {
       setSubmitting(false);
     }
@@ -182,8 +189,8 @@ export default function CustomersPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Contacts" subtitle="Bulk-assign stage, tags, admin, and internal notes">
-        <Badge tone="neutral">{customers.length} loaded</Badge>
+      <PageHeader title="Contacts" subtitle="Atur massal stage lead, tag, admin penanggung jawab, dan catatan internal CRM">
+        <Badge tone="neutral">{customers.length} pelanggan dimuat</Badge>
       </PageHeader>
 
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -200,11 +207,17 @@ export default function CustomersPage() {
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search name or number…"
+                aria-label="Cari pelanggan berdasarkan nama atau nomor"
                 className={`${inputClass} w-full pl-8`}
               />
             </div>
-            <select value={stageFilter} onChange={(e) => setStageFilter(e.target.value)} className={inputClass}>
-              <option value="">All stages</option>
+            <select
+              value={stageFilter}
+              onChange={(e) => setStageFilter(e.target.value)}
+              aria-label="Filter berdasarkan stage lead"
+              className={inputClass}
+            >
+              <option value="">Semua stage</option>
               {stages.map((stage) => (
                 <option key={stage.value} value={stage.value}>{stage.label}</option>
               ))}
@@ -212,12 +225,13 @@ export default function CustomersPage() {
             <input
               value={tagFilter}
               onChange={(e) => setTagFilter(e.target.value)}
-              placeholder="Filter tag"
+              placeholder="Filter tag…"
+              aria-label="Filter berdasarkan tag"
               className={inputClass}
             />
             <Button variant="outline" size="md" onClick={loadCustomers}>
               <RefreshCw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-              Refresh
+              Muat ulang
             </Button>
           </div>
         </section>
@@ -226,12 +240,17 @@ export default function CustomersPage() {
         {canBulkEdit && (
           <section className="border-b border-gray-200 bg-gray-50 px-5 py-3 dark:border-gray-800 dark:bg-gray-950">
             <div className="mb-2 text-xs text-gray-500 dark:text-gray-400">
-              <span className="font-semibold text-hermes-600">{selectedCount}</span> selected
-              <span className="ml-2 text-gray-400">Up to 100 customers per bulk action.</span>
+              <span className="font-semibold text-hermes-600">{selectedCount}</span> pelanggan dipilih
+              <span className="ml-2 text-gray-400">Maksimal 100 pelanggan per aksi massal.</span>
             </div>
             <div className="grid gap-2 xl:grid-cols-[150px_1fr_140px_220px_1fr_auto]">
-              <select value={bulkStage} onChange={(e) => setBulkStage(e.target.value)} className={inputClass}>
-                <option value="">Stage…</option>
+              <select
+                value={bulkStage}
+                onChange={(e) => setBulkStage(e.target.value)}
+                aria-label="Ubah stage lead untuk pelanggan terpilih"
+                className={inputClass}
+              >
+                <option value="">Ubah stage…</option>
                 {stages.map((stage) => (
                   <option key={stage.value} value={stage.value}>{stage.label}</option>
                 ))}
@@ -239,17 +258,28 @@ export default function CustomersPage() {
               <input
                 value={bulkTags}
                 onChange={(e) => setBulkTags(e.target.value)}
-                placeholder="Tags: vip, repeat, promo"
+                placeholder="Tag: vip, repeat, promo"
+                aria-label="Tag untuk aksi massal, pisahkan dengan koma"
                 className={inputClass}
               />
-              <select value={tagMode} onChange={(e) => setTagMode(e.target.value as TagMode)} className={inputClass}>
-                <option value="append">Add tags</option>
-                <option value="replace">Replace tags</option>
-                <option value="remove">Remove tags</option>
+              <select
+                value={tagMode}
+                onChange={(e) => setTagMode(e.target.value as TagMode)}
+                aria-label="Mode penerapan tag"
+                className={inputClass}
+              >
+                <option value="append">Tambah tag</option>
+                <option value="replace">Ganti tag</option>
+                <option value="remove">Hapus tag</option>
               </select>
-              <select value={assignedAdminId} onChange={(e) => setAssignedAdminId(e.target.value)} className={inputClass}>
-                <option value="">Assign admin…</option>
-                <option value="unassigned">Unassigned</option>
+              <select
+                value={assignedAdminId}
+                onChange={(e) => setAssignedAdminId(e.target.value)}
+                aria-label="Tetapkan admin penanggung jawab"
+                className={inputClass}
+              >
+                <option value="">Tetapkan admin…</option>
+                <option value="unassigned">Tanpa admin</option>
                 {admins.map((admin) => (
                   <option key={admin.id} value={admin.id}>{admin.name || admin.email}</option>
                 ))}
@@ -257,11 +287,12 @@ export default function CustomersPage() {
               <input
                 value={bulkNote}
                 onChange={(e) => setBulkNote(e.target.value)}
-                placeholder="Optional internal note"
+                placeholder="Catatan internal (opsional)"
+                aria-label="Catatan internal untuk aksi massal"
                 className={inputClass}
               />
               <Button size="md" onClick={applyBulkAction} disabled={submitting || selectedCount === 0}>
-                {submitting ? 'Applying…' : 'Apply'}
+                {submitting ? 'Menerapkan…' : 'Terapkan'}
               </Button>
             </div>
           </section>
@@ -279,11 +310,22 @@ export default function CustomersPage() {
 
         <div className="scrollbar-thin flex-1 overflow-auto p-5">
           {loading ? (
-            <p className="text-sm text-gray-500">Loading customers…</p>
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <div key={n} className="h-14 rounded-lg animate-shimmer" />
+              ))}
+            </div>
           ) : customers.length === 0 ? (
             <Card className="flex flex-col items-center justify-center py-16 text-center">
               <ContactRound className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
-              <p className="text-sm text-gray-400">No customers yet.</p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Belum ada pelanggan cocok</p>
+              <p className="mt-1 text-[13px] text-gray-400">
+                Longgarkan filter pencarian, atau muat ulang setelah ada chat masuk dari WhatsApp.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={loadCustomers}>
+                <RefreshCw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                Coba lagi
+              </Button>
             </Card>
           ) : (
             <Card className="overflow-hidden">
@@ -291,13 +333,19 @@ export default function CustomersPage() {
                 <thead>
                   <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
                     <th className="w-10 px-4 py-3">
-                      <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="accent-hermes-600" />
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleAllVisible}
+                        aria-label="Pilih semua pelanggan yang tampil"
+                        className="accent-hermes-600"
+                      />
                     </th>
-                    <th className="px-4 py-3 font-medium">Customer</th>
+                    <th className="px-4 py-3 font-medium">Pelanggan</th>
                     <th className="px-4 py-3 font-medium">Stage</th>
-                    <th className="px-4 py-3 font-medium">Tags</th>
-                    <th className="px-4 py-3 font-medium">Assigned admin</th>
-                    <th className="px-4 py-3 font-medium">Last contact</th>
+                    <th className="px-4 py-3 font-medium">Tag</th>
+                    <th className="px-4 py-3 font-medium">Admin penanggung jawab</th>
+                    <th className="px-4 py-3 font-medium">Kontak terakhir</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -311,21 +359,22 @@ export default function CustomersPage() {
                           type="checkbox"
                           checked={selectedSet.has(customer.id)}
                           onChange={() => toggleCustomer(customer.id)}
+                          aria-label={`Pilih ${customer.name || customer.phoneNumber}`}
                           className="accent-hermes-600"
                         />
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900 dark:text-gray-100">{customer.name || 'Unnamed'}</div>
+                        <div className="font-medium text-gray-900 dark:text-gray-100">{customer.name || 'Tanpa nama'}</div>
                         <div className="text-xs text-gray-400">{customer.phoneNumber}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge tone={stageTone[customer.leadStage]}>{customer.leadStage}</Badge>
-                        <span className="ml-2 text-xs tabular-nums text-gray-400">score {customer.leadScore}</span>
+                        <Badge tone={stageTone[customer.leadStage]}>{stageLabel[customer.leadStage]}</Badge>
+                        <span className="ml-2 text-xs tabular-nums text-gray-400">skor {customer.leadScore}</span>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex max-w-sm flex-wrap gap-1">
                           {customer.tags.length === 0 ? (
-                            <span className="text-xs text-gray-400">No tags</span>
+                            <span className="text-xs text-gray-400">Tanpa tag</span>
                           ) : (
                             customer.tags.map((tag) => (
                               <Badge key={tag} tone="neutral">{tag}</Badge>
@@ -335,7 +384,7 @@ export default function CustomersPage() {
                       </td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
                         {customer.assignedAdmin?.name || customer.assignedAdmin?.email || (
-                          <span className="text-gray-400">Unassigned</span>
+                          <span className="text-gray-400">Belum ditetapkan</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
