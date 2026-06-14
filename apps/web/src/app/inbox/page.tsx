@@ -108,10 +108,10 @@ interface ConvDetail {
 type Filter = 'all' | 'attention' | 'sla' | 'unassigned';
 
 const filters: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'attention', label: 'Needs attention' },
-  { key: 'sla', label: 'SLA risk' },
-  { key: 'unassigned', label: 'Unassigned' },
+  { key: 'all', label: 'Semua' },
+  { key: 'attention', label: 'Perlu tindakan' },
+  { key: 'sla', label: 'SLA berisiko' },
+  { key: 'unassigned', label: 'Belum ditugaskan' },
 ];
 
 const aiModeLabel: Record<string, string> = {
@@ -132,9 +132,9 @@ const aiModeOptions = [
 ];
 
 const statusOptions = [
-  { value: 'open', label: 'Open' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'resolved', label: 'Resolved' },
+  { value: 'open', label: 'Terbuka' },
+  { value: 'pending', label: 'Tertunda' },
+  { value: 'resolved', label: 'Selesai' },
 ];
 
 const reactionOptions = [
@@ -409,7 +409,7 @@ function InboxInner() {
       method: 'POST',
       body: JSON.stringify({ accountId: startAccountId, phoneNumber: startPhone.trim() }),
     });
-    setStartResult(`${result.phoneNumber} is ${result.exists ? 'registered' : 'not registered'} on WhatsApp`);
+    setStartResult(`${result.phoneNumber} ${result.exists ? 'terdaftar' : 'tidak terdaftar'} di WhatsApp`);
   });
 
   const startConversation = () => act(async () => {
@@ -419,7 +419,7 @@ function InboxInner() {
       body: JSON.stringify({ accountId: startAccountId, phoneNumber: startPhone.trim(), name: startName.trim() || undefined }),
     });
     setActiveId(opened.id);
-    setStartResult('Conversation opened from API');
+    setStartResult('Percakapan berhasil dibuka');
     setStartPhone('');
     setStartName('');
   });
@@ -468,7 +468,8 @@ function InboxInner() {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search conversations"
+                placeholder="Cari percakapan"
+                aria-label="Cari percakapan"
                 className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               />
             </div>
@@ -494,15 +495,16 @@ function InboxInner() {
           <div className="border-b border-gray-100 p-3 dark:border-gray-800">
             <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-gray-700 dark:text-gray-200">
               <UserPlus className="h-3.5 w-3.5 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
-              Start WhatsApp chat
+              Mulai chat WhatsApp
             </div>
             <div className="space-y-2">
               <select
                 value={startAccountId}
                 onChange={(e) => setStartAccountId(e.target.value)}
+                aria-label="Pilih akun WhatsApp pengirim"
                 className="h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
               >
-                <option value="">Select account from API</option>
+                <option value="">Pilih akun pengirim</option>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>{account.accountName} ({account.phoneNumber})</option>
                 ))}
@@ -510,23 +512,25 @@ function InboxInner() {
               <input
                 value={startPhone}
                 onChange={(e) => setStartPhone(e.target.value)}
-                placeholder="Phone number"
+                placeholder="Nomor telepon"
+                aria-label="Nomor telepon tujuan"
                 className="h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               />
               <input
                 value={startName}
                 onChange={(e) => setStartName(e.target.value)}
-                placeholder="Name from customer record"
+                placeholder="Nama (opsional)"
+                aria-label="Nama pelanggan (opsional)"
                 className="h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               />
               <div className="grid grid-cols-2 gap-2">
                 <Button variant="outline" size="sm" onClick={validateNumber} disabled={busy || !startAccountId || !startPhone.trim()}>
                   <PhoneCall className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                  Validate
+                  Cek nomor
                 </Button>
                 <Button size="sm" onClick={startConversation} disabled={busy || !startAccountId || !startPhone.trim()}>
                   <WhatsAppMark className="h-4 w-4" />
-                  Open
+                  Buka chat
                 </Button>
               </div>
               {startResult && <p className="text-xs text-gray-500 dark:text-gray-400">{startResult}</p>}
@@ -537,7 +541,7 @@ function InboxInner() {
             {listError ? (
               <li className="px-4 py-10 text-center text-sm text-danger-600">{listError}</li>
             ) : visible.length === 0 && (
-              <li className="px-4 py-10 text-center text-sm text-gray-400">No conversations returned by API</li>
+              <li className="px-4 py-10 text-center text-sm text-gray-400">Tidak ada percakapan pada filter ini.</li>
             )}
             {visible.map((c) => {
               const isActive = c.id === activeId;
@@ -560,7 +564,7 @@ function InboxInner() {
                         <span className="truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{name}</span>
                         <span className="shrink-0 text-[11px] tabular-nums text-gray-400">{relTime(c.lastMessageAt)}</span>
                       </div>
-                      <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{c.lastMessage ?? 'No messages yet'}</p>
+                      <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{c.lastMessage ?? 'Belum ada pesan'}</p>
                       <div className="mt-1.5 flex items-center justify-between gap-2">
                         <StatusLabel kind={summaryStatus(c)} />
                         {!!c.unreadCount && c.unreadCount > 0 && (
@@ -581,7 +585,7 @@ function InboxInner() {
             <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
               <InboxIcon className="mb-2 h-7 w-7 text-gray-300" strokeWidth={1.5} aria-hidden="true" />
               <p className={cn('text-sm', detailError && 'text-danger-600')}>
-                {detailError ?? 'Select a conversation to begin.'}
+                {detailError ?? 'Pilih percakapan untuk mulai membalas.'}
               </p>
             </div>
           ) : (
@@ -611,22 +615,22 @@ function InboxInner() {
                   </Badge>
                   <Button variant="outline" size="sm" onClick={markRead} disabled={busy}>
                     <CheckCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                    Mark Read
+                    Tandai dibaca
                   </Button>
                   {takenOver ? (
                     <Button variant="outline" size="sm" onClick={returnToAi} disabled={busy}>
                       <RotateCcw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                      Return to AI
+                      Kembalikan ke AI
                     </Button>
                   ) : (
                     <Button variant="outline" size="sm" onClick={takeOver} disabled={busy}>
                       <Hand className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                      Take Over
+                      Ambil alih
                     </Button>
                   )}
                   <Button variant="outline" size="sm" onClick={escalate} disabled={busy}>
                     <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                    Escalate
+                    Eskalasi
                   </Button>
                 </div>
               </div>
@@ -647,15 +651,15 @@ function InboxInner() {
                           <div className="mt-3 flex flex-wrap items-center gap-2">
                             <Button size="sm" onClick={() => approveDraft(m.id)} disabled={busy}>
                               <CircleCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                              Approve &amp; Send
+                              Setujui &amp; kirim
                             </Button>
                             <Button variant="outline" size="sm" onClick={() => editDraft(m)}>
                               <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                              Edit Draft
+                              Edit draft
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => blockDraft(m.id)} disabled={busy} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
                               <CircleX className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                              Block Send
+                              Blokir kirim
                             </Button>
                           </div>
                         </div>
@@ -673,31 +677,31 @@ function InboxInner() {
                         )}
                       >
                         {m.deletedAt && (
-                          <span className="mb-1 block text-[10px] font-medium text-danger-100">Message revoked</span>
+                          <span className="mb-1 block text-[10px] font-medium text-danger-100">Pesan ditarik</span>
                         )}
                         {m.quotedMessage && (
                           <div className={cn('mb-1 rounded border-l-2 px-2 py-1 text-[11px]', isCustomer ? 'border-gray-300 bg-gray-50 text-gray-500 dark:bg-gray-700/60' : 'border-hermes-200 bg-hermes-700/40 text-hermes-100')}>
-                            Reply to {m.quotedMessage.senderType}: {m.quotedMessage.content ?? m.quotedMessage.messageType}
+                            Balasan ke {m.quotedMessage.senderType}: {m.quotedMessage.content ?? m.quotedMessage.messageType}
                           </div>
                         )}
                         {m.aiGenerated && !isCustomer && (
                           <span className="mb-1 flex items-center gap-1 text-[10px] font-medium text-hermes-100">
                             <Workflow className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
-                            AI generated
+                            Dibuat AI
                           </span>
                         )}
                         <MediaContent message={m} />
-                        {m.editedAt && <span className={cn('mt-1 block text-[10px]', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>Edited</span>}
+                        {m.editedAt && <span className={cn('mt-1 block text-[10px]', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>Diedit</span>}
                         {m.reactions && Object.keys(m.reactions).length > 0 && (
                           <span className={cn('mt-1 block text-[10px]', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>
-                            Reactions: {Object.keys(m.reactions).join(' ')}
+                            Reaksi: {Object.keys(m.reactions).join(' ')}
                           </span>
                         )}
                         <div className={cn('mt-1 flex items-center justify-between gap-2 text-[10px] tabular-nums', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>
                           <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => quoteReply(m)} className="hover:underline">Reply</button>
+                            <button type="button" onClick={() => quoteReply(m)} className="hover:underline">Balas</button>
                             {!isCustomer && !m.deletedAt && <button type="button" onClick={() => editSentMessage(m)} className="hover:underline">Edit</button>}
-                            {!m.deletedAt && <button type="button" onClick={() => deleteMessage(m.id)} className="hover:underline">Revoke</button>}
+                            {!m.deletedAt && <button type="button" onClick={() => deleteMessage(m.id)} className="hover:underline">Tarik</button>}
                             {!m.deletedAt && (
                               <span className="inline-flex items-center gap-1" aria-label="React to message">
                                 {reactionOptions.map((reaction) => (
@@ -714,7 +718,7 @@ function InboxInner() {
                                 ))}
                               </span>
                             )}
-                            {m.reactions && Object.keys(m.reactions).length > 0 && <button type="button" onClick={() => clearReaction(m.id)} className="hover:underline">Clear reaction</button>}
+                            {m.reactions && Object.keys(m.reactions).length > 0 && <button type="button" onClick={() => clearReaction(m.id)} className="hover:underline">Hapus reaksi</button>}
                           </div>
                           <span>{clockTime(m.createdAt)}</span>
                         </div>
@@ -728,9 +732,9 @@ function InboxInner() {
                 {(quoteMessage || editingMessage) && (
                   <div className="mb-2 flex items-center justify-between rounded border border-hermes-200 bg-hermes-50 px-3 py-2 text-xs text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-300">
                     <span>
-                      {editingMessage ? 'Editing sent message' : `Replying to ${quoteMessage?.senderType}`}: {(editingMessage ?? quoteMessage)?.content ?? (editingMessage ?? quoteMessage)?.messageType}
+                      {editingMessage ? 'Mengedit pesan terkirim' : `Membalas ${quoteMessage?.senderType}`}: {(editingMessage ?? quoteMessage)?.content ?? (editingMessage ?? quoteMessage)?.messageType}
                     </span>
-                    <button type="button" onClick={() => { setQuoteMessage(null); setEditingMessage(null); setComposer(''); }} className="font-semibold">Cancel</button>
+                    <button type="button" onClick={() => { setQuoteMessage(null); setEditingMessage(null); setComposer(''); }} className="font-semibold">Batal</button>
                   </div>
                 )}
                 <div className="flex items-end gap-2">
@@ -767,12 +771,13 @@ function InboxInner() {
                         sendMessage();
                       }
                     }}
-                    placeholder={editingMessage ? 'Edit sent message through Baileys' : quoteMessage ? 'Reply with quoted message context' : 'Write a reply, or edit the AI draft above'}
+                    placeholder={editingMessage ? 'Edit pesan terkirim' : quoteMessage ? 'Balas dengan kutipan pesan' : 'Tulis balasan, atau edit draft AI di atas'}
+                    aria-label="Tulis balasan"
                     className="scrollbar-thin max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                   />
                   <Button size="md" onClick={sendMessage} disabled={sending || !composer.trim()}>
                     <Send className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                    {editingMessage ? 'Save Edit' : 'Send'}
+                    {editingMessage ? 'Simpan' : 'Kirim'}
                   </Button>
                 </div>
               </div>
@@ -794,7 +799,7 @@ function InboxInner() {
                     onClick={() => reasoningRef.current?.scrollIntoView({ block: 'nearest' })}
                   >
                     <FileSearch className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                    View Reasoning
+                    Lihat alasan
                   </Button>
                   <Button
                     variant="outline"
@@ -803,7 +808,7 @@ function InboxInner() {
                     onClick={() => auditRef.current?.scrollIntoView({ block: 'nearest' })}
                   >
                     <ScrollText className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                    View Audit Trail
+                    Jejak audit
                   </Button>
                 </div>
                 <div className="flex items-center gap-3">
@@ -811,17 +816,17 @@ function InboxInner() {
                     {initials(active.customer.name, active.customer.phoneNumber)}
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{active.customer.name || 'Unnamed'}</p>
+                    <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{active.customer.name || 'Tanpa nama'}</p>
                     <p className="truncate text-xs text-gray-400">{active.customer.phoneNumber}</p>
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-md bg-gray-50 px-2.5 py-1.5 dark:bg-gray-800">
-                    <p className="text-gray-400">Stage</p>
+                    <p className="text-gray-400">Stage lead</p>
                     <p className="font-medium capitalize text-gray-800 dark:text-gray-100">{active.customer.leadStage.replace('_', ' ')}</p>
                   </div>
                   <div className="rounded-md bg-gray-50 px-2.5 py-1.5 dark:bg-gray-800">
-                    <p className="text-gray-400">Lead score</p>
+                    <p className="text-gray-400">Skor lead</p>
                     <p className="font-medium tabular-nums text-gray-800 dark:text-gray-100">{active.customer.leadScore} / 100</p>
                   </div>
                 </div>
@@ -837,26 +842,26 @@ function InboxInner() {
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
                 <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                   <Tag className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
-                  WhatsApp native controls
+                  Kontrol WhatsApp
                 </h3>
                 <div className="space-y-2 text-xs">
                   <label className="block text-gray-500">
-                    AI mode
+                    Mode AI
                     <select value={active.aiMode} onChange={(e) => setAiMode(e.target.value)} className="mt-1 h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
                       {aiModeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </label>
                   <label className="block text-gray-500">
-                    Workflow status
+                    Status alur
                     <select value={active.status} onChange={(e) => setWorkflowStatus(e.target.value)} className="mt-1 h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
                       {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </label>
                   <label className="block text-gray-500">
-                    Labels from API
+                    Label
                     <div className="mt-1 flex gap-2">
-                      <input value={labelDraft} onChange={(e) => setLabelDraft(e.target.value)} placeholder="priority, renewal, billing" className="h-8 min-w-0 flex-1 rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
-                      <Button size="sm" variant="outline" onClick={saveLabels} disabled={busy}>Save</Button>
+                      <input value={labelDraft} onChange={(e) => setLabelDraft(e.target.value)} placeholder="prioritas, renewal, tagihan" className="h-8 min-w-0 flex-1 rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+                      <Button size="sm" variant="outline" onClick={saveLabels} disabled={busy}>Simpan</Button>
                     </div>
                   </label>
                 </div>
@@ -867,14 +872,14 @@ function InboxInner() {
                 <div className="mb-2 flex items-center justify-between">
                   <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                     <UserRound className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
-                    Assigned to
+                    Ditugaskan ke
                   </h3>
                   <button
                     type="button"
                     onClick={() => setShowAssign((v) => !v)}
                     className="text-[11px] font-medium text-hermes-600 hover:text-hermes-700"
                   >
-                    {showAssign ? 'Cancel' : 'Change'}
+                    {showAssign ? 'Batal' : 'Ubah'}
                   </button>
                 </div>
                 {adminError && <p className="mb-2 text-xs text-danger-600">{adminError}</p>}
@@ -885,7 +890,7 @@ function InboxInner() {
                       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10"
                     >
                       <UserX className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                      Unassign
+                      Lepas tugas
                     </button>
                     {admins.map((a) => (
                       <button
@@ -913,7 +918,7 @@ function InboxInner() {
                     {active.assignedAdmin.name}
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">Unassigned</p>
+                  <p className="text-xs text-gray-400">Belum ditugaskan</p>
                 )}
               </div>
 
@@ -922,7 +927,7 @@ function InboxInner() {
                 <div className="mb-2.5 flex items-center justify-between">
                   <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                     <ShieldCheck className="h-4 w-4 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
-                    Hermes AI review
+                    Review Hermes AI
                   </h3>
                   {review && (
                     <Badge tone={riskTone[review.riskLevel] ?? 'neutral'}>{review.decision.replace('_', ' ')}</Badge>
@@ -932,15 +937,15 @@ function InboxInner() {
                   <>
                     <dl className="space-y-1.5 text-xs">
                       <div className="flex items-center justify-between">
-                        <dt className="text-gray-400">Review score</dt>
+                        <dt className="text-gray-400">Skor keyakinan</dt>
                         <dd className="font-medium tabular-nums text-gray-800 dark:text-gray-100">{review.confidenceScore}</dd>
                       </div>
                       <div className="flex items-center justify-between">
-                        <dt className="text-gray-400">Risk</dt>
+                        <dt className="text-gray-400">Skor risiko</dt>
                         <dd className="font-medium tabular-nums text-gray-800 dark:text-gray-100">{review.riskScore}</dd>
                       </div>
                       <div className="flex items-center justify-between">
-                        <dt className="text-gray-400">Risk level</dt>
+                        <dt className="text-gray-400">Level risiko</dt>
                         <dd className="font-medium capitalize text-gray-800 dark:text-gray-100">{review.riskLevel}</dd>
                       </div>
                     </dl>
@@ -948,44 +953,44 @@ function InboxInner() {
                       <div className="mt-2.5 rounded-md bg-gray-50 px-2.5 py-2 text-xs leading-relaxed text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                         <div className="mb-1 flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-200">
                           <FileSearch className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-                          Hermes reasoning
+                          Alasan Hermes
                         </div>
                         {review.reason}
                       </div>
                     )}
                     {review.recommendation && (
-                      <p className="mt-1.5 text-xs text-gray-500">Recommendation: {review.recommendation}</p>
+                      <p className="mt-1.5 text-xs text-gray-500">Rekomendasi: {review.recommendation}</p>
                     )}
                   </>
                 ) : (
-                  <p className="text-xs text-gray-400">No Hermes review for this conversation yet.</p>
+                  <p className="text-xs text-gray-400">Belum ada review Hermes untuk percakapan ini.</p>
                 )}
               </div>
 
               {/* Risk flags */}
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
-                <h3 className="mb-2 text-[13px] font-semibold text-gray-900 dark:text-gray-100">Risk flags</h3>
+                <h3 className="mb-2 text-[13px] font-semibold text-gray-900 dark:text-gray-100">Tanda risiko</h3>
                 <div className="flex flex-wrap gap-1.5">
                   {active.slaBreachedAt && (
                     <Badge tone="review">
                       <Clock className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-                      SLA breached
+                      SLA terlewat
                     </Badge>
                   )}
                   {active.aiMode === 'ai_paused' && (
                     <Badge tone="danger">
                       <CircleX className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-                      AI paused
+                      AI dijeda
                     </Badge>
                   )}
                   {review && (review.riskLevel === 'high' || review.riskLevel === 'critical') && (
                     <Badge tone="danger">
                       <TriangleAlert className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-                      {review.riskLevel} risk
+                      Risiko {review.riskLevel}
                     </Badge>
                   )}
                   {!active.slaBreachedAt && active.aiMode !== 'ai_paused' && !(review && (review.riskLevel === 'high' || review.riskLevel === 'critical')) && (
-                    <span className="text-xs text-gray-400">No active flags.</span>
+                    <span className="text-xs text-gray-400">Tidak ada tanda risiko aktif.</span>
                   )}
                 </div>
               </div>
@@ -994,15 +999,15 @@ function InboxInner() {
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
                 <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                   <Workflow className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
-                  Automation mode
+                  Mode otomasi
                 </h3>
                 {active.bot ? (
                   <div className="flex items-center justify-between rounded-md border border-gray-200 px-2.5 py-1.5 text-xs dark:border-gray-700">
                     <span className="truncate text-gray-700 dark:text-gray-200">{active.bot.botName}</span>
-                    <Badge tone="success">Active</Badge>
+                    <Badge tone="success">Aktif</Badge>
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">No automation bot assigned.</p>
+                  <p className="text-xs text-gray-400">Belum ada bot otomasi yang ditugaskan.</p>
                 )}
               </div>
 
@@ -1010,7 +1015,7 @@ function InboxInner() {
               <div ref={auditRef} className="p-4">
                 <h3 className="mb-2.5 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                   <ScrollText className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
-                  View Audit Trail
+                  Jejak audit
                 </h3>
                 <ol className="space-y-3 text-xs">
                   {buildAudit(active).map((e, i) => {
@@ -1032,7 +1037,7 @@ function InboxInner() {
             <div className="border-t border-gray-100 p-3 dark:border-gray-800">
               <Button variant="ghost" size="sm" className="w-full justify-start" onClick={escalate} disabled={busy}>
                 <FileSearch className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                Escalate to a supervisor
+                Eskalasi ke supervisor
               </Button>
             </div>
           </aside>
@@ -1075,10 +1080,10 @@ function MediaContent({ message: m }: { message: Message }) {
 function buildAudit(conv: ConvDetail) {
   const out: { label: string; time: string | null; icon: typeof Workflow; tone: string }[] = [];
   const firstAi = conv.messages.find((m) => m.aiGenerated);
-  if (firstAi) out.push({ label: 'AI generated a reply', time: firstAi.createdAt, icon: Workflow, tone: 'text-hermes-600' });
+  if (firstAi) out.push({ label: 'AI membuat balasan', time: firstAi.createdAt, icon: Workflow, tone: 'text-hermes-600' });
   if (conv.hermesReviews[0]) out.push({ label: `Hermes ${conv.hermesReviews[0].decision.replace('_', ' ')}`, time: null, icon: ShieldCheck, tone: 'text-review-600' });
-  if (conv.takeoverStatus === 'admin_takeover') out.push({ label: 'Human took over', time: null, icon: Hand, tone: 'text-gray-500' });
-  if (conv.assignedAdmin) out.push({ label: `Assigned to ${conv.assignedAdmin.name}`, time: null, icon: Hand, tone: 'text-gray-500' });
-  if (out.length === 0) out.push({ label: 'No supervised actions yet', time: null, icon: History, tone: 'text-gray-400' });
+  if (conv.takeoverStatus === 'admin_takeover') out.push({ label: 'Admin mengambil alih', time: null, icon: Hand, tone: 'text-gray-500' });
+  if (conv.assignedAdmin) out.push({ label: `Ditugaskan ke ${conv.assignedAdmin.name}`, time: null, icon: Hand, tone: 'text-gray-500' });
+  if (out.length === 0) out.push({ label: 'Belum ada tindakan tersupervisi', time: null, icon: History, tone: 'text-gray-400' });
   return out;
 }
