@@ -18,9 +18,14 @@ describe('CustomersPage', () => {
   it('renders customers from the api', async () => {
     apiMock.mockImplementation((path: string = '') => {
       if (path.startsWith('/customers')) {
-        return Promise.resolve([
-          { id: 'cu1', name: 'Budi', phoneNumber: '628222', leadScore: 70, leadStage: 'hot', tags: ['vip'], notes: '' },
-        ]);
+        return Promise.resolve({
+          items: [
+            { id: 'cu1', name: 'Budi', phoneNumber: '628222', leadScore: 70, leadStage: 'hot', tags: ['vip'], notes: '' },
+          ],
+          total: 1,
+          page: 1,
+          limit: 50,
+        });
       }
       if (path.startsWith('/users')) return Promise.resolve({ users: [] });
       return Promise.resolve({});
@@ -32,7 +37,9 @@ describe('CustomersPage', () => {
 
   it('renders the search box', async () => {
     apiMock.mockImplementation((path: string = '') =>
-      path.startsWith('/users') ? Promise.resolve({ users: [] }) : Promise.resolve([]),
+      path.startsWith('/users')
+        ? Promise.resolve({ users: [] })
+        : Promise.resolve({ items: [], total: 0, page: 1, limit: 50 }),
     );
     render(<CustomersPage />);
     expect(await screen.findByPlaceholderText('Search name or number…')).toBeInTheDocument();

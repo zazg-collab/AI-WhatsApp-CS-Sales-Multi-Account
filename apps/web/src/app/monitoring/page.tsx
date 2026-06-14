@@ -201,7 +201,7 @@ export default function MonitoringPage() {
           id="range-select"
           value={days}
           onChange={(e) => setDays(Number(e.target.value))}
-          className="h-8 rounded-md border border-gray-300 bg-white px-2.5 text-[13px] text-gray-700 outline-none focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+          className="h-8 rounded-md border border-gray-300 bg-white px-2.5 text-[13px] text-gray-700 focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
         >
           <option value={7}>{t('range7')}</option>
           <option value={14}>{t('range14')}</option>
