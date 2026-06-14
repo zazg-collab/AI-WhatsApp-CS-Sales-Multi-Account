@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, UsersRound } from 'lucide-react';
+import { Plus, Pencil, Trash2, UsersRound, ShieldAlert } from 'lucide-react';
 import { api, getToken } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Modal } from '@/components/ui/Modal';
+import { Field, SelectField } from '@/components/ui/Field';
 
 interface User {
   id: string;
@@ -32,9 +34,14 @@ const roleTone: Record<string, BadgeTone> = {
   viewer: 'neutral',
 };
 
-const inputClass =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
-const labelClass = 'mb-1 block text-sm text-gray-600 dark:text-gray-300';
+const roleOptions = (
+  <>
+    <option value="admin">Admin</option>
+    <option value="supervisor">Supervisor</option>
+    <option value="owner">Owner</option>
+    <option value="viewer">Viewer</option>
+  </>
+);
 
 function getRoleFromToken(): AuthUser | null {
   if (typeof window === 'undefined') return null;
@@ -50,11 +57,11 @@ function getRoleFromToken(): AuthUser | null {
   }
 }
 
-function Overlay({ children }: { children: React.ReactNode }) {
+function FormError({ message }: { message: string }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 dark:bg-gray-950/60">
-      {children}
-    </div>
+    <p className="mb-3 rounded border border-danger-200 bg-danger-50 px-3 py-2 text-[13px] text-danger-700 dark:border-danger-700/40 dark:bg-danger-700/10 dark:text-danger-400">
+      {message}
+    </p>
   );
 }
 
@@ -69,7 +76,7 @@ function CreateUserModal({ onClose, onSuccess, isLoading }: { onClose: () => voi
     e.preventDefault();
     setError('');
     if (!email.trim() || !password.trim()) {
-      setError('Email and password are required');
+      setError('Email dan password wajib diisi');
       return;
     }
     try {
@@ -80,44 +87,31 @@ function CreateUserModal({ onClose, onSuccess, isLoading }: { onClose: () => voi
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create user');
+      setError(err instanceof Error ? err.message : 'Gagal membuat pengguna');
     }
   }
 
   return (
-    <Overlay>
-      <Card className="w-96 p-6 shadow-pop">
-        <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-gray-100">Create user</h3>
-        {error && <p className="mb-4 rounded-lg bg-danger-50 p-2 text-sm text-danger-700 dark:bg-danger-700/10 dark:text-danger-500">{error}</p>}
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className={labelClass}>Name (optional)</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="John Doe" className={inputClass} />
-          </div>
-          <div>
-            <label className={labelClass}>Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" className={inputClass} required />
-          </div>
-          <div>
-            <label className={labelClass}>Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" className={inputClass} required />
-          </div>
-          <div>
-            <label className={labelClass}>Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as any)} className={inputClass}>
-              <option value="admin">Admin</option>
-              <option value="supervisor">Supervisor</option>
-              <option value="owner">Owner</option>
-              <option value="viewer">Viewer</option>
-            </select>
-          </div>
-          <div className="flex gap-2 pt-2">
-            <Button type="submit" disabled={isLoading} className="flex-1">{isLoading ? 'Creating…' : 'Create'}</Button>
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
-          </div>
-        </form>
-      </Card>
-    </Overlay>
+    <Modal
+      open
+      onClose={onClose}
+      title="Tambah pengguna"
+      description="Buat akun untuk anggota tim baru."
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Batal</Button>
+          <Button type="submit" form="create-user-form" disabled={isLoading}>{isLoading ? 'Menyimpan…' : 'Buat pengguna'}</Button>
+        </>
+      }
+    >
+      {error && <FormError message={error} />}
+      <form id="create-user-form" onSubmit={handleSubmit} className="space-y-3">
+        <Field label="Nama (opsional)" value={name} onChange={(e) => setName(e.target.value)} placeholder="John Doe" />
+        <Field label="Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" />
+        <Field label="Password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimal 8 karakter" hint="Minimal 8 karakter." />
+        <SelectField label="Role" value={role} onChange={(e) => setRole(e.target.value as typeof role)}>{roleOptions}</SelectField>
+      </form>
+    </Modal>
   );
 }
 
@@ -138,66 +132,61 @@ function EditUserModal({ user, onClose, onSuccess, isLoading }: { user: User; on
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update user');
+      setError(err instanceof Error ? err.message : 'Gagal memperbarui pengguna');
     }
   }
 
   return (
-    <Overlay>
-      <Card className="w-96 p-6 shadow-pop">
-        <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-gray-100">Edit user</h3>
-        {error && <p className="mb-4 rounded-lg bg-danger-50 p-2 text-sm text-danger-700 dark:bg-danger-700/10 dark:text-danger-500">{error}</p>}
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className={labelClass}>Name</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-          </div>
-          <div>
-            <label className={labelClass}>Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
-          </div>
-          <div>
-            <label className={labelClass}>Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as any)} className={inputClass}>
-              <option value="admin">Admin</option>
-              <option value="supervisor">Supervisor</option>
-              <option value="owner">Owner</option>
-              <option value="viewer">Viewer</option>
-            </select>
-          </div>
-          <div className="flex gap-2 pt-2">
-            <Button type="submit" disabled={isLoading} className="flex-1">{isLoading ? 'Saving…' : 'Save'}</Button>
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
-          </div>
-        </form>
-      </Card>
-    </Overlay>
+    <Modal
+      open
+      onClose={onClose}
+      title="Edit pengguna"
+      description={user.email}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Batal</Button>
+          <Button type="submit" form="edit-user-form" disabled={isLoading}>{isLoading ? 'Menyimpan…' : 'Simpan perubahan'}</Button>
+        </>
+      }
+    >
+      {error && <FormError message={error} />}
+      <form id="edit-user-form" onSubmit={handleSubmit} className="space-y-3">
+        <Field label="Nama" value={name} onChange={(e) => setName(e.target.value)} />
+        <Field label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <SelectField label="Role" value={role} onChange={(e) => setRole(e.target.value as typeof role)}>{roleOptions}</SelectField>
+      </form>
+    </Modal>
   );
 }
 
 function DeleteConfirmModal({ user, onClose, onConfirm, isLoading }: { user: User; onClose: () => void; onConfirm: () => void; isLoading: boolean }) {
   return (
-    <Overlay>
-      <Card className="w-80 p-6 shadow-pop">
-        <h3 className="mb-2 text-base font-semibold text-gray-900 dark:text-gray-100">Delete user</h3>
-        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-          Are you sure you want to delete <span className="font-medium text-gray-800 dark:text-gray-200">{user.email}</span>? This action cannot be undone.
-        </p>
-        <div className="flex gap-2">
-          <Button variant="danger" onClick={onConfirm} disabled={isLoading} className="flex-1">
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title="Hapus pengguna"
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Batal</Button>
+          <Button variant="danger" onClick={onConfirm} disabled={isLoading}>
             <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-            {isLoading ? 'Deleting…' : 'Delete'}
+            {isLoading ? 'Menghapus…' : 'Hapus pengguna'}
           </Button>
-          <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
-        </div>
-      </Card>
-    </Overlay>
+        </>
+      }
+    >
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Yakin ingin menghapus <span className="font-semibold text-gray-900 dark:text-gray-100">{user.email}</span>? Tindakan ini tidak bisa dibatalkan.
+      </p>
+    </Modal>
   );
 }
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
@@ -207,10 +196,11 @@ export default function UsersPage() {
   const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const data = await api<{ users: User[] }>('/users');
       setUsers(data.users);
     } catch (err) {
-      console.error('Failed to load users:', err);
+      setError(err instanceof Error ? err.message : 'Gagal memuat daftar pengguna');
     } finally {
       setLoading(false);
     }
@@ -224,8 +214,14 @@ export default function UsersPage() {
   if (!authUser || (authUser.role !== 'owner' && authUser.role !== 'supervisor')) {
     return (
       <AppLayout>
-        <div className="flex flex-1 items-center justify-center">
-          <p className="text-gray-500">You do not have permission to view this page.</p>
+        <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+          <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-review-50 dark:bg-review-900/20">
+            <ShieldAlert className="h-5 w-5 text-review-600" strokeWidth={1.75} aria-hidden="true" />
+          </span>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Akses dibatasi</p>
+          <p className="mt-1 max-w-sm text-[13px] text-gray-500">
+            You do not have permission to view this page. Hubungi owner untuk meminta akses manajemen tim.
+          </p>
         </div>
       </AppLayout>
     );
@@ -238,7 +234,7 @@ export default function UsersPage() {
       setDeletingUser(null);
       await loadUsers();
     } catch (err) {
-      console.error('Failed to delete user:', err);
+      setError(err instanceof Error ? err.message : 'Gagal menghapus pengguna');
     } finally {
       setIsSubmitting(false);
     }
@@ -246,7 +242,7 @@ export default function UsersPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Team" subtitle="Manage system users and roles">
+      <PageHeader title="Team" subtitle="Kelola pengguna sistem dan hak aksesnya">
         {authUser?.role === 'owner' && (
           <Button size="sm" onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -256,12 +252,27 @@ export default function UsersPage() {
       </PageHeader>
 
       <div className="scrollbar-thin flex-1 overflow-auto p-5">
+        {error && (
+          <Card className="mb-4 border-danger-200 bg-danger-50 p-4 dark:border-danger-700/40 dark:bg-danger-900/20">
+            <p className="text-[13px] font-medium text-danger-700 dark:text-danger-400">{error}</p>
+            <button onClick={loadUsers} className="mt-2 text-[13px] font-semibold text-danger-700 underline dark:text-danger-400">Coba lagi</button>
+          </Card>
+        )}
         {loading ? (
-          <p className="text-sm text-gray-500">Loading users…</p>
+          <div className="space-y-2">
+            {[1, 2, 3, 4].map((n) => <div key={n} className="h-12 rounded animate-shimmer" />)}
+          </div>
         ) : users.length === 0 ? (
           <Card className="flex flex-col items-center justify-center py-16 text-center">
             <UsersRound className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
-            <p className="text-sm text-gray-400">No users found.</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Belum ada pengguna</p>
+            <p className="mt-1 text-[13px] text-gray-400">Tambahkan anggota tim pertama untuk mulai berkolaborasi.</p>
+            {authUser?.role === 'owner' && (
+              <Button size="sm" className="mt-4" onClick={() => setShowCreateModal(true)}>
+                <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                Create user
+              </Button>
+            )}
           </Card>
         ) : (
           <Card className="overflow-x-auto">
@@ -269,11 +280,11 @@ export default function UsersPage() {
               <thead>
                 <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
                   <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">Nama</th>
                   <th className="px-4 py-3 font-medium">Role</th>
                   <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Created</th>
-                  <th className="px-4 py-3 text-right font-medium">Actions</th>
+                  <th className="px-4 py-3 font-medium">Dibuat</th>
+                  <th className="px-4 py-3 text-right font-medium">Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -298,7 +309,7 @@ export default function UsersPage() {
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => setDeletingUser(user)} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
                               <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                              Delete
+                              Hapus
                             </Button>
                           </>
                         )}
