@@ -184,7 +184,7 @@ export default function MonitoringPage() {
       }
     }
     load();
-  }, [days]);
+  }, [days, t]);
 
   const maxVolume = Math.max(...(data?.messageVolume.map((item) => item.count) ?? [1]), 1);
 

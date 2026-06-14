@@ -36,7 +36,7 @@ export default function AiSettingsPage() {
     api<{ baseUrl: string; defaultModel: string }>('/ai/config')
       .then(setConfig)
       .catch((err) => setError(err instanceof Error ? err.message : t('errConfig')));
-  }, []);
+  }, [t]);
 
   async function loadModels() {
     setLoading(true);
