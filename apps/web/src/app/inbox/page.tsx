@@ -38,7 +38,7 @@ import { Badge } from '@/components/ui/Badge';
 import { StatusLabel, type StatusKind } from '@/components/ui/StatusLabel';
 import { WhatsAppMark } from '@/components/WhatsAppMark';
 import { cn } from '@/lib/cn';
-import { useT, type Dict, type TFunction } from '@/lib/i18n';
+import { useT, type Dict } from '@/lib/i18n';
 
 const dict: Dict = {
   // Filters
