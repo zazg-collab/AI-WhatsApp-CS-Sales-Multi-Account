@@ -9,6 +9,8 @@ interface ListFilters {
   stage?: LeadStage;
   tag?: string;
   search?: string;
+  page?: number;
+  limit?: number;
   user?: ScopedUser;
 }
 
@@ -47,14 +49,21 @@ export class CustomersService {
     const scope = await allowedAccountIds(this.prisma, filters.user);
     const scopeWhere = customerScopeWhere(scope, filters.user);
     if (scopeWhere) where.AND = scopeWhere;
-    return this.prisma.customer.findMany({
-      where,
-      orderBy: { lastMessageAt: 'desc' },
-      include: {
-        assignedAdmin: { select: { id: true, name: true, email: true } },
-      },
-      take: 100,
-    });
+    const page = Math.max(1, filters.page ?? 1);
+    const limit = Math.min(Math.max(1, filters.limit ?? 50), 100);
+    const [total, items] = await Promise.all([
+      this.prisma.customer.count({ where }),
+      this.prisma.customer.findMany({
+        where,
+        orderBy: { lastMessageAt: 'desc' },
+        include: {
+          assignedAdmin: { select: { id: true, name: true, email: true } },
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
+    return { total, page, limit, items };
   }
 
   async get(id: string, user?: ScopedUser) {

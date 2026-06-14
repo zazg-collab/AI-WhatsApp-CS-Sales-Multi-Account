@@ -63,8 +63,17 @@ export class CustomersController {
     @Query('stage') stage?: LeadStage,
     @Query('tag') tag?: string,
     @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.customers.list({ stage, tag, search, user });
+    return this.customers.list({
+      stage,
+      tag,
+      search,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 50,
+      user,
+    });
   }
 
   @ApiOperation({ summary: 'Bulk CRM actions on customers' })

@@ -309,6 +309,16 @@ function InboxInner() {
     }
   }, []);
 
+  // Close the schedule modal on Escape (a11y).
+  useEffect(() => {
+    if (!showSchedule) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowSchedule(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showSchedule]);
+
   useEffect(() => {
     api<{ id: string; title: string; content: string; shortcut: string | null }[]>('/quick-replies')
       .then((r) => setQuickReplies(Array.isArray(r) ? r : []))
@@ -1006,20 +1016,23 @@ function InboxInner() {
 
               {showSchedule && (
                 <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowSchedule(false)}>
-                  <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-700 dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
-                    <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  <div role="dialog" aria-modal="true" aria-labelledby="schedule-title" className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-700 dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+                    <h3 id="schedule-title" className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
                       <CalendarClock className="h-4 w-4 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
                       Schedule a message
                     </h3>
-                    <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">Send at</label>
+                    <label htmlFor="schedule-at" className="mb-1 block text-xs text-gray-500 dark:text-gray-400">Send at</label>
                     <input
+                      id="schedule-at"
                       type="datetime-local"
+                      autoFocus
                       value={scheduleAt}
                       onChange={(e) => setScheduleAt(e.target.value)}
                       className="mb-3 w-full rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-[13px] text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     />
-                    <label className="mb-1 block text-xs text-gray-500 dark:text-gray-400">Message</label>
+                    <label htmlFor="schedule-msg" className="mb-1 block text-xs text-gray-500 dark:text-gray-400">Message</label>
                     <textarea
+                      id="schedule-msg"
                       rows={3}
                       value={scheduleMsg}
                       onChange={(e) => setScheduleMsg(e.target.value)}

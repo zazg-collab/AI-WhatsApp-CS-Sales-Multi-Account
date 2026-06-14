@@ -26,7 +26,7 @@ describe('CustomersController', () => {
     controller.addNote('c1', { note: 'n' } as any, { id: 'u1' } as any);
     controller.timeline('c1');
     controller.bulkAction({ customerIds: ['c1'] } as any, { id: 'u1' } as any);
-    expect(svc.list).toHaveBeenCalledWith({ stage: LeadStage.hot, tag: 'vip', search: 'b', user });
+    expect(svc.list).toHaveBeenCalledWith({ stage: LeadStage.hot, tag: 'vip', search: 'b', page: 1, limit: 50, user });
     expect(svc.get).toHaveBeenCalledWith('c1', user);
     expect(svc.update).toHaveBeenCalled();
     expect(svc.addNote).toHaveBeenCalledWith('c1', 'n', 'u1');
