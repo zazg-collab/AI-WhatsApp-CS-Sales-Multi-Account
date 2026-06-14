@@ -946,10 +946,6 @@ function InboxInner() {
                     <CalendarClock className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                     Schedule
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => { setShowSchedule(true); setScheduleErr(null); }}>
-                    <CalendarClock className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                    Schedule
-                  </Button>
                 </div>
               </div>
 
