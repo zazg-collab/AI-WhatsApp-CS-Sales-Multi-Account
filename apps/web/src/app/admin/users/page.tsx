@@ -8,6 +8,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Modal } from '@/components/ui/Modal';
+import { Field, fieldControl } from '@/components/ui/Field';
 
 interface User {
   id: string;
@@ -32,10 +34,6 @@ const roleTone: Record<string, BadgeTone> = {
   viewer: 'neutral',
 };
 
-const inputClass =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
-const labelClass = 'mb-1 block text-sm text-gray-600 dark:text-gray-300';
-
 function getRoleFromToken(): AuthUser | null {
   if (typeof window === 'undefined') return null;
   const token = getToken();
@@ -48,14 +46,6 @@ function getRoleFromToken(): AuthUser | null {
   } catch {
     return null;
   }
-}
-
-function Overlay({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 dark:bg-gray-950/60">
-      {children}
-    </div>
-  );
 }
 
 function CreateUserModal({ onClose, onSuccess, isLoading }: { onClose: () => void; onSuccess: () => void; isLoading: boolean }) {
@@ -85,39 +75,34 @@ function CreateUserModal({ onClose, onSuccess, isLoading }: { onClose: () => voi
   }
 
   return (
-    <Overlay>
-      <Card className="w-96 p-6 shadow-pop">
-        <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-gray-100">Create user</h3>
-        {error && <p className="mb-4 rounded-lg bg-danger-50 p-2 text-sm text-danger-700 dark:bg-danger-700/10 dark:text-danger-500">{error}</p>}
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className={labelClass}>Name (optional)</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="John Doe" className={inputClass} />
-          </div>
-          <div>
-            <label className={labelClass}>Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" className={inputClass} required />
-          </div>
-          <div>
-            <label className={labelClass}>Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" className={inputClass} required />
-          </div>
-          <div>
-            <label className={labelClass}>Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as any)} className={inputClass}>
+    <Modal title="Create user" onClose={onClose} size="sm">
+      {error && <p className="mb-4 rounded-lg bg-danger-50 p-2 text-sm text-danger-700 dark:bg-danger-700/10 dark:text-danger-500">{error}</p>}
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <Field label="Name (optional)">
+          {(id) => <input id={id} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="John Doe" className={fieldControl} />}
+        </Field>
+        <Field label="Email">
+          {(id) => <input id={id} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" className={fieldControl} required />}
+        </Field>
+        <Field label="Password">
+          {(id) => <input id={id} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" className={fieldControl} required />}
+        </Field>
+        <Field label="Role">
+          {(id) => (
+            <select id={id} value={role} onChange={(e) => setRole(e.target.value as any)} className={fieldControl}>
               <option value="admin">Admin</option>
               <option value="supervisor">Supervisor</option>
               <option value="owner">Owner</option>
               <option value="viewer">Viewer</option>
             </select>
-          </div>
-          <div className="flex gap-2 pt-2">
-            <Button type="submit" disabled={isLoading} className="flex-1">{isLoading ? 'Creating…' : 'Create'}</Button>
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
-          </div>
-        </form>
-      </Card>
-    </Overlay>
+          )}
+        </Field>
+        <div className="flex gap-2 pt-2">
+          <Button type="submit" disabled={isLoading} className="flex-1">{isLoading ? 'Creating…' : 'Create'}</Button>
+          <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -143,55 +128,48 @@ function EditUserModal({ user, onClose, onSuccess, isLoading }: { user: User; on
   }
 
   return (
-    <Overlay>
-      <Card className="w-96 p-6 shadow-pop">
-        <h3 className="mb-4 text-base font-semibold text-gray-900 dark:text-gray-100">Edit user</h3>
-        {error && <p className="mb-4 rounded-lg bg-danger-50 p-2 text-sm text-danger-700 dark:bg-danger-700/10 dark:text-danger-500">{error}</p>}
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className={labelClass}>Name</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
-          </div>
-          <div>
-            <label className={labelClass}>Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
-          </div>
-          <div>
-            <label className={labelClass}>Role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as any)} className={inputClass}>
+    <Modal title="Edit user" onClose={onClose} size="sm">
+      {error && <p className="mb-4 rounded-lg bg-danger-50 p-2 text-sm text-danger-700 dark:bg-danger-700/10 dark:text-danger-500">{error}</p>}
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <Field label="Name">
+          {(id) => <input id={id} type="text" value={name} onChange={(e) => setName(e.target.value)} className={fieldControl} />}
+        </Field>
+        <Field label="Email">
+          {(id) => <input id={id} type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={fieldControl} />}
+        </Field>
+        <Field label="Role">
+          {(id) => (
+            <select id={id} value={role} onChange={(e) => setRole(e.target.value as any)} className={fieldControl}>
               <option value="admin">Admin</option>
               <option value="supervisor">Supervisor</option>
               <option value="owner">Owner</option>
               <option value="viewer">Viewer</option>
             </select>
-          </div>
-          <div className="flex gap-2 pt-2">
-            <Button type="submit" disabled={isLoading} className="flex-1">{isLoading ? 'Saving…' : 'Save'}</Button>
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
-          </div>
-        </form>
-      </Card>
-    </Overlay>
+          )}
+        </Field>
+        <div className="flex gap-2 pt-2">
+          <Button type="submit" disabled={isLoading} className="flex-1">{isLoading ? 'Saving…' : 'Save'}</Button>
+          <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
 function DeleteConfirmModal({ user, onClose, onConfirm, isLoading }: { user: User; onClose: () => void; onConfirm: () => void; isLoading: boolean }) {
   return (
-    <Overlay>
-      <Card className="w-80 p-6 shadow-pop">
-        <h3 className="mb-2 text-base font-semibold text-gray-900 dark:text-gray-100">Delete user</h3>
-        <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
-          Are you sure you want to delete <span className="font-medium text-gray-800 dark:text-gray-200">{user.email}</span>? This action cannot be undone.
-        </p>
-        <div className="flex gap-2">
-          <Button variant="danger" onClick={onConfirm} disabled={isLoading} className="flex-1">
-            <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-            {isLoading ? 'Deleting…' : 'Delete'}
-          </Button>
-          <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
-        </div>
-      </Card>
-    </Overlay>
+    <Modal title="Delete user" onClose={onClose} size="sm">
+      <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+        Are you sure you want to delete <span className="font-medium text-gray-800 dark:text-gray-200">{user.email}</span>? This action cannot be undone.
+      </p>
+      <div className="flex gap-2">
+        <Button variant="danger" onClick={onConfirm} disabled={isLoading} className="flex-1">
+          <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          {isLoading ? 'Deleting…' : 'Delete'}
+        </Button>
+        <Button variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
+      </div>
+    </Modal>
   );
 }
 

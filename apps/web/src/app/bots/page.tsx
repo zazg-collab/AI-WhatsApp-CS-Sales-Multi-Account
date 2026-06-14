@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useId } from 'react';
 import { Plus, Pencil, Trash2, Workflow, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
@@ -8,6 +8,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Modal } from '@/components/ui/Modal';
+import { Field, fieldControl } from '@/components/ui/Field';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -62,11 +64,6 @@ interface PersonaFormData {
 
 // ── Shared styles ────────────────────────────────────────────────────────────────
 
-const inputClass =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
-
-const labelClass = 'mb-1 block text-xs text-gray-500';
-
 type BadgeTone = 'success' | 'review' | 'neutral';
 const statusTone: Record<string, BadgeTone> = {
   active: 'success',
@@ -84,14 +81,6 @@ function sessionDot(status: string) {
     reconnecting: 'bg-hermes-500',
   };
   return <span className={`inline-block h-2 w-2 rounded-full ${map[status] ?? 'bg-gray-300 dark:bg-gray-600'}`} />;
-}
-
-function Overlay({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/40 p-4 backdrop-blur-[1px] dark:bg-gray-950/60">
-      {children}
-    </div>
-  );
 }
 
 // ── PersonaModal ───────────────────────────────────────────────────────────────
@@ -125,40 +114,32 @@ function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 p-4 dark:bg-gray-950/60">
-      <Card className="w-full max-w-lg p-6 shadow-pop">
-        <h2 className="mb-4 text-base font-semibold text-gray-900 dark:text-gray-100">New persona</h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className={labelClass}>Persona name</label>
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inputClass} placeholder="e.g. Cheerful Sales Bot" />
-          </div>
-          <div>
-            <label className={labelClass}>Soul.md (personality)</label>
-            <textarea required rows={5} value={form.soulMd} onChange={(e) => setForm({ ...form, soulMd: e.target.value })} className={`resize-none ${inputClass}`} placeholder="You are a friendly sales assistant…" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Tone</label>
-              <input value={form.tone} onChange={(e) => setForm({ ...form, tone: e.target.value })} className={inputClass} placeholder="friendly, formal…" />
-            </div>
-            <div>
-              <label className={labelClass}>Style</label>
-              <input value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })} className={inputClass} placeholder="concise, detailed…" />
-            </div>
-          </div>
-          <div>
-            <label className={labelClass}>Rules</label>
-            <textarea rows={2} value={form.rules} onChange={(e) => setForm({ ...form, rules: e.target.value })} className={`resize-none ${inputClass}`} placeholder="Don't quote prices without approval…" />
-          </div>
-          {error && <p className="text-xs text-danger-600">{error}</p>}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={loading}>{loading ? 'Saving…' : 'Create persona'}</Button>
-          </div>
-        </form>
-      </Card>
-    </div>
+    <Modal title="New persona" onClose={onClose} size="lg">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <Field label="Persona name">
+          {(id) => <input id={id} required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={fieldControl} placeholder="e.g. Cheerful Sales Bot" />}
+        </Field>
+        <Field label="Soul.md (personality)">
+          {(id) => <textarea id={id} required rows={5} value={form.soulMd} onChange={(e) => setForm({ ...form, soulMd: e.target.value })} className={`resize-none ${fieldControl}`} placeholder="You are a friendly sales assistant…" />}
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Tone">
+            {(id) => <input id={id} value={form.tone} onChange={(e) => setForm({ ...form, tone: e.target.value })} className={fieldControl} placeholder="friendly, formal…" />}
+          </Field>
+          <Field label="Style">
+            {(id) => <input id={id} value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })} className={fieldControl} placeholder="concise, detailed…" />}
+          </Field>
+        </div>
+        <Field label="Rules">
+          {(id) => <textarea id={id} rows={2} value={form.rules} onChange={(e) => setForm({ ...form, rules: e.target.value })} className={`resize-none ${fieldControl}`} placeholder="Don't quote prices without approval…" />}
+        </Field>
+        {error && <p className="text-xs text-danger-600">{error}</p>}
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={loading}>{loading ? 'Saving…' : 'Create persona'}</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -191,6 +172,7 @@ function BotModal({
   const [error, setError] = useState<string | null>(null);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [localPersonas, setLocalPersonas] = useState(personas);
+  const personaSelectId = useId();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -237,106 +219,103 @@ function BotModal({
 
   return (
     <>
-      <Overlay>
-        <Card className="w-full max-w-xl p-6 shadow-pop">
-          <h2 className="mb-4 text-base font-semibold text-gray-900 dark:text-gray-100">
-            {bot ? `Edit bot: ${bot.botName}` : 'New bot'}
-          </h2>
+      <Modal title={bot ? `Edit bot: ${bot.botName}` : 'New bot'} onClose={onClose} size="lg">
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <Field label="Bot name">
+            {(id) => <input id={id} required value={form.botName} onChange={(e) => setForm({ ...form, botName: e.target.value })} className={fieldControl} placeholder="e.g. Hermes Sales Bot" />}
+          </Field>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div>
-              <label className={labelClass}>Bot name</label>
-              <input required value={form.botName} onChange={(e) => setForm({ ...form, botName: e.target.value })} className={inputClass} placeholder="e.g. Hermes Sales Bot" />
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <label htmlFor={personaSelectId} className="text-xs font-medium text-gray-600 dark:text-gray-300">Persona</label>
+              <button type="button" onClick={() => setShowPersonaModal(true)} className="inline-flex items-center gap-1 text-xs font-medium text-hermes-600 hover:text-hermes-700">
+                <Plus className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                New persona
+              </button>
             </div>
+            <select id={personaSelectId} value={form.personaId} onChange={(e) => setForm({ ...form, personaId: e.target.value })} className={fieldControl}>
+              <option value="">Select persona…</option>
+              {localPersonas.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between">
-                <label className="text-xs text-gray-500">Persona</label>
-                <button type="button" onClick={() => setShowPersonaModal(true)} className="inline-flex items-center gap-1 text-xs font-medium text-hermes-600 hover:text-hermes-700">
-                  <Plus className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-                  New persona
-                </button>
-              </div>
-              <select value={form.personaId} onChange={(e) => setForm({ ...form, personaId: e.target.value })} className={inputClass}>
-                <option value="">Select persona…</option>
-                {localPersonas.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className={labelClass}>Knowledge base</label>
-              <select value={form.knowledgeBaseId} onChange={(e) => setForm({ ...form, knowledgeBaseId: e.target.value })} className={inputClass}>
+          <Field label="Knowledge base">
+            {(id) => (
+              <select id={id} value={form.knowledgeBaseId} onChange={(e) => setForm({ ...form, knowledgeBaseId: e.target.value })} className={fieldControl}>
                 <option value="">Select knowledge base…</option>
                 {knowledgeBases.map((kb) => (
                   <option key={kb.id} value={kb.id}>{kb.name}</option>
                 ))}
               </select>
-            </div>
+            )}
+          </Field>
 
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className={labelClass}>Default AI mode</label>
-                <select value={form.defaultAiMode} onChange={(e) => setForm({ ...form, defaultAiMode: e.target.value })} className={inputClass}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label="Default AI mode">
+              {(id) => (
+                <select id={id} value={form.defaultAiMode} onChange={(e) => setForm({ ...form, defaultAiMode: e.target.value })} className={fieldControl}>
                   {aiModes.map((m) => (
                     <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label className={labelClass}>Language</label>
-                <select value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} className={inputClass}>
+              )}
+            </Field>
+            <Field label="Language">
+              {(id) => (
+                <select id={id} value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} className={fieldControl}>
                   <option value="id">Indonesia</option>
                   <option value="en">English</option>
                 </select>
-              </div>
-              <div>
-                <label className={labelClass}>Status</label>
-                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={inputClass}>
+              )}
+            </Field>
+            <Field label="Status">
+              {(id) => (
+                <select id={id} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={fieldControl}>
                   <option value="draft">Draft</option>
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
-              </div>
-            </div>
+              )}
+            </Field>
+          </div>
 
-            {error && <p className="text-xs text-danger-600">{error}</p>}
+          {error && <p className="text-xs text-danger-600">{error}</p>}
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-              <Button type="submit" disabled={loading}>{loading ? 'Saving…' : 'Save'}</Button>
-            </div>
-          </form>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={loading}>{loading ? 'Saving…' : 'Save'}</Button>
+          </div>
+        </form>
 
-          {/* Assign accounts — only when editing */}
-          {bot && (
-            <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-800">
-              <h3 className="mb-2 text-xs font-semibold text-gray-500">Assign to WhatsApp accounts</h3>
-              <div className="space-y-1.5">
-                {accounts.map((a) => {
-                  const assigned = bot.accounts.some((ba) => ba.id === a.id);
-                  return (
-                    <div key={a.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800">
-                      <div className="flex items-center gap-2">
-                        {sessionDot(a.sessionStatus)}
-                        <span className="text-sm text-gray-800 dark:text-gray-200">{a.accountName}</span>
-                        <span className="text-xs text-gray-400">{a.phoneNumber}</span>
-                      </div>
-                      {assigned ? (
-                        <Badge tone="success">Assigned</Badge>
-                      ) : (
-                        <Button size="sm" onClick={() => handleAssign(a.id)}>Assign</Button>
-                      )}
+        {/* Assign accounts — only when editing */}
+        {bot && (
+          <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-800">
+            <h3 className="mb-2 text-xs font-semibold text-gray-500">Assign to WhatsApp accounts</h3>
+            <div className="space-y-1.5">
+              {accounts.map((a) => {
+                const assigned = bot.accounts.some((ba) => ba.id === a.id);
+                return (
+                  <div key={a.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800">
+                    <div className="flex items-center gap-2">
+                      {sessionDot(a.sessionStatus)}
+                      <span className="text-sm text-gray-800 dark:text-gray-200">{a.accountName}</span>
+                      <span className="text-xs text-gray-400">{a.phoneNumber}</span>
                     </div>
-                  );
-                })}
-                {accounts.length === 0 && <p className="text-xs text-gray-400">No WhatsApp accounts yet.</p>}
-              </div>
+                    {assigned ? (
+                      <Badge tone="success">Assigned</Badge>
+                    ) : (
+                      <Button size="sm" onClick={() => handleAssign(a.id)}>Assign</Button>
+                    )}
+                  </div>
+                );
+              })}
+              {accounts.length === 0 && <p className="text-xs text-gray-400">No WhatsApp accounts yet.</p>}
             </div>
-          )}
-        </Card>
-      </Overlay>
+          </div>
+        )}
+      </Modal>
 
       {showPersonaModal && (
         <PersonaModal
@@ -498,20 +477,18 @@ export default function BotsPage() {
         )}
 
         {confirmDelete && (
-          <Overlay>
-            <Card className="max-w-sm p-6 shadow-pop">
-              <p className="mb-4 text-sm text-gray-700 dark:text-gray-200">
-                Delete bot <strong>{confirmDelete.botName}</strong>? This action cannot be undone.
-              </p>
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => setConfirmDelete(null)}>Cancel</Button>
-                <Button variant="danger" onClick={() => handleDelete(confirmDelete)}>
-                  <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                  Delete
-                </Button>
-              </div>
-            </Card>
-          </Overlay>
+          <Modal title="Delete bot" onClose={() => setConfirmDelete(null)} size="sm">
+            <p className="mb-4 text-sm text-gray-700 dark:text-gray-200">
+              Delete bot <strong>{confirmDelete.botName}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setConfirmDelete(null)}>Cancel</Button>
+              <Button variant="danger" onClick={() => handleDelete(confirmDelete)}>
+                <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                Delete
+              </Button>
+            </div>
+          </Modal>
         )}
       </main>
     </AppLayout>
