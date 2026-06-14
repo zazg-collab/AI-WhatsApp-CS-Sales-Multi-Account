@@ -2,11 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { Sun, Moon } from 'lucide-react';
+import { useT, type Dict } from '@/lib/i18n';
 
 const THEME_KEY = 'hermes_theme';
 
+const dict: Dict = {
+  toLight: { id: 'Ganti ke tema terang', en: 'Switch to light theme' },
+  toDark: { id: 'Ganti ke tema gelap', en: 'Switch to dark theme' },
+  light: { id: 'Tema terang', en: 'Light theme' },
+  dark: { id: 'Tema gelap', en: 'Dark theme' },
+};
+
 /** Light/dark switcher. Light is the default; the choice persists per browser. */
 export function ThemeToggle() {
+  const t = useT(dict);
   const [dark, setDark] = useState(false);
 
   useEffect(() => {
@@ -24,7 +33,7 @@ export function ThemeToggle() {
     }
   }
 
-  const label = dark ? 'Switch to light theme' : 'Switch to dark theme';
+  const label = dark ? t('toLight') : t('toDark');
 
   return (
     <button
@@ -38,7 +47,7 @@ export function ThemeToggle() {
       ) : (
         <Moon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
       )}
-      <span className="hidden lg:block">{dark ? 'Light theme' : 'Dark theme'}</span>
+      <span className="hidden lg:block">{dark ? t('light') : t('dark')}</span>
     </button>
   );
 }

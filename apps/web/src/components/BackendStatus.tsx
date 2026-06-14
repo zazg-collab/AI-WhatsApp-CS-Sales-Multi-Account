@@ -3,14 +3,22 @@
 import { useEffect, useState } from 'react';
 import { ServerCog, Unplug } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { useT, type Dict } from '@/lib/i18n';
 
 type HealthState = 'checking' | 'online' | 'offline';
+
+const dict: Dict = {
+  checking: { id: 'Cek API', en: 'Checking API' },
+  online: { id: 'API aktif', en: 'API online' },
+  offline: { id: 'API mati', en: 'API offline' },
+};
 
 /**
  * Live backend status badge. This intentionally calls the API instead of
  * presenting a static "connected" label, so operators never see fake wiring.
  */
 export function BackendStatus() {
+  const t = useT(dict);
   const [state, setState] = useState<HealthState>('checking');
 
   useEffect(() => {
@@ -41,7 +49,7 @@ export function BackendStatus() {
   }, []);
 
   const Icon = state === 'offline' ? Unplug : ServerCog;
-  const label = state === 'checking' ? 'Cek API' : state === 'online' ? 'API aktif' : 'API mati';
+  const label = t(state);
 
   return (
     <span

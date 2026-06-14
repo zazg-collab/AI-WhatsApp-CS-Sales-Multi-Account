@@ -23,6 +23,8 @@ import {
 import { getToken, clearToken } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { ThemeToggle } from './ThemeToggle';
+import { LanguageToggle } from './LanguageToggle';
+import { useT, type Dict } from '@/lib/i18n';
 
 interface NavItem {
   href: string;
@@ -94,10 +96,18 @@ const sections: NavSection[] = [
   },
 ];
 
+const dict: Dict = {
+  tagline: { id: 'Sales Control Desk', en: 'Sales Control Desk' },
+  Growth: { id: 'Pertumbuhan', en: 'Growth' },
+  Operations: { id: 'Operasional', en: 'Operations' },
+  signOut: { id: 'Keluar', en: 'Sign out' },
+};
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const userRole = getRoleFromToken();
+  const t = useT(dict);
 
   function handleLogout() {
     clearToken();
@@ -115,7 +125,7 @@ export function Sidebar() {
           <span className="block truncate text-sm font-semibold tracking-tight text-gray-50">
             Hermes AI
           </span>
-          <span className="block truncate text-[11px] text-gray-400">Sales Control Desk</span>
+          <span className="block truncate text-[11px] text-gray-400">{t('tagline')}</span>
         </span>
       </div>
 
@@ -128,7 +138,7 @@ export function Sidebar() {
             <div key={i} className="flex flex-col gap-0.5">
               {section.heading && (
                 <span className="mb-1 hidden px-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500 lg:block">
-                  {section.heading}
+                  {t(section.heading)}
                 </span>
               )}
               {visible.map((item) => {
@@ -168,6 +178,9 @@ export function Sidebar() {
       {/* Footer */}
       <div className="border-t border-gray-800 px-2 py-2 lg:px-3">
         <div className="mb-1">
+          <LanguageToggle />
+        </div>
+        <div className="mb-1">
           <ThemeToggle />
         </div>
         <button
@@ -176,7 +189,7 @@ export function Sidebar() {
           className="flex w-full items-center justify-center gap-2.5 rounded-md px-2 py-2 text-[13px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50 lg:justify-start lg:px-2.5"
         >
           <LogOut className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
-          <span className="hidden lg:block">Sign out</span>
+          <span className="hidden lg:block">{t('signOut')}</span>
         </button>
       </div>
     </aside>
