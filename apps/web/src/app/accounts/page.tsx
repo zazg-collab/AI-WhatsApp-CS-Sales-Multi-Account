@@ -18,6 +18,50 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Field, TextareaField } from '@/components/ui/Field';
+import { useT, type Dict } from '@/lib/i18n';
+
+const dict: Dict = {
+  subtitle: {
+    id: 'Nomor WhatsApp, status koneksi, dan jam operasional',
+    en: 'WhatsApp numbers, connection status, and business hours',
+  },
+  accountNameLabel: { id: 'Nama akun', en: 'Account name' },
+  phoneLabel: { id: 'Nomor WhatsApp', en: 'WhatsApp number' },
+  retry: { id: 'Coba lagi', en: 'Try again' },
+  noAccounts: { id: 'Belum ada akun terhubung', en: 'No accounts connected yet' },
+  noAccountsHint: {
+    id: 'Tambah akun WhatsApp di atas untuk mulai menerima dan membalas pesan pelanggan.',
+    en: 'Add a WhatsApp account above to start receiving and replying to customer messages.',
+  },
+  waitingScan: {
+    id: 'Menunggu admin memindai kode QR.',
+    en: 'Waiting for an admin to scan the QR code.',
+  },
+  loadFailed: { id: 'Gagal memuat daftar akun.', en: 'Failed to load the account list.' },
+  addFailed: { id: 'Gagal menambahkan akun.', en: 'Failed to add the account.' },
+  businessHoursToggle: {
+    id: 'Jam operasional & pesan otomatis di luar jam',
+    en: 'Business hours & after-hours auto-reply',
+  },
+  active: { id: ' (aktif)', en: ' (active)' },
+  enableBusinessHours: { id: 'Aktifkan jam operasional', en: 'Enable business hours' },
+  hours: { id: 'Jam', en: 'Hours' },
+  startTime: { id: 'Jam mulai operasional', en: 'Business hours start time' },
+  endTime: { id: 'Jam selesai operasional', en: 'Business hours end time' },
+  timezone: { id: 'Zona waktu', en: 'Time zone' },
+  awayLabel: { id: 'Pesan otomatis di luar jam', en: 'After-hours auto-reply' },
+  awayHint: {
+    id: 'Dikirim di luar jam operasional saat AI tidak aktif.',
+    en: 'Sent outside business hours when the AI is inactive.',
+  },
+  awayPlaceholder: {
+    id: 'Halo, saat ini di luar jam operasional. Pesan akan kami balas pada jam kerja ya kak.',
+    en: "Hi, we're currently outside business hours. We'll reply during working hours.",
+  },
+  saving: { id: 'Menyimpan…', en: 'Saving…' },
+  save: { id: 'Simpan', en: 'Save' },
+  saved: { id: 'Tersimpan', en: 'Saved' },
+};
 
 interface Account {
   id: string;
@@ -49,6 +93,7 @@ const inputClass =
   'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: () => void }) {
+  const t = useT(dict);
   const [open, setOpen] = useState(false);
   const [enabled, setEnabled] = useState(account.businessHoursEnabled ?? false);
   const [start, setStart] = useState(account.businessHoursStart ?? '09:00');
@@ -96,20 +141,20 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
         ) : (
           <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
         )}
-        Jam operasional &amp; pesan otomatis di luar jam
-        {account.businessHoursEnabled ? ' (aktif)' : ''}
+        {t('businessHoursToggle')}
+        {account.businessHoursEnabled ? t('active') : ''}
       </button>
       {open && (
         <div className="mt-3 space-y-3 text-sm">
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="accent-hermes-600" />
-            <span className="text-gray-700 dark:text-gray-300">Aktifkan jam operasional</span>
+            <span className="text-gray-700 dark:text-gray-300">{t('enableBusinessHours')}</span>
           </label>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-gray-500">Jam</span>
-            <input type="time" aria-label="Jam mulai operasional" value={start} onChange={(e) => setStart(e.target.value)} className={inputClass} />
+            <span className="text-xs text-gray-500">{t('hours')}</span>
+            <input type="time" aria-label={t('startTime')} value={start} onChange={(e) => setStart(e.target.value)} className={inputClass} />
             <span className="text-gray-400">–</span>
-            <input type="time" aria-label="Jam selesai operasional" value={end} onChange={(e) => setEnd(e.target.value)} className={inputClass} />
+            <input type="time" aria-label={t('endTime')} value={end} onChange={(e) => setEnd(e.target.value)} className={inputClass} />
           </div>
           <div className="flex flex-wrap gap-1">
             {DAY_LABELS.map((label, d) => (
@@ -128,28 +173,28 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
             ))}
           </div>
           <Field
-            label="Zona waktu"
+            label={t('timezone')}
             value={tz}
             onChange={(e) => setTz(e.target.value)}
             placeholder="Asia/Jakarta"
           />
           <TextareaField
-            label="Pesan otomatis di luar jam"
-            hint="Dikirim di luar jam operasional saat AI tidak aktif."
+            label={t('awayLabel')}
+            hint={t('awayHint')}
             rows={2}
             value={away}
             onChange={(e) => setAway(e.target.value)}
-            placeholder="Halo, saat ini di luar jam operasional. Pesan akan kami balas pada jam kerja ya kak."
+            placeholder={t('awayPlaceholder')}
             className="resize-none"
           />
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={save} disabled={saving}>
-              {saving ? 'Menyimpan…' : 'Simpan'}
+              {saving ? t('saving') : t('save')}
             </Button>
             {saved && (
               <span className="flex items-center gap-1 text-xs text-channel-700">
                 <CircleCheck className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-                Tersimpan
+                {t('saved')}
               </span>
             )}
           </div>
@@ -160,6 +205,7 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
 }
 
 export default function AccountsPage() {
+  const t = useT(dict);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -176,11 +222,11 @@ export default function AccountsPage() {
     try {
       setAccounts(await api<Account[]>('/wa/accounts'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat daftar akun.');
+      setError(err instanceof Error ? err.message : t('loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -207,19 +253,19 @@ export default function AccountsPage() {
       setPhone('');
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal menambahkan akun.');
+      setError(err instanceof Error ? err.message : t('addFailed'));
     }
   }
 
   return (
     <AppLayout>
-      <PageHeader title="Accounts" subtitle="Nomor WhatsApp, status koneksi, dan jam operasional" />
+      <PageHeader title="Accounts" subtitle={t('subtitle')} />
 
       <div className="scrollbar-thin mx-auto w-full max-w-3xl flex-1 overflow-y-auto p-5">
         <Card className="mb-5 p-4">
           <form onSubmit={addAccount} className="flex flex-wrap gap-2">
-            <input aria-label="Nama akun" placeholder="Account name" value={name} onChange={(e) => setName(e.target.value)} className={`flex-1 ${inputClass}`} required />
-            <input aria-label="Nomor WhatsApp" placeholder="Number (e.g. 628123…)" value={phone} onChange={(e) => setPhone(e.target.value)} className={`flex-1 ${inputClass}`} required />
+            <input aria-label={t('accountNameLabel')} placeholder="Account name" value={name} onChange={(e) => setName(e.target.value)} className={`flex-1 ${inputClass}`} required />
+            <input aria-label={t('phoneLabel')} placeholder="Number (e.g. 628123…)" value={phone} onChange={(e) => setPhone(e.target.value)} className={`flex-1 ${inputClass}`} required />
             <Button type="submit" size="md">
               <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
               Add account
@@ -231,7 +277,7 @@ export default function AccountsPage() {
           <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 border-danger-200 bg-danger-50 p-4 dark:border-danger-800 dark:bg-danger-900/20">
             <p className="text-sm text-danger-700 dark:text-danger-300">{error}</p>
             <Button variant="outline" size="sm" onClick={load}>
-              Coba lagi
+              {t('retry')}
             </Button>
           </Card>
         )}
@@ -247,9 +293,9 @@ export default function AccountsPage() {
             <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-lg bg-gray-100 text-gray-400 dark:bg-gray-800">
               <Smartphone className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
             </span>
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Belum ada akun terhubung</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('noAccounts')}</p>
             <p className="mt-1 max-w-xs text-xs text-gray-500 dark:text-gray-400">
-              Tambah akun WhatsApp di atas untuk mulai menerima dan membalas pesan pelanggan.
+              {t('noAccountsHint')}
             </p>
           </Card>
         ) : (
@@ -281,7 +327,7 @@ export default function AccountsPage() {
                         !canScan && (
                           <p className="mt-4 flex items-center gap-1.5 text-xs text-gray-500">
                             <QrCode className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                            Menunggu admin memindai kode QR.
+                            {t('waitingScan')}
                           </p>
                         )
                       ))}

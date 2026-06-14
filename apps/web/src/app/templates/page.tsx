@@ -10,6 +10,50 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Field, TextareaField, SelectField } from '@/components/ui/Field';
+import { useT, type Dict } from '@/lib/i18n';
+
+const dict: Dict = {
+  subtitle: {
+    id: 'Balasan CS siap pakai — ketik /shortcut di kolom pesan untuk menyisipkan',
+    en: 'Ready-to-use CS replies — type /shortcut in the message box to insert',
+  },
+  loadFailed: { id: 'Gagal memuat template balasan', en: 'Failed to load reply templates' },
+  saveFailed: { id: 'Gagal menyimpan template', en: 'Failed to save template' },
+  deleteFailed: { id: 'Gagal menghapus template', en: 'Failed to delete template' },
+  formRequired: {
+    id: 'Judul dan isi pesan wajib diisi sebelum disimpan.',
+    en: 'Title and message body are required before saving.',
+  },
+  retry: { id: 'Coba lagi', en: 'Try again' },
+  editHeading: { id: 'Edit template', en: 'Edit template' },
+  newHeading: { id: 'Template baru', en: 'New template' },
+  titleLabel: { id: 'Judul', en: 'Title' },
+  shortcutLabel: { id: 'Shortcut (opsional)', en: 'Shortcut (optional)' },
+  shortcutHint: {
+    id: 'Ketik /shortcut di kolom pesan untuk memanggil template ini.',
+    en: 'Type /shortcut in the message box to call up this template.',
+  },
+  accountLabel: { id: 'Akun WhatsApp', en: 'WhatsApp account' },
+  globalOption: { id: 'Global (semua akun)', en: 'Global (all accounts)' },
+  messageLabel: { id: 'Isi pesan', en: 'Message body' },
+  save: { id: 'Simpan', en: 'Save' },
+  cancel: { id: 'Batal', en: 'Cancel' },
+  noTemplates: { id: 'Belum ada template', en: 'No templates yet' },
+  noTemplatesHint: {
+    id: 'Buat template pertama lewat form di samping agar tim bisa membalas lebih cepat.',
+    en: 'Create your first template using the form beside this so the team can reply faster.',
+  },
+  globalBadge: { id: 'Global', en: 'Global' },
+  edit: { id: 'Edit', en: 'Edit' },
+  delete: { id: 'Hapus', en: 'Delete' },
+  deleteHeading: { id: 'Hapus template', en: 'Delete template' },
+  deleteConfirmAction: { id: 'Hapus template', en: 'Delete template' },
+  deletePromptBefore: { id: 'Yakin ingin menghapus ', en: 'Are you sure you want to delete ' },
+  deletePromptAfter: {
+    id: '? Tindakan ini tidak bisa dibatalkan.',
+    en: '? This action cannot be undone.',
+  },
+};
 
 interface WaAccount {
   id: string;
@@ -29,6 +73,7 @@ interface QuickReply {
 const EMPTY = { title: '', content: '', shortcut: '', whatsappAccountId: '' };
 
 export default function TemplatesPage() {
+  const t = useT(dict);
   const [items, setItems] = useState<QuickReply[]>([]);
   const [accounts, setAccounts] = useState<WaAccount[]>([]);
   const [form, setForm] = useState({ ...EMPTY });
@@ -49,11 +94,11 @@ export default function TemplatesPage() {
       setItems(list);
       setAccounts(accs);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal memuat template balasan');
+      setError(e instanceof Error ? e.message : t('loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -65,7 +110,7 @@ export default function TemplatesPage() {
 
   async function handleSubmit() {
     if (!form.title.trim() || !form.content.trim()) {
-      setFormError('Judul dan isi pesan wajib diisi sebelum disimpan.');
+      setFormError(t('formRequired'));
       return;
     }
     setFormError(null);
@@ -87,7 +132,7 @@ export default function TemplatesPage() {
       resetForm();
       load();
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : 'Gagal menyimpan template');
+      setFormError(e instanceof Error ? e.message : t('saveFailed'));
     }
   }
 
@@ -111,7 +156,7 @@ export default function TemplatesPage() {
       setDeleting(null);
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal menghapus template');
+      setError(e instanceof Error ? e.message : t('deleteFailed'));
       setDeleting(null);
     }
   }
@@ -120,7 +165,7 @@ export default function TemplatesPage() {
     <AppLayout>
       <PageHeader
         title="Templates"
-        subtitle="Balasan CS siap pakai — ketik /shortcut di kolom pesan untuk menyisipkan"
+        subtitle={t('subtitle')}
       />
 
       <main className="scrollbar-thin flex-1 overflow-y-auto p-5">
@@ -128,7 +173,7 @@ export default function TemplatesPage() {
           <Card className="mb-4 border-danger-200 bg-danger-50 p-4 dark:border-danger-700/40 dark:bg-danger-900/20">
             <p className="text-[13px] font-medium text-danger-700 dark:text-danger-400">{error}</p>
             <button onClick={load} className="mt-2 text-[13px] font-semibold text-danger-700 underline dark:text-danger-400">
-              Coba lagi
+              {t('retry')}
             </button>
           </Card>
         )}
@@ -137,7 +182,7 @@ export default function TemplatesPage() {
           {/* Form */}
           <Card className="h-fit p-5">
             <h2 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              {editingId ? 'Edit template' : 'Template baru'}
+              {editingId ? t('editHeading') : t('newHeading')}
             </h2>
             {formError && (
               <p className="mb-3 rounded border border-danger-200 bg-danger-50 px-3 py-2 text-[13px] text-danger-700 dark:border-danger-700/40 dark:bg-danger-700/10 dark:text-danger-400">
@@ -146,31 +191,31 @@ export default function TemplatesPage() {
             )}
             <div className="space-y-3">
               <Field
-                label="Judul"
+                label={t('titleLabel')}
                 required
                 value={form.title}
                 onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                 placeholder="e.g. Greeting"
               />
               <Field
-                label="Shortcut (opsional)"
-                hint="Ketik /shortcut di kolom pesan untuk memanggil template ini."
+                label={t('shortcutLabel')}
+                hint={t('shortcutHint')}
                 value={form.shortcut}
                 onChange={(e) => setForm((f) => ({ ...f, shortcut: e.target.value }))}
                 placeholder="greeting"
               />
               <SelectField
-                label="Akun WhatsApp"
+                label={t('accountLabel')}
                 value={form.whatsappAccountId}
                 onChange={(e) => setForm((f) => ({ ...f, whatsappAccountId: e.target.value }))}
               >
-                <option value="">Global (semua akun)</option>
+                <option value="">{t('globalOption')}</option>
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>{a.accountName}</option>
                 ))}
               </SelectField>
               <TextareaField
-                label="Isi pesan"
+                label={t('messageLabel')}
                 required
                 rows={5}
                 value={form.content}
@@ -183,7 +228,7 @@ export default function TemplatesPage() {
                   {editingId ? (
                     <>
                       <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                      Simpan
+                      {t('save')}
                     </>
                   ) : (
                     <>
@@ -194,7 +239,7 @@ export default function TemplatesPage() {
                 </Button>
                 {editingId && (
                   <Button variant="outline" onClick={resetForm}>
-                    Batal
+                    {t('cancel')}
                   </Button>
                 )}
               </div>
@@ -210,9 +255,9 @@ export default function TemplatesPage() {
             ) : items.length === 0 ? (
               <Card className="flex flex-col items-center justify-center py-16 text-center">
                 <MessageSquareText className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Belum ada template</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('noTemplates')}</p>
                 <p className="mt-1 text-[13px] text-gray-400">
-                  Buat template pertama lewat form di samping agar tim bisa membalas lebih cepat.
+                  {t('noTemplatesHint')}
                 </p>
               </Card>
             ) : (
@@ -223,18 +268,18 @@ export default function TemplatesPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium text-gray-900 dark:text-gray-100">{item.title}</span>
                         {item.shortcut && <Badge tone="hermes">/{item.shortcut}</Badge>}
-                        <Badge tone="neutral">{item.whatsappAccount?.accountName ?? 'Global'}</Badge>
+                        <Badge tone="neutral">{item.whatsappAccount?.accountName ?? t('globalBadge')}</Badge>
                       </div>
                       <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-400">{item.content}</p>
                     </div>
                     <div className="flex shrink-0 gap-1.5">
                       <Button variant="outline" size="sm" onClick={() => startEdit(item)}>
                         <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                        Edit
+                        {t('edit')}
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => setDeleting(item)} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
                         <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                        Hapus
+                        {t('delete')}
                       </Button>
                     </div>
                   </div>
@@ -250,19 +295,19 @@ export default function TemplatesPage() {
           open
           onClose={() => setDeleting(null)}
           size="sm"
-          title="Hapus template"
+          title={t('deleteHeading')}
           footer={
             <>
-              <Button variant="outline" onClick={() => setDeleting(null)}>Batal</Button>
+              <Button variant="outline" onClick={() => setDeleting(null)}>{t('cancel')}</Button>
               <Button variant="danger" onClick={confirmDelete}>
                 <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                Hapus template
+                {t('deleteConfirmAction')}
               </Button>
             </>
           }
         >
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Yakin ingin menghapus <span className="font-semibold text-gray-900 dark:text-gray-100">{deleting.title}</span>? Tindakan ini tidak bisa dibatalkan.
+            {t('deletePromptBefore')}<span className="font-semibold text-gray-900 dark:text-gray-100">{deleting.title}</span>{t('deletePromptAfter')}
           </p>
         </Modal>
       )}
