@@ -7,8 +7,25 @@ import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { useT, type Dict } from '@/lib/i18n';
+
+const dict: Dict = {
+  title: { id: 'AI Settings', en: 'AI Settings' },
+  subtitle: { id: 'Konfigurasi provider dan model yang tersedia', en: 'Provider configuration and available models' },
+  errConfig: { id: 'Gagal memuat konfigurasi AI — periksa koneksi ke API.', en: 'Failed to load AI configuration — check the API connection.' },
+  errModels: { id: 'Gagal memuat daftar model dari provider.', en: 'Failed to load the model list from the provider.' },
+  baseUrl: { id: 'Base URL', en: 'Base URL' },
+  modelDefault: { id: 'Model default', en: 'Default model' },
+  providerNote: { id: 'Provider bersifat OpenAI-compatible — ubah lewat env AI_BASE_URL / AI_API_KEY / AI_MODEL (OpenAI, OpenRouter, Ollama, LM Studio, vLLM).', en: 'The provider is OpenAI-compatible — change it via the AI_BASE_URL / AI_API_KEY / AI_MODEL env vars (OpenAI, OpenRouter, Ollama, LM Studio, vLLM).' },
+  loading: { id: 'Memuat…', en: 'Loading…' },
+  loadModels: { id: 'Load models from Base URL', en: 'Load models from Base URL' },
+  cobaLagi: { id: 'Coba lagi', en: 'Try again' },
+  noModels: { id: 'Tidak ada model ditemukan', en: 'No models found' },
+  noModelsHint: { id: 'Periksa Base URL dan API key provider, lalu muat ulang daftar model.', en: 'Check the provider Base URL and API key, then reload the model list.' },
+};
 
 export default function AiSettingsPage() {
+  const t = useT(dict);
   const [config, setConfig] = useState<{ baseUrl: string; defaultModel: string } | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +35,7 @@ export default function AiSettingsPage() {
   useEffect(() => {
     api<{ baseUrl: string; defaultModel: string }>('/ai/config')
       .then(setConfig)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Gagal memuat konfigurasi AI — periksa koneksi ke API.'));
+      .catch((err) => setError(err instanceof Error ? err.message : t('errConfig')));
   }, []);
 
   async function loadModels() {
@@ -28,7 +45,7 @@ export default function AiSettingsPage() {
       setModels(await api<string[]>('/ai/models'));
       setLoaded(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal memuat daftar model dari provider.');
+      setError(err instanceof Error ? err.message : t('errModels'));
     } finally {
       setLoading(false);
     }
@@ -36,29 +53,28 @@ export default function AiSettingsPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="AI Settings" subtitle="Konfigurasi provider dan model yang tersedia" />
+      <PageHeader title={t('title')} subtitle={t('subtitle')} />
 
       <div className="scrollbar-thin mx-auto w-full max-w-2xl flex-1 overflow-y-auto p-5">
         <Card className="mb-5 p-4 text-sm">
           <dl className="space-y-1.5">
             <div className="flex justify-between gap-3">
-              <dt className="text-gray-500 dark:text-gray-400">Base URL</dt>
+              <dt className="text-gray-500 dark:text-gray-400">{t('baseUrl')}</dt>
               <dd className="truncate font-mono text-gray-800 dark:text-gray-200">{config?.baseUrl ?? '—'}</dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-gray-500 dark:text-gray-400">Model default</dt>
+              <dt className="text-gray-500 dark:text-gray-400">{t('modelDefault')}</dt>
               <dd className="truncate font-mono text-gray-800 dark:text-gray-200">{config?.defaultModel ?? '—'}</dd>
             </div>
           </dl>
           <p className="mt-3 text-xs leading-relaxed text-gray-400">
-            Provider bersifat OpenAI-compatible — ubah lewat env AI_BASE_URL / AI_API_KEY /
-            AI_MODEL (OpenAI, OpenRouter, Ollama, LM Studio, vLLM).
+            {t('providerNote')}
           </p>
         </Card>
 
         <Button onClick={loadModels} disabled={loading} className="mb-4">
           <RefreshCw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          {loading ? 'Memuat…' : 'Load models from Base URL'}
+          {loading ? t('loading') : t('loadModels')}
         </Button>
 
         {error && (
@@ -67,7 +83,7 @@ export default function AiSettingsPage() {
             <div>
               <p className="text-[13px] font-medium text-danger-700 dark:text-danger-400">{error}</p>
               <button onClick={loadModels} className="mt-1 text-[13px] font-semibold text-danger-700 underline dark:text-danger-400">
-                Coba lagi
+                {t('cobaLagi')}
               </button>
             </div>
           </Card>
@@ -88,9 +104,9 @@ export default function AiSettingsPage() {
         ) : loaded && !error ? (
           <Card className="flex flex-col items-center justify-center py-12 text-center">
             <Cpu className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
-            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tidak ada model ditemukan</p>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('noModels')}</p>
             <p className="mt-1 text-[13px] text-gray-400">
-              Periksa Base URL dan API key provider, lalu muat ulang daftar model.
+              {t('noModelsHint')}
             </p>
           </Card>
         ) : null}

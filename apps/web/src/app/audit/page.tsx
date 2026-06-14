@@ -8,6 +8,33 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Field, SelectField } from '@/components/ui/Field';
+import { useT, type Dict } from '@/lib/i18n';
+
+const dict: Dict = {
+  title: { id: 'Audit Log', en: 'Audit Log' },
+  subtitle: { id: 'Setiap tindakan terekam dan bisa ditelusuri lintas akun', en: 'Every action is recorded and traceable across accounts' },
+  entitas: { id: 'Entitas', en: 'Entity' },
+  semuaEntitas: { id: 'Semua entitas', en: 'All entities' },
+  aksi: { id: 'Aksi', en: 'Action' },
+  cariAksi: { id: 'Cari aksi…', en: 'Search action…' },
+  dariTanggal: { id: 'Dari tanggal', en: 'From date' },
+  sampaiTanggal: { id: 'Sampai tanggal', en: 'To date' },
+  cobaLagi: { id: 'Coba lagi', en: 'Try again' },
+  errLoad: { id: 'Gagal memuat audit log — periksa koneksi lalu coba lagi.', en: 'Failed to load the audit log — check your connection and try again.' },
+  colWaktu: { id: 'Waktu', en: 'Time' },
+  colPengguna: { id: 'Pengguna', en: 'User' },
+  colEntitas: { id: 'Entitas', en: 'Entity' },
+  colIdEntitas: { id: 'ID Entitas', en: 'Entity ID' },
+  colData: { id: 'Data', en: 'Data' },
+  noMatch: { id: 'Tidak ada aktivitas yang cocok', en: 'No matching activity' },
+  noActivity: { id: 'Belum ada aktivitas tercatat', en: 'No activity recorded yet' },
+  noMatchHint: { id: 'Longgarkan filter entitas, aksi, atau rentang tanggal lalu muat ulang.', en: 'Loosen the entity, action, or date-range filters and reload.' },
+  noActivityHint: { id: 'Aktivitas admin dan sistem akan muncul di sini begitu ada perubahan.', en: 'Admin and system activity will appear here as soon as something changes.' },
+  sistem: { id: 'sistem', en: 'system' },
+  sebelumnya: { id: 'Sebelumnya', en: 'Previous' },
+  berikutnya: { id: 'Berikutnya', en: 'Next' },
+  pageInfo: { id: 'Halaman {page} / {total} ({count} total)', en: 'Page {page} / {total} ({count} total)' },
+};
 
 interface AuditEntry {
   id: string;
@@ -23,6 +50,7 @@ interface AuditEntry {
 const PAGE_SIZE = 20;
 
 export default function AuditPage() {
+  const t = useT(dict);
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
@@ -51,11 +79,11 @@ export default function AuditPage() {
     } catch (e) {
       setEntries([]);
       setTotal(0);
-      setError(e instanceof Error ? e.message : 'Gagal memuat audit log — periksa koneksi lalu coba lagi.');
+      setError(e instanceof Error ? e.message : t('errLoad'));
     } finally {
       setLoading(false);
     }
-  }, [entity, action, from, to]);
+  }, [entity, action, from, to, t]);
 
   useEffect(() => {
     setPage(0);
@@ -72,14 +100,14 @@ export default function AuditPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Audit Log" subtitle="Setiap tindakan terekam dan bisa ditelusuri lintas akun" />
+      <PageHeader title={t('title')} subtitle={t('subtitle')} />
 
       <div className="scrollbar-thin flex-1 overflow-y-auto p-5">
         {/* Filters */}
         <div className="mb-4 flex flex-wrap items-end gap-2">
           <div className="w-40">
-            <SelectField label="Entitas" value={entity} onChange={(e) => setEntity(e.target.value)}>
-              <option value="">Semua entitas</option>
+            <SelectField label={t('entitas')} value={entity} onChange={(e) => setEntity(e.target.value)}>
+              <option value="">{t('semuaEntitas')}</option>
               <option value="message">message</option>
               <option value="conversation">conversation</option>
               <option value="customer">customer</option>
@@ -88,18 +116,18 @@ export default function AuditPage() {
           </div>
           <div className="w-44">
             <Field
-              label="Aksi"
+              label={t('aksi')}
               type="text"
-              placeholder="Cari aksi…"
+              placeholder={t('cariAksi')}
               value={action}
               onChange={(e) => setAction(e.target.value)}
             />
           </div>
           <div className="w-40">
-            <Field label="Dari tanggal" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <Field label={t('dariTanggal')} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           </div>
           <div className="w-40">
-            <Field label="Sampai tanggal" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <Field label={t('sampaiTanggal')} type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
         </div>
 
@@ -112,7 +140,7 @@ export default function AuditPage() {
                 onClick={() => load(page)}
                 className="mt-1 text-[13px] font-semibold text-danger-700 underline dark:text-danger-400"
               >
-                Coba lagi
+                {t('cobaLagi')}
               </button>
             </div>
           </Card>
@@ -128,12 +156,12 @@ export default function AuditPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
-                    <th className="px-4 py-3 font-medium">Waktu</th>
-                    <th className="px-4 py-3 font-medium">Pengguna</th>
-                    <th className="px-4 py-3 font-medium">Aksi</th>
-                    <th className="px-4 py-3 font-medium">Entitas</th>
-                    <th className="px-4 py-3 font-medium">ID Entitas</th>
-                    <th className="px-4 py-3 font-medium">Data</th>
+                    <th className="px-4 py-3 font-medium">{t('colWaktu')}</th>
+                    <th className="px-4 py-3 font-medium">{t('colPengguna')}</th>
+                    <th className="px-4 py-3 font-medium">{t('aksi')}</th>
+                    <th className="px-4 py-3 font-medium">{t('colEntitas')}</th>
+                    <th className="px-4 py-3 font-medium">{t('colIdEntitas')}</th>
+                    <th className="px-4 py-3 font-medium">{t('colData')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -142,12 +170,10 @@ export default function AuditPage() {
                       <td colSpan={6} className="px-4 py-12 text-center">
                         <History className="mx-auto mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
                         <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          {hasFilters ? 'Tidak ada aktivitas yang cocok' : 'Belum ada aktivitas tercatat'}
+                          {hasFilters ? t('noMatch') : t('noActivity')}
                         </p>
                         <p className="mt-1 text-[13px] text-gray-400">
-                          {hasFilters
-                            ? 'Longgarkan filter entitas, aksi, atau rentang tanggal lalu muat ulang.'
-                            : 'Aktivitas admin dan sistem akan muncul di sini begitu ada perubahan.'}
+                          {hasFilters ? t('noMatchHint') : t('noActivityHint')}
                         </p>
                       </td>
                     </tr>
@@ -170,7 +196,7 @@ export default function AuditPage() {
                               <p className="text-xs text-gray-400">{e.user.email}</p>
                             </div>
                           ) : (
-                            <span className="text-gray-400">sistem</span>
+                            <span className="text-gray-400">{t('sistem')}</span>
                           )}
                         </td>
                         <td className="px-4 py-2.5">
@@ -202,10 +228,10 @@ export default function AuditPage() {
               <div className="mt-4 flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => handlePageChange(page - 1)} disabled={page === 0}>
                   <ChevronLeft className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                  Sebelumnya
+                  {t('sebelumnya')}
                 </Button>
                 <span className="text-xs text-gray-400">
-                  Halaman {page + 1} / {totalPages} ({total} total)
+                  {t('pageInfo', { page: page + 1, total: totalPages, count: total })}
                 </span>
                 <Button
                   variant="outline"
@@ -213,7 +239,7 @@ export default function AuditPage() {
                   onClick={() => handlePageChange(page + 1)}
                   disabled={page >= totalPages - 1}
                 >
-                  Berikutnya
+                  {t('berikutnya')}
                   <ChevronRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                 </Button>
               </div>

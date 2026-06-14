@@ -174,7 +174,9 @@ export default function CampaignsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Campaign | null>(null);
   const [role, setRole] = useState<Role | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; tone: 'error' | 'success' } | null>(null);
+  const showError = (msg: string) => setToast({ msg, tone: 'error' });
+  const showOk = (msg: string) => setToast({ msg, tone: 'success' });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
@@ -211,7 +213,7 @@ export default function CampaignsPage() {
       setAccounts(accountData);
       if (!whatsappAccountId && accountData[0]) setWhatsappAccountId(accountData[0].id);
     } catch (err) {
-      setToast(err instanceof Error ? err.message : t('toastLoadCampaigns'));
+      showError(err instanceof Error ? err.message : t('toastLoadCampaigns'));
     } finally {
       setLoading(false);
     }
@@ -221,7 +223,7 @@ export default function CampaignsPage() {
     try {
       setDetail(await api<Campaign>(`/campaigns/${id}`));
     } catch (err) {
-      setToast(err instanceof Error ? err.message : t('toastLoadDetail'));
+      showError(err instanceof Error ? err.message : t('toastLoadDetail'));
     }
   }, [t]);
 
@@ -237,7 +239,7 @@ export default function CampaignsPage() {
 
   async function handlePreview() {
     if (!whatsappAccountId) {
-      setToast(t('toastSelectAccount'));
+      showError(t('toastSelectAccount'));
       return;
     }
     setSubmitting(true);
@@ -247,7 +249,7 @@ export default function CampaignsPage() {
         body: JSON.stringify({ whatsappAccountId, targetFilter }),
       }));
     } catch (err) {
-      setToast(err instanceof Error ? err.message : t('toastPreviewFailed'));
+      showError(err instanceof Error ? err.message : t('toastPreviewFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -255,7 +257,7 @@ export default function CampaignsPage() {
 
   async function createCampaign() {
     if (!name.trim() || !messageTemplate.trim() || !whatsappAccountId) {
-      setToast(t('toastRequired'));
+      showError(t('toastRequired'));
       return;
     }
     setSubmitting(true);
@@ -271,13 +273,13 @@ export default function CampaignsPage() {
           scheduledAt: scheduledAt || undefined,
         }),
       });
-      setToast(t('toastDraftCreated'));
+      showOk(t('toastDraftCreated'));
       setSelectedId(campaign.id);
       setName('');
       setMessageTemplate('');
       await loadCampaigns();
     } catch (err) {
-      setToast(err instanceof Error ? err.message : t('toastCreateFailed'));
+      showError(err instanceof Error ? err.message : t('toastCreateFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -297,11 +299,11 @@ export default function CampaignsPage() {
     setSubmitting(true);
     try {
       await api(`/campaigns/${selectedCampaign.id}/${action}`, { method: 'POST' });
-      setToast(t('toastActionOk', { action }));
+      showOk(t('toastActionOk', { action }));
       await loadCampaigns();
       await loadDetail(selectedCampaign.id);
     } catch (err) {
-      setToast(err instanceof Error ? err.message : t('toastActionFailed', { action }));
+      showError(err instanceof Error ? err.message : t('toastActionFailed', { action }));
     } finally {
       setSubmitting(false);
     }
@@ -449,12 +451,12 @@ export default function CampaignsPage() {
               onClick={() => setToast(null)}
               aria-label={t('closeToast')}
               className={`mb-4 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
-                /gagal|wajib|dulu/i.test(toast)
+                toast.tone === 'error'
                   ? 'border-danger-200 bg-danger-50 text-danger-700 dark:border-danger-900 dark:bg-danger-900/30 dark:text-danger-100'
                   : 'border-channel-100 bg-channel-50 text-channel-700 dark:border-channel-700 dark:bg-channel-700/20 dark:text-channel-100'
               }`}
             >
-              {toast}
+              {toast.msg}
               <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
             </button>
           )}

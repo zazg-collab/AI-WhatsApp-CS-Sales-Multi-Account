@@ -38,6 +38,137 @@ import { Badge } from '@/components/ui/Badge';
 import { StatusLabel, type StatusKind } from '@/components/ui/StatusLabel';
 import { WhatsAppMark } from '@/components/WhatsAppMark';
 import { cn } from '@/lib/cn';
+import { useT, type Dict, type TFunction } from '@/lib/i18n';
+
+const dict: Dict = {
+  // Filters
+  filterAll: { id: 'Semua', en: 'All' },
+  filterAttention: { id: 'Perlu tindakan', en: 'Needs action' },
+  filterSla: { id: 'SLA berisiko', en: 'SLA at risk' },
+  filterUnassigned: { id: 'Belum ditugaskan', en: 'Unassigned' },
+  // AI mode select options
+  aiModeOptionOn: { id: 'AI on', en: 'AI on' },
+  aiModeOptionOff: { id: 'AI off', en: 'AI off' },
+  aiModeOptionDraft: { id: 'AI draft', en: 'AI draft' },
+  aiModeOptionSupervised: { id: 'AI supervised', en: 'AI supervised' },
+  aiModeOptionPaused: { id: 'AI paused', en: 'AI paused' },
+  // Workflow status options
+  statusOpen: { id: 'Terbuka', en: 'Open' },
+  statusPending: { id: 'Tertunda', en: 'Pending' },
+  statusResolved: { id: 'Selesai', en: 'Resolved' },
+  // Reaction labels
+  reactionThumbsUp: { id: 'Thumbs up', en: 'Thumbs up' },
+  reactionHeart: { id: 'Heart', en: 'Heart' },
+  reactionLaugh: { id: 'Laugh', en: 'Laugh' },
+  reactionSurprised: { id: 'Surprised', en: 'Surprised' },
+  reactionSad: { id: 'Sad', en: 'Sad' },
+  reactionThanks: { id: 'Thanks', en: 'Thanks' },
+  reactWith: { id: 'React with {label}', en: 'React with {label}' },
+  // Error fallbacks
+  errLoadUsers: { id: 'Failed to load team users from API', en: 'Failed to load team users from API' },
+  errLoadAccounts: { id: 'Failed to load WhatsApp accounts from API', en: 'Failed to load WhatsApp accounts from API' },
+  errLoadConversations: { id: 'Failed to load conversations from API', en: 'Failed to load conversations from API' },
+  errLoadConversation: { id: 'Failed to load conversation from API', en: 'Failed to load conversation from API' },
+  // Number validation / start results
+  numberRegistered: { id: 'terdaftar', en: 'registered' },
+  numberNotRegistered: { id: 'tidak terdaftar', en: 'not registered' },
+  numberResult: { id: '{phone} {state} di WhatsApp', en: '{phone} is {state} on WhatsApp' },
+  conversationOpened: { id: 'Percakapan berhasil dibuka', en: 'Conversation opened successfully' },
+  // Search
+  searchPlaceholder: { id: 'Cari percakapan', en: 'Search conversations' },
+  // Start chat panel
+  startChat: { id: 'Mulai chat WhatsApp', en: 'Start WhatsApp chat' },
+  pickSenderAccountLabel: { id: 'Pilih akun WhatsApp pengirim', en: 'Pick sender WhatsApp account' },
+  pickSenderAccount: { id: 'Pilih akun pengirim', en: 'Pick sender account' },
+  phonePlaceholder: { id: 'Nomor telepon', en: 'Phone number' },
+  phoneAriaLabel: { id: 'Nomor telepon tujuan', en: 'Destination phone number' },
+  namePlaceholder: { id: 'Nama (opsional)', en: 'Name (optional)' },
+  nameAriaLabel: { id: 'Nama pelanggan (opsional)', en: 'Customer name (optional)' },
+  checkNumber: { id: 'Cek nomor', en: 'Check number' },
+  openChat: { id: 'Buka chat', en: 'Open chat' },
+  // Queue list
+  noConversationsFilter: { id: 'Tidak ada percakapan pada filter ini.', en: 'No conversations in this filter.' },
+  noMessagesYet: { id: 'Belum ada pesan', en: 'No messages yet' },
+  // Timeline header
+  pickConversation: { id: 'Pilih percakapan untuk mulai membalas.', en: 'Select a conversation to start replying.' },
+  markRead: { id: 'Tandai dibaca', en: 'Mark as read' },
+  returnToAi: { id: 'Kembalikan ke AI', en: 'Return to AI' },
+  takeover: { id: 'Ambil alih', en: 'Take over' },
+  escalate: { id: 'Eskalasi', en: 'Escalate' },
+  // Draft controls
+  approveAndSend: { id: 'Setujui & kirim', en: 'Approve & send' },
+  editDraft: { id: 'Edit draft', en: 'Edit draft' },
+  blockSend: { id: 'Blokir kirim', en: 'Block send' },
+  // Message bubble
+  messageRetracted: { id: 'Pesan ditarik', en: 'Message retracted' },
+  replyTo: { id: 'Balasan ke {sender}: {body}', en: 'Reply to {sender}: {body}' },
+  aiGeneratedLabel: { id: 'Dibuat AI', en: 'AI-generated' },
+  edited: { id: 'Diedit', en: 'Edited' },
+  reactionsLabel: { id: 'Reaksi: {reactions}', en: 'Reactions: {reactions}' },
+  reply: { id: 'Balas', en: 'Reply' },
+  edit: { id: 'Edit', en: 'Edit' },
+  retract: { id: 'Tarik', en: 'Retract' },
+  reactToMessageLabel: { id: 'React to message', en: 'React to message' },
+  clearReactionAction: { id: 'Hapus reaksi', en: 'Clear reaction' },
+  // Composer
+  editingSent: { id: 'Mengedit pesan terkirim', en: 'Editing sent message' },
+  replyingTo: { id: 'Membalas {sender}', en: 'Replying to {sender}' },
+  quotePreview: { id: '{prefix}: {body}', en: '{prefix}: {body}' },
+  cancel: { id: 'Batal', en: 'Cancel' },
+  attachMedia: { id: 'Attach media', en: 'Attach media' },
+  composerEditPlaceholder: { id: 'Edit pesan terkirim', en: 'Edit sent message' },
+  composerQuotePlaceholder: { id: 'Balas dengan kutipan pesan', en: 'Reply with quoted message' },
+  composerPlaceholder: { id: 'Tulis balasan, atau edit draft AI di atas', en: 'Write a reply, or edit the AI draft above' },
+  composerAriaLabel: { id: 'Tulis balasan', en: 'Write a reply' },
+  save: { id: 'Simpan', en: 'Save' },
+  send: { id: 'Kirim', en: 'Send' },
+  // CRM panel
+  viewReasoning: { id: 'Lihat alasan', en: 'View reasoning' },
+  auditTrail: { id: 'Jejak audit', en: 'Audit trail' },
+  noName: { id: 'Tanpa nama', en: 'No name' },
+  leadStage: { id: 'Stage lead', en: 'Lead stage' },
+  leadScore: { id: 'Skor lead', en: 'Lead score' },
+  // WhatsApp controls
+  whatsappControls: { id: 'Kontrol WhatsApp', en: 'WhatsApp controls' },
+  aiModeField: { id: 'Mode AI', en: 'AI mode' },
+  workflowStatusField: { id: 'Status alur', en: 'Workflow status' },
+  labelField: { id: 'Label', en: 'Label' },
+  labelPlaceholder: { id: 'prioritas, renewal, tagihan', en: 'priority, renewal, invoice' },
+  // Assigned admin
+  assignedTo: { id: 'Ditugaskan ke', en: 'Assigned to' },
+  change: { id: 'Ubah', en: 'Change' },
+  unassign: { id: 'Lepas tugas', en: 'Unassign' },
+  notAssigned: { id: 'Belum ditugaskan', en: 'Not assigned' },
+  // Hermes review
+  hermesReview: { id: 'Review Hermes AI', en: 'Hermes AI review' },
+  confidenceScore: { id: 'Skor keyakinan', en: 'Confidence score' },
+  riskScore: { id: 'Skor risiko', en: 'Risk score' },
+  riskLevel: { id: 'Level risiko', en: 'Risk level' },
+  hermesReason: { id: 'Alasan Hermes', en: 'Hermes reasoning' },
+  recommendation: { id: 'Rekomendasi: {text}', en: 'Recommendation: {text}' },
+  noHermesReview: { id: 'Belum ada review Hermes untuk percakapan ini.', en: 'No Hermes review for this conversation yet.' },
+  // Risk flags
+  riskFlags: { id: 'Tanda risiko', en: 'Risk flags' },
+  slaMissed: { id: 'SLA terlewat', en: 'SLA missed' },
+  aiPausedFlag: { id: 'AI dijeda', en: 'AI paused' },
+  riskLevelFlag: { id: 'Risiko {level}', en: '{level} risk' },
+  noActiveRisk: { id: 'Tidak ada tanda risiko aktif.', en: 'No active risk flags.' },
+  // Automation
+  automationMode: { id: 'Mode otomasi', en: 'Automation mode' },
+  active: { id: 'Aktif', en: 'Active' },
+  noBotAssigned: { id: 'Belum ada bot otomasi yang ditugaskan.', en: 'No automation bot assigned yet.' },
+  // Audit panel
+  escalateToSupervisor: { id: 'Eskalasi ke supervisor', en: 'Escalate to supervisor' },
+  // MediaContent
+  mediaImage: { id: 'Image', en: 'Image' },
+  mediaVideo: { id: 'Video', en: 'Video' },
+  // buildAudit
+  auditAiReply: { id: 'AI membuat balasan', en: 'AI generated a reply' },
+  auditHermes: { id: 'Hermes {decision}', en: 'Hermes {decision}' },
+  auditTakeover: { id: 'Admin mengambil alih', en: 'Admin took over' },
+  auditAssigned: { id: 'Ditugaskan ke {name}', en: 'Assigned to {name}' },
+  auditNoActions: { id: 'Belum ada tindakan tersupervisi', en: 'No supervised actions yet' },
+};
 
 /**
  * Live 3-panel Inbox:
@@ -108,10 +239,10 @@ interface ConvDetail {
 type Filter = 'all' | 'attention' | 'sla' | 'unassigned';
 
 const filters: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'Semua' },
-  { key: 'attention', label: 'Perlu tindakan' },
-  { key: 'sla', label: 'SLA berisiko' },
-  { key: 'unassigned', label: 'Belum ditugaskan' },
+  { key: 'all', label: 'filterAll' },
+  { key: 'attention', label: 'filterAttention' },
+  { key: 'sla', label: 'filterSla' },
+  { key: 'unassigned', label: 'filterUnassigned' },
 ];
 
 const aiModeLabel: Record<string, string> = {
@@ -124,26 +255,26 @@ const aiModeLabel: Record<string, string> = {
 
 
 const aiModeOptions = [
-  { value: 'ai_on', label: 'AI on' },
-  { value: 'ai_off', label: 'AI off' },
-  { value: 'ai_draft', label: 'AI draft' },
-  { value: 'ai_supervised', label: 'AI supervised' },
-  { value: 'ai_paused', label: 'AI paused' },
+  { value: 'ai_on', label: 'aiModeOptionOn' },
+  { value: 'ai_off', label: 'aiModeOptionOff' },
+  { value: 'ai_draft', label: 'aiModeOptionDraft' },
+  { value: 'ai_supervised', label: 'aiModeOptionSupervised' },
+  { value: 'ai_paused', label: 'aiModeOptionPaused' },
 ];
 
 const statusOptions = [
-  { value: 'open', label: 'Terbuka' },
-  { value: 'pending', label: 'Tertunda' },
-  { value: 'resolved', label: 'Selesai' },
+  { value: 'open', label: 'statusOpen' },
+  { value: 'pending', label: 'statusPending' },
+  { value: 'resolved', label: 'statusResolved' },
 ];
 
 const reactionOptions = [
-  { emoji: '👍', label: 'Thumbs up' },
-  { emoji: '❤️', label: 'Heart' },
-  { emoji: '😂', label: 'Laugh' },
-  { emoji: '😮', label: 'Surprised' },
-  { emoji: '😢', label: 'Sad' },
-  { emoji: '🙏', label: 'Thanks' },
+  { emoji: '👍', label: 'reactionThumbsUp' },
+  { emoji: '❤️', label: 'reactionHeart' },
+  { emoji: '😂', label: 'reactionLaugh' },
+  { emoji: '😮', label: 'reactionSurprised' },
+  { emoji: '😢', label: 'reactionSad' },
+  { emoji: '🙏', label: 'reactionThanks' },
 ];
 
 const riskTone: Record<string, 'success' | 'review' | 'danger'> = {
@@ -191,6 +322,7 @@ export default function InboxPage() {
 }
 
 function InboxInner() {
+  const t = useT(dict);
   const searchParams = useSearchParams();
   const [list, setList] = useState<ConvSummary[]>([]);
   const [activeId, setActiveId] = useState<string | null>(searchParams.get('conversation'));
@@ -227,8 +359,8 @@ function InboxInner() {
         setAdmins(d.users);
         setAdminError(null);
       })
-      .catch((err) => setAdminError(err instanceof Error ? err.message : 'Failed to load team users from API'));
-  }, []);
+      .catch((err) => setAdminError(err instanceof Error ? err.message : t('errLoadUsers')));
+  }, [t]);
 
   useEffect(() => {
     api<WaAccount[]>('/wa/accounts')
@@ -236,8 +368,8 @@ function InboxInner() {
         setAccounts(items);
         if (items[0]) setStartAccountId((current) => current || items[0].id);
       })
-      .catch((err) => setListError(err instanceof Error ? err.message : 'Failed to load WhatsApp accounts from API'));
-  }, []);
+      .catch((err) => setListError(err instanceof Error ? err.message : t('errLoadAccounts')));
+  }, [t]);
 
   const loadList = useCallback(async () => {
     const params = new URLSearchParams({ limit: '50' });
@@ -247,9 +379,9 @@ function InboxInner() {
       setList(data.items);
       setListError(null);
     } catch (err) {
-      setListError(err instanceof Error ? err.message : 'Failed to load conversations from API');
+      setListError(err instanceof Error ? err.message : t('errLoadConversations'));
     }
-  }, [debounced]);
+  }, [debounced, t]);
 
   const loadConv = useCallback(async (id: string) => {
     try {
@@ -259,9 +391,9 @@ function InboxInner() {
       api(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
     } catch (err) {
       setConv(null);
-      setDetailError(err instanceof Error ? err.message : 'Failed to load conversation from API');
+      setDetailError(err instanceof Error ? err.message : t('errLoadConversation'));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 300);
@@ -409,7 +541,7 @@ function InboxInner() {
       method: 'POST',
       body: JSON.stringify({ accountId: startAccountId, phoneNumber: startPhone.trim() }),
     });
-    setStartResult(`${result.phoneNumber} ${result.exists ? 'terdaftar' : 'tidak terdaftar'} di WhatsApp`);
+    setStartResult(t('numberResult', { phone: result.phoneNumber, state: result.exists ? t('numberRegistered') : t('numberNotRegistered') }));
   });
 
   const startConversation = () => act(async () => {
@@ -419,7 +551,7 @@ function InboxInner() {
       body: JSON.stringify({ accountId: startAccountId, phoneNumber: startPhone.trim(), name: startName.trim() || undefined }),
     });
     setActiveId(opened.id);
-    setStartResult('Percakapan berhasil dibuka');
+    setStartResult(t('conversationOpened'));
     setStartPhone('');
     setStartName('');
   });
@@ -468,8 +600,8 @@ function InboxInner() {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cari percakapan"
-                aria-label="Cari percakapan"
+                placeholder={t('searchPlaceholder')}
+                aria-label={t('searchPlaceholder')}
                 className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               />
             </div>
@@ -487,7 +619,7 @@ function InboxInner() {
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700',
                 )}
               >
-                {f.label}
+                {t(f.label)}
               </button>
             ))}
           </div>
@@ -495,16 +627,16 @@ function InboxInner() {
           <div className="border-b border-gray-100 p-3 dark:border-gray-800">
             <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-gray-700 dark:text-gray-200">
               <UserPlus className="h-3.5 w-3.5 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
-              Mulai chat WhatsApp
+              {t('startChat')}
             </div>
             <div className="space-y-2">
               <select
                 value={startAccountId}
                 onChange={(e) => setStartAccountId(e.target.value)}
-                aria-label="Pilih akun WhatsApp pengirim"
+                aria-label={t('pickSenderAccountLabel')}
                 className="h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
               >
-                <option value="">Pilih akun pengirim</option>
+                <option value="">{t('pickSenderAccount')}</option>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>{account.accountName} ({account.phoneNumber})</option>
                 ))}
@@ -512,25 +644,25 @@ function InboxInner() {
               <input
                 value={startPhone}
                 onChange={(e) => setStartPhone(e.target.value)}
-                placeholder="Nomor telepon"
-                aria-label="Nomor telepon tujuan"
+                placeholder={t('phonePlaceholder')}
+                aria-label={t('phoneAriaLabel')}
                 className="h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               />
               <input
                 value={startName}
                 onChange={(e) => setStartName(e.target.value)}
-                placeholder="Nama (opsional)"
-                aria-label="Nama pelanggan (opsional)"
+                placeholder={t('namePlaceholder')}
+                aria-label={t('nameAriaLabel')}
                 className="h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               />
               <div className="grid grid-cols-2 gap-2">
                 <Button variant="outline" size="sm" onClick={validateNumber} disabled={busy || !startAccountId || !startPhone.trim()}>
                   <PhoneCall className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                  Cek nomor
+                  {t('checkNumber')}
                 </Button>
                 <Button size="sm" onClick={startConversation} disabled={busy || !startAccountId || !startPhone.trim()}>
                   <WhatsAppMark className="h-4 w-4" />
-                  Buka chat
+                  {t('openChat')}
                 </Button>
               </div>
               {startResult && <p className="text-xs text-gray-500 dark:text-gray-400">{startResult}</p>}
@@ -541,7 +673,7 @@ function InboxInner() {
             {listError ? (
               <li className="px-4 py-10 text-center text-sm text-danger-600">{listError}</li>
             ) : visible.length === 0 && (
-              <li className="px-4 py-10 text-center text-sm text-gray-400">Tidak ada percakapan pada filter ini.</li>
+              <li className="px-4 py-10 text-center text-sm text-gray-400">{t('noConversationsFilter')}</li>
             )}
             {visible.map((c) => {
               const isActive = c.id === activeId;
@@ -564,7 +696,7 @@ function InboxInner() {
                         <span className="truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{name}</span>
                         <span className="shrink-0 text-[11px] tabular-nums text-gray-400">{relTime(c.lastMessageAt)}</span>
                       </div>
-                      <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{c.lastMessage ?? 'Belum ada pesan'}</p>
+                      <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{c.lastMessage ?? t('noMessagesYet')}</p>
                       <div className="mt-1.5 flex items-center justify-between gap-2">
                         <StatusLabel kind={summaryStatus(c)} />
                         {!!c.unreadCount && c.unreadCount > 0 && (
@@ -585,7 +717,7 @@ function InboxInner() {
             <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
               <InboxIcon className="mb-2 h-7 w-7 text-gray-300" strokeWidth={1.5} aria-hidden="true" />
               <p className={cn('text-sm', detailError && 'text-danger-600')}>
-                {detailError ?? 'Pilih percakapan untuk mulai membalas.'}
+                {detailError ?? t('pickConversation')}
               </p>
             </div>
           ) : (
@@ -615,22 +747,22 @@ function InboxInner() {
                   </Badge>
                   <Button variant="outline" size="sm" onClick={markRead} disabled={busy}>
                     <CheckCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                    Tandai dibaca
+                    {t('markRead')}
                   </Button>
                   {takenOver ? (
                     <Button variant="outline" size="sm" onClick={returnToAi} disabled={busy}>
                       <RotateCcw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                      Kembalikan ke AI
+                      {t('returnToAi')}
                     </Button>
                   ) : (
                     <Button variant="outline" size="sm" onClick={takeOver} disabled={busy}>
                       <Hand className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                      Ambil alih
+                      {t('takeover')}
                     </Button>
                   )}
                   <Button variant="outline" size="sm" onClick={escalate} disabled={busy}>
                     <ArrowUpRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                    Eskalasi
+                    {t('escalate')}
                   </Button>
                 </div>
               </div>
@@ -651,15 +783,15 @@ function InboxInner() {
                           <div className="mt-3 flex flex-wrap items-center gap-2">
                             <Button size="sm" onClick={() => approveDraft(m.id)} disabled={busy}>
                               <CircleCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                              Setujui &amp; kirim
+                              {t('approveAndSend')}
                             </Button>
                             <Button variant="outline" size="sm" onClick={() => editDraft(m)}>
                               <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                              Edit draft
+                              {t('editDraft')}
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => blockDraft(m.id)} disabled={busy} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
                               <CircleX className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                              Blokir kirim
+                              {t('blockSend')}
                             </Button>
                           </div>
                         </div>
@@ -677,48 +809,48 @@ function InboxInner() {
                         )}
                       >
                         {m.deletedAt && (
-                          <span className="mb-1 block text-[10px] font-medium text-danger-100">Pesan ditarik</span>
+                          <span className="mb-1 block text-[10px] font-medium text-danger-100">{t('messageRetracted')}</span>
                         )}
                         {m.quotedMessage && (
                           <div className={cn('mb-1 rounded border-l-2 px-2 py-1 text-[11px]', isCustomer ? 'border-gray-300 bg-gray-50 text-gray-500 dark:bg-gray-700/60' : 'border-hermes-200 bg-hermes-700/40 text-hermes-100')}>
-                            Balasan ke {m.quotedMessage.senderType}: {m.quotedMessage.content ?? m.quotedMessage.messageType}
+                            {t('replyTo', { sender: m.quotedMessage.senderType, body: m.quotedMessage.content ?? m.quotedMessage.messageType })}
                           </div>
                         )}
                         {m.aiGenerated && !isCustomer && (
                           <span className="mb-1 flex items-center gap-1 text-[10px] font-medium text-hermes-100">
                             <Workflow className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
-                            Dibuat AI
+                            {t('aiGeneratedLabel')}
                           </span>
                         )}
                         <MediaContent message={m} />
-                        {m.editedAt && <span className={cn('mt-1 block text-[10px]', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>Diedit</span>}
+                        {m.editedAt && <span className={cn('mt-1 block text-[10px]', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>{t('edited')}</span>}
                         {m.reactions && Object.keys(m.reactions).length > 0 && (
                           <span className={cn('mt-1 block text-[10px]', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>
-                            Reaksi: {Object.keys(m.reactions).join(' ')}
+                            {t('reactionsLabel', { reactions: Object.keys(m.reactions).join(' ') })}
                           </span>
                         )}
                         <div className={cn('mt-1 flex items-center justify-between gap-2 text-[10px] tabular-nums', isCustomer ? 'text-gray-400' : 'text-hermes-100')}>
                           <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => quoteReply(m)} className="hover:underline">Balas</button>
-                            {!isCustomer && !m.deletedAt && <button type="button" onClick={() => editSentMessage(m)} className="hover:underline">Edit</button>}
-                            {!m.deletedAt && <button type="button" onClick={() => deleteMessage(m.id)} className="hover:underline">Tarik</button>}
+                            <button type="button" onClick={() => quoteReply(m)} className="hover:underline">{t('reply')}</button>
+                            {!isCustomer && !m.deletedAt && <button type="button" onClick={() => editSentMessage(m)} className="hover:underline">{t('edit')}</button>}
+                            {!m.deletedAt && <button type="button" onClick={() => deleteMessage(m.id)} className="hover:underline">{t('retract')}</button>}
                             {!m.deletedAt && (
-                              <span className="inline-flex items-center gap-1" aria-label="React to message">
+                              <span className="inline-flex items-center gap-1" aria-label={t('reactToMessageLabel')}>
                                 {reactionOptions.map((reaction) => (
                                   <button
                                     key={reaction.emoji}
                                     type="button"
                                     onClick={() => reactToMessage(m.id, reaction.emoji)}
                                     className="rounded px-1 hover:bg-white/20"
-                                    aria-label={`React with ${reaction.label}`}
-                                    title={`React with ${reaction.label}`}
+                                    aria-label={t('reactWith', { label: t(reaction.label) })}
+                                    title={t('reactWith', { label: t(reaction.label) })}
                                   >
                                     {reaction.emoji}
                                   </button>
                                 ))}
                               </span>
                             )}
-                            {m.reactions && Object.keys(m.reactions).length > 0 && <button type="button" onClick={() => clearReaction(m.id)} className="hover:underline">Hapus reaksi</button>}
+                            {m.reactions && Object.keys(m.reactions).length > 0 && <button type="button" onClick={() => clearReaction(m.id)} className="hover:underline">{t('clearReactionAction')}</button>}
                           </div>
                           <span>{clockTime(m.createdAt)}</span>
                         </div>
@@ -732,15 +864,18 @@ function InboxInner() {
                 {(quoteMessage || editingMessage) && (
                   <div className="mb-2 flex items-center justify-between rounded border border-hermes-200 bg-hermes-50 px-3 py-2 text-xs text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-300">
                     <span>
-                      {editingMessage ? 'Mengedit pesan terkirim' : `Membalas ${quoteMessage?.senderType}`}: {(editingMessage ?? quoteMessage)?.content ?? (editingMessage ?? quoteMessage)?.messageType}
+                      {t('quotePreview', {
+                        prefix: editingMessage ? t('editingSent') : t('replyingTo', { sender: quoteMessage?.senderType ?? '' }),
+                        body: (editingMessage ?? quoteMessage)?.content ?? (editingMessage ?? quoteMessage)?.messageType ?? '',
+                      })}
                     </span>
-                    <button type="button" onClick={() => { setQuoteMessage(null); setEditingMessage(null); setComposer(''); }} className="font-semibold">Batal</button>
+                    <button type="button" onClick={() => { setQuoteMessage(null); setEditingMessage(null); setComposer(''); }} className="font-semibold">{t('cancel')}</button>
                   </div>
                 )}
                 <div className="flex items-end gap-2">
                   <button
                     type="button"
-                    title="Attach media"
+                    title={t('attachMedia')}
                     disabled={uploadingMedia}
                     onClick={() => fileInputRef.current?.click()}
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
@@ -771,13 +906,13 @@ function InboxInner() {
                         sendMessage();
                       }
                     }}
-                    placeholder={editingMessage ? 'Edit pesan terkirim' : quoteMessage ? 'Balas dengan kutipan pesan' : 'Tulis balasan, atau edit draft AI di atas'}
-                    aria-label="Tulis balasan"
+                    placeholder={editingMessage ? t('composerEditPlaceholder') : quoteMessage ? t('composerQuotePlaceholder') : t('composerPlaceholder')}
+                    aria-label={t('composerAriaLabel')}
                     className="scrollbar-thin max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                   />
                   <Button size="md" onClick={sendMessage} disabled={sending || !composer.trim()}>
                     <Send className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                    {editingMessage ? 'Simpan' : 'Kirim'}
+                    {editingMessage ? t('save') : t('send')}
                   </Button>
                 </div>
               </div>
@@ -799,7 +934,7 @@ function InboxInner() {
                     onClick={() => reasoningRef.current?.scrollIntoView({ block: 'nearest' })}
                   >
                     <FileSearch className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                    Lihat alasan
+                    {t('viewReasoning')}
                   </Button>
                   <Button
                     variant="outline"
@@ -808,7 +943,7 @@ function InboxInner() {
                     onClick={() => auditRef.current?.scrollIntoView({ block: 'nearest' })}
                   >
                     <ScrollText className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                    Jejak audit
+                    {t('auditTrail')}
                   </Button>
                 </div>
                 <div className="flex items-center gap-3">
@@ -816,17 +951,17 @@ function InboxInner() {
                     {initials(active.customer.name, active.customer.phoneNumber)}
                   </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{active.customer.name || 'Tanpa nama'}</p>
+                    <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{active.customer.name || t('noName')}</p>
                     <p className="truncate text-xs text-gray-400">{active.customer.phoneNumber}</p>
                   </div>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded-md bg-gray-50 px-2.5 py-1.5 dark:bg-gray-800">
-                    <p className="text-gray-400">Stage lead</p>
+                    <p className="text-gray-400">{t('leadStage')}</p>
                     <p className="font-medium capitalize text-gray-800 dark:text-gray-100">{active.customer.leadStage.replace('_', ' ')}</p>
                   </div>
                   <div className="rounded-md bg-gray-50 px-2.5 py-1.5 dark:bg-gray-800">
-                    <p className="text-gray-400">Skor lead</p>
+                    <p className="text-gray-400">{t('leadScore')}</p>
                     <p className="font-medium tabular-nums text-gray-800 dark:text-gray-100">{active.customer.leadScore} / 100</p>
                   </div>
                 </div>
@@ -842,26 +977,26 @@ function InboxInner() {
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
                 <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                   <Tag className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
-                  Kontrol WhatsApp
+                  {t('whatsappControls')}
                 </h3>
                 <div className="space-y-2 text-xs">
                   <label className="block text-gray-500">
-                    Mode AI
+                    {t('aiModeField')}
                     <select value={active.aiMode} onChange={(e) => setAiMode(e.target.value)} className="mt-1 h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
-                      {aiModeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      {aiModeOptions.map((option) => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
                     </select>
                   </label>
                   <label className="block text-gray-500">
-                    Status alur
+                    {t('workflowStatusField')}
                     <select value={active.status} onChange={(e) => setWorkflowStatus(e.target.value)} className="mt-1 h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
-                      {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      {statusOptions.map((option) => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
                     </select>
                   </label>
                   <label className="block text-gray-500">
-                    Label
+                    {t('labelField')}
                     <div className="mt-1 flex gap-2">
-                      <input value={labelDraft} onChange={(e) => setLabelDraft(e.target.value)} placeholder="prioritas, renewal, tagihan" className="h-8 min-w-0 flex-1 rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
-                      <Button size="sm" variant="outline" onClick={saveLabels} disabled={busy}>Simpan</Button>
+                      <input value={labelDraft} onChange={(e) => setLabelDraft(e.target.value)} placeholder={t('labelPlaceholder')} className="h-8 min-w-0 flex-1 rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+                      <Button size="sm" variant="outline" onClick={saveLabels} disabled={busy}>{t('save')}</Button>
                     </div>
                   </label>
                 </div>
@@ -872,14 +1007,14 @@ function InboxInner() {
                 <div className="mb-2 flex items-center justify-between">
                   <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                     <UserRound className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
-                    Ditugaskan ke
+                    {t('assignedTo')}
                   </h3>
                   <button
                     type="button"
                     onClick={() => setShowAssign((v) => !v)}
                     className="text-[11px] font-medium text-hermes-600 hover:text-hermes-700"
                   >
-                    {showAssign ? 'Batal' : 'Ubah'}
+                    {showAssign ? t('cancel') : t('change')}
                   </button>
                 </div>
                 {adminError && <p className="mb-2 text-xs text-danger-600">{adminError}</p>}
@@ -890,7 +1025,7 @@ function InboxInner() {
                       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10"
                     >
                       <UserX className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-                      Lepas tugas
+                      {t('unassign')}
                     </button>
                     {admins.map((a) => (
                       <button
@@ -918,7 +1053,7 @@ function InboxInner() {
                     {active.assignedAdmin.name}
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">Belum ditugaskan</p>
+                  <p className="text-xs text-gray-400">{t('notAssigned')}</p>
                 )}
               </div>
 
@@ -927,7 +1062,7 @@ function InboxInner() {
                 <div className="mb-2.5 flex items-center justify-between">
                   <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                     <ShieldCheck className="h-4 w-4 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
-                    Review Hermes AI
+                    {t('hermesReview')}
                   </h3>
                   {review && (
                     <Badge tone={riskTone[review.riskLevel] ?? 'neutral'}>{review.decision.replace('_', ' ')}</Badge>
@@ -937,15 +1072,15 @@ function InboxInner() {
                   <>
                     <dl className="space-y-1.5 text-xs">
                       <div className="flex items-center justify-between">
-                        <dt className="text-gray-400">Skor keyakinan</dt>
+                        <dt className="text-gray-400">{t('confidenceScore')}</dt>
                         <dd className="font-medium tabular-nums text-gray-800 dark:text-gray-100">{review.confidenceScore}</dd>
                       </div>
                       <div className="flex items-center justify-between">
-                        <dt className="text-gray-400">Skor risiko</dt>
+                        <dt className="text-gray-400">{t('riskScore')}</dt>
                         <dd className="font-medium tabular-nums text-gray-800 dark:text-gray-100">{review.riskScore}</dd>
                       </div>
                       <div className="flex items-center justify-between">
-                        <dt className="text-gray-400">Level risiko</dt>
+                        <dt className="text-gray-400">{t('riskLevel')}</dt>
                         <dd className="font-medium capitalize text-gray-800 dark:text-gray-100">{review.riskLevel}</dd>
                       </div>
                     </dl>
@@ -953,44 +1088,44 @@ function InboxInner() {
                       <div className="mt-2.5 rounded-md bg-gray-50 px-2.5 py-2 text-xs leading-relaxed text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                         <div className="mb-1 flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-200">
                           <FileSearch className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-                          Alasan Hermes
+                          {t('hermesReason')}
                         </div>
                         {review.reason}
                       </div>
                     )}
                     {review.recommendation && (
-                      <p className="mt-1.5 text-xs text-gray-500">Rekomendasi: {review.recommendation}</p>
+                      <p className="mt-1.5 text-xs text-gray-500">{t('recommendation', { text: review.recommendation })}</p>
                     )}
                   </>
                 ) : (
-                  <p className="text-xs text-gray-400">Belum ada review Hermes untuk percakapan ini.</p>
+                  <p className="text-xs text-gray-400">{t('noHermesReview')}</p>
                 )}
               </div>
 
               {/* Risk flags */}
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
-                <h3 className="mb-2 text-[13px] font-semibold text-gray-900 dark:text-gray-100">Tanda risiko</h3>
+                <h3 className="mb-2 text-[13px] font-semibold text-gray-900 dark:text-gray-100">{t('riskFlags')}</h3>
                 <div className="flex flex-wrap gap-1.5">
                   {active.slaBreachedAt && (
                     <Badge tone="review">
                       <Clock className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-                      SLA terlewat
+                      {t('slaMissed')}
                     </Badge>
                   )}
                   {active.aiMode === 'ai_paused' && (
                     <Badge tone="danger">
                       <CircleX className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-                      AI dijeda
+                      {t('aiPausedFlag')}
                     </Badge>
                   )}
                   {review && (review.riskLevel === 'high' || review.riskLevel === 'critical') && (
                     <Badge tone="danger">
                       <TriangleAlert className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-                      Risiko {review.riskLevel}
+                      {t('riskLevelFlag', { level: review.riskLevel })}
                     </Badge>
                   )}
                   {!active.slaBreachedAt && active.aiMode !== 'ai_paused' && !(review && (review.riskLevel === 'high' || review.riskLevel === 'critical')) && (
-                    <span className="text-xs text-gray-400">Tidak ada tanda risiko aktif.</span>
+                    <span className="text-xs text-gray-400">{t('noActiveRisk')}</span>
                   )}
                 </div>
               </div>
@@ -999,15 +1134,15 @@ function InboxInner() {
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
                 <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                   <Workflow className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
-                  Mode otomasi
+                  {t('automationMode')}
                 </h3>
                 {active.bot ? (
                   <div className="flex items-center justify-between rounded-md border border-gray-200 px-2.5 py-1.5 text-xs dark:border-gray-700">
                     <span className="truncate text-gray-700 dark:text-gray-200">{active.bot.botName}</span>
-                    <Badge tone="success">Aktif</Badge>
+                    <Badge tone="success">{t('active')}</Badge>
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400">Belum ada bot otomasi yang ditugaskan.</p>
+                  <p className="text-xs text-gray-400">{t('noBotAssigned')}</p>
                 )}
               </div>
 
@@ -1015,7 +1150,7 @@ function InboxInner() {
               <div ref={auditRef} className="p-4">
                 <h3 className="mb-2.5 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
                   <ScrollText className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
-                  Jejak audit
+                  {t('auditTrail')}
                 </h3>
                 <ol className="space-y-3 text-xs">
                   {buildAudit(active).map((e, i) => {
@@ -1024,7 +1159,7 @@ function InboxInner() {
                       <li key={i} className="flex gap-2.5">
                         <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', e.tone)} strokeWidth={1.75} aria-hidden="true" />
                         <div className="flex-1">
-                          <p className="text-gray-700 dark:text-gray-200">{e.label}</p>
+                          <p className="text-gray-700 dark:text-gray-200">{t(e.label, e.vars)}</p>
                           {e.time && <p className="text-gray-400">{clockTime(e.time)}</p>}
                         </div>
                       </li>
@@ -1037,7 +1172,7 @@ function InboxInner() {
             <div className="border-t border-gray-100 p-3 dark:border-gray-800">
               <Button variant="ghost" size="sm" className="w-full justify-start" onClick={escalate} disabled={busy}>
                 <FileSearch className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                Eskalasi ke supervisor
+                {t('escalateToSupervisor')}
               </Button>
             </div>
           </aside>
@@ -1049,11 +1184,12 @@ function InboxInner() {
 
 // Render message content: text, or a media placeholder for non-text types.
 function MediaContent({ message: m }: { message: Message }) {
+  const t = useT(dict);
   if (m.messageType === 'image') {
     return (
       <span className="flex items-center gap-1.5 italic opacity-80">
         <ImageIcon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-        {m.content ?? 'Image'}
+        {m.content ?? t('mediaImage')}
       </span>
     );
   }
@@ -1061,7 +1197,7 @@ function MediaContent({ message: m }: { message: Message }) {
     return (
       <span className="flex items-center gap-1.5 italic opacity-80">
         <Video className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-        {m.content ?? 'Video'}
+        {m.content ?? t('mediaVideo')}
       </span>
     );
   }
@@ -1078,12 +1214,12 @@ function MediaContent({ message: m }: { message: Message }) {
 
 // Build a small, truthful audit trail from what the conversation actually shows.
 function buildAudit(conv: ConvDetail) {
-  const out: { label: string; time: string | null; icon: typeof Workflow; tone: string }[] = [];
+  const out: { label: string; vars?: Record<string, string | number>; time: string | null; icon: typeof Workflow; tone: string }[] = [];
   const firstAi = conv.messages.find((m) => m.aiGenerated);
-  if (firstAi) out.push({ label: 'AI membuat balasan', time: firstAi.createdAt, icon: Workflow, tone: 'text-hermes-600' });
-  if (conv.hermesReviews[0]) out.push({ label: `Hermes ${conv.hermesReviews[0].decision.replace('_', ' ')}`, time: null, icon: ShieldCheck, tone: 'text-review-600' });
-  if (conv.takeoverStatus === 'admin_takeover') out.push({ label: 'Admin mengambil alih', time: null, icon: Hand, tone: 'text-gray-500' });
-  if (conv.assignedAdmin) out.push({ label: `Ditugaskan ke ${conv.assignedAdmin.name}`, time: null, icon: Hand, tone: 'text-gray-500' });
-  if (out.length === 0) out.push({ label: 'Belum ada tindakan tersupervisi', time: null, icon: History, tone: 'text-gray-400' });
+  if (firstAi) out.push({ label: 'auditAiReply', time: firstAi.createdAt, icon: Workflow, tone: 'text-hermes-600' });
+  if (conv.hermesReviews[0]) out.push({ label: 'auditHermes', vars: { decision: conv.hermesReviews[0].decision.replace('_', ' ') }, time: null, icon: ShieldCheck, tone: 'text-review-600' });
+  if (conv.takeoverStatus === 'admin_takeover') out.push({ label: 'auditTakeover', time: null, icon: Hand, tone: 'text-gray-500' });
+  if (conv.assignedAdmin) out.push({ label: 'auditAssigned', vars: { name: conv.assignedAdmin.name }, time: null, icon: Hand, tone: 'text-gray-500' });
+  if (out.length === 0) out.push({ label: 'auditNoActions', time: null, icon: History, tone: 'text-gray-400' });
   return out;
 }
