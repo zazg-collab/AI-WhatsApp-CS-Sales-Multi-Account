@@ -3,7 +3,6 @@ import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import { Providers } from '@/components/Providers';
 
-
 export const metadata: Metadata = {
   title: 'Hermes — Sales & CS Control Desk',
   description: 'Pusat operasi AI yang tersupervisi dan terlacak untuk banyak akun WhatsApp.',

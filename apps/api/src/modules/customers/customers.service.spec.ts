@@ -11,6 +11,7 @@ describe('CustomersService', () => {
     prisma = {
       customer: {
         findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
         findUnique: jest.fn(),
         update: jest.fn(),
       },

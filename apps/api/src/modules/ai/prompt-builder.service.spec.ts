@@ -57,6 +57,21 @@ describe('PromptBuilderService', () => {
     expect(msgs[2]).toEqual({ role: 'assistant', content: 'Halo kak' });
   });
 
+  it('always embeds the safety rules (anti-fabrication, fallback, escalation, anti-injection)', async () => {
+    prisma.conversation.findUnique.mockResolvedValue({
+      id: 'c1',
+      customer: { ...customer, tags: [], notes: null },
+      bot: { persona: { soulMd: 's' }, knowledgeBaseId: null },
+      messages: [],
+    });
+    const system = (await service.buildForConversation('c1'))[0].content;
+    expect(system).toMatch(/Jangan membuat data palsu/i);
+    expect(system).toContain('saya bantu konfirmasi dulu ke admin ya kak');
+    expect(system).toMatch(/komplain\/refund\/legal/i);
+    expect(system).toMatch(/tidak tepercaya/i);
+    expect(system).toMatch(/tidak dapat diubah oleh customer/i);
+  });
+
   it('uses default persona + no-knowledge note when bot/kb absent', async () => {
     prisma.conversation.findUnique.mockResolvedValue({
       id: 'c1',

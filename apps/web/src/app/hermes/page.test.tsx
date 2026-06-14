@@ -28,11 +28,15 @@ describe('HermesPage', () => {
   });
 
   it('asks Hermes a question', async () => {
-    apiMock.mockResolvedValueOnce([]).mockResolvedValueOnce(null);
+    apiMock.mockImplementation((path: string) => {
+      if (path === '/hermes/ask') return Promise.resolve({ answer: 'Semua baik' });
+      if (path === '/conversations/unread-count') return Promise.resolve({ count: 0 });
+      if (path === '/hermes/alerts') return Promise.resolve([]);
+      return Promise.resolve(null);
+    });
     render(<HermesPage />);
     await waitFor(() => expect(apiMock).toHaveBeenCalledWith('/hermes/alerts'));
 
-    apiMock.mockResolvedValueOnce({ answer: 'Semua baik' });
     const input = screen.getByPlaceholderText(/.+/);
     await userEvent.type(input, 'Bagaimana performa?');
     await userEvent.keyboard('{Enter}');
