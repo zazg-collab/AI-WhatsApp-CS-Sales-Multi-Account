@@ -29,6 +29,13 @@ export class LearningController {
     return this.learning.mineAll(botId);
   }
 
+  @ApiOperation({ summary: 'Suggest the best-fit bot/persona for a conversation (advisory)' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Get('conversations/:id/suggest-bot')
+  suggestBot(@Param('id') id: string) {
+    return this.learning.suggestBot(id);
+  }
+
   @ApiOperation({ summary: 'List learning proposals (filter by status/type/bot)' })
   @Roles('owner', 'supervisor')
   @Get('proposals')

@@ -23,6 +23,10 @@ const TRANSCRIPT_CHAR_BUDGET = 14_000;
 const PER_MESSAGE_CHAR_CAP = 320;
 /** How many historical messages to pull per bot before trimming. */
 const MAX_MESSAGES = 600;
+/** Max customers mined for memory per run (one LLM call each — the cost driver). */
+const CUSTOMER_MEMORY_LIMIT = 25;
+/** How many per-customer memory calls to run in parallel. */
+const MINE_CONCURRENCY = 5;
 
 interface Transcript {
   text: string;
@@ -260,71 +264,171 @@ title = nama keberatan/situasi. content = teknik/respon yang dipakai admin. Maks
    * Per customer (recently active for this bot), extract durable facts
    * (preferences, past purchases, constraints) → a draft note update.
    */
-  async mineCustomerMemory(botId: string): Promise<number> {
+  async mineCustomerMemory(botId: string, limit = CUSTOMER_MEMORY_LIMIT): Promise<number> {
     const bot = await this.botOrThrow(botId);
     const accountIds = bot.accounts.map((a) => a.id);
     if (accountIds.length === 0) return 0;
 
-    const customers = await this.prisma.customer.findMany({
-      where: { sourceAccountId: { in: accountIds } },
-      orderBy: { lastMessageAt: 'desc' },
-      take: 25,
-      select: { id: true, name: true, phoneNumber: true, notes: true },
+    // Skip customers that already have a pending memory proposal so re-runs
+    // don't re-mine (and re-pay for) the same people.
+    const alreadyProposed = await this.prisma.learningProposal.findMany({
+      where: { botId, type: 'customer_memory', status: 'pending' },
+      select: { customerId: true },
     });
+    const skip = new Set(alreadyProposed.map((p) => p.customerId));
 
+    const customers = (
+      await this.prisma.customer.findMany({
+        where: { sourceAccountId: { in: accountIds } },
+        orderBy: { lastMessageAt: 'desc' },
+        take: limit + skip.size,
+        select: { id: true, name: true, phoneNumber: true },
+      })
+    )
+      .filter((c) => !skip.has(c.id))
+      .slice(0, limit);
+    if (customers.length === 0) return 0;
+
+    // Process in bounded-concurrency batches — one LLM call per customer is the
+    // cost driver, so running a handful in parallel cuts wall time ~Nx.
     let created = 0;
-    for (const customer of customers) {
-      const history = await this.prisma.message.findMany({
-        where: {
-          conversation: {
-            customerId: customer.id,
-            whatsappAccountId: { in: accountIds },
-          },
-        },
-        orderBy: { createdAt: 'asc' },
-        take: 80,
-        select: { content: true, senderType: true },
-      });
-      const text = this.formatMessages(
-        history.map((m) => ({ ...m, id: '' })),
-      ).text;
-      if (text.length < 80) continue; // too little to learn from
-
-      const messages: ChatMessage[] = [
-        {
-          role: 'system',
-          content: `Ekstrak FAKTA DURABEL tentang pelanggan dari chat (preferensi, produk diminati, kendala, lokasi, anggaran).
-Hanya fakta yang eksplisit disebut. Jangan mengarang atau menebak.
-Balas HANYA JSON: {"facts": string[]}. Kosongkan array jika tidak ada fakta jelas. Maksimal 6 fakta singkat.`,
-        },
-        { role: 'user', content: text },
-      ];
-      const raw = await this.provider.chat(messages, {
-        temperature: 0,
-        json: true,
-        maxTokens: 1200,
-      });
-      const obj = this.parseObject(raw);
-      const facts = Array.isArray(obj?.facts)
-        ? obj.facts.map(String).filter((f: string) => f.trim().length > 0).slice(0, 6)
-        : [];
-      if (facts.length === 0) continue;
-
-      const payload: CustomerMemoryPayload = { facts };
-      await this.prisma.learningProposal.create({
-        data: {
-          botId,
-          customerId: customer.id,
-          type: 'customer_memory',
-          title: customer.name || customer.phoneNumber,
-          payload: payload as object,
-          sourceSummary: 'Fakta pelanggan dari riwayat chat.',
-          confidence: 65,
-        },
-      });
-      created++;
+    for (let i = 0; i < customers.length; i += MINE_CONCURRENCY) {
+      const batch = customers.slice(i, i + MINE_CONCURRENCY);
+      // Isolate each call: one provider error must not reject the whole batch
+      // (which would lose the count and abort remaining customers).
+      const results = await Promise.all(
+        batch.map((c) =>
+          this.mineOneCustomerMemory(botId, accountIds, c).catch((err) => {
+            this.logger.warn(`Customer memory mining failed for ${c.id}: ${err}`);
+            return false;
+          }),
+        ),
+      );
+      created += results.filter(Boolean).length;
     }
     return created;
+  }
+
+  private async mineOneCustomerMemory(
+    botId: string,
+    accountIds: string[],
+    customer: { id: string; name: string | null; phoneNumber: string },
+  ): Promise<boolean> {
+    const history = await this.prisma.message.findMany({
+      where: {
+        conversation: { customerId: customer.id, whatsappAccountId: { in: accountIds } },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 80,
+      select: { content: true, senderType: true },
+    });
+    const text = this.formatMessages(history.map((m) => ({ ...m, id: '' }))).text;
+    if (text.length < 80) return false; // too little to learn from
+
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: `Ekstrak FAKTA DURABEL tentang pelanggan dari chat (preferensi, produk diminati, kendala, lokasi, anggaran).
+Hanya fakta yang eksplisit disebut. Jangan mengarang atau menebak.
+Balas HANYA JSON: {"facts": string[]}. Kosongkan array jika tidak ada fakta jelas. Maksimal 6 fakta singkat.`,
+      },
+      { role: 'user', content: text },
+    ];
+    const raw = await this.provider.chat(messages, { temperature: 0, json: true, maxTokens: 1200 });
+    const obj = this.parseObject(raw);
+    const facts = Array.isArray(obj?.facts)
+      ? obj.facts.map(String).filter((f: string) => f.trim().length > 0).slice(0, 6)
+      : [];
+    if (facts.length === 0) return false;
+
+    const payload: CustomerMemoryPayload = { facts };
+    await this.prisma.learningProposal.create({
+      data: {
+        botId,
+        customerId: customer.id,
+        type: 'customer_memory',
+        title: customer.name || customer.phoneNumber,
+        payload: payload as object,
+        sourceSummary: 'Fakta pelanggan dari riwayat chat.',
+        confidence: 65,
+      },
+    });
+    return true;
+  }
+
+  // ── Persona-fit suggestion ────────────────────────────────────────────
+
+  /**
+   * Recommend which bot/persona best fits this customer's character (tone,
+   * formality, intent) to improve rapport/conversion. Advisory only — the
+   * admin still switches manually. Returns null when there's nothing to
+   * suggest (fewer than 2 active bots, or no customer messages yet).
+   */
+  async suggestBot(conversationId: string): Promise<{
+    botId: string;
+    botName: string;
+    personaName: string | null;
+    reason: string;
+    currentBotId: string | null;
+  } | null> {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { id: true, botId: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const bots = await this.prisma.bot.findMany({
+      where: { status: 'active' },
+      select: { id: true, botName: true, persona: { select: { name: true, soulMd: true, tone: true, style: true } } },
+    });
+    if (bots.length < 2) return null; // nothing to choose between
+
+    const customerLines = (
+      await this.prisma.message.findMany({
+        where: { conversationId, senderType: SenderType.customer, content: { not: '' } },
+        orderBy: { createdAt: 'desc' },
+        take: 15,
+        select: { content: true },
+      })
+    )
+      .reverse()
+      .map((m) => `- ${(m.content ?? '').slice(0, 200)}`)
+      .join('\n');
+    if (!customerLines) return null;
+
+    const botList = bots
+      .map((b, i) => {
+        const p = b.persona;
+        const desc = p
+          ? `${p.name ?? ''} — ${(p.soulMd ?? '').slice(0, 160)}${p.tone ? ` (nada: ${p.tone})` : ''}${p.style ? ` (gaya: ${p.style})` : ''}`
+          : '(tanpa persona)';
+        return `${i + 1}. id=${b.id} | ${b.botName}: ${desc}`;
+      })
+      .join('\n');
+
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: `Kamu memilih persona bot yang PALING COCOK dengan karakter pelanggan agar rapport & konversi maksimal.
+Pertimbangkan nada, formalitas, dan kebutuhan pelanggan dari pesannya.
+Pilih HANYA dari daftar id yang diberikan. Jangan mengarang id.
+Balas HANYA JSON: {"botId": string, "reason": string}. reason singkat Bahasa Indonesia.`,
+      },
+      { role: 'user', content: `Pesan pelanggan:\n${customerLines}\n\nKandidat bot:\n${botList}\n\nPilih satu sebagai JSON.` },
+    ];
+
+    const raw = await this.provider.chat(messages, { temperature: 0, json: true, maxTokens: 600 });
+    const obj = this.parseObject(raw);
+    const chosen = bots.find((b) => b.id === String(obj?.botId));
+    if (!chosen) return null; // model returned an unknown id → no suggestion
+
+    return {
+      botId: chosen.id,
+      botName: chosen.botName,
+      personaName: chosen.persona?.name ?? null,
+      reason: typeof obj?.reason === 'string' ? obj.reason : '',
+      currentBotId: conversation.botId,
+    };
   }
 
   // ── Review / approval ─────────────────────────────────────────────────
@@ -587,8 +691,10 @@ Balas HANYA JSON: {"facts": string[]}. Kosongkan array jika tidak ada fakta jela
   }
 
   private clampConfidence(v: unknown): number {
-    const n = Number(v);
+    let n = Number(v);
     if (!Number.isFinite(n)) return 50;
+    // Some models answer on a 0–1 scale; rescale so the UI shows 0–100.
+    if (n > 0 && n <= 1) n = n * 100;
     return Math.max(0, Math.min(100, Math.round(n)));
   }
 
