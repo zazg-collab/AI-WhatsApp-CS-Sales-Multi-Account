@@ -16,8 +16,8 @@ export class CampaignsController {
   @ApiOperation({ summary: 'List campaigns with optional status filter' })
   @Roles('viewer')
   @Get()
-  list(@Query('status') status?: string) {
-    return this.campaigns.list(status);
+  list(@CurrentUser() user: AuthUser, @Query('status') status?: string) {
+    return this.campaigns.list(status, user);
   }
 
   @ApiOperation({ summary: 'Preview campaign recipients before sending' })
@@ -37,8 +37,8 @@ export class CampaignsController {
   @ApiOperation({ summary: 'Get a campaign by ID' })
   @Roles('viewer')
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.campaigns.get(id);
+  get(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.campaigns.get(id, user);
   }
 
   @ApiOperation({ summary: 'Update a campaign' })

@@ -1,15 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MessageStatus, MessageType, SenderType, Prisma } from '@hermes/database';
+import { AiMode, MessageStatus, MessageType, SenderType, Prisma } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { AutoAssignService } from './auto-assign.service';
+import { ContactSyncService } from './contact-sync.service';
 import { logAudit } from '../../common/audit.util';
-import { isOptOutMessage, jidToPhone } from './wa.util';
+import { isGroupJid, isOptOutMessage, jidToPhone } from './wa.util';
 
 interface IncomingMessage {
   accountId: string;
   remoteJid: string;
+  /**
+   * Real phone-number JID surfaced by Baileys on the message key (senderPn /
+   * participantPn) when the chat is addressed by @lid. Lets us resolve the
+   * privacy identifier to an actual number.
+   */
+  senderPn?: string;
   externalId: string;
   pushName?: string;
   text: string;
@@ -40,6 +47,7 @@ export class MessageIngestService {
     private readonly prisma: PrismaService,
     private readonly events: EventsGateway,
     private readonly autoAssign: AutoAssignService,
+    private readonly contactSync: ContactSyncService,
     config: ConfigService,
   ) {
     const h = Number(config.get('CSAT_WINDOW_HOURS'));
@@ -47,7 +55,25 @@ export class MessageIngestService {
   }
 
   async ingest(msg: IncomingMessage) {
-    const phone = jidToPhone(msg.remoteJid);
+    const groupChat = isGroupJid(msg.remoteJid);
+    let phone = groupChat ? msg.remoteJid : jidToPhone(msg.remoteJid);
+
+    // Resolve @lid JIDs to real phone numbers. Prefer the phone Baileys put on
+    // the message key (senderPn); fall back to the contact-sync mapping table.
+    if (!groupChat && phone.endsWith('@lid')) {
+      const fromKey = msg.senderPn ? jidToPhone(msg.senderPn) : '';
+      if (fromKey && !fromKey.endsWith('@lid')) {
+        phone = fromKey;
+        // Persist the lid → phone mapping so later lookups (and the WA Contacts
+        // page) resolve without needing the key again.
+        await this.contactSync
+          .recordLidMapping(msg.accountId, msg.remoteJid, phone)
+          .catch((err) => this.logger.warn(`LID mapping persist failed: ${err}`));
+      } else {
+        phone = await this.contactSync.resolveLidPhone(msg.accountId, phone);
+      }
+    }
+
     const fromMe = msg.fromMe === true;
     const occurredAt = msg.occurredAt ?? new Date();
 
@@ -68,10 +94,10 @@ export class MessageIngestService {
       },
       update: {
         ...(msg.suppressAutomation ? {} : { lastMessageAt: occurredAt }),
-        ...(!fromMe && msg.pushName ? { name: msg.pushName } : {}),
+        ...(!groupChat && !fromMe && msg.pushName ? { name: msg.pushName } : {}),
       },
       create: {
-        name: !fromMe ? msg.pushName ?? null : null,
+        name: groupChat ? msg.pushName ?? msg.remoteJid : !fromMe ? msg.pushName ?? null : null,
         phoneNumber: phone,
         sourceAccountId: account.id,
         assignedAdminId: account.assignedAdminId,
@@ -80,7 +106,9 @@ export class MessageIngestService {
     });
 
     let conversation = await this.prisma.conversation.findFirst({
-      where: { customerId: customer.id, whatsappAccountId: account.id },
+      where: groupChat
+        ? { whatsappAccountId: account.id, chatJid: msg.remoteJid }
+        : { customerId: customer.id, whatsappAccountId: account.id },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -94,8 +122,11 @@ export class MessageIngestService {
           customerId: customer.id,
           whatsappAccountId: account.id,
           botId: account.assignedBotId,
-          aiMode: account.aiMode,
+          aiMode: groupChat ? AiMode.ai_off : account.aiMode,
           assignedAdminId,
+          chatJid: msg.remoteJid,
+          isGroup: groupChat,
+          groupSubject: groupChat ? msg.pushName ?? null : null,
         },
       });
     } else if (!fromMe && this.autoAssign.enabled && !conversation.assignedAdminId) {
@@ -199,6 +230,11 @@ export class MessageIngestService {
       await this.prisma.conversation.update({
         where: { id: conversation.id },
         data: conversationData,
+      });
+      this.events.emitToAccount(account.id, 'conversation:updated', {
+        conversationId: conversation.id,
+        ...('lastMessage' in conversationData ? { lastMessage: msg.text, lastMessageAt: occurredAt } : {}),
+        ...(!fromMe && !msg.suppressAutomation ? { unreadCountDelta: 1 } : {}),
       });
     }
 

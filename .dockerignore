@@ -1,15 +1,67 @@
+# Dependencies
 node_modules
-.git
-.gitignore
-*.md
-.env
-.env.local
-*.local
+.npm-cache
+
+# Build outputs
 dist
 .next
-.agents
+out
+
+# Git
+.git
+.gitignore
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE / Editor
 .vscode
 .idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+!README.md
+
+# Agents / AI config
+.agents
+.claude
+skills-lock.json
+
+# Docker files (avoid recursive builds)
+docker-compose*.yml
+Dockerfile*
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Test / Coverage
+coverage
+test-results
+
+# Python (sidecar)
 __pycache__
 *.pyc
-coverage
+*.pyo
+venv
+.venv
+
+# Media / Sessions (mounted as volumes, not baked in)
+.wa-sessions
+.wa-media
+data
+
+# Scripts (not needed in image)
+scripts
+
+# Misc
+eslint.config.mjs

@@ -6,6 +6,7 @@ import { ConversationStatus, SenderType } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { SettingsService } from '../settings/settings.service';
 import { isWithinBusinessHours } from '../../common/business-hours.util';
 
 /**
@@ -27,9 +28,12 @@ export class SlaService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly events: EventsGateway,
     private readonly notifications: NotificationsService,
+    private readonly settings: SettingsService,
     config: ConfigService,
     @InjectQueue('sla') private readonly slaQueue: Queue,
   ) {
+    // Env-derived default threshold (also the settings fallback). The live
+    // threshold is resolved per scan so an admin can change it without restart.
     this.responseMinutes = this.positiveInt(config.get('SLA_RESPONSE_MINUTES'), 15);
     this.intervalMs = this.positiveInt(config.get('SLA_SCAN_INTERVAL_MS'), 60_000);
   }
@@ -64,7 +68,11 @@ export class SlaService implements OnModuleInit {
    * since been answered or resolved. Returns a small summary for tests/logs.
    */
   async scan() {
-    const cutoff = new Date(Date.now() - this.responseMinutes * 60_000);
+    const responseMinutes = this.positiveInt(
+      (await this.settings.sla()).responseMinutes,
+      this.responseMinutes,
+    );
+    const cutoff = new Date(Date.now() - responseMinutes * 60_000);
     const horizon = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     // Cursor pagination (A7): a fixed take(1000) silently skipped everything
@@ -177,7 +185,7 @@ export class SlaService implements OnModuleInit {
       // Fire-and-forget; no-ops if notifications are unconfigured.
       this.notifications
         .send(
-          `⏰ ${newlyBreached.length} chat belum dibalas > ${this.responseMinutes} menit:\n${lines}${extra}`,
+          `⏰ ${newlyBreached.length} chat belum dibalas > ${responseMinutes} menit:\n${lines}${extra}`,
         )
         .catch(() => undefined);
     }

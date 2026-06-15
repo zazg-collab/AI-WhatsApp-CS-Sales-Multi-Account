@@ -3,7 +3,7 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { SettingsService } from '../settings/settings.service';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -19,47 +19,40 @@ export interface ChatOptions {
 }
 
 /**
- * Thin client for any OpenAI-compatible chat API. The provider is selected
- * purely via env (AI_BASE_URL / AI_API_KEY / AI_MODEL), so the same code
- * targets OpenAI, OpenRouter, Ollama, LM Studio, vLLM, etc.
+ * Thin client for any OpenAI-compatible chat API. Provider config (base URL,
+ * API key, model, temperature, timeout) is resolved from SettingsService at
+ * call time, so an admin can change it from the dashboard with no redeploy.
+ * SettingsService layers DB overrides over the AI_* env defaults.
  */
 @Injectable()
 export class AiProviderService {
   private readonly logger = new Logger(AiProviderService.name);
-  private readonly baseUrl: string;
-  private readonly apiKey: string;
-  private readonly defaultModel: string;
-  private readonly timeoutMs: number;
 
-  constructor(config: ConfigService) {
-    this.baseUrl = (
-      config.get<string>('AI_BASE_URL') ?? 'https://api.openai.com/v1'
-    ).replace(/\/$/, '');
-    this.apiKey = config.get<string>('AI_API_KEY') ?? '';
-    this.defaultModel = config.get<string>('AI_MODEL') ?? 'gpt-4o-mini';
-    this.timeoutMs = Number(config.get<string>('AI_TIMEOUT_MS') ?? 30_000);
+  constructor(private readonly settings: SettingsService) {}
+
+  /** Public, non-secret config for the dashboard. */
+  async getConfig() {
+    const ai = await this.settings.ai();
+    return { baseUrl: ai.baseUrl, defaultModel: ai.model };
   }
 
-  get model(): string {
-    return this.defaultModel;
+  async defaultModel(): Promise<string> {
+    return (await this.settings.ai()).model;
   }
 
-  getConfig() {
-    return { baseUrl: this.baseUrl, defaultModel: this.defaultModel };
-  }
-
-  private headers(): Record<string, string> {
+  private headers(apiKey: string): Record<string, string> {
     const h: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.apiKey) h.Authorization = `Bearer ${this.apiKey}`;
+    if (apiKey) h.Authorization = `Bearer ${apiKey}`;
     return h;
   }
 
   /** List model ids advertised by the configured base URL. */
   async listModels(): Promise<string[]> {
+    const ai = await this.settings.ai();
     try {
-      const res = await fetch(`${this.baseUrl}/models`, {
-        headers: this.headers(),
-        signal: AbortSignal.timeout(this.timeoutMs),
+      const res = await fetch(`${ai.baseUrl}/models`, {
+        headers: this.headers(ai.apiKey),
+        signal: AbortSignal.timeout(ai.timeoutMs),
       });
       if (!res.ok) {
         throw new Error(`Provider returned ${res.status}`);
@@ -75,22 +68,23 @@ export class AiProviderService {
   }
 
   async chat(messages: ChatMessage[], opts: ChatOptions = {}): Promise<string> {
+    const ai = await this.settings.ai();
     const payload: Record<string, unknown> = {
-      model: opts.model ?? this.defaultModel,
+      model: opts.model ?? ai.model,
       messages,
-      temperature: opts.temperature ?? 0.6,
+      temperature: opts.temperature ?? ai.temperature,
     };
     if (opts.maxTokens) payload.max_tokens = opts.maxTokens;
     if (opts.json) payload.response_format = { type: 'json_object' };
 
     let res: Response;
     try {
-      res = await fetch(`${this.baseUrl}/chat/completions`, {
+      res = await fetch(`${ai.baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: this.headers(),
+        headers: this.headers(ai.apiKey),
         body: JSON.stringify(payload),
         // H8: bound the wait so a hung provider can't stall auto-reply forever.
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: AbortSignal.timeout(ai.timeoutMs),
       });
     } catch (err) {
       this.logger.error(`chat request failed: ${err}`);

@@ -2,7 +2,10 @@ import { NotificationsService } from './notifications.service';
 
 describe('NotificationsService', () => {
   function make(env: Record<string, string> = {}) {
-    return new NotificationsService({ get: (k: string) => env[k] } as any);
+    const settings = {
+      notifications: async () => ({ hermesNotifyTarget: env.HERMES_NOTIFY_TARGET ?? '' }),
+    } as any;
+    return new NotificationsService({ get: (k: string) => env[k] } as any, settings);
   }
 
   it('disabled when no target', () => {
@@ -13,7 +16,7 @@ describe('NotificationsService', () => {
     expect(make({ HERMES_NOTIFY_TARGET: 'telegram' }).enabled).toBe(true);
   });
 
-  it('send no-ops when disabled', async () => {
+  it('send no-ops when no target', async () => {
     await expect(make().send('hi')).resolves.toBeUndefined();
   });
 

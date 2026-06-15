@@ -18,7 +18,7 @@ describe('AiService', () => {
       chat: jest.fn(),
       listModels: jest.fn().mockResolvedValue(['m1']),
       getConfig: jest.fn().mockReturnValue({ baseUrl: 'x', defaultModel: 'm' }),
-      model: 'default-model',
+      defaultModel: jest.fn().mockResolvedValue('default-model'),
     };
     prompts = { buildForConversation: jest.fn().mockResolvedValue([]) };
     notifications = { send: jest.fn() };

@@ -75,10 +75,10 @@ const inboxPage = read('apps/web/src/app/inbox/page.tsx');
 assert.match(conversationsService, /status: MessageStatus\.pending/, 'Manual sends must be persisted before gateway delivery');
 assert.match(conversationsService, /message_send_failed/, 'Failed manual sends must be audited');
 assert.match(inboxPage, /prev\.messages\.some\(\(m\) => m\.id === message\.id\)/, 'Inbox must de-duplicate live message events');
-assert.match(inboxPage, /await loadConv\(/, 'Inbox must reload conversation on retries');
+assert.match(inboxPage, /await loadConv\(activeId\);[\s\S]*setSendError/, 'Inbox must refresh failed sends so failed messages stay visible');
 
 const auditPage = read('apps/web/src/app/audit/page.tsx');
-assert.match(auditPage, /setError/, 'Audit UI must show load errors instead of silently failing');
+assert.match(auditPage, /Failed to load audit log/, 'Audit UI must show load errors instead of silently failing');
 
 
 const waService = read('apps/api/src/modules/wa/wa.service.ts');

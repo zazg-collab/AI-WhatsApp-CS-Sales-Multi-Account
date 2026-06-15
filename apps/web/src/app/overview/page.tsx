@@ -18,7 +18,44 @@ import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { useT, type Dict } from '@/lib/i18n';
 import type { LucideIcon } from 'lucide-react';
+
+const dict: Dict = {
+  title: { id: 'Prioritaskan lead, review balasan AI, dan kendalikan campaign hari ini.', en: 'Prioritise leads, review AI replies, and control campaigns today.' },
+  subtitle: { id: 'Tindakan yang menunggu admin di semua akun WhatsApp', en: 'Actions awaiting an admin across all WhatsApp accounts' },
+  fullAnalytics: { id: 'Analytics lengkap', en: 'Full analytics' },
+  errTitle: { id: 'Gagal memuat overview', en: 'Failed to load overview' },
+  retry: { id: 'Coba lagi', en: 'Try again' },
+  attnRequired: { id: 'Perlu tindakan', en: 'Needs attention' },
+  needDecision: { id: 'Percakapan butuh keputusan', en: 'Conversations needing a decision' },
+  openInbox: { id: 'Buka inbox', en: 'Open inbox' },
+  allClear: { id: 'Aman terkendali', en: 'All clear' },
+  allClearSub: { id: 'Tidak ada yang menunggu tindakan admin saat ini.', en: 'Nothing is waiting on an admin right now.' },
+  noMessages: { id: 'Belum ada pesan', en: 'No messages yet' },
+  todaySummary: { id: 'Ringkasan hari ini', en: 'Today at a glance' },
+  errFallback: { id: 'Gagal memuat overview dari API', en: 'Failed to load the overview from the API' },
+  // queues
+  q_reviews: { id: 'Review tertunda', en: 'Pending reviews' },
+  q_reviews_h: { id: 'Draft menunggu persetujuan admin', en: 'Drafts awaiting admin approval' },
+  q_risk: { id: 'Percakapan berisiko tinggi', en: 'High-risk conversations' },
+  q_risk_h: { id: 'Ditandai Hermes — tinjau sebelum balas', en: 'Flagged by Hermes — review before replying' },
+  q_failed: { id: 'Pesan gagal terkirim', en: 'Failed messages' },
+  q_failed_h: { id: 'Kirim ulang dari antrean perhatian', en: 'Resend from the attention queue' },
+  q_disc: { id: 'Akun WhatsApp terputus', en: 'Disconnected WhatsApp accounts' },
+  q_disc_h: { id: 'Scan ulang QR untuk menyambung', en: 'Re-scan the QR to reconnect' },
+  q_sla: { id: 'SLA hampir terlewat', en: 'SLA at risk' },
+  q_sla_h: { id: 'Sudah lewat target waktu respons', en: 'Past the response-time target' },
+  // state meta
+  st_takeover: { id: 'Ambil alih', en: 'Human takeover' },
+  st_review: { id: 'Perlu review', en: 'Needs review' },
+  st_blocked: { id: 'Kirim diblokir', en: 'Sending blocked' },
+  // metrics
+  m_conv: { id: 'Total percakapan', en: 'Total conversations' },
+  m_ai: { id: 'Ditangani AI', en: 'Handled by AI' },
+  m_resp: { id: 'Rata-rata respons', en: 'Avg response' },
+  m_appr: { id: 'Approval Hermes', en: 'Hermes approval' },
+};
 
 /**
  * Operational Overview — live. Attention queues come first (the things a human
@@ -72,9 +109,9 @@ const toneRing: Record<QueueTone, string> = {
 };
 
 const stateMeta: Record<AttnState, { label: string; icon: LucideIcon; tone: 'review' | 'danger' | 'neutral' }> = {
-  'human-takeover': { label: 'Human takeover', icon: Hand, tone: 'neutral' },
-  'needs-review': { label: 'Needs review', icon: TriangleAlert, tone: 'review' },
-  'sending-blocked': { label: 'Sending blocked', icon: CircleX, tone: 'danger' },
+  'human-takeover': { label: 'st_takeover', icon: Hand, tone: 'neutral' },
+  'needs-review': { label: 'st_review', icon: TriangleAlert, tone: 'review' },
+  'sending-blocked': { label: 'st_blocked', icon: CircleX, tone: 'danger' },
 };
 
 function relTime(iso: string | null | undefined): string {
@@ -107,6 +144,7 @@ export default function OverviewPage() {
   const [attention, setAttention] = useState<ConvSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const t = useT(dict);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,22 +163,28 @@ export default function OverviewPage() {
       setAccounts(acc);
       setAttention(conv);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load overview from API');
+      setError(err instanceof Error ? err.message : t('errFallback'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
     const socket = getSocket();
-    const refresh = () => load();
+    if (!socket) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const refresh = () => {
+      if (timer) return;
+      timer = setTimeout(() => { timer = null; load(); }, 1000);
+    };
     socket.on('hermes:alert', refresh);
     socket.on('conversation:updated', refresh);
     socket.on('conversation:sla-breach', refresh);
     socket.on('conversation:sla-cleared', refresh);
     socket.on('wa:status', refresh);
     return () => {
+      if (timer) clearTimeout(timer);
       socket.off('hermes:alert', refresh);
       socket.off('conversation:updated', refresh);
       socket.off('conversation:sla-breach', refresh);
@@ -165,11 +209,11 @@ export default function OverviewPage() {
     icon: LucideIcon;
     tone: QueueTone;
   }[] = [
-    { key: 'reviews', label: 'Pending reviews', count: pendingReviews, hint: 'Drafts awaiting approval', href: '/hermes', icon: ShieldCheck, tone: 'review' },
-    { key: 'risk', label: 'High-risk conversations', count: highRisk, hint: 'Flagged by Hermes', href: '/hermes', icon: TriangleAlert, tone: 'danger' },
-    { key: 'failed', label: 'Failed messages', count: failed, hint: 'In the attention queue', href: '/inbox', icon: CircleX, tone: 'danger' },
-    { key: 'disconnected', label: 'Disconnected accounts', count: disconnected, hint: 'Reconnect required', href: '/accounts', icon: Unplug, tone: 'danger' },
-    { key: 'sla', label: 'SLA at risk', count: slaRisk, hint: 'Past the response target', href: '/inbox', icon: Clock, tone: 'review' },
+    { key: 'reviews', label: t('q_reviews'), count: pendingReviews, hint: t('q_reviews_h'), href: '/hermes', icon: ShieldCheck, tone: 'review' },
+    { key: 'risk', label: t('q_risk'), count: highRisk, hint: t('q_risk_h'), href: '/hermes', icon: TriangleAlert, tone: 'danger' },
+    { key: 'failed', label: t('q_failed'), count: failed, hint: t('q_failed_h'), href: '/inbox', icon: CircleX, tone: 'danger' },
+    { key: 'disconnected', label: t('q_disc'), count: disconnected, hint: t('q_disc_h'), href: '/accounts', icon: Unplug, tone: 'danger' },
+    { key: 'sla', label: t('q_sla'), count: slaRisk, hint: t('q_sla_h'), href: '/inbox', icon: Clock, tone: 'review' },
   ];
 
   // ── Derive the at-a-glance metrics ──────────────────────────────────
@@ -181,35 +225,42 @@ export default function OverviewPage() {
   const approvalPct = decisionTotal > 0 ? Math.round(((decisions.approve ?? 0) / decisionTotal) * 100) : null;
 
   const metrics: { label: string; value: string }[] = [
-    { label: 'Conversations', value: summary ? String(summary.totalConversations) : '—' },
-    { label: 'AI auto-handled', value: aiHandledPct != null ? `${aiHandledPct}%` : '—' },
-    { label: 'Avg response', value: summary ? `${summary.avgResponseTime}s` : '—' },
-    { label: 'Hermes approval rate', value: approvalPct != null ? `${approvalPct}%` : '—' },
+    { label: t('m_conv'), value: summary ? String(summary.totalConversations) : '—' },
+    { label: t('m_ai'), value: aiHandledPct != null ? `${aiHandledPct}%` : '—' },
+    { label: t('m_resp'), value: summary ? `${summary.avgResponseTime}s` : '—' },
+    { label: t('m_appr'), value: approvalPct != null ? `${approvalPct}%` : '—' },
   ];
 
   return (
     <AppLayout>
-      <PageHeader title="Overview" subtitle="Operational attention across all accounts">
+      <PageHeader title={t('title')} subtitle={t('subtitle')}>
         <Link
           href="/analytics"
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 text-[13px] font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+          className="inline-flex h-9 items-center gap-2 rounded border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-700 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
         >
           <ChartNoAxesCombined className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-          Full analytics
+          {t('fullAnalytics')}
         </Link>
       </PageHeader>
 
       <div className="scrollbar-thin flex-1 overflow-y-auto p-5 space-y-6">
         {error ? (
-          <Card className="border-danger-200 bg-danger-50 p-4 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">
-            {error}
+          <Card className="border-danger-200 bg-danger-50 p-4 dark:border-danger-700/40 dark:bg-danger-900/20">
+            <p className="text-sm font-semibold text-danger-700 dark:text-danger-400">{t('errTitle')}</p>
+            <p className="mt-1 text-[13px] text-danger-700/90 dark:text-danger-400/90">{error}</p>
+            <button
+              onClick={load}
+              className="mt-3 inline-flex h-8 items-center gap-1.5 rounded border border-danger-300 bg-white px-3 text-[13px] font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-700/50 dark:bg-gray-900 dark:text-danger-400"
+            >
+              {t('retry')}
+            </button>
           </Card>
         ) : (
           <>
         {/* Attention queues */}
         <section aria-labelledby="queues-h">
           <h2 id="queues-h" className="mb-3 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-400">
-            Attention required
+            {t('attnRequired')}
           </h2>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
             {queues.map((q) => {
@@ -244,9 +295,9 @@ export default function OverviewPage() {
         <section aria-labelledby="attn-h">
           <Card>
             <CardHeader>
-              <CardTitle id="attn-h">Conversations needing a decision</CardTitle>
+              <CardTitle id="attn-h">{t('needDecision')}</CardTitle>
               <Link href="/inbox" className="inline-flex items-center gap-1 rounded-lg bg-hermes-50 px-2.5 py-1 text-[12px] font-semibold text-hermes-700 hover:bg-hermes-100 dark:bg-hermes-900/30 dark:text-hermes-300 dark:hover:bg-hermes-900/50">
-                Open inbox
+                {t('openInbox')}
                 <ArrowUpRight className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
               </Link>
             </CardHeader>
@@ -259,8 +310,8 @@ export default function OverviewPage() {
                 <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-channel-50 dark:bg-channel-900/20">
                   <ShieldCheck className="h-5 w-5 text-channel-600 dark:text-channel-500" strokeWidth={1.75} aria-hidden="true" />
                 </span>
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">All clear</p>
-                <p className="mt-1 text-xs text-gray-400">Nothing waiting on a human right now.</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('allClear')}</p>
+                <p className="mt-1 text-xs text-gray-400">{t('allClearSub')}</p>
               </div>
             ) : (
               <ul className="divide-y divide-gray-50 dark:divide-gray-800/80">
@@ -284,12 +335,12 @@ export default function OverviewPage() {
                             <span className="truncate text-[11px] text-gray-400">{c.whatsappAccount.accountName}</span>
                           </div>
                           <p className="truncate text-[12px] text-gray-500 dark:text-gray-400">
-                            {c.lastMessage ?? 'No messages yet'}
+                            {c.lastMessage ?? t('noMessages')}
                           </p>
                         </div>
                         <Badge tone={meta.tone}>
                           <Icon className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
-                          {meta.label}
+                          {t(meta.label)}
                         </Badge>
                         <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-gray-400">
                           {relTime(c.lastMessageAt)}
@@ -306,7 +357,7 @@ export default function OverviewPage() {
         {/* Analytics */}
         <section aria-labelledby="metrics-h">
           <h2 id="metrics-h" className="mb-3 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-400">
-            Today at a glance
+            {t('todaySummary')}
           </h2>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {metrics.map((m) => (

@@ -4,7 +4,6 @@ COPY package*.json ./
 COPY apps/web/package*.json ./apps/web/
 RUN npm ci
 COPY . .
-ENV NODE_OPTIONS="--max-old-space-size=2048"
 RUN npm run build --workspace=@hermes/web
 
 FROM node:20-alpine AS runner

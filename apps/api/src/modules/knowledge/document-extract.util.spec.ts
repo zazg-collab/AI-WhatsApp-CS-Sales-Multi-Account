@@ -66,11 +66,12 @@ describe('document-extract.util', () => {
     });
     it('routes xlsx through the sheet parser', async () => {
       // Build a real tiny workbook in-memory so the round trip is honest.
-      const XLSX = await import('xlsx');
-      const ws = XLSX.utils.aoa_to_sheet([['produk', 'harga'], ['Paket A', 100000]]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Daftar');
-      const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+      const ExcelJS = await import('exceljs');
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Daftar');
+      ws.addRow(['produk', 'harga']);
+      ws.addRow(['Paket A', 100000]);
+      const buf = Buffer.from(await wb.xlsx.writeBuffer());
       const r = await extractFromFile(buf, 'harga.xlsx');
       expect(r.kind).toBe('excel');
       expect(r.text).toContain('Sheet: Daftar');

@@ -33,17 +33,30 @@ import { MessageIngestService } from './message-ingest.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { AiService } from '../ai/ai.service';
 import { HermesService } from '../hermes/hermes.service';
-import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, isLidJid, extForMimetype, typingDelay, backoffDelay } from './wa.util';
+import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, isGroupJid, isSupportedChatJid, extForMimetype, typingDelay, backoffDelay } from './wa.util';
+import { SettingsService } from '../settings/settings.service';
 import { MediaStorageService } from '../media/media-storage.service';
 import { logAudit } from '../../common/audit.util';
 import { isWithinBusinessHours } from '../../common/business-hours.util';
+import { ContactSyncService } from './contact-sync.service';
 
 interface Session {
   sock: WASocket;
   qr?: string; // latest QR as data-URL PNG
-  /** phone→lid mapping from Baileys events for resolving linked device JIDs. */
-  lidMap: Map<string, string>; // lid → phoneJid
 }
+
+type LongLike = { toString(): string };
+
+type GroupMetadataLike = {
+  id?: string;
+  subject?: string | null;
+  owner?: string | null;
+  desc?: string | null;
+  participants?: Array<{
+    id?: string;
+    admin?: string | null;
+  }>;
+};
 
 /**
  * Manages one Baileys connection per WhatsApp account. Sessions are keyed
@@ -74,6 +87,8 @@ export class WaService implements OnModuleInit {
     private readonly hermes: HermesService,
     private readonly notifications: NotificationsService,
     private readonly storage: MediaStorageService,
+    private readonly contactSync: ContactSyncService,
+    private readonly settings: SettingsService,
     config: ConfigService,
   ) {
     this.sessionDir = config.get<string>('WA_SESSION_DIR') ?? './.wa-sessions';
@@ -83,6 +98,19 @@ export class WaService implements OnModuleInit {
     const cooldown = Number(config.get('AUTO_AWAY_COOLDOWN_MS'));
     this.awayCooldownMs = Number.isFinite(cooldown) && cooldown > 0 ? cooldown : 12 * 60 * 60 * 1000;
     this.syncFullHistory = config.get<string>('WA_SYNC_FULL_HISTORY') !== 'false';
+  }
+
+  // ── Anti-ban delays (admin-tunable via settings) ──────────────────────
+  /** Random per-message send delay using the configured bounds. */
+  private async humanDelay(): Promise<void> {
+    const wa = await this.settings.wa();
+    return humanDelay(wa.humanDelayMinMs, wa.humanDelayMaxMs);
+  }
+
+  /** Typing-indicator duration for a message using the configured model. */
+  private async typingDelay(text: string): Promise<void> {
+    const wa = await this.settings.wa();
+    return typingDelay(text, wa.typingPerCharMs, wa.typingMinMs, wa.typingMaxMs);
   }
 
   /** Reconnect every active account on boot. */
@@ -108,7 +136,7 @@ export class WaService implements OnModuleInit {
     const sock = makeWASocket({
       version,
       auth: state,
-      logger: pino({ level: 'warn' }) as never,
+      logger: pino({ level: 'silent' }) as never,
       printQRInTerminal: false,
       // Request WhatsApp history chunks so the app mirrors chats sent/read on the phone.
       // macOS/desktop browser identity is required by Baileys for full history sync.
@@ -116,29 +144,12 @@ export class WaService implements OnModuleInit {
       browser: Browsers.macOS('Desktop'),
     });
 
-    this.sessions.set(accountId, { sock, lidMap: new Map() });
+    this.sessions.set(accountId, { sock });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Build a lid→phoneJid mapping from Baileys contact events.
-    // Linked devices receive @lid JIDs; this map lets us resolve them to phone JIDs.
-    const populateLidMap = (contacts: { id?: string; lid?: string }[]) => {
-      const session = this.sessions.get(accountId);
-      if (!session) return;
-      for (const c of contacts) {
-        if (c.id && c.lid && c.id.endsWith('@s.whatsapp.net')) {
-          session.lidMap.set(c.lid, c.id);
-        }
-      }
-    };
-
-    sock.ev.on('contacts.upsert', (contacts) => {
-      populateLidMap(contacts as { id?: string; lid?: string }[]);
-    });
-
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
-      this.logger.log(`connection.update [${accountId}]: connection=${connection}, qr=${!!qr}, lastDisconnect=${lastDisconnect?.error?.message ?? 'none'}`);
 
       if (qr) {
         const dataUrl = await QRCode.toDataURL(qr);
@@ -146,6 +157,7 @@ export class WaService implements OnModuleInit {
         if (session) session.qr = dataUrl;
         await this.setStatus(accountId, SessionStatus.qr_required);
         this.events.emitToAccount(accountId, 'wa:qr', { accountId, qr: dataUrl });
+        this.logger.log(`Account ${accountId}: QR code generated — scan required`);
       }
 
       if (connection === 'open') {
@@ -154,6 +166,8 @@ export class WaService implements OnModuleInit {
         this.reconnectAttempts.set(accountId, 0);
         this.reconnectingSince.delete(accountId);
         await this.setStatus(accountId, SessionStatus.connected);
+        this.logger.log(`Account ${accountId}: Connection OPEN`);
+        this.events.emitToAccount(accountId, 'wa:status', { accountId, status: SessionStatus.connected });
       }
 
       if (connection === 'close') {
@@ -161,6 +175,8 @@ export class WaService implements OnModuleInit {
           ?.output?.statusCode;
         const loggedOut = code === DisconnectReason.loggedOut;
         this.sessions.delete(accountId);
+        this.logger.warn(`Account ${accountId}: Connection CLOSED (code=${code}, loggedOut=${loggedOut})`);
+        this.events.emitToAccount(accountId, 'wa:status', { accountId, status: 'disconnected', code });
 
         if (loggedOut) {
           this.reconnectAttempts.delete(accountId);
@@ -185,33 +201,117 @@ export class WaService implements OnModuleInit {
       // notify = live traffic; append = history/backfill from the linked phone.
       // We persist both so the dashboard mirrors WhatsApp, but suppress AI/away
       // automation for backfilled history to avoid replying to old chats.
-      this.logger.log(`messages.upsert [${accountId}]: type=${type}, count=${messages?.length ?? 0}`);
       if (type !== 'notify' && type !== 'append') return;
+      if (type === 'notify') {
+        this.logger.log(`Account ${accountId}: Received ${messages.length} live message(s)`);
+      }
       for (const m of messages) {
-        this.logger.log(`Processing message [${accountId}]: jid=${m.key?.remoteJid}, fromMe=${m.key?.fromMe}, id=${m.key?.id}`);
         await this.handleIncoming(accountId, m, { suppressAutomation: type !== 'notify' });
+      }
+    });
+
+    sock.ev.on('contacts.upsert', async (contacts) => {
+      await this.contactSync.syncContacts(accountId, contacts).catch((err) =>
+        this.logger.warn(`Contact upsert sync failed: ${err}`),
+      );
+    });
+
+    sock.ev.on('contacts.update', async (contacts) => {
+      await this.contactSync.syncContacts(accountId, contacts).catch((err) =>
+        this.logger.warn(`Contact update sync failed: ${err}`),
+      );
+    });
+
+    const groupEvents = sock.ev as unknown as {
+      on(event: 'groups.upsert' | 'groups.update' | 'group-participants.update', listener: (payload: any) => void): void;
+    };
+
+    groupEvents.on('groups.upsert', async (groups: GroupMetadataLike[]) => {
+      for (const group of groups ?? []) {
+        await this.applyGroupMetadata(accountId, group).catch((err) =>
+          this.logger.warn(`Group upsert mirror failed for ${group.id}: ${err}`),
+        );
+      }
+    });
+
+    groupEvents.on('groups.update', async (groups: GroupMetadataLike[]) => {
+      for (const group of groups ?? []) {
+        await this.applyGroupMetadata(accountId, group, { logChanges: true }).catch((err) =>
+          this.logger.warn(`Group update mirror failed for ${group.id}: ${err}`),
+        );
+      }
+    });
+
+    groupEvents.on('group-participants.update', async (update: {
+      id?: string;
+      author?: string;
+      participants?: string[];
+      action?: string;
+    }) => {
+      await this.applyGroupParticipantUpdate(accountId, update).catch((err) =>
+        this.logger.warn(`Group participant mirror failed for ${update.id}: ${err}`),
+      );
+    });
+
+    sock.ev.on('chats.upsert', async (chats) => {
+      for (const chat of chats) {
+        await this.applyChatMirrorState(accountId, chat.id, chat).catch((err) =>
+          this.logger.warn(`Chat upsert mirror failed for ${chat.id}: ${err}`),
+        );
+      }
+    });
+
+    sock.ev.on('chats.update', async (updates) => {
+      for (const chat of updates) {
+        if (!chat.id) continue;
+        await this.applyChatMirrorState(accountId, chat.id, chat).catch((err) =>
+          this.logger.warn(`Chat update mirror failed for ${chat.id}: ${err}`),
+        );
+      }
+    });
+
+    sock.ev.on('blocklist.set', async ({ blocklist }) => {
+      await this.applyBlocklist(accountId, blocklist, true).catch((err) =>
+        this.logger.warn(`Blocklist set mirror failed: ${err}`),
+      );
+    });
+
+    sock.ev.on('blocklist.update', async ({ blocklist, type }) => {
+      await this.applyBlocklist(accountId, blocklist, type === 'add').catch((err) =>
+        this.logger.warn(`Blocklist update mirror failed: ${err}`),
+      );
+    });
+
+    sock.ev.on('message-receipt.update', async (updates) => {
+      for (const update of updates) {
+        if (!update.key?.id) continue;
+        await this.applyReceiptDetail(accountId, update.key.id, update.receipt).catch((err) =>
+          this.logger.warn(`Receipt detail mirror failed for ${update.key?.id}: ${err}`),
+        );
       }
     });
 
     // Baileys delivers the *initial* history sync (negotiated at QR pairing
     // when syncFullHistory is on) through this event — NOT messages.upsert.
     // Without this handler the phone's existing chats never reach the app.
-    sock.ev.on('messaging-history.set', async ({ messages, contacts, isLatest }) => {
+    sock.ev.on('messaging-history.set', async ({ messages, contacts, chats, isLatest }) => {
       this.logger.log(
         `History sync ${accountId}: ${messages?.length ?? 0} messages, ${contacts?.length ?? 0} contacts${isLatest ? ' (latest)' : ''}`,
       );
-      // Build LID→phone mapping from history contacts and update customer names.
-      populateLidMap(contacts as { id?: string; lid?: string }[]);
-      for (const c of contacts ?? []) {
-        if (!c.id || !isDirectChatJid(c.id)) continue;
-        const name = c.name ?? c.notify;
-        if (!name) continue;
-        await this.prisma.customer
-          .updateMany({
-            where: { phoneNumber: jidToPhone(c.id), sourceAccountId: accountId, name: null },
-            data: { name },
-          })
-          .catch(() => undefined);
+      await this.contactSync.syncContacts(accountId, contacts ?? []).catch((err) =>
+        this.logger.warn(`History contact sync failed: ${err}`),
+      );
+      for (const chat of chats ?? []) {
+        if (isGroupJid(chat.id)) {
+          await this.applyGroupMetadata(accountId, { id: chat.id, subject: (chat as { name?: string }).name }).catch((err) =>
+            this.logger.warn(`History group metadata mirror failed for ${chat.id}: ${err}`),
+          );
+        }
+      }
+      for (const chat of chats ?? []) {
+        await this.applyChatMirrorState(accountId, chat.id, chat).catch((err) =>
+          this.logger.warn(`History chat mirror failed for ${chat.id}: ${err}`),
+        );
       }
       for (const m of messages ?? []) {
         await this.handleIncoming(accountId, m, { suppressAutomation: true }).catch((err) =>
@@ -221,14 +321,17 @@ export class WaService implements OnModuleInit {
     });
 
     // Customer typing/online indicator → live to the dashboard (scoped to account).
-    sock.ev.on('presence.update', ({ id, presences }) => {
+    sock.ev.on('presence.update', async ({ id, presences }) => {
       if (!isDirectChatJid(id)) return;
-      const resolvedId = this.resolveJid(accountId, id);
       const state = presences?.[id]?.lastKnownPresence;
       const typing = state === 'composing' || state === 'recording';
+      let phone = jidToPhone(id);
+      if (phone.endsWith('@lid')) {
+        phone = await this.contactSync.resolveLidPhone(accountId, phone);
+      }
       this.events.emitToAccount(accountId, 'wa:presence', {
         accountId,
-        phone: jidToPhone(resolvedId),
+        phone,
         typing,
         presence: state ?? 'unavailable',
       });
@@ -415,6 +518,294 @@ export class WaService implements OnModuleInit {
     });
   }
 
+  private async conversationsForJid(accountId: string, jid: string) {
+    if (isGroupJid(jid)) {
+      const conversation = await this.ensureGroupConversation(accountId, { id: jid });
+      return [{ id: conversation.id }];
+    }
+    if (!isDirectChatJid(jid)) return [];
+    return this.prisma.conversation.findMany({
+      where: {
+        whatsappAccountId: accountId,
+        customer: {
+          phoneNumber: jidToPhone(jid),
+          sourceAccountId: accountId,
+        },
+      },
+      select: { id: true },
+    });
+  }
+
+  private async ensureGroupConversation(accountId: string, group: GroupMetadataLike) {
+    const jid = group.id;
+    if (!jid || !isGroupJid(jid)) {
+      throw new Error(`Invalid group jid: ${jid}`);
+    }
+    const account = await this.prisma.whatsappAccount.findUnique({ where: { id: accountId } });
+    if (!account) throw new NotFoundException(`Account ${accountId} not found`);
+    const subject = group.subject ?? jid;
+    const participants = (group.participants ?? [])
+      .filter((participant) => participant.id)
+      .map((participant) => ({ jid: participant.id, admin: participant.admin ?? null }));
+
+    const customer = await this.prisma.customer.upsert({
+      where: {
+        phoneNumber_sourceAccountId: {
+          phoneNumber: jid,
+          sourceAccountId: accountId,
+        },
+      },
+      update: { name: subject },
+      create: {
+        name: subject,
+        phoneNumber: jid,
+        sourceAccountId: accountId,
+        assignedAdminId: account.assignedAdminId,
+      },
+    });
+
+    const existing = await this.prisma.conversation.findUnique({
+      where: { whatsappAccountId_chatJid: { whatsappAccountId: accountId, chatJid: jid } },
+      select: { id: true, groupSubject: true },
+    });
+    const data = {
+      customerId: customer.id,
+      whatsappAccountId: accountId,
+      botId: account.assignedBotId,
+      aiMode: AiMode.ai_off,
+      assignedAdminId: account.assignedAdminId,
+      chatJid: jid,
+      isGroup: true,
+      groupSubject: subject,
+      groupOwnerJid: group.owner ?? null,
+      groupDescription: group.desc ?? null,
+      groupParticipants: participants,
+      groupMetadata: group as never,
+    };
+
+    if (existing) {
+      return this.prisma.conversation.update({
+        where: { id: existing.id },
+        data: {
+          groupSubject: subject,
+          groupOwnerJid: group.owner ?? undefined,
+          groupDescription: group.desc ?? undefined,
+          groupParticipants: participants.length ? participants : undefined,
+          groupMetadata: group as never,
+        },
+      });
+    }
+
+    const conversation = await this.prisma.conversation.create({ data });
+    this.events.emitToAccount(accountId, 'conversation:updated', {
+      conversationId: conversation.id,
+      isGroup: true,
+      groupSubject: subject,
+    });
+    return conversation;
+  }
+
+  private async applyGroupMetadata(
+    accountId: string,
+    group: GroupMetadataLike,
+    opts: { logChanges?: boolean } = {},
+  ) {
+    if (!group.id || !isGroupJid(group.id)) return;
+    const before = await this.prisma.conversation.findUnique({
+      where: { whatsappAccountId_chatJid: { whatsappAccountId: accountId, chatJid: group.id } },
+      select: { id: true, groupSubject: true, groupDescription: true },
+    });
+    const conversation = await this.ensureGroupConversation(accountId, group);
+    this.events.emitToAccount(accountId, 'conversation:updated', {
+      conversationId: conversation.id,
+      isGroup: true,
+      groupSubject: conversation.groupSubject,
+      groupDescription: conversation.groupDescription,
+      groupParticipants: conversation.groupParticipants,
+    });
+
+    if (!opts.logChanges || !before) return;
+    if (group.subject && before.groupSubject && group.subject !== before.groupSubject) {
+      await this.logGroupSystemMessage(accountId, conversation.id, `Subject grup diganti menjadi "${group.subject}"`);
+    }
+    if (group.desc && before.groupDescription !== undefined && group.desc !== before.groupDescription) {
+      await this.logGroupSystemMessage(accountId, conversation.id, 'Deskripsi grup diperbarui');
+    }
+  }
+
+  private async applyGroupParticipantUpdate(
+    accountId: string,
+    update: { id?: string; author?: string; participants?: string[]; action?: string },
+  ) {
+    if (!update.id || !isGroupJid(update.id)) return;
+    const session = this.sessions.get(accountId);
+    let conversation = await this.ensureGroupConversation(accountId, { id: update.id });
+    if (session) {
+      const metadata = await session.sock.groupMetadata(update.id).catch(() => null);
+      if (metadata) {
+        conversation = await this.ensureGroupConversation(accountId, metadata as GroupMetadataLike);
+      }
+    }
+    const participants = update.participants ?? [];
+    const count = participants.length;
+    const sample = participants.slice(0, 3).map(jidToPhone).join(', ');
+    const suffix = count > 3 ? ` +${count - 3} lainnya` : '';
+    const actionLabel: Record<string, string> = {
+      add: 'ditambahkan ke grup',
+      remove: 'dikeluarkan dari grup',
+      promote: 'dipromosikan menjadi admin',
+      demote: 'diturunkan dari admin',
+    };
+    const label = actionLabel[update.action ?? ''] ?? `mengalami perubahan (${update.action ?? 'unknown'})`;
+    await this.logGroupSystemMessage(
+      accountId,
+      conversation.id,
+      `${sample || `${count} participant`} ${label}${suffix}`,
+      {
+        action: update.action ?? null,
+        author: update.author ?? null,
+        participants,
+      },
+    );
+  }
+
+  private async logGroupSystemMessage(
+    accountId: string,
+    conversationId: string,
+    content: string,
+    metadata?: Record<string, unknown>,
+  ) {
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId,
+        senderType: SenderType.system,
+        messageType: MessageType.system,
+        content,
+        status: MessageStatus.delivered,
+        rawWaPayload: metadata as never,
+      },
+    });
+    await this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { lastMessage: content, lastMessageAt: message.createdAt },
+    });
+    this.events.emitToAccount(accountId, 'message:new', { conversationId, message });
+    this.events.emitToAccount(accountId, 'conversation:updated', {
+      conversationId,
+      lastMessage: content,
+      lastMessageAt: message.createdAt,
+    });
+  }
+
+  private longToNumber(value: number | LongLike | null | undefined): number | undefined {
+    if (value === null || value === undefined) return undefined;
+    const n = Number(typeof value === 'object' && 'toString' in value ? value.toString() : value);
+    return Number.isFinite(n) ? n : undefined;
+  }
+
+  private async applyChatMirrorState(
+    accountId: string,
+    jid: string,
+    chat: {
+      archived?: boolean | null;
+      pinned?: number | null;
+      muteEndTime?: number | LongLike | null;
+      unreadCount?: number | null;
+      ephemeralExpiration?: number | null;
+      ephemeralSettingTimestamp?: number | LongLike | null;
+    },
+  ) {
+    const conversations = await this.conversationsForJid(accountId, jid);
+    if (conversations.length === 0) return;
+
+    const data: Record<string, unknown> = {};
+    if (chat.archived !== undefined && chat.archived !== null) data.isArchived = chat.archived;
+    if (chat.pinned !== undefined && chat.pinned !== null) data.isPinned = chat.pinned > 0;
+    if (chat.muteEndTime !== undefined && chat.muteEndTime !== null) {
+      const muteEnd = this.longToNumber(chat.muteEndTime);
+      const isMuted = Boolean(muteEnd && muteEnd > Math.floor(Date.now() / 1000));
+      data.isMuted = isMuted;
+      data.muteUntil = isMuted && muteEnd ? new Date(muteEnd * 1000) : null;
+    }
+    if (chat.unreadCount !== undefined && chat.unreadCount !== null) data.unreadCount = chat.unreadCount;
+    if (chat.ephemeralExpiration !== undefined && chat.ephemeralExpiration !== null) {
+      data.disappearingDuration = chat.ephemeralExpiration > 0 ? chat.ephemeralExpiration : null;
+      const setAt = this.longToNumber(chat.ephemeralSettingTimestamp);
+      data.disappearingSetAt = chat.ephemeralExpiration > 0 && setAt ? new Date(setAt * 1000) : null;
+    }
+    if (Object.keys(data).length === 0) return;
+
+    for (const conversation of conversations) {
+      await this.prisma.conversation.update({
+        where: { id: conversation.id },
+        data: data as never,
+      });
+      this.events.emitToAccount(accountId, 'conversation:updated', {
+        conversationId: conversation.id,
+        ...data,
+      });
+    }
+  }
+
+  private async applyBlocklist(accountId: string, blocklist: string[], blocked: boolean) {
+    for (const jid of blocklist) {
+      const conversations = await this.conversationsForJid(accountId, jid);
+      for (const conversation of conversations) {
+        await this.prisma.conversation.update({
+          where: { id: conversation.id },
+          data: { isBlocked: blocked },
+        });
+        this.events.emitToAccount(accountId, 'conversation:updated', {
+          conversationId: conversation.id,
+          isBlocked: blocked,
+        });
+      }
+    }
+  }
+
+  private async applyReceiptDetail(
+    accountId: string,
+    externalId: string,
+    receipt: {
+      userJid?: string | null;
+      receiptTimestamp?: number | LongLike | null;
+      readTimestamp?: number | LongLike | null;
+      playedTimestamp?: number | LongLike | null;
+      pendingDeviceJid?: string[] | null;
+      deliveredDeviceJid?: string[] | null;
+    },
+  ) {
+    const message = await this.prisma.message.findFirst({
+      where: { externalId, conversation: { whatsappAccountId: accountId } },
+      select: { id: true, conversationId: true, receiptDetails: true, status: true },
+    });
+    if (!message) return;
+    const key = receipt.userJid ?? 'unknown';
+    const details = (message.receiptDetails as Record<string, unknown>) ?? {};
+    details[key] = {
+      receiptTimestamp: this.longToNumber(receipt.receiptTimestamp) ?? null,
+      readTimestamp: this.longToNumber(receipt.readTimestamp) ?? null,
+      playedTimestamp: this.longToNumber(receipt.playedTimestamp) ?? null,
+      pendingDeviceJid: receipt.pendingDeviceJid ?? [],
+      deliveredDeviceJid: receipt.deliveredDeviceJid ?? [],
+    };
+    const readTs = this.longToNumber(receipt.readTimestamp);
+    const deliveredTs = this.longToNumber(receipt.receiptTimestamp);
+    const status = readTs
+      ? MessageStatus.read
+      : deliveredTs && message.status !== MessageStatus.read
+        ? MessageStatus.delivered
+        : message.status;
+    const updated = await this.prisma.message.update({
+      where: { id: message.id },
+      data: { receiptDetails: details as never, status },
+    });
+    this.events.emitToAccount(accountId, 'message:updated', {
+      conversationId: message.conversationId,
+      message: updated,
+    });
+  }
+
   /**
    * Mark the customer's recent inbound messages as read in WhatsApp (blue
    * ticks) when an admin opens the chat. Best-effort; never throws to caller.
@@ -557,32 +948,23 @@ export class WaService implements OnModuleInit {
     m: proto.IWebMessageInfo,
     opts: { suppressAutomation?: boolean } = {},
   ) {
-    if (!m.key.remoteJid) return;
-    // Only 1-on-1 chats (M1): drop groups, broadcast lists, newsletters.
-    if (!isDirectChatJid(m.key.remoteJid)) {
-      this.logger.log(`handleIncoming [${accountId}]: dropped non-direct JID: ${m.key.remoteJid}`);
-      return;
-    }
-
-    // Resolve @lid JIDs to phone numbers via Baileys contact store.
-    const remoteJid = await this.resolveJid(accountId, m.key.remoteJid);
+    const remoteJid = m.message?.deviceSentMessage?.destinationJid ?? m.key.remoteJid;
+    if (!remoteJid) return;
+    if (!isSupportedChatJid(remoteJid)) return;
+    const groupChat = isGroupJid(remoteJid);
 
     const fromMe = m.key.fromMe === true;
-
-    const locationText = m.message?.locationMessage
-      ? `📍 ${m.message.locationMessage.degreesLatitude?.toFixed(6)}, ${m.message.locationMessage.degreesLongitude?.toFixed(6)}`
-      : '';
+    const msg = this.unwrapMessage(m.message);
 
     const text =
-      m.message?.conversation ??
-      m.message?.extendedTextMessage?.text ??
-      m.message?.imageMessage?.caption ??
-      m.message?.videoMessage?.caption ??
-      m.message?.documentMessage?.caption ??
-      locationText ??
+      msg?.conversation ??
+      msg?.extendedTextMessage?.text ??
+      msg?.imageMessage?.caption ??
+      msg?.videoMessage?.caption ??
+      msg?.documentMessage?.caption ??
       '';
 
-    const type = this.resolveType(m);
+    const type = this.resolveType(msg);
     if (!text && type === MessageType.text) return;
 
     // Download inbound media to WA_MEDIA_DIR and reference it as /media/<file>.
@@ -592,7 +974,7 @@ export class WaService implements OnModuleInit {
     let mediaUrl: string | undefined;
     if (!opts.suppressAutomation &&
         (type === MessageType.image || type === MessageType.video ||
-         type === MessageType.audio || type === MessageType.voice || type === MessageType.document)) {
+         type === MessageType.audio || type === MessageType.document)) {
       mediaUrl = await this.downloadInboundMedia(m).catch((err) => {
         this.logger.warn(`Media download failed for ${m.key.id}: ${err}`);
         return undefined;
@@ -602,14 +984,22 @@ export class WaService implements OnModuleInit {
     // If the customer replied to (quoted) an earlier message, WhatsApp sends
     // the original's id as contextInfo.stanzaId — link it to our stored row.
     const ctx =
-      m.message?.extendedTextMessage?.contextInfo ??
-      m.message?.imageMessage?.contextInfo ??
-      m.message?.videoMessage?.contextInfo ??
-      m.message?.documentMessage?.contextInfo;
+      msg?.extendedTextMessage?.contextInfo ??
+      msg?.imageMessage?.contextInfo ??
+      msg?.videoMessage?.contextInfo ??
+      msg?.documentMessage?.contextInfo;
+
+    // Newer WhatsApp addresses some chats by @lid (privacy identifier) instead
+    // of a phone number. Baileys still surfaces the real phone on the message
+    // key as senderPn / participantPn — capture it so ingest can resolve and
+    // persist the lid → phone mapping instead of showing a raw "…@lid" string.
+    const key = m.key as typeof m.key & { senderPn?: string | null; participantPn?: string | null };
+    const senderPn = key.senderPn ?? key.participantPn ?? undefined;
 
     const result = await this.ingest.ingest({
       accountId,
       remoteJid,
+      senderPn: senderPn ?? undefined,
       externalId: m.key.id ?? '',
       pushName: m.pushName ?? undefined,
       text,
@@ -618,10 +1008,10 @@ export class WaService implements OnModuleInit {
       quotedExternalId: ctx?.stanzaId ?? undefined,
       fromMe,
       occurredAt: this.messageTimestamp(m),
-      suppressAutomation: opts.suppressAutomation,
+      suppressAutomation: opts.suppressAutomation || groupChat,
     });
 
-    if (result && !result.fromMe && !result.suppressAutomation) {
+    if (result && !groupChat && !result.fromMe && !result.suppressAutomation) {
       // Fetch the contact's profile picture once (when we don't have one yet).
       if (result.customer && !result.customer.avatarUrl) {
         this.maybeFetchAvatar(accountId, result.customer.id, result.customer.phoneNumber)
@@ -639,26 +1029,6 @@ export class WaService implements OnModuleInit {
     }
   }
 
-  /**
-   * Resolve @lid JIDs to phone-based @s.whatsapp.net JIDs.
-   * Linked devices receive messages with @lid identifiers instead of phone JIDs.
-   * We maintain a lidMap from Baileys contact events to perform the mapping.
-   * Falls back to the original JID if no mapping is found.
-   */
-  private resolveJid(accountId: string, jid: string): string {
-    if (!isLidJid(jid)) return jid;
-
-    const session = this.sessions.get(accountId);
-    if (!session) return jid;
-
-    const resolved = session.lidMap.get(jid);
-    if (resolved) return resolved;
-
-    // No resolution found — keep the @lid (messages will still appear, just
-    // with the LID as the customer identifier).
-    return jid;
-  }
-
   /** Store a customer's WhatsApp avatar and notify the dashboard. */
   private async maybeFetchAvatar(accountId: string, customerId: string, phone: string) {
     const url = await this.fetchAvatar(accountId, phone);
@@ -674,6 +1044,22 @@ export class WaService implements OnModuleInit {
     const seconds = Number(typeof raw === 'object' && 'toString' in raw ? raw.toString() : raw);
     if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
     return new Date(seconds * 1000);
+  }
+
+  private unwrapMessage(message?: proto.IMessage | null): proto.IMessage | undefined {
+    let current = message ?? undefined;
+    for (let i = 0; i < 5 && current; i++) {
+      const wrapped =
+        current.ephemeralMessage?.message ??
+        current.viewOnceMessage?.message ??
+        current.viewOnceMessageV2?.message ??
+        current.viewOnceMessageV2Extension?.message ??
+        current.documentWithCaptionMessage?.message ??
+        current.deviceSentMessage?.message;
+      if (!wrapped || wrapped === current) return current;
+      current = wrapped;
+    }
+    return current;
   }
 
   /**
@@ -742,15 +1128,30 @@ export class WaService implements OnModuleInit {
       where: { id: conversationId },
       include: { customer: true },
     });
-    if (!convo) return;
-    if (convo.takeoverStatus === TakeoverStatus.admin_takeover) return;
-    if (convo.aiMode === AiMode.ai_off || convo.aiMode === AiMode.ai_paused) {
+    if (!convo) {
+      this.logger.debug(`maybeAutoReply: conversation not found: ${conversationId}`);
       return;
     }
-    if (!convo.customer.phoneNumber) return;
+    if (convo.takeoverStatus === TakeoverStatus.admin_takeover) {
+      this.logger.debug(`maybeAutoReply: admin takeover active`);
+      return;
+    }
+    if (convo.aiMode === AiMode.ai_off || convo.aiMode === AiMode.ai_paused) {
+      this.logger.debug(`maybeAutoReply: AI mode is off/paused: ${convo.aiMode}`);
+      return;
+    }
+    if (!convo.customer.phoneNumber) {
+      this.logger.debug(`maybeAutoReply: no phone number`);
+      return;
+    }
 
+    this.logger.debug(`maybeAutoReply: generating reply for ${conversationId}, mode=${convo.aiMode}`);
     const { text } = await this.ai.generateReply(conversationId);
-    if (!text) return;
+    if (!text) {
+      this.logger.debug(`maybeAutoReply: generateReply returned empty text`);
+      return;
+    }
+    this.logger.debug(`maybeAutoReply: generated reply: ${text.substring(0, 100)}...`);
 
     // TOCTOU guard (H2): generateReply can take >10s. An admin may have taken
     // over, paused, or switched the AI mode meanwhile. Re-read the conversation
@@ -849,7 +1250,9 @@ export class WaService implements OnModuleInit {
         hermesReviewId,
       },
     });
+    this.logger.debug(`storeDraft: created draft message ${message.id} for conversation ${conversationId}`);
     this.events.emitToAccount(accountId, 'message:draft', { conversationId, message });
+    this.logger.debug(`storeDraft: emitted message:draft event to account ${accountId}`);
     return message;
   }
 
@@ -878,12 +1281,9 @@ export class WaService implements OnModuleInit {
     return url;
   }
 
-  private resolveType(m: proto.IWebMessageInfo): MessageType {
-    const msg = m.message;
+  private resolveType(msg?: proto.IMessage | null): MessageType {
     if (msg?.imageMessage) return MessageType.image;
     if (msg?.videoMessage) return MessageType.video;
-    // PTT = Push-To-Talk (voice message)
-    if (msg?.audioMessage?.ptt === true) return MessageType.voice;
     if (msg?.audioMessage) return MessageType.audio;
     if (msg?.documentMessage) return MessageType.document;
     if (msg?.stickerMessage) return MessageType.sticker;
@@ -918,7 +1318,7 @@ export class WaService implements OnModuleInit {
     } catch {
       /* presence is best-effort */
     }
-    await typingDelay(text);
+    await this.typingDelay(text);
     try {
       await session.sock.sendPresenceUpdate('paused', jid);
     } catch {
@@ -952,7 +1352,7 @@ export class WaService implements OnModuleInit {
     }
     const jid = phoneToJid(phone);
     await this.throttleSend(accountId);
-    await humanDelay();
+    await this.humanDelay();
 
     let content: Record<string, unknown>;
     if (mediaType === 'image') {
@@ -992,7 +1392,8 @@ export class WaService implements OnModuleInit {
       throw new NotFoundException(`Account ${accountId} is not connected`);
     }
     const jid = phoneToJid(phone);
-    await humanDelay();
+    await this.throttleSend(accountId);
+    await this.humanDelay();
 
     let content: Record<string, unknown>;
     if (mediaType === 'image') {
@@ -1041,46 +1442,6 @@ export class WaService implements OnModuleInit {
     }
   }
 
-  /** Send a voice message (PTT = push-to-talk). */
-  async sendVoice(
-    accountId: string,
-    phone: string,
-    audioBuffer: Buffer,
-    mimetype = 'audio/ogg; codecs=opus',
-  ): Promise<string | null> {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await this.throttleSend(accountId);
-    await humanDelay();
-
-    const sent = await session.sock.sendMessage(jid, {
-      audio: audioBuffer,
-      mimetype,
-      ptt: true,
-    } as never);
-    return sent?.key.id ?? null;
-  }
-
-  /** Send a location message. */
-  async sendLocation(
-    accountId: string,
-    phone: string,
-    latitude: number,
-    longitude: number,
-  ): Promise<string | null> {
-    const session = this.sessions.get(accountId);
-    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
-    const jid = phoneToJid(phone);
-    await this.throttleSend(accountId);
-    await humanDelay();
-
-    const sent = await session.sock.sendMessage(jid, {
-      location: { degreesLatitude: latitude, degreesLongitude: longitude },
-    } as never);
-    return sent?.key.id ?? null;
-  }
-
   /** React to a message with an emoji (empty string clears our reaction). */
   async sendReaction(accountId: string, phone: string, externalId: string, emoji: string) {
     const session = this.sessions.get(accountId);
@@ -1110,6 +1471,161 @@ export class WaService implements OnModuleInit {
     await session.sock.sendMessage(jid, {
       delete: { remoteJid: jid, id: externalId, fromMe },
     } as never);
+  }
+
+  async sendLocation(
+    accountId: string,
+    phone: string,
+    latitude: number,
+    longitude: number,
+    name?: string,
+  ): Promise<string | null> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(phone);
+    await this.throttleSend(accountId);
+    await this.humanDelay();
+    const sent = await session.sock.sendMessage(jid, {
+      location: {
+        degreesLatitude: latitude,
+        degreesLongitude: longitude,
+        name,
+      },
+    } as never);
+    return sent?.key.id ?? null;
+  }
+
+  async sendPoll(
+    accountId: string,
+    phone: string,
+    question: string,
+    options: string[],
+    selectableCount = 1,
+  ): Promise<string | null> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(phone);
+    await this.throttleSend(accountId);
+    await this.humanDelay();
+    const sent = await session.sock.sendMessage(jid, {
+      poll: {
+        name: question,
+        values: options,
+        selectableCount,
+      },
+    } as never);
+    return sent?.key.id ?? null;
+  }
+
+  async sendContacts(
+    accountId: string,
+    phone: string,
+    contacts: { name: string; phone: string }[],
+  ): Promise<string | null> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(phone);
+    await this.throttleSend(accountId);
+    await this.humanDelay();
+    const contactCards = contacts.map((contact) => {
+      const digits = contact.phone.replace(/[^\d]/g, '');
+      return {
+        displayName: contact.name,
+        vcard: [
+          'BEGIN:VCARD',
+          'VERSION:3.0',
+          `FN:${contact.name}`,
+          `TEL;type=CELL;type=VOICE;waid=${digits}:${contact.phone}`,
+          'END:VCARD',
+        ].join('\n'),
+      };
+    });
+    const sent = await session.sock.sendMessage(jid, {
+      contacts: {
+        displayName: contacts.length === 1 ? contacts[0].name : `${contacts.length} contacts`,
+        contacts: contactCards,
+      },
+    } as never);
+    return sent?.key.id ?? null;
+  }
+
+  async forwardMessage(accountId: string, toPhone: string, text: string): Promise<string | null> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(toPhone);
+    await this.throttleSend(accountId);
+    await this.humanDelay();
+    const sent = await session.sock.sendMessage(jid, {
+      text,
+      contextInfo: { forwardingScore: 1, isForwarded: true },
+    } as never);
+    return sent?.key.id ?? null;
+  }
+
+  async setContactBlocked(accountId: string, phone: string, blocked: boolean): Promise<void> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    await session.sock.updateBlockStatus(phoneToJid(phone), blocked ? 'block' : 'unblock');
+  }
+
+  async setChatMuted(accountId: string, phone: string, muted: boolean): Promise<void> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(phone);
+    const muteUntil = muted ? Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60 : null;
+    await session.sock.chatModify({ mute: muteUntil } as never, jid);
+  }
+
+  async setChatArchived(accountId: string, phone: string, archived: boolean): Promise<void> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    await session.sock.chatModify({ archive: archived, lastMessages: [] } as never, phoneToJid(phone));
+  }
+
+  async setChatPinned(accountId: string, phone: string, pinned: boolean): Promise<void> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    await session.sock.chatModify({ pin: pinned } as never, phoneToJid(phone));
+  }
+
+  async setMessageStarred(
+    accountId: string,
+    phone: string,
+    externalId: string,
+    fromMe: boolean,
+    starred: boolean,
+  ): Promise<void> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(phone);
+    await session.sock.chatModify({
+      star: {
+        messages: [{ id: externalId, fromMe }],
+        star: starred,
+      },
+    } as never, jid);
+  }
+
+  async setDisappearingMessages(
+    accountId: string,
+    phone: string,
+    enabled: boolean,
+    duration = 7 * 24 * 60 * 60,
+  ): Promise<void> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(phone);
+    await session.sock.sendMessage(jid, {
+      disappearingMessagesInChat: enabled ? duration : false,
+    } as never);
+  }
+
+  async sendTyping(accountId: string, phone: string, typing: boolean): Promise<void> {
+    const session = this.sessions.get(accountId);
+    if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
+    const jid = phoneToJid(phone);
+    await session.sock.presenceSubscribe(jid).catch(() => undefined);
+    await session.sock.sendPresenceUpdate(typing ? 'composing' : 'paused', jid);
   }
 
   /** Log AI mode change to audit trail. */
@@ -1149,27 +1665,35 @@ export class WaService implements OnModuleInit {
     await this.startSession(accountId);
   }
 
-  /**
-   * Log out a WhatsApp account: close the Baileys socket, wipe the auth
-   * state on disk, and mark the account disconnected. The admin can then
-   * delete the account row or re-scan a fresh QR.
-   */
-  async logout(accountId: string): Promise<void> {
+  /** Fully remove an account: close socket, clean up state, delete DB record + session files. */
+  async removeAccount(accountId: string): Promise<void> {
+    // 1. Close live socket if any.
     const session = this.sessions.get(accountId);
     if (session) {
       try {
-        // Baileys logout() sends a proper logout to WhatsApp servers so the
-        // linked device is removed from the phone's device list.
-        await session.sock.logout();
-      } catch {
-        // Best-effort: if logout fails (already disconnected), just end.
-        try { session.sock.end(undefined); } catch { /* ignore */ }
-      }
+        session.sock.end(undefined);
+      } catch { /* ignore */ }
       this.sessions.delete(accountId);
     }
+    // 2. Clean up anti-ban / reconnect state.
     this.reconnectAttempts.delete(accountId);
     this.reconnectingSince.delete(accountId);
-    await this.setStatus(accountId, SessionStatus.disconnected);
+    this.sendTimestamps.delete(accountId);
+    // 3. Delete on-disk auth state (session credentials).
+    try {
+      const { rmSync } = await import('fs');
+      const { join } = await import('path');
+      const sessionPath = join(this.sessionDir, accountId);
+      rmSync(sessionPath, { recursive: true, force: true });
+    } catch { /* best-effort cleanup */ }
+    // 4. Delete DB record (cascades to related data via FK).
+    await this.prisma.whatsappAccount.delete({ where: { id: accountId } });
+    // 5. Notify dashboards.
+    this.events.emitToAccount(accountId, 'wa:status', {
+      accountId,
+      status: 'disconnected',
+      deleted: true,
+    });
   }
 
   private async setStatus(accountId: string, status: SessionStatus) {

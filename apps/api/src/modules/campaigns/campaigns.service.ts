@@ -11,6 +11,7 @@ import {
   TakeoverStatus,
 } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
+import { allowedAccountIds, type ScopedUser } from '../../common/account-scope.util';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { AuditService } from '../audit/audit.service';
 import { WaService } from '../wa/wa.service';
@@ -55,11 +56,13 @@ export class CampaignsService {
     );
   }
 
-  async list(status?: string) {
+  async list(status?: string, user?: ScopedUser) {
     if (status && !this.isCampaignStatus(status)) {
       throw new BadRequestException(`Invalid campaign status: ${status}`);
     }
-    const where = status ? { status: status as CampaignStatus } : {};
+    const where: Prisma.CampaignWhereInput = status ? { status: status as CampaignStatus } : {};
+    const scope = await allowedAccountIds(this.prisma, user);
+    if (scope !== null) where.whatsappAccountId = { in: scope };
     const campaigns = await this.prisma.campaign.findMany({
       where,
       orderBy: { createdAt: 'desc' },
@@ -79,7 +82,7 @@ export class CampaignsService {
     }));
   }
 
-  async get(id: string) {
+  async get(id: string, user?: ScopedUser) {
     const campaign = await this.prisma.campaign.findUnique({
       where: { id },
       include: {
@@ -94,6 +97,10 @@ export class CampaignsService {
       },
     });
     if (!campaign) throw new NotFoundException('Campaign not found');
+    const scope = await allowedAccountIds(this.prisma, user);
+    if (scope !== null && !scope.includes(campaign.whatsappAccountId)) {
+      throw new NotFoundException('Campaign not found');
+    }
     const stats = await this.recipientStats([id]);
     return { ...campaign, recipientStats: stats[id] ?? {} };
   }

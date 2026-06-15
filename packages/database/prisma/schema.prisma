@@ -2,8 +2,7 @@
 // See PRD section 13. All tables map 1:1 to the PRD spec.
 
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -208,6 +207,7 @@ model WhatsappAccount {
   assignedAdmin User?          @relation("AccountAdmin", fields: [assignedAdminId], references: [id])
   customers     Customer[]
   conversations Conversation[]
+  contacts      WhatsappContact[]
   campaigns     Campaign[]
   quickReplies  QuickReply[]
 
@@ -311,10 +311,37 @@ model Customer {
   conversations      Conversation[]
   followUps          FollowUp[]
   campaignRecipients CampaignRecipient[]
+  whatsappContacts   WhatsappContact[]
 
   @@unique([phoneNumber, sourceAccountId])
   @@index([leadStage])
   @@map("customers")
+}
+
+model WhatsappContact {
+  id              String   @id @default(uuid())
+  whatsappAccountId String @map("whatsapp_account_id")
+  customerId      String?  @map("customer_id")
+  jid             String
+  lid             String?
+  phoneNumber     String?  @map("phone_number")
+  name            String?
+  notify          String?
+  verifiedName    String?  @map("verified_name")
+  avatarUrl       String?  @map("avatar_url")
+  status          String?
+  raw             Json?
+  lastSyncedAt    DateTime @default(now()) @map("last_synced_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  customer        Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@unique([whatsappAccountId, jid])
+  @@index([whatsappAccountId])
+  @@index([phoneNumber])
+  @@map("whatsapp_contacts")
 }
 
 model Conversation {
@@ -336,11 +363,25 @@ model Conversation {
   assignedAdminId   String?        @map("assigned_admin_id")
   lastMessage       String?        @map("last_message")
   lastMessageAt     DateTime?      @map("last_message_at")
+  chatJid           String?        @map("chat_jid")
+  isGroup           Boolean        @default(false) @map("is_group")
+  groupSubject      String?        @map("group_subject")
+  groupOwnerJid     String?        @map("group_owner_jid")
+  groupDescription  String?        @map("group_description")
+  groupParticipants Json?          @map("group_participants")
+  groupMetadata     Json?          @map("group_metadata")
+  isArchived        Boolean        @default(false) @map("is_archived")
+  isPinned          Boolean        @default(false) @map("is_pinned")
+  isMuted           Boolean        @default(false) @map("is_muted")
+  muteUntil         DateTime?      @map("mute_until")
+  isBlocked         Boolean        @default(false) @map("is_blocked")
+  disappearingDuration Int?        @map("disappearing_duration")
+  disappearingSetAt DateTime?      @map("disappearing_set_at")
   createdAt         DateTime       @default(now()) @map("created_at")
   updatedAt         DateTime       @updatedAt @map("updated_at")
 
   customer        Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id])
   bot             Bot?            @relation(fields: [botId], references: [id])
   assignedAdmin   User?           @relation("ConversationAdmin", fields: [assignedAdminId], references: [id])
   messages        Message[]
@@ -350,6 +391,7 @@ model Conversation {
 
   @@index([whatsappAccountId])
   @@index([customerId])
+  @@unique([whatsappAccountId, chatJid])
   @@map("conversations")
 }
 
@@ -369,6 +411,11 @@ model Message {
   reactions      Json?         // { "👍": ["628.."], ... } emoji → reactor jids
   editedAt       DateTime?     @map("edited_at")
   deletedAt      DateTime?     @map("deleted_at") // set when revoked (deleted for everyone)
+  isStarred      Boolean       @default(false) @map("is_starred")
+  isForwarded    Boolean       @default(false) @map("is_forwarded")
+  receiptDetails Json?         @map("receipt_details")
+  rawWaPayload   Json?         @map("raw_wa_payload")
+  waMessageType  String?       @map("wa_message_type")
   createdAt      DateTime      @default(now()) @map("created_at")
 
   conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -441,7 +488,7 @@ model Campaign {
   createdAt           DateTime       @default(now()) @map("created_at")
   updatedAt           DateTime       @updatedAt @map("updated_at")
 
-  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id])
   createdBy       User?           @relation("CampaignCreatedBy", fields: [createdById], references: [id])
   approvedBy      User?           @relation("CampaignApprovedBy", fields: [approvedById], references: [id])
   recipients      CampaignRecipient[]
@@ -508,4 +555,15 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@map("audit_logs")
+}
+
+/// Runtime-editable application settings (key → JSON value). Overrides the
+/// matching env default when present. One row per setting key; read through
+/// SettingsService which layers these over env-derived defaults.
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
 }

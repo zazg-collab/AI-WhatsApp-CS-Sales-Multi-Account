@@ -1,4 +1,4 @@
-import { ArrayMinSize, ArrayNotEmpty, IsArray, IsInt, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { ArrayMinSize, ArrayNotEmpty, IsArray, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 
 export class SendPollDto {
   @IsString()
@@ -14,6 +14,7 @@ export class SendPollDto {
   options!: string[];
 
   @IsInt()
+  @IsOptional()
   @Min(1)
   selectableCount?: number;
 }

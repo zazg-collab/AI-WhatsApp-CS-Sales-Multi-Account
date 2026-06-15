@@ -4,16 +4,35 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldCheck, History, Workflow, UsersRound } from 'lucide-react';
 import { api, setToken } from '@/lib/api';
+import { useT, type Dict } from '@/lib/i18n';
 
-const features = [
-  { icon: Workflow, text: 'AI-assisted drafts with supervisor controls' },
-  { icon: ShieldCheck, text: 'Hermes review for quality, policy, and risk' },
-  { icon: History, text: 'Auditable decisions across every account' },
-  { icon: UsersRound, text: 'Human takeover for sensitive conversations' },
-];
+const dict: Dict = {
+  feat1: { id: 'Balasan AI dengan kontrol supervisor di setiap akun', en: 'AI replies with supervisor control on every account' },
+  feat2: { id: 'Hermes review: cegah pesan berisiko terkirim', en: 'Hermes review: stop risky messages before they send' },
+  feat3: { id: 'Setiap keputusan tercatat & bisa diaudit', en: 'Every decision logged and auditable' },
+  feat4: { id: 'Ambil alih manual untuk percakapan sensitif', en: 'Manual takeover for sensitive conversations' },
+  badge: { id: 'Operasi AI yang tersupervisi', en: 'Supervised AI operations' },
+  headline: { id: 'Kelola banyak akun WhatsApp Sales & CS dari satu dashboard.', en: 'Manage every WhatsApp Sales & CS account from one dashboard.' },
+  sub: { id: 'Prioritaskan lead, review balasan AI, jalankan campaign terkontrol, dan cegah pesan berisiko terkirim tanpa persetujuan admin.', en: 'Prioritise leads, review AI replies, run controlled campaigns, and stop risky messages from sending without admin approval.' },
+  footer: { id: 'Workspace operasional untuk layanan pelanggan yang tersupervisi dan terlacak.', en: 'Operational workspace for supervised, traceable customer service.' },
+  signinTitle: { id: 'Masuk', en: 'Sign in' },
+  signinSub: { id: 'Akses Hermes Control Center untuk tim Sales & CS.', en: 'Access the Hermes Control Center for your Sales & CS team.' },
+  pwPlaceholder: { id: 'Masukkan password Anda', en: 'Enter your password' },
+  submit: { id: 'Masuk ke Dashboard', en: 'Go to dashboard' },
+  submitting: { id: 'Memproses…', en: 'Signing in…' },
+  errFallback: { id: 'Gagal masuk. Periksa email dan password Anda.', en: 'Sign-in failed. Check your email and password.' },
+};
 
 export default function LoginPage() {
+  const t = useT(dict);
   const router = useRouter();
+
+  const features = [
+    { icon: Workflow, text: t('feat1') },
+    { icon: ShieldCheck, text: t('feat2') },
+    { icon: History, text: t('feat3') },
+    { icon: UsersRound, text: t('feat4') },
+  ];
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +50,7 @@ export default function LoginPage() {
       setToken(res.accessToken);
       router.push('/overview');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed. Check your credentials.');
+      setError(err instanceof Error ? err.message : t('errFallback'));
     } finally {
       setLoading(false);
     }
@@ -53,13 +72,13 @@ export default function LoginPage() {
         <div className="max-w-md space-y-7">
           <div className="space-y-4">
             <p className="inline-flex rounded border border-hermes-400/30 bg-hermes-950 px-2.5 py-1 text-xs font-semibold text-hermes-200">
-              Supervised AI operations
+              {t('badge')}
             </p>
             <h1 className="text-4xl font-semibold leading-tight tracking-[-0.04em] text-white">
-              Calm control for high-volume WhatsApp sales and service.
+              {t('headline')}
             </h1>
             <p className="max-w-sm text-sm leading-6 text-gray-400">
-              AI accelerates routine replies. Hermes supervises quality and risk. Humans retain control over sensitive decisions.
+              {t('sub')}
             </p>
           </div>
           <ul className="grid gap-2">
@@ -72,7 +91,7 @@ export default function LoginPage() {
           </ul>
         </div>
 
-        <p className="text-[11px] text-gray-500">Production workspace for supervised, traceable customer operations.</p>
+        <p className="text-[11px] text-gray-500">{t('footer')}</p>
       </section>
 
       <section className="flex flex-1 items-center justify-center bg-gray-50 px-6 dark:bg-gray-950">
@@ -82,8 +101,8 @@ export default function LoginPage() {
               <ShieldCheck className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
             </span>
             <div>
-              <h2 className="text-xl font-semibold tracking-tight text-gray-950 dark:text-gray-50">Sign in</h2>
-              <p className="mt-1 text-sm text-gray-500">Access the Hermes operations center.</p>
+              <h2 className="text-xl font-semibold tracking-tight text-gray-950 dark:text-gray-50">{t('signinTitle')}</h2>
+              <p className="mt-1 text-sm text-gray-500">{t('signinSub')}</p>
             </div>
           </div>
 
@@ -96,7 +115,7 @@ export default function LoginPage() {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-10 w-full rounded border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 outline-none transition-colors focus:border-hermes-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                className="h-10 w-full rounded border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 transition-colors focus:border-hermes-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                 required
               />
             </div>
@@ -105,10 +124,10 @@ export default function LoginPage() {
               <input
                 id="login-password"
                 type="password"
-                placeholder="Enter your password"
+                placeholder={t('pwPlaceholder')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="h-10 w-full rounded border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 outline-none transition-colors focus:border-hermes-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                className="h-10 w-full rounded border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 transition-colors focus:border-hermes-500 focus:bg-white dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                 required
               />
             </div>
@@ -124,7 +143,7 @@ export default function LoginPage() {
               aria-label="Sign in"
             >
               <ShieldCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-              {loading ? 'Signing in...' : 'Enter Control Center'}
+              {loading ? t('submitting') : t('submit')}
             </button>
           </form>
         </div>

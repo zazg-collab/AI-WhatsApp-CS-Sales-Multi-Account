@@ -13,12 +13,15 @@ function makeService(overrides: { responseMinutes?: number } = {}) {
     get: (k: string) =>
       k === 'SLA_RESPONSE_MINUTES' ? overrides.responseMinutes ?? 15 : undefined,
   };
+  const settings: any = {
+    sla: async () => ({ responseMinutes: overrides.responseMinutes ?? 15 }),
+  };
   const queue: any = {
     add: jest.fn().mockResolvedValue({}),
     getRepeatableJobs: jest.fn().mockResolvedValue([]),
     removeRepeatableByKey: jest.fn().mockResolvedValue(undefined),
   };
-  const service = new SlaService(prisma, events, notifications, config, queue);
+  const service = new SlaService(prisma, events, notifications, settings, config, queue);
   return { service, prisma, events, notifications, queue };
 }
 

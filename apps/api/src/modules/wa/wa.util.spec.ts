@@ -1,4 +1,4 @@
-import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, extForMimetype, typingDelay, backoffDelay, isOptOutMessage, renderTemplate } from './wa.util';
+import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, isGroupJid, isSupportedChatJid, extForMimetype, typingDelay, backoffDelay, isOptOutMessage, renderTemplate } from './wa.util';
 
 describe('wa.util', () => {
   describe('phoneToJid', () => {
@@ -7,6 +7,9 @@ describe('wa.util', () => {
     });
     it('handles already-clean digits', () => {
       expect(phoneToJid('6281234567890')).toBe('6281234567890@s.whatsapp.net');
+    });
+    it('preserves an already-normalized JID', () => {
+      expect(phoneToJid('123456789012345@lid')).toBe('123456789012345@lid');
     });
   });
 
@@ -17,17 +20,36 @@ describe('wa.util', () => {
     it('strips device suffix', () => {
       expect(jidToPhone('6281234567890:12@s.whatsapp.net')).toBe('6281234567890');
     });
+    it('preserves LID JIDs because they are not phone numbers', () => {
+      expect(jidToPhone('123456789012345@lid')).toBe('123456789012345@lid');
+    });
   });
 
   describe('isDirectChatJid', () => {
     it('accepts 1-on-1 chats', () => {
       expect(isDirectChatJid('6281234567890@s.whatsapp.net')).toBe(true);
     });
+    it('accepts WhatsApp LID 1-on-1 chats from multi-device sync', () => {
+      expect(isDirectChatJid('123456789012345@lid')).toBe(true);
+    });
     it('rejects groups, broadcasts, newsletters (M1)', () => {
       expect(isDirectChatJid('123456-789@g.us')).toBe(false);
       expect(isDirectChatJid('status@broadcast')).toBe(false);
       expect(isDirectChatJid('999@broadcast')).toBe(false);
       expect(isDirectChatJid('abc@newsletter')).toBe(false);
+    });
+  });
+
+  describe('group/support jid helpers', () => {
+    it('detects WhatsApp groups separately from direct chats', () => {
+      expect(isGroupJid('123456-789@g.us')).toBe(true);
+      expect(isGroupJid('6281234567890@s.whatsapp.net')).toBe(false);
+    });
+    it('accepts direct and group chats for mirror sync', () => {
+      expect(isSupportedChatJid('6281234567890@s.whatsapp.net')).toBe(true);
+      expect(isSupportedChatJid('123456789012345@lid')).toBe(true);
+      expect(isSupportedChatJid('123456-789@g.us')).toBe(true);
+      expect(isSupportedChatJid('status@broadcast')).toBe(false);
     });
   });
 

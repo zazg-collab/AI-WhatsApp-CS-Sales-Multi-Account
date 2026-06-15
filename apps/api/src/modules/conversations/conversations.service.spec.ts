@@ -63,8 +63,14 @@ describe('ConversationsService', () => {
       const where = prisma.conversation.findMany.mock.calls[0][0].where;
       expect(where.whatsappAccountId).toBe('a1');
       expect(where.aiMode).toBe(AiMode.ai_on);
-      expect(where.OR).toBeDefined();
-      expect(where.customer).toBeDefined();
+      expect(where.AND).toBeDefined();
+      expect(where.AND[1].OR).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ groupSubject: expect.any(Object) }),
+          expect.objectContaining({ chatJid: expect.any(Object) }),
+          expect.objectContaining({ customer: expect.any(Object) }),
+        ]),
+      );
     });
   });
 
