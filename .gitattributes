@@ -1,0 +1,4 @@
+# Shell scripts MUST stay LF or the container's interpreter line breaks
+# ("exec ./docker-entrypoint.sh: no such file or directory") on Windows
+# checkouts where core.autocrlf=true.
+*.sh text eol=lf

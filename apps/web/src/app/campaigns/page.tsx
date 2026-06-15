@@ -30,6 +30,10 @@ const dict: Dict = {
   nameLabel: { id: 'Nama campaign', en: 'Campaign name' },
   senderAccountLabel: { id: 'Akun WhatsApp pengirim', en: 'Sending WhatsApp account' },
   selectAccount: { id: 'Pilih akun WhatsApp', en: 'Select a WhatsApp account' },
+  attachAssetLabel: { id: 'Lampirkan media (opsional)', en: 'Attach media (optional)' },
+  attachAssetHint: { id: 'Broadcast foto/video/dokumen dari Media Library.', en: 'Broadcast a photo/video/document from the Media Library.' },
+  noAsset: { id: 'Tanpa media (teks saja)', en: 'No media (text only)' },
+  captionHint: { id: 'Pesan ini menjadi caption media. Token {{name}} / {{phone}} tetap berlaku.', en: 'This message becomes the media caption. {{name}} / {{phone}} tokens still apply.' },
   messageLabel: { id: 'Isi pesan', en: 'Message body' },
   messageHint: {
     id: 'Gunakan token {{name}} / {{phone}} untuk personalisasi.',
@@ -189,6 +193,8 @@ export default function CampaignsPage() {
   const [tag, setTag] = useState('');
   const [rateLimitPerMinute, setRateLimitPerMinute] = useState(6);
   const [scheduledAt, setScheduledAt] = useState('');
+  const [assetId, setAssetId] = useState('');
+  const [assetOptions, setAssetOptions] = useState<Array<{ id: string; title: string; kind: string; purpose: string }>>([]);
 
   const canManage = role === 'owner' || role === 'supervisor' || role === 'admin';
   const canApprove = role === 'owner' || role === 'supervisor';
@@ -231,6 +237,9 @@ export default function CampaignsPage() {
   useEffect(() => {
     setRole(getRoleFromToken());
     loadCampaigns();
+    api<Array<{ id: string; title: string; kind: string; purpose: string }>>('/assets?status=active')
+      .then(setAssetOptions)
+      .catch(() => setAssetOptions([]));
   }, [loadCampaigns]);
 
   useEffect(() => {
@@ -269,6 +278,7 @@ export default function CampaignsPage() {
           name: name.trim(),
           messageTemplate,
           whatsappAccountId,
+          assetId: assetId || undefined,
           targetFilter,
           rateLimitPerMinute,
           scheduledAt: scheduledAt || undefined,
@@ -278,6 +288,7 @@ export default function CampaignsPage() {
       setSelectedId(campaign.id);
       setName('');
       setMessageTemplate('');
+      setAssetId('');
       await loadCampaigns();
     } catch (err) {
       showError(err instanceof Error ? err.message : t('toastCreateFailed'));
@@ -337,13 +348,28 @@ export default function CampaignsPage() {
               </SelectField>
               <TextareaField
                 label={t('messageLabel')}
-                hint={t('messageHint')}
+                hint={assetId ? t('captionHint') : t('messageHint')}
                 rows={4}
                 value={messageTemplate}
                 onChange={(e) => setMessageTemplate(e.target.value)}
                 placeholder="Campaign message… use {{name}} / {{phone}} tokens"
                 className="resize-none"
               />
+              {assetOptions.length > 0 && (
+                <SelectField
+                  label={t('attachAssetLabel')}
+                  hint={t('attachAssetHint')}
+                  value={assetId}
+                  onChange={(e) => setAssetId(e.target.value)}
+                >
+                  <option value="">{t('noAsset')}</option>
+                  {assetOptions.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.kind === 'image' ? '🖼️' : a.kind === 'video' ? '🎬' : '📄'} {a.title} ({a.purpose})
+                    </option>
+                  ))}
+                </SelectField>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <SelectField
                   label={t('leadStageLabel')}
