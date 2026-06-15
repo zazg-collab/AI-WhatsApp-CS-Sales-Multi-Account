@@ -179,6 +179,7 @@ model User {
   approvedKnowledge KnowledgeBase[]  @relation("KnowledgeApprovedBy")
   quickReplies     QuickReply[]
   reviewedLearning LearningProposal[] @relation("LearningReviewedBy")
+  createdAssets    Asset[]            @relation("AssetCreatedBy")
 
   @@map("users")
 }
@@ -608,4 +609,35 @@ model LearningProposal {
   @@index([botId])
   @@index([type])
   @@map("learning_proposals")
+}
+
+/// A curated, reusable media asset the bot/admin can send to build a sale:
+/// brochures/company-profile (document), product cards (image + marketplace
+/// link), and testimonials (image/video). Files are NEVER fabricated by the
+/// AI — it may only pick from this library.
+/// `kind`: image | video | document   `purpose`: brochure | product | testimonial
+/// `status`: active | draft
+model Asset {
+  id              String   @id @default(uuid())
+  kind            String
+  purpose         String
+  title           String
+  caption         String?
+  storageKey      String   @map("storage_key")
+  mediaUrl        String   @map("media_url")
+  mimeType        String   @map("mime_type")
+  /// For purpose=product: the real marketplace/catalog link (Shopee/Tokopedia).
+  marketplaceUrl  String?  @map("marketplace_url")
+  tags            String[] @default([])
+  triggerKeywords String[] @default([]) @map("trigger_keywords")
+  status          String   @default("active")
+  createdById     String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  createdBy User? @relation("AssetCreatedBy", fields: [createdById], references: [id])
+
+  @@index([purpose])
+  @@index([status])
+  @@map("assets")
 }

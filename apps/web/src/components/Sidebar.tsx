@@ -21,6 +21,7 @@ import {
   BookText,
   BookUser,
   GraduationCap,
+  Images,
   type LucideIcon,
 } from 'lucide-react';
 import { getToken, clearToken, api } from '@/lib/api';
@@ -84,6 +85,7 @@ const sections: NavSection[] = [
     items: [
       { href: '/campaigns', label: 'Campaigns', icon: Megaphone, requiredRole: 'admin' },
       { href: '/knowledge', label: 'Knowledge Base', icon: BookOpen },
+      { href: '/assets', label: 'Media Library', icon: Images },
       { href: '/learning', label: 'AI Learning', icon: GraduationCap, requiredRole: 'supervisor' },
       { href: '/analytics', label: 'Analytics', icon: ChartNoAxesCombined },
       { href: '/monitoring', label: 'Monitoring', icon: Activity, requiredRole: 'supervisor' },
