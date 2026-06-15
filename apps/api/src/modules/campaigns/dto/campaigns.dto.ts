@@ -50,6 +50,11 @@ export class CreateCampaignDto {
   @IsString()
   whatsappAccountId!: string;
 
+  @ApiProperty({ required: false, description: 'Optional media asset to broadcast (caption = messageTemplate)' })
+  @IsOptional()
+  @IsString()
+  assetId?: string;
+
   @IsOptional()
   @ValidateNested()
   @Type(() => CampaignTargetFilterDto)

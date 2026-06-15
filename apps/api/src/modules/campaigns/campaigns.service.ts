@@ -6,6 +6,7 @@ import { Queue } from 'bullmq';
 import {
   CampaignRecipientStatus,
   CampaignStatus,
+  MessageType,
   Prisma,
   SenderType,
   TakeoverStatus,
@@ -15,6 +16,7 @@ import { allowedAccountIds, type ScopedUser } from '../../common/account-scope.u
 import { EventsGateway } from '../../realtime/events.gateway';
 import { AuditService } from '../audit/audit.service';
 import { WaService } from '../wa/wa.service';
+import { MediaStorageService } from '../media/media-storage.service';
 import { renderTemplate } from '../wa/wa.util';
 import { CreateCampaignDto, CampaignTargetFilterDto, UpdateCampaignDto } from './dto/campaigns.dto';
 
@@ -43,6 +45,7 @@ export class CampaignsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly wa: WaService,
+    private readonly storage: MediaStorageService,
     private readonly events: EventsGateway,
     @InjectQueue('campaigns') private readonly campaignsQueue: Queue,
     config: ConfigService,
@@ -70,6 +73,7 @@ export class CampaignsService {
         whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true } },
         createdBy: { select: { id: true, name: true, email: true } },
         approvedBy: { select: { id: true, name: true, email: true } },
+        asset: { select: { id: true, title: true, kind: true, mediaUrl: true } },
         _count: { select: { recipients: true } },
       },
       take: 100,
@@ -89,6 +93,7 @@ export class CampaignsService {
         whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true } },
         createdBy: { select: { id: true, name: true, email: true } },
         approvedBy: { select: { id: true, name: true, email: true } },
+        asset: { select: { id: true, title: true, kind: true, mediaUrl: true } },
         recipients: {
           orderBy: { createdAt: 'asc' },
           take: 250,
@@ -123,6 +128,7 @@ export class CampaignsService {
         name: dto.name.trim(),
         messageTemplate: dto.messageTemplate,
         whatsappAccountId: dto.whatsappAccountId,
+        assetId: dto.assetId,
         targetFilter: (dto.targetFilter ?? {}) as Prisma.InputJsonValue,
         createdById: userId,
         scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : undefined,
@@ -429,7 +435,7 @@ export class CampaignsService {
   async processRecipient(recipientId: string) {
     const recipient = await this.prisma.campaignRecipient.findUnique({
       where: { id: recipientId },
-      include: { campaign: true, customer: true, conversation: true },
+      include: { campaign: { include: { asset: true } }, customer: true, conversation: true },
     });
     if (!recipient) throw new NotFoundException('Campaign recipient not found');
     if (recipient.status === CampaignRecipientStatus.sent) return;
@@ -500,11 +506,28 @@ export class CampaignsService {
     // reached the customer — so mark failed and rethrow.
     let sentMessageId: string | null;
     try {
-      sentMessageId = await this.wa.sendText(
-        recipient.campaign.whatsappAccountId,
-        recipient.phoneNumber,
-        content,
-      );
+      const asset = recipient.campaign.asset;
+      if (asset) {
+        // Media broadcast: stream the asset bytes with the rendered template as
+        // caption. Read failure → treat as a send failure (nothing reached the
+        // customer yet), so the catch below marks it failed/retryable.
+        const buffer = await this.storage.read(asset.storageKey);
+        sentMessageId = await this.wa.sendMediaBuffer(
+          recipient.campaign.whatsappAccountId,
+          recipient.phoneNumber,
+          asset.kind as 'image' | 'document' | 'audio' | 'video',
+          buffer,
+          asset.mimeType,
+          content,
+          asset.title,
+        );
+      } else {
+        sentMessageId = await this.wa.sendText(
+          recipient.campaign.whatsappAccountId,
+          recipient.phoneNumber,
+          content,
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`Campaign recipient ${recipient.id} failed: ${message}`);
@@ -525,12 +548,19 @@ export class CampaignsService {
     // the same message to the customer. Persistence is best-effort.
     try {
       if (recipient.conversationId) {
+        const asset = recipient.campaign.asset;
         const message = await this.prisma.message.create({
           data: {
             conversationId: recipient.conversationId,
             senderType: SenderType.admin,
             senderId: recipient.campaign.createdById,
             content,
+            ...(asset
+              ? {
+                  messageType: asset.kind as MessageType,
+                  mediaUrl: asset.mediaUrl,
+                }
+              : {}),
             status: 'sent',
             externalId: sentMessageId,
           },

@@ -492,12 +492,15 @@ model Campaign {
   rateLimitPerMinute  Int            @default(6) @map("rate_limit_per_minute")
   humanDelayMinMs     Int            @default(5000) @map("human_delay_min_ms")
   humanDelayMaxMs     Int            @default(20000) @map("human_delay_max_ms")
+  /// Optional media asset to broadcast (the messageTemplate becomes its caption).
+  assetId             String?        @map("asset_id")
   createdAt           DateTime       @default(now()) @map("created_at")
   updatedAt           DateTime       @updatedAt @map("updated_at")
 
   whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
   createdBy       User?           @relation("CampaignCreatedBy", fields: [createdById], references: [id])
   approvedBy      User?           @relation("CampaignApprovedBy", fields: [approvedById], references: [id])
+  asset           Asset?          @relation(fields: [assetId], references: [id], onDelete: SetNull)
   recipients      CampaignRecipient[]
 
   @@index([status])
@@ -635,7 +638,8 @@ model Asset {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  createdBy User? @relation("AssetCreatedBy", fields: [createdById], references: [id])
+  createdBy User?      @relation("AssetCreatedBy", fields: [createdById], references: [id])
+  campaigns Campaign[]
 
   @@index([purpose])
   @@index([status])

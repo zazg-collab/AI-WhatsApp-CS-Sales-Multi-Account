@@ -10,6 +10,7 @@ describe('CampaignsService', () => {
   let prisma: any;
   let audit: any;
   let wa: any;
+  let storage: any;
   let events: any;
   let queue: any;
 
@@ -39,11 +40,12 @@ describe('CampaignsService', () => {
       $transaction: jest.fn((ps: any[]) => Promise.all(ps)),
     };
     audit = { log: jest.fn().mockResolvedValue({}) };
-    wa = { sendText: jest.fn().mockResolvedValue('ext1') };
+    wa = { sendText: jest.fn().mockResolvedValue('ext1'), sendMediaBuffer: jest.fn().mockResolvedValue('ext1') };
+    storage = { read: jest.fn().mockResolvedValue(Buffer.from('x')) };
     events = { emit: jest.fn(), emitToAccount: jest.fn() };
     queue = { add: jest.fn().mockResolvedValue({}), getJob: jest.fn() };
     const config = { get: jest.fn().mockReturnValue(undefined) };
-    service = new CampaignsService(prisma, audit, wa, events, queue, config as any);
+    service = new CampaignsService(prisma, audit, wa, storage, events, queue, config as any);
   });
 
   describe('list', () => {
@@ -136,7 +138,7 @@ describe('CampaignsService', () => {
     });
     it('enforces the env-configured daily send cap (M8)', async () => {
       const config = { get: (k: string) => (k === 'CAMPAIGN_MAX_DAILY_SENDS' ? '2' : undefined) };
-      const capped = new CampaignsService(prisma, audit, wa, events, queue, config as any);
+      const capped = new CampaignsService(prisma, audit, wa, storage, events, queue, config as any);
       prisma.campaign.findUnique.mockResolvedValue({
         id: 'cmp1', status: CampaignStatus.approved, whatsappAccountId: 'a1',
       });

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { AuditModule } from '../audit/audit.module';
 import { WaModule } from '../wa/wa.module';
+import { MediaModule } from '../media/media.module';
 import { CampaignsController } from './campaigns.controller';
 import { CampaignsProcessor } from './campaigns.processor';
 import { CampaignsService } from './campaigns.service';
@@ -11,6 +12,7 @@ import { CampaignsService } from './campaigns.service';
     BullModule.registerQueue({ name: 'campaigns' }),
     AuditModule,
     WaModule,
+    MediaModule,
   ],
   controllers: [CampaignsController],
   providers: [CampaignsService, CampaignsProcessor],
