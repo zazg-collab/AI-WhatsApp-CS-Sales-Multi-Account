@@ -24,10 +24,14 @@ const TRANSCRIPT_CHAR_BUDGET = 14_000;
 const PER_MESSAGE_CHAR_CAP = 320;
 /** How many historical messages to pull per bot before trimming. */
 const MAX_MESSAGES = 600;
-/** Max customers mined for memory per run (one LLM call each — the cost driver). */
+/** Max customers mined for memory per run. */
 const CUSTOMER_MEMORY_LIMIT = 25;
-/** How many per-customer memory calls to run in parallel. */
-const MINE_CONCURRENCY = 5;
+/** Customers packed into a single memory LLM call (amortizes the prompt). */
+const CUSTOMER_MEMORY_BATCH = 5;
+/** Per-customer transcript char cap inside a batched memory prompt. */
+const CUSTOMER_TRANSCRIPT_CAP = 1500;
+/** How many memory batches to run in parallel. */
+const MINE_CONCURRENCY = 3;
 
 interface Transcript {
   text: string;
@@ -44,6 +48,13 @@ export class LearningService {
    * without hurting customer-facing replies. Undefined → use the default model.
    */
   private readonly miningModel?: string;
+  /**
+   * Set AI_JSON_STRICT=true when the configured model reliably returns clean
+   * JSON (Claude/GPT/Gemini class). Mining then uses much smaller output
+   * budgets — reasoning models (minimax/deepseek-r1) need the generous default
+   * to avoid truncation, but strict models don't, so this saves output tokens.
+   */
+  private readonly jsonStrict: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -51,6 +62,12 @@ export class LearningService {
     config: ConfigService,
   ) {
     this.miningModel = config.get<string>('AI_MINING_MODEL') || undefined;
+    this.jsonStrict = config.get<string>('AI_JSON_STRICT') === 'true';
+  }
+
+  /** Output-token budget: smaller for strict-JSON models, generous otherwise. */
+  private maxTokens(lenient: number, strict: number): number {
+    return this.jsonStrict ? strict : lenient;
   }
 
   // ── Public API ────────────────────────────────────────────────────────
@@ -147,7 +164,7 @@ title = pertanyaan ringkas. content = jawaban faktual berdasarkan balasan admin.
       model: this.miningModel,
       temperature: 0,
       json: true,
-      maxTokens: 4000,
+      maxTokens: this.maxTokens(4000, 1500),
     });
     const items = this.parseArray(raw);
     if (items.length === 0) return { created: 0, skipped: 0 };
@@ -211,7 +228,7 @@ soulMd = deskripsi persona dalam Bahasa Indonesia (3-6 kalimat). forbiddenWords 
       model: this.miningModel,
       temperature: 0.2,
       json: true,
-      maxTokens: 2500,
+      maxTokens: this.maxTokens(2500, 800),
     });
     const obj = this.parseObject(raw);
     if (!obj || !obj.soulMd) return 0;
@@ -267,7 +284,7 @@ title = nama keberatan/situasi. content = teknik/respon yang dipakai admin. Maks
       model: this.miningModel,
       temperature: 0.1,
       json: true,
-      maxTokens: 3500,
+      maxTokens: this.maxTokens(3500, 1200),
     });
     const items = this.parseArray(raw);
     let created = 0;
@@ -311,7 +328,7 @@ title = nama keberatan/situasi. content = teknik/respon yang dipakai admin. Maks
     });
     const skip = new Set(alreadyProposed.map((p) => p.customerId));
 
-    const customers = (
+    const candidates = (
       await this.prisma.customer.findMany({
         where: { sourceAccountId: { in: accountIds } },
         orderBy: { lastMessageAt: 'desc' },
@@ -321,73 +338,97 @@ title = nama keberatan/situasi. content = teknik/respon yang dipakai admin. Maks
     )
       .filter((c) => !skip.has(c.id))
       .slice(0, limit);
-    if (customers.length === 0) return 0;
+    if (candidates.length === 0) return 0;
 
-    // Process in bounded-concurrency batches — one LLM call per customer is the
-    // cost driver, so running a handful in parallel cuts wall time ~Nx.
+    // Build one capped transcript per candidate; drop those with too little text.
+    const withText: Array<{ id: string; name: string | null; phoneNumber: string; text: string }> = [];
+    for (const c of candidates) {
+      const history = await this.prisma.message.findMany({
+        where: { conversation: { customerId: c.id, whatsappAccountId: { in: accountIds } } },
+        orderBy: { createdAt: 'asc' },
+        take: 60,
+        select: { content: true, senderType: true },
+      });
+      const text = this.formatMessages(
+        history.map((m) => ({ ...m, id: '' })),
+        CUSTOMER_TRANSCRIPT_CAP,
+      ).text;
+      if (text.length >= 80) withText.push({ ...c, text });
+    }
+    if (withText.length === 0) return 0;
+
+    // Pack several customers into ONE call (amortizes the system prompt), and
+    // run a few such batches in parallel. Each batch is isolated so one error
+    // doesn't abort the rest or lose the count.
+    const batches: (typeof withText)[] = [];
+    for (let i = 0; i < withText.length; i += CUSTOMER_MEMORY_BATCH) {
+      batches.push(withText.slice(i, i + CUSTOMER_MEMORY_BATCH));
+    }
     let created = 0;
-    for (let i = 0; i < customers.length; i += MINE_CONCURRENCY) {
-      const batch = customers.slice(i, i + MINE_CONCURRENCY);
-      // Isolate each call: one provider error must not reject the whole batch
-      // (which would lose the count and abort remaining customers).
+    for (let i = 0; i < batches.length; i += MINE_CONCURRENCY) {
+      const slice = batches.slice(i, i + MINE_CONCURRENCY);
       const results = await Promise.all(
-        batch.map((c) =>
-          this.mineOneCustomerMemory(botId, accountIds, c).catch((err) => {
-            this.logger.warn(`Customer memory mining failed for ${c.id}: ${err}`);
-            return false;
+        slice.map((b) =>
+          this.mineCustomerBatch(botId, b).catch((err) => {
+            this.logger.warn(`Customer memory batch failed: ${err}`);
+            return 0;
           }),
         ),
       );
-      created += results.filter(Boolean).length;
+      created += results.reduce((a, b) => a + b, 0);
     }
     return created;
   }
 
-  private async mineOneCustomerMemory(
+  private async mineCustomerBatch(
     botId: string,
-    accountIds: string[],
-    customer: { id: string; name: string | null; phoneNumber: string },
-  ): Promise<boolean> {
-    const history = await this.prisma.message.findMany({
-      where: {
-        conversation: { customerId: customer.id, whatsappAccountId: { in: accountIds } },
-      },
-      orderBy: { createdAt: 'asc' },
-      take: 80,
-      select: { content: true, senderType: true },
-    });
-    const text = this.formatMessages(history.map((m) => ({ ...m, id: '' }))).text;
-    if (text.length < 80) return false; // too little to learn from
+    batch: Array<{ id: string; name: string | null; phoneNumber: string; text: string }>,
+  ): Promise<number> {
+    const block = batch
+      .map((c, idx) => `=== PELANGGAN #${idx} ===\n${c.text}`)
+      .join('\n\n');
 
     const messages: ChatMessage[] = [
       {
         role: 'system',
-        content: `Ekstrak FAKTA DURABEL tentang pelanggan dari chat (preferensi, produk diminati, kendala, lokasi, anggaran).
-Hanya fakta yang eksplisit disebut. Jangan mengarang atau menebak.
-Balas HANYA JSON: {"facts": string[]}. Kosongkan array jika tidak ada fakta jelas. Maksimal 6 fakta singkat.`,
+        content: `Ekstrak FAKTA DURABEL tiap pelanggan dari chat-nya (preferensi, produk diminati, kendala, lokasi, anggaran).
+JANGAN campur fakta antar pelanggan — pakai index "#N" yang diberikan. Hanya fakta yang eksplisit disebut. Jangan mengarang.
+Balas HANYA JSON: {"results":[{"index":number,"facts":string[]}]}. Lewati pelanggan tanpa fakta jelas. Maksimal 6 fakta/pelanggan.`,
       },
-      { role: 'user', content: text },
+      { role: 'user', content: block },
     ];
-    const raw = await this.provider.chat(messages, { model: this.miningModel, temperature: 0, json: true, maxTokens: 1200 });
-    const obj = this.parseObject(raw);
-    const facts = Array.isArray(obj?.facts)
-      ? obj.facts.map(String).filter((f: string) => f.trim().length > 0).slice(0, 6)
-      : [];
-    if (facts.length === 0) return false;
-
-    const payload: CustomerMemoryPayload = { facts };
-    await this.prisma.learningProposal.create({
-      data: {
-        botId,
-        customerId: customer.id,
-        type: 'customer_memory',
-        title: customer.name || customer.phoneNumber,
-        payload: payload as object,
-        sourceSummary: 'Fakta pelanggan dari riwayat chat.',
-        confidence: 65,
-      },
+    const raw = await this.provider.chat(messages, {
+      model: this.miningModel,
+      temperature: 0,
+      json: true,
+      maxTokens: this.maxTokens(2000, 1000),
     });
-    return true;
+    const obj = this.parseObject(raw);
+    const results = Array.isArray(obj?.results) ? obj.results : [];
+
+    let created = 0;
+    for (const r of results) {
+      const idx = Number(r?.index);
+      const cust = batch[idx];
+      const facts = Array.isArray(r?.facts)
+        ? r.facts.map(String).filter((f: string) => f.trim().length > 0).slice(0, 6)
+        : [];
+      if (!cust || facts.length === 0) continue;
+      const payload: CustomerMemoryPayload = { facts };
+      await this.prisma.learningProposal.create({
+        data: {
+          botId,
+          customerId: cust.id,
+          type: 'customer_memory',
+          title: cust.name || cust.phoneNumber,
+          payload: payload as object,
+          sourceSummary: 'Fakta pelanggan dari riwayat chat.',
+          confidence: 65,
+        },
+      });
+      created++;
+    }
+    return created;
   }
 
   // ── Persona-fit suggestion ────────────────────────────────────────────
@@ -451,7 +492,7 @@ Balas HANYA JSON: {"botId": string, "reason": string}. reason singkat Bahasa Ind
       { role: 'user', content: `Pesan pelanggan:\n${customerLines}\n\nKandidat bot:\n${botList}\n\nPilih satu sebagai JSON.` },
     ];
 
-    const raw = await this.provider.chat(messages, { model: this.miningModel, temperature: 0, json: true, maxTokens: 600 });
+    const raw = await this.provider.chat(messages, { model: this.miningModel, temperature: 0, json: true, maxTokens: this.maxTokens(600, 400) });
     const obj = this.parseObject(raw);
     const chosen = bots.find((b) => b.id === String(obj?.botId));
     if (!chosen) return null; // model returned an unknown id → no suggestion
@@ -669,6 +710,7 @@ Balas HANYA JSON: {"botId": string, "reason": string}. reason singkat Bahasa Ind
   /** Render messages to a labelled, char-capped transcript within budget. */
   private formatMessages(
     messages: { id: string; content: string | null; senderType: SenderType }[],
+    budget = TRANSCRIPT_CHAR_BUDGET,
   ): Transcript {
     const lines: string[] = [];
     const ids: string[] = [];
@@ -685,7 +727,7 @@ Balas HANYA JSON: {"botId": string, "reason": string}. reason singkat Bahasa Ind
               ? 'AI'
               : 'S';
       const line = `${tag}: ${body}`;
-      if (total + line.length > TRANSCRIPT_CHAR_BUDGET) break;
+      if (total + line.length > budget) break;
       lines.push(line);
       if (m.id) ids.push(m.id);
       total += line.length + 1;
