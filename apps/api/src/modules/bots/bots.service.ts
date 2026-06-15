@@ -57,7 +57,18 @@ export class BotsService {
 
   async delete(id: string) {
     await this.get(id);
-    return this.prisma.bot.delete({ where: { id } });
+    // Detach references first: conversations and accounts FK to bots with NO
+    // ACTION, so a plain delete throws if the bot is in use anywhere. Nulling
+    // them out cleanly reverts those chats/accounts to "no bot / default".
+    // (LearningProposal cascades on its own.)
+    return this.prisma.$transaction(async (tx) => {
+      await tx.conversation.updateMany({ where: { botId: id }, data: { botId: null } });
+      await tx.whatsappAccount.updateMany({
+        where: { assignedBotId: id },
+        data: { assignedBotId: null },
+      });
+      return tx.bot.delete({ where: { id } });
+    });
   }
 
   listPersonas() {

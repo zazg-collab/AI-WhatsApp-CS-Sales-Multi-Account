@@ -178,6 +178,7 @@ model User {
   createdKnowledge KnowledgeBase[]   @relation("KnowledgeCreatedBy")
   approvedKnowledge KnowledgeBase[]  @relation("KnowledgeApprovedBy")
   quickReplies     QuickReply[]
+  reviewedLearning LearningProposal[] @relation("LearningReviewedBy")
 
   @@map("users")
 }
@@ -231,6 +232,7 @@ model Bot {
   accounts      WhatsappAccount[]
   conversations Conversation[]
   hermesReviews HermesReview[]
+  learningProposals LearningProposal[]
 
   @@map("bots")
 }
@@ -312,6 +314,7 @@ model Customer {
   followUps          FollowUp[]
   campaignRecipients CampaignRecipient[]
   whatsappContacts   WhatsappContact[]
+  learningProposals  LearningProposal[]
 
   @@unique([phoneNumber, sourceAccountId])
   @@index([leadStage])
@@ -381,7 +384,7 @@ model Conversation {
   updatedAt         DateTime       @updatedAt @map("updated_at")
 
   customer        Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id])
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
   bot             Bot?            @relation(fields: [botId], references: [id])
   assignedAdmin   User?           @relation("ConversationAdmin", fields: [assignedAdminId], references: [id])
   messages        Message[]
@@ -488,7 +491,7 @@ model Campaign {
   createdAt           DateTime       @default(now()) @map("created_at")
   updatedAt           DateTime       @updatedAt @map("updated_at")
 
-  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id])
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
   createdBy       User?           @relation("CampaignCreatedBy", fields: [createdById], references: [id])
   approvedBy      User?           @relation("CampaignApprovedBy", fields: [approvedById], references: [id])
   recipients      CampaignRecipient[]
@@ -566,4 +569,40 @@ model AppSetting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("app_settings")
+}
+
+/// AI-mined learning proposals derived from synced conversation history.
+/// Everything lands here as `pending` for human review; on approve it is
+/// materialized into the live table (KnowledgeItem / Persona / Customer note).
+/// `type`: knowledge | persona | customer_memory | playbook
+/// `status`: pending | approved | rejected
+model LearningProposal {
+  id               String    @id @default(uuid())
+  botId            String?   @map("bot_id")
+  customerId       String?   @map("customer_id")
+  type             String
+  status           String    @default("pending")
+  title            String
+  /// Type-specific proposed content (e.g. {content,category} for knowledge,
+  /// {soulMd,tone,style,rules,forbiddenWords} for persona).
+  payload          Json
+  /// Messages this proposal was derived from, for owner verification.
+  sourceMessageIds String[]  @default([]) @map("source_message_ids")
+  sourceSummary    String?   @map("source_summary")
+  confidence       Int       @default(0)
+  /// Id of the row created/updated when the proposal was approved.
+  resultEntityId   String?   @map("result_entity_id")
+  reviewedById     String?   @map("reviewed_by")
+  reviewedAt       DateTime? @map("reviewed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  bot        Bot?      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  reviewedBy User?     @relation("LearningReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([status])
+  @@index([botId])
+  @@index([type])
+  @@map("learning_proposals")
 }

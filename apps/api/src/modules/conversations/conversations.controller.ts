@@ -24,6 +24,7 @@ import { ConversationsService } from './conversations.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ApproveDraftDto } from './dto/approve-draft.dto';
 import { AiModeDto } from './dto/ai-mode.dto';
+import { SetBotDto } from './dto/set-bot.dto';
 import { ConversationStatusDto } from './dto/conversation-status.dto';
 import { AssignConversationDto } from './dto/assign-conversation.dto';
 import { LabelsDto } from './dto/labels.dto';
@@ -393,6 +394,13 @@ export class ConversationsController {
   @Patch(':id/ai-mode')
   setAiMode(@Param('id') id: string, @Body() dto: AiModeDto) {
     return this.conversations.setAiMode(id, dto.aiMode);
+  }
+
+  @ApiOperation({ summary: 'Switch the bot/persona used for this conversation (null = account default)' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Patch(':id/bot')
+  setBot(@Param('id') id: string, @Body() dto: SetBotDto, @CurrentUser() user: AuthUser) {
+    return this.conversations.setBot(id, dto.botId, user.id);
   }
 
   @ApiOperation({ summary: 'Set conversation workflow status (open/pending/resolved)' })

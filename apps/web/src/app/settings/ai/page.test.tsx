@@ -6,39 +6,49 @@ const apiMock = vi.fn();
 vi.mock('@/lib/api', () => ({
   api: (...a: any[]) => apiMock(...a),
   getToken: () => null,
+  hasRole: () => true,
 }));
 vi.mock('@/lib/socket', () => ({ getSocket: () => ({ on: vi.fn(), off: vi.fn() }) }));
 
 import AiSettingsPage from './page';
 
+// The page loads the layered settings object from /settings on mount.
+const settings = {
+  ai: { baseUrl: 'http://x/v1', model: 'Hermes-4-70B', temperature: 0.7, timeoutMs: 30000, apiKeySet: true },
+  wa: { humanDelayMinMs: 0, humanDelayMaxMs: 0, typingPerCharMs: 0, typingMinMs: 0, typingMaxMs: 0 },
+  notifications: { hermesNotifyTarget: '' },
+  sla: { responseMinutes: 15 },
+};
+
 describe('AiSettingsPage', () => {
   beforeEach(() => apiMock.mockReset());
 
-  it('renders config from /ai/config', async () => {
-    apiMock.mockResolvedValueOnce({ baseUrl: 'http://x/v1', defaultModel: 'Hermes-4-70B' });
+  it('renders settings from /settings', async () => {
+    apiMock.mockResolvedValueOnce(settings);
     render(<AiSettingsPage />);
-    expect(await screen.findByText('http://x/v1')).toBeInTheDocument();
-    expect(screen.getByText('Hermes-4-70B')).toBeInTheDocument();
+    // baseUrl and model are editable inputs, not static text.
+    expect(await screen.findByDisplayValue('http://x/v1')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Hermes-4-70B')).toBeInTheDocument();
   });
 
-  it('loads models on button click', async () => {
-    apiMock.mockResolvedValueOnce({ baseUrl: 'b', defaultModel: 'm' });
-    render(<AiSettingsPage />);
-    await screen.findByText('b');
+  it('loads models into the datalist on button click', async () => {
+    apiMock.mockResolvedValueOnce(settings);
+    const { container } = render(<AiSettingsPage />);
+    await screen.findByDisplayValue('http://x/v1');
 
     apiMock.mockResolvedValueOnce(['model-a', 'model-b']);
-    await userEvent.click(screen.getByRole('button', { name: /Load models/ }));
-    expect(await screen.findByText('model-a')).toBeInTheDocument();
-    expect(screen.getByText('model-b')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Muat daftar model/ }));
+    await waitFor(() => expect(container.querySelector('option[value="model-a"]')).toBeTruthy());
+    expect(container.querySelector('option[value="model-b"]')).toBeTruthy();
   });
 
-  it('shows error when model load fails', async () => {
-    apiMock.mockResolvedValueOnce({ baseUrl: 'b', defaultModel: 'm' });
+  it('shows a message when model load fails', async () => {
+    apiMock.mockResolvedValueOnce(settings);
     render(<AiSettingsPage />);
-    await screen.findByText('b');
+    await screen.findByDisplayValue('http://x/v1');
 
     apiMock.mockRejectedValueOnce(new Error('boom'));
-    await userEvent.click(screen.getByRole('button', { name: /Load models/ }));
-    await waitFor(() => expect(screen.getByText('boom')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /Muat daftar model/ }));
+    await waitFor(() => expect(screen.getByText(/Tidak ada model ditemukan/)).toBeInTheDocument());
   });
 });
