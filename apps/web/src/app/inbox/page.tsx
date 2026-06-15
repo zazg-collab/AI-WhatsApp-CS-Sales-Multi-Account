@@ -132,6 +132,8 @@ const dict: Dict = {
   cancel: { id: 'Batal', en: 'Cancel' },
   attachMedia: { id: 'Attach media', en: 'Attach media' },
   sendFromLibrary: { id: 'Kirim dari Media Library', en: 'Send from Media Library' },
+  assetSuggestLabel: { id: '💡 Saran kirim:', en: '💡 Suggested:' },
+  assetSuggestSend: { id: 'Kirim', en: 'Send' },
   composerEditPlaceholder: { id: 'Edit pesan terkirim', en: 'Edit sent message' },
   composerQuotePlaceholder: { id: 'Balas dengan kutipan pesan', en: 'Reply with quoted message' },
   composerPlaceholder: { id: 'Tulis balasan, atau edit draft AI di atas', en: 'Write a reply, or edit the AI draft above' },
@@ -412,6 +414,8 @@ function InboxInner() {
   const [bots, setBots] = useState<Array<{ id: string; botName: string; persona?: { name: string } | null }>>([]);
   const [assetsList, setAssetsList] = useState<Array<{ id: string; title: string; kind: string; purpose: string }>>([]);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [assetSuggestions, setAssetSuggestions] = useState<Array<{ id: string; title: string; kind: string; purpose: string; reason: string }>>([]);
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set());
   const [botSuggestion, setBotSuggestion] = useState<{ botId: string; botName: string; personaName: string | null; reason: string } | null>(null);
   const [suggestingBot, setSuggestingBot] = useState(false);
   const activeIdRef = useRef<string | null>(activeId);
@@ -449,6 +453,20 @@ function InboxInner() {
       .then(setAssetsList)
       .catch(() => setAssetsList([]));
   }, []);
+
+  // Asset suggestions for the open conversation — refreshed when a new message
+  // arrives (conv reloads, changing its message count). Deterministic + cheap.
+  useEffect(() => {
+    if (!activeId) {
+      setAssetSuggestions([]);
+      return;
+    }
+    api<Array<{ id: string; title: string; kind: string; purpose: string; reason: string }>>(
+      `/assets/suggestions?conversationId=${activeId}`,
+    )
+      .then(setAssetSuggestions)
+      .catch(() => setAssetSuggestions([]));
+  }, [activeId, conv?.messages?.length]);
 
   const loadList = useCallback(async () => {
     const params = new URLSearchParams({ limit: '50' });
@@ -1300,6 +1318,18 @@ function InboxInner() {
               )}
 
               <div className="shrink-0 border-t border-gray-200 bg-white p-3 dark:border-gray-800 dark:bg-gray-900">
+                {assetSuggestions.filter((s) => !dismissedSuggestions.has(s.id)).length > 0 && (
+                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-medium text-gray-400">{t('assetSuggestLabel')}</span>
+                    {assetSuggestions.filter((s) => !dismissedSuggestions.has(s.id)).map((s) => (
+                      <span key={s.id} className="inline-flex items-center gap-1 rounded-full border border-hermes-200 bg-hermes-50 py-0.5 pl-2 pr-1 text-[11px] text-hermes-700 dark:border-hermes-700/40 dark:bg-hermes-900/20 dark:text-hermes-300" title={s.reason}>
+                        <span className="shrink-0">{s.kind === 'image' ? '🖼️' : s.kind === 'video' ? '🎬' : '📄'}</span>
+                        <button type="button" disabled={busy} onClick={() => { sendAsset(s.id); setDismissedSuggestions((p) => new Set(p).add(s.id)); }} className="max-w-[160px] truncate font-medium hover:underline disabled:opacity-50">{t('assetSuggestSend')}: {s.title}</button>
+                        <button type="button" onClick={() => setDismissedSuggestions((p) => new Set(p).add(s.id))} className="shrink-0 rounded-full px-1 text-hermes-500 hover:bg-hermes-100 dark:hover:bg-hermes-800/40" aria-label="Dismiss">×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {sendError && (
                   <div className="mb-2 flex items-center justify-between rounded border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700 dark:border-danger-800 dark:bg-danger-900/30 dark:text-danger-300">
                     <span>{sendError}</span>
