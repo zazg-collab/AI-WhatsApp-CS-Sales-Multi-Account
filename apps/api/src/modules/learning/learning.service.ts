@@ -110,7 +110,7 @@ title = pertanyaan ringkas. content = jawaban faktual berdasarkan balasan admin.
     const raw = await this.provider.chat(messages, {
       temperature: 0,
       json: true,
-      maxTokens: 1500,
+      maxTokens: 4000,
     });
     const items = this.parseArray(raw);
     if (items.length === 0) return { created: 0, skipped: 0 };
@@ -173,7 +173,7 @@ soulMd = deskripsi persona dalam Bahasa Indonesia (3-6 kalimat). forbiddenWords 
     const raw = await this.provider.chat(messages, {
       temperature: 0.2,
       json: true,
-      maxTokens: 800,
+      maxTokens: 2500,
     });
     const obj = this.parseObject(raw);
     if (!obj || !obj.soulMd) return 0;
@@ -228,7 +228,7 @@ title = nama keberatan/situasi. content = teknik/respon yang dipakai admin. Maks
     const raw = await this.provider.chat(messages, {
       temperature: 0.1,
       json: true,
-      maxTokens: 1200,
+      maxTokens: 3500,
     });
     const items = this.parseArray(raw);
     let created = 0;
@@ -301,7 +301,7 @@ Balas HANYA JSON: {"facts": string[]}. Kosongkan array jika tidak ada fakta jela
       const raw = await this.provider.chat(messages, {
         temperature: 0,
         json: true,
-        maxTokens: 300,
+        maxTokens: 1200,
       });
       const obj = this.parseObject(raw);
       const facts = Array.isArray(obj?.facts)
@@ -596,7 +596,7 @@ Balas HANYA JSON: {"facts": string[]}. Kosongkan array jika tidak ada fakta jela
       const json = JSON.parse(this.extractJson(raw, '['));
       return Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
     } catch (err) {
-      this.logger.warn(`Failed to parse array: ${err}`);
+      this.logger.warn(`Failed to parse array: ${err} | raw: ${this.snippet(raw)}`);
       return [];
     }
   }
@@ -605,19 +605,49 @@ Balas HANYA JSON: {"facts": string[]}. Kosongkan array jika tidak ada fakta jela
     try {
       return JSON.parse(this.extractJson(raw, '{'));
     } catch (err) {
-      this.logger.warn(`Failed to parse object: ${err}`);
+      this.logger.warn(`Failed to parse object: ${err} | raw: ${this.snippet(raw)}`);
       return null;
     }
   }
 
-  /** Tolerate models that wrap JSON in prose or code fences. */
-  private extractJson(raw: string, open: '{' | '[' = '{'): string {
-    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenced) return fenced[1].trim();
+  private snippet(raw: string): string {
+    return (raw ?? '').replace(/\s+/g, ' ').slice(0, 240);
+  }
+
+  /**
+   * Tolerate models that wrap JSON in prose, code fences, or reasoning blocks.
+   * Reasoning models (e.g. minimax/kimi) emit <think>…</think> chain-of-thought
+   * around the answer, which pollutes naive brace-slicing — strip it first.
+   */
+  private extractJson(raw: string, open: '{' | '[' = '{', depth = 0): string {
+    let s = raw ?? '';
+    // Drop reasoning/thinking blocks (closed or trailing-open).
+    s = s.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    s = s.replace(/<\/?(?:think|reasoning|thought)>/gi, '');
+    const fenced = s.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenced) s = fenced[1].trim();
+
+    // Some providers wrap the answer in an envelope, e.g.
+    // {"_type":"response","text":"[ ...json... ]"} — unwrap the inner string.
+    if (depth < 2) {
+      try {
+        const env = JSON.parse(s.trim());
+        if (env && typeof env === 'object' && !Array.isArray(env)) {
+          for (const k of ['text', 'content', 'output', 'response', 'result', 'message']) {
+            if (typeof env[k] === 'string' && env[k].includes(open)) {
+              return this.extractJson(env[k], open, depth + 1);
+            }
+          }
+        }
+      } catch {
+        // not a clean envelope — fall through to brace slicing
+      }
+    }
+
     const close = open === '{' ? '}' : ']';
-    const start = raw.indexOf(open);
-    const end = raw.lastIndexOf(close);
-    if (start !== -1 && end !== -1) return raw.slice(start, end + 1);
-    return raw;
+    const start = s.indexOf(open);
+    const end = s.lastIndexOf(close);
+    if (start !== -1 && end !== -1 && end > start) return s.slice(start, end + 1);
+    return s.trim();
   }
 }
