@@ -27,7 +27,6 @@ import {
   Image as ImageIcon,
   FileText,
   Video,
-  Tag,
   CheckCheck,
   Check,
   Zap,
@@ -148,6 +147,9 @@ const dict: Dict = {
   // WhatsApp controls
   whatsappControls: { id: 'Kontrol WhatsApp', en: 'WhatsApp controls' },
   aiModeField: { id: 'Mode AI', en: 'AI mode' },
+  botPersonaField: { id: 'Bot / Persona', en: 'Bot / Persona' },
+  botDefaultOption: { id: 'Default (dari akun)', en: 'Default (from account)' },
+  activePersona: { id: 'Persona aktif', en: 'Active persona' },
   workflowStatusField: { id: 'Status alur', en: 'Workflow status' },
   labelField: { id: 'Label', en: 'Label' },
   labelPlaceholder: { id: 'prioritas, renewal, tagihan', en: 'priority, renewal, invoice' },
@@ -257,7 +259,7 @@ interface ConvDetail {
   groupParticipants?: Array<{ jid: string; admin?: string | null }> | null;
   customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[]; notes: string | null };
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
-  bot: { id: string; botName: string } | null;
+  bot: { id: string; botName: string; persona?: { id: string; name: string } | null } | null;
   assignedAdmin?: AdminUser | null;
   labels?: string[];
   messages: Message[];
@@ -400,6 +402,7 @@ function InboxInner() {
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showRightPanel, setShowRightPanel] = useState(false);
+  const [bots, setBots] = useState<Array<{ id: string; botName: string; persona?: { name: string } | null }>>([]);
   const activeIdRef = useRef<string | null>(activeId);
   activeIdRef.current = activeId;
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -426,6 +429,12 @@ function InboxInner() {
       })
       .catch((err) => setListError(err instanceof Error ? err.message : t('errLoadAccounts')));
   }, [t]);
+
+  useEffect(() => {
+    api<Array<{ id: string; botName: string; persona?: { name: string } | null }>>('/bots')
+      .then(setBots)
+      .catch(() => setBots([]));
+  }, []);
 
   const loadList = useCallback(async () => {
     const params = new URLSearchParams({ limit: '50' });
@@ -801,6 +810,7 @@ function InboxInner() {
   const reactToMessage = (msgId: string, emoji: string) => act(() => api(`/conversations/${activeId}/messages/${msgId}/react`, { method: 'POST', body: JSON.stringify({ emoji }) }));
   const markRead = () => act(() => api(`/conversations/${activeId}/read`, { method: 'POST' }));
   const setAiMode = (aiMode: string) => act(() => api(`/conversations/${activeId}/ai-mode`, { method: 'PATCH', body: JSON.stringify({ aiMode }) }));
+  const setBot = (botId: string) => act(() => api(`/conversations/${activeId}/bot`, { method: 'PATCH', body: JSON.stringify({ botId: botId || null }) }));
   const setWorkflowStatus = (status: string) => act(() => api(`/conversations/${activeId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }));
   const sendLocation = () => act(async () => {
     const [latRaw, lngRaw, ...nameParts] = locationDraft.split(',').map((part) => part.trim());
@@ -1483,6 +1493,18 @@ function InboxInner() {
                     </select>
                   </label>
                   <label className="block">
+                    <span className="mb-1 block text-gray-600 dark:text-gray-300">{t('botPersonaField')}</span>
+                    <select value={active.bot?.id ?? ''} onChange={(e) => setBot(e.target.value)} disabled={busy} className="h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                      <option value="">{t('botDefaultOption')}</option>
+                      {bots.map((b) => (
+                        <option key={b.id} value={b.id}>{b.botName}{b.persona ? ` · ${b.persona.name}` : ''}</option>
+                      ))}
+                    </select>
+                    {active.bot?.persona && (
+                      <span className="mt-1 block text-[11px] text-gray-400">{t('activePersona')}: {active.bot.persona.name}</span>
+                    )}
+                  </label>
+                  <label className="block">
                     <span className="mb-1 block text-gray-600 dark:text-gray-300">{t('workflowStatusField')}</span>
                     <select value={active.status} onChange={(e) => setWorkflowStatus(e.target.value)} className="h-8 w-full rounded border border-gray-200 bg-gray-50 px-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
                       {statusOptions.map((option) => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
@@ -1812,6 +1834,15 @@ function InboxInner() {
                           <span className="mb-1 block text-gray-600 dark:text-gray-300">{t('aiModeField')}</span>
                           <select value={active.aiMode} onChange={(e) => setAiMode(e.target.value)} className="h-7 w-full rounded border border-gray-200 bg-gray-50 px-2 text-[11px] text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
                             {aiModeOptions.map((option) => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
+                          </select>
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-gray-600 dark:text-gray-300">{t('botPersonaField')}</span>
+                          <select value={active.bot?.id ?? ''} onChange={(e) => setBot(e.target.value)} disabled={busy} className="h-7 w-full rounded border border-gray-200 bg-gray-50 px-2 text-[11px] text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                            <option value="">{t('botDefaultOption')}</option>
+                            {bots.map((b) => (
+                              <option key={b.id} value={b.id}>{b.botName}{b.persona ? ` · ${b.persona.name}` : ''}</option>
+                            ))}
                           </select>
                         </label>
                         <label className="block">

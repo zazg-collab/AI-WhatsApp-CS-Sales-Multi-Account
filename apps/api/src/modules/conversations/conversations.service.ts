@@ -210,7 +210,14 @@ export class ConversationsService {
       include: {
         customer: true,
         whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true } },
-        bot: { select: { id: true, botName: true, defaultAiMode: true } },
+        bot: {
+          select: {
+            id: true,
+            botName: true,
+            defaultAiMode: true,
+            persona: { select: { id: true, name: true } },
+          },
+        },
         assignedAdmin: { select: { id: true, name: true } },
         hermesReviews: {
           orderBy: { createdAt: 'desc' },
@@ -510,6 +517,46 @@ export class ConversationsService {
       where: { id },
       data: { aiMode },
     });
+  }
+
+  /**
+   * Switch the bot (and therefore the persona) used for THIS conversation only.
+   * Pass `botId: null` to clear the override and fall back to the account's
+   * default bot. The prompt builder resolves persona via conversation.bot, so
+   * this immediately changes how the AI talks for this chat.
+   */
+  async setBot(id: string, botId: string | null, actorId?: string) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id },
+      select: { whatsappAccountId: true, botId: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    if (botId) {
+      const bot = await this.prisma.bot.findUnique({ where: { id: botId }, select: { id: true } });
+      if (!bot) throw new NotFoundException('Bot not found');
+    }
+
+    const updated = await this.prisma.conversation.update({
+      where: { id },
+      data: { botId },
+      include: { bot: { select: { id: true, botName: true, persona: { select: { id: true, name: true } } } } },
+    });
+
+    await logAudit(this.prisma, {
+      userId: actorId,
+      action: 'conversation_set_bot',
+      entityType: 'conversation',
+      entityId: id,
+      oldValue: { botId: conversation.botId },
+      newValue: { botId },
+    });
+
+    this.events.emitToAccount(updated.whatsappAccountId, 'conversation:updated', {
+      conversationId: id,
+      bot: updated.bot,
+    });
+    return updated;
   }
 
   /** Set the workflow status (open/pending/resolved) of a conversation. */

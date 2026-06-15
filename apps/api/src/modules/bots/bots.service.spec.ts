@@ -20,8 +20,15 @@ describe('BotsService', () => {
         create: jest.fn().mockResolvedValue({ id: 'p1' }),
         update: jest.fn().mockResolvedValue({ id: 'p1' }),
       },
-      whatsappAccount: { findUnique: jest.fn(), update: jest.fn().mockResolvedValue({ id: 'acc1' }) },
+      whatsappAccount: {
+        findUnique: jest.fn(),
+        update: jest.fn().mockResolvedValue({ id: 'acc1' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      conversation: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
+    // delete() runs inside a transaction; pass the same mock through as `tx`.
+    prisma.$transaction = jest.fn((fn: any) => fn(prisma));
     service = new BotsService(prisma);
   });
 
