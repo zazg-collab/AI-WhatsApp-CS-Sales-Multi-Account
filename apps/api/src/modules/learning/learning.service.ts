@@ -14,6 +14,7 @@ import {
   MineResult,
   PersonaPayload,
 } from './learning.types';
+import { parseJsonArray, parseJsonObject } from './learning.util';
 
 /** AI fallback phrase (PRD §): an unanswered question the admin later handled. */
 const FALLBACK_MARKER = 'konfirmasi dulu ke admin';
@@ -593,8 +594,7 @@ Balas HANYA JSON: {"facts": string[]}. Kosongkan array jika tidak ada fakta jela
 
   private parseArray(raw: string): Array<Record<string, unknown>> {
     try {
-      const json = JSON.parse(this.extractJson(raw, '['));
-      return Array.isArray(json) ? json : Array.isArray(json?.items) ? json.items : [];
+      return parseJsonArray(raw);
     } catch (err) {
       this.logger.warn(`Failed to parse array: ${err} | raw: ${this.snippet(raw)}`);
       return [];
@@ -603,7 +603,7 @@ Balas HANYA JSON: {"facts": string[]}. Kosongkan array jika tidak ada fakta jela
 
   private parseObject(raw: string): Record<string, any> | null {
     try {
-      return JSON.parse(this.extractJson(raw, '{'));
+      return parseJsonObject(raw);
     } catch (err) {
       this.logger.warn(`Failed to parse object: ${err} | raw: ${this.snippet(raw)}`);
       return null;
@@ -612,42 +612,5 @@ Balas HANYA JSON: {"facts": string[]}. Kosongkan array jika tidak ada fakta jela
 
   private snippet(raw: string): string {
     return (raw ?? '').replace(/\s+/g, ' ').slice(0, 240);
-  }
-
-  /**
-   * Tolerate models that wrap JSON in prose, code fences, or reasoning blocks.
-   * Reasoning models (e.g. minimax/kimi) emit <think>…</think> chain-of-thought
-   * around the answer, which pollutes naive brace-slicing — strip it first.
-   */
-  private extractJson(raw: string, open: '{' | '[' = '{', depth = 0): string {
-    let s = raw ?? '';
-    // Drop reasoning/thinking blocks (closed or trailing-open).
-    s = s.replace(/<think>[\s\S]*?<\/think>/gi, '');
-    s = s.replace(/<\/?(?:think|reasoning|thought)>/gi, '');
-    const fenced = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenced) s = fenced[1].trim();
-
-    // Some providers wrap the answer in an envelope, e.g.
-    // {"_type":"response","text":"[ ...json... ]"} — unwrap the inner string.
-    if (depth < 2) {
-      try {
-        const env = JSON.parse(s.trim());
-        if (env && typeof env === 'object' && !Array.isArray(env)) {
-          for (const k of ['text', 'content', 'output', 'response', 'result', 'message']) {
-            if (typeof env[k] === 'string' && env[k].includes(open)) {
-              return this.extractJson(env[k], open, depth + 1);
-            }
-          }
-        }
-      } catch {
-        // not a clean envelope — fall through to brace slicing
-      }
-    }
-
-    const close = open === '{' ? '}' : ']';
-    const start = s.indexOf(open);
-    const end = s.lastIndexOf(close);
-    if (start !== -1 && end !== -1 && end > start) return s.slice(start, end + 1);
-    return s.trim();
   }
 }

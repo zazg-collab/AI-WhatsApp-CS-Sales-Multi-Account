@@ -13,12 +13,14 @@ describe('BotsService', () => {
         create: jest.fn().mockResolvedValue({ id: 'b1' }),
         update: jest.fn().mockResolvedValue({ id: 'b1' }),
         delete: jest.fn().mockResolvedValue({ id: 'b1' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       persona: {
         findMany: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn(),
         create: jest.fn().mockResolvedValue({ id: 'p1' }),
         update: jest.fn().mockResolvedValue({ id: 'p1' }),
+        delete: jest.fn().mockResolvedValue({ id: 'p1' }),
       },
       whatsappAccount: {
         findUnique: jest.fn(),
@@ -88,6 +90,22 @@ describe('BotsService', () => {
       prisma.persona.findUnique.mockResolvedValue({ id: 'p1' });
       await service.updatePersona('p1', { name: 'X' } as any);
       expect(prisma.persona.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('deletePersona', () => {
+    it('throws when missing', async () => {
+      prisma.persona.findUnique.mockResolvedValue(null);
+      await expect(service.deletePersona('p1')).rejects.toThrow(NotFoundException);
+    });
+    it('detaches bots then deletes when found', async () => {
+      prisma.persona.findUnique.mockResolvedValue({ id: 'p1' });
+      await service.deletePersona('p1');
+      expect(prisma.bot.updateMany).toHaveBeenCalledWith({
+        where: { personaId: 'p1' },
+        data: { personaId: null },
+      });
+      expect(prisma.persona.delete).toHaveBeenCalled();
     });
   });
 
