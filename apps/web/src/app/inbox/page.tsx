@@ -21,6 +21,7 @@ import {
   RotateCcw,
   Inbox as InboxIcon,
   Paperclip,
+  Images,
   UserRound,
   UsersRound,
   UserX,
@@ -130,6 +131,7 @@ const dict: Dict = {
   quotePreview: { id: '{prefix}: {body}', en: '{prefix}: {body}' },
   cancel: { id: 'Batal', en: 'Cancel' },
   attachMedia: { id: 'Attach media', en: 'Attach media' },
+  sendFromLibrary: { id: 'Kirim dari Media Library', en: 'Send from Media Library' },
   composerEditPlaceholder: { id: 'Edit pesan terkirim', en: 'Edit sent message' },
   composerQuotePlaceholder: { id: 'Balas dengan kutipan pesan', en: 'Reply with quoted message' },
   composerPlaceholder: { id: 'Tulis balasan, atau edit draft AI di atas', en: 'Write a reply, or edit the AI draft above' },
@@ -408,6 +410,8 @@ function InboxInner() {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showRightPanel, setShowRightPanel] = useState(false);
   const [bots, setBots] = useState<Array<{ id: string; botName: string; persona?: { name: string } | null }>>([]);
+  const [assetsList, setAssetsList] = useState<Array<{ id: string; title: string; kind: string; purpose: string }>>([]);
+  const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [botSuggestion, setBotSuggestion] = useState<{ botId: string; botName: string; personaName: string | null; reason: string } | null>(null);
   const [suggestingBot, setSuggestingBot] = useState(false);
   const activeIdRef = useRef<string | null>(activeId);
@@ -441,6 +445,9 @@ function InboxInner() {
     api<Array<{ id: string; botName: string; persona?: { name: string } | null }>>('/bots')
       .then(setBots)
       .catch(() => setBots([]));
+    api<Array<{ id: string; title: string; kind: string; purpose: string }>>('/assets?status=active')
+      .then(setAssetsList)
+      .catch(() => setAssetsList([]));
   }, []);
 
   const loadList = useCallback(async () => {
@@ -818,6 +825,7 @@ function InboxInner() {
   const markRead = () => act(() => api(`/conversations/${activeId}/read`, { method: 'POST' }));
   const setAiMode = (aiMode: string) => act(() => api(`/conversations/${activeId}/ai-mode`, { method: 'PATCH', body: JSON.stringify({ aiMode }) }));
   const setBot = (botId: string) => act(() => api(`/conversations/${activeId}/bot`, { method: 'PATCH', body: JSON.stringify({ botId: botId || null }) }));
+  const sendAsset = (assetId: string) => act(() => api(`/assets/${assetId}/send`, { method: 'POST', body: JSON.stringify({ conversationId: activeId }) }).then(() => setShowAssetPicker(false)));
   const suggestBot = async () => {
     if (!activeId) return;
     setSuggestingBot(true);
@@ -1354,6 +1362,37 @@ function InboxInner() {
                       : <Paperclip className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                     }
                   </button>
+                  {assetsList.length > 0 && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        title={t('sendFromLibrary')}
+                        disabled={busy}
+                        onClick={() => setShowAssetPicker((v) => !v)}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                      >
+                        <Images className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      </button>
+                      {showAssetPicker && (
+                        <div className="absolute bottom-11 left-0 z-50 max-h-72 w-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
+                          <div className="border-b border-gray-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:border-gray-800">{t('sendFromLibrary')}</div>
+                          {assetsList.map((a) => (
+                            <button
+                              key={a.id}
+                              type="button"
+                              onClick={() => sendAsset(a.id)}
+                              disabled={busy}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-800"
+                            >
+                              <span className="shrink-0 text-gray-400">{a.kind === 'image' ? '🖼️' : a.kind === 'video' ? '🎬' : '📄'}</span>
+                              <span className="min-w-0 flex-1 truncate">{a.title}</span>
+                              <Badge tone="neutral" className="shrink-0 text-[10px]">{a.purpose}</Badge>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <input
                     ref={fileInputRef}
                     type="file"
