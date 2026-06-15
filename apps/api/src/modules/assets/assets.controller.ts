@@ -40,6 +40,13 @@ export class AssetsController {
     return this.assets.list(query);
   }
 
+  @ApiOperation({ summary: 'Suggest assets to send for a conversation (advisory)' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Get('suggestions')
+  suggestions(@Query('conversationId') conversationId: string) {
+    return this.assets.suggest(conversationId);
+  }
+
   @ApiOperation({ summary: 'Upload a new media asset (image/video/document)' })
   @ApiConsumes('multipart/form-data')
   @Roles('admin', 'supervisor', 'owner')

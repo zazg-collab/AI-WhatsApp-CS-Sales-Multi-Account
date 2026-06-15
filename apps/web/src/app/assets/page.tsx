@@ -49,6 +49,7 @@ export default function AssetsPage() {
   const [purpose, setPurpose] = useState<Purpose>('brochure');
   const [caption, setCaption] = useState('');
   const [marketplaceUrl, setMarketplaceUrl] = useState('');
+  const [triggerKeywords, setTriggerKeywords] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   function load() {
@@ -73,9 +74,14 @@ export default function AssetsPage() {
       form.append('purpose', purpose);
       if (caption.trim()) form.append('caption', caption.trim());
       if (purpose === 'product' && marketplaceUrl.trim()) form.append('marketplaceUrl', marketplaceUrl.trim());
+      triggerKeywords
+        .split(',')
+        .map((k) => k.trim())
+        .filter(Boolean)
+        .forEach((k) => form.append('triggerKeywords[]', k));
       await uploadFile('/assets/upload', form);
       setNotice('Aset diunggah.');
-      setFile(null); setTitle(''); setCaption(''); setMarketplaceUrl('');
+      setFile(null); setTitle(''); setCaption(''); setMarketplaceUrl(''); setTriggerKeywords('');
       if (fileRef.current) fileRef.current.value = '';
       load();
     } catch (e) {
@@ -131,6 +137,10 @@ export default function AssetsPage() {
                   <input value={marketplaceUrl} onChange={(e) => setMarketplaceUrl(e.target.value)} placeholder="https://shopee.co.id/..." className="h-9 w-full rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
                 </label>
               )}
+              <label className="block text-[13px] sm:col-span-2">
+                <span className="mb-1 block text-gray-600 dark:text-gray-300">Kata pemicu (pisahkan koma) — bot akan menyarankan aset ini saat pelanggan menyebutnya</span>
+                <input value={triggerKeywords} onChange={(e) => setTriggerKeywords(e.target.value)} placeholder="brosur, katalog, harga, pricelist" className="h-9 w-full rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+              </label>
             </div>
             <div className="mt-3">
               <Button onClick={submit} disabled={uploading || !file || !title.trim()}>

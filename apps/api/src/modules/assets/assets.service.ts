@@ -17,6 +17,31 @@ function kindForMime(mime: string): MediaKind {
   return 'document';
 }
 
+/**
+ * Hesitation/skeptic cues. When a customer says these, a testimonial asset is
+ * worth offering even if no explicit trigger keyword matched — that's exactly
+ * when social proof helps convert.
+ */
+const HESITATION_CUES = [
+  'ragu',
+  'yakin',
+  'beneran',
+  'bener ga',
+  'real',
+  'asli',
+  'penipuan',
+  'penipu',
+  'aman ga',
+  'aman kah',
+  'bukti',
+  'testimoni',
+  'terpercaya',
+  'percaya',
+  'takut',
+];
+
+const MAX_SUGGESTIONS = 4;
+
 @Injectable()
 export class AssetsService {
   constructor(
@@ -151,6 +176,54 @@ export class AssetsService {
       newValue: { assetId, title: asset.title },
     });
     return message;
+  }
+
+  /**
+   * Suggest assets to send for a conversation, based on the customer's recent
+   * messages. Deterministic and token-free: matches each active asset's
+   * triggerKeywords, and offers testimonials when the customer sounds hesitant.
+   * Advisory only — the admin still sends. The model never invents assets.
+   */
+  async suggest(conversationId: string) {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { id: true },
+    });
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    const recent = await this.prisma.message.findMany({
+      where: { conversationId, senderType: SenderType.customer, content: { not: '' } },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: { content: true },
+    });
+    const text = recent.map((m) => (m.content ?? '').toLowerCase()).join(' ');
+    if (!text.trim()) return [];
+
+    const assets = await this.prisma.asset.findMany({
+      where: { status: 'active' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const hesitant = HESITATION_CUES.some((c) => text.includes(c));
+    const suggestions: Array<{
+      id: string;
+      title: string;
+      kind: string;
+      purpose: string;
+      reason: string;
+    }> = [];
+
+    for (const a of assets) {
+      const matched = a.triggerKeywords.find((k) => k && text.includes(k.toLowerCase()));
+      let reason = '';
+      if (matched) reason = `Cocok dengan "${matched}"`;
+      else if (a.purpose === 'testimonial' && hesitant) reason = 'Pelanggan tampak ragu — kirim testimoni';
+      if (!reason) continue;
+      suggestions.push({ id: a.id, title: a.title, kind: a.kind, purpose: a.purpose, reason });
+      if (suggestions.length >= MAX_SUGGESTIONS) break;
+    }
+    return suggestions;
   }
 
   private async getOrThrow(id: string) {
