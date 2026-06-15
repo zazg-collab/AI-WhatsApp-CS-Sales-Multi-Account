@@ -18,6 +18,10 @@ const BASE_RULES = `Aturan:
 export const MAX_HISTORY_MESSAGES = 20;
 /** Rough character budget for the chat-history portion of the prompt. */
 export const MAX_CONTEXT_CHARS = 12000;
+/** Max knowledge items injected into a reply prompt (retrieval top-K). */
+export const KNOWLEDGE_MAX_ITEMS = 12;
+/** How many active items to pull and rank before selecting the top-K. */
+export const KNOWLEDGE_SCAN_LIMIT = 200;
 
 /** Rough token estimate (~4 chars/token). */
 export function estimateTokens(text: string): number {
@@ -54,8 +58,17 @@ export class PromptBuilderService {
       conversation.bot?.persona?.soulMd ??
       'Kamu adalah asisten customer service/sales yang ramah dan natural.';
 
+    // Relevance query = the customer's most recent messages. Used to pick the
+    // most relevant knowledge items instead of dumping the whole base.
+    const query = conversation.messages
+      .filter((m) => m.senderType === SenderType.customer && m.content)
+      .slice(0, 3)
+      .map((m) => m.content as string)
+      .join(' ');
+
     const knowledge = await this.loadKnowledge(
       conversation.bot?.knowledgeBaseId ?? null,
+      query,
     );
 
     const memory = this.customerMemory(conversation.customer);
@@ -124,7 +137,10 @@ export class PromptBuilderService {
     ];
   }
 
-  private async loadKnowledge(knowledgeBaseId: string | null): Promise<string> {
+  private async loadKnowledge(
+    knowledgeBaseId: string | null,
+    query = '',
+  ): Promise<string> {
     if (!knowledgeBaseId) return '';
     const now = new Date();
     const items = await this.prisma.knowledgeItem.findMany({
@@ -134,11 +150,56 @@ export class PromptBuilderService {
         OR: [{ validUntil: null }, { validUntil: { gte: now } }],
       },
       orderBy: { updatedAt: 'desc' },
-      take: 50,
+      take: KNOWLEDGE_SCAN_LIMIT,
     });
-    return items
+
+    // Small base, or no query yet: keep everything (already recency-ordered).
+    let selected = items;
+    if (items.length > KNOWLEDGE_MAX_ITEMS) {
+      const terms = this.queryTerms(query);
+      if (terms.length > 0) {
+        // Rank by keyword overlap with the customer's recent messages, then
+        // recency. Always returns KNOWLEDGE_MAX_ITEMS so a relevant-but-thin
+        // match still falls back to recent items rather than starving the bot.
+        selected = items
+          .map((item, idx) => ({ item, idx, score: this.relevanceScore(item, terms) }))
+          .sort((a, b) => b.score - a.score || a.idx - b.idx)
+          .slice(0, KNOWLEDGE_MAX_ITEMS)
+          .map((s) => s.item);
+      } else {
+        selected = items.slice(0, KNOWLEDGE_MAX_ITEMS);
+      }
+    }
+
+    return selected
       .map((i) => `• ${i.title}${i.productName ? ` (${i.productName})` : ''}: ${i.content}`)
       .join('\n');
+  }
+
+  /** Distinct, lowercased query words long enough to be meaningful. */
+  private queryTerms(query: string): string[] {
+    return Array.from(
+      new Set(
+        (query ?? '')
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+          .split(/\s+/)
+          .filter((w) => w.length > 2),
+      ),
+    );
+  }
+
+  /** How many query terms appear in an item's title/product/content. */
+  private relevanceScore(
+    item: { title: string; productName: string | null; content: string },
+    terms: string[],
+  ): number {
+    const hay = `${item.title} ${item.productName ?? ''} ${item.content}`.toLowerCase();
+    let score = 0;
+    for (const t of terms) {
+      if (hay.includes(t)) score += item.title.toLowerCase().includes(t) ? 2 : 1;
+    }
+    return score;
   }
 
   private customerMemory(customer: {

@@ -3,6 +3,7 @@ import {
   PromptBuilderService,
   MAX_HISTORY_MESSAGES,
   MAX_CONTEXT_CHARS,
+  KNOWLEDGE_MAX_ITEMS,
   estimateTokens,
 } from './prompt-builder.service';
 
@@ -87,6 +88,32 @@ describe('PromptBuilderService', () => {
     const msgs = await service.buildForConversation('c1');
     expect(msgs[0].content).toContain('belum ada knowledge');
     expect(prisma.knowledgeItem.findMany).not.toHaveBeenCalled();
+  });
+
+  it('retrieves only the top-K knowledge items relevant to the customer query', async () => {
+    // One clearly relevant item ("ongkir") + many irrelevant ones (> top-K).
+    const items = [
+      { title: 'Ongkir ke Jawa', productName: null, content: 'Gratis ongkir min 100rb' },
+      ...Array.from({ length: 30 }, (_, i) => ({
+        title: `Topik ${i}`,
+        productName: null,
+        content: `konten tidak terkait ${i}`,
+      })),
+    ];
+    prisma.knowledgeItem.findMany.mockResolvedValue(items);
+    prisma.conversation.findUnique.mockResolvedValue({
+      id: 'c1',
+      customer: { ...customer, tags: [], notes: null },
+      bot: { persona: { soulMd: 's' }, knowledgeBaseId: 'kb1' },
+      messages: [{ senderType: 'customer', content: 'berapa ongkir kirim?' }],
+    });
+
+    const shared = (await service.buildForConversation('c1'))[0].content;
+    // The relevant item is included...
+    expect(shared).toContain('Ongkir ke Jawa');
+    // ...and the injected set is capped at top-K (not all 31).
+    const injected = (shared.match(/^• /gm) ?? []).length;
+    expect(injected).toBe(KNOWLEDGE_MAX_ITEMS);
   });
 
   it('estimateTokens approximates ~4 chars/token', () => {
