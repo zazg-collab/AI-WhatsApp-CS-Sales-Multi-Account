@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { FileText, Image as ImageIcon, Video, Upload, Trash2, Link as LinkIcon } from 'lucide-react';
+import { FileText, Image as ImageIcon, Video, Upload, Trash2, Pencil, Link as LinkIcon } from 'lucide-react';
 import { api, uploadFile, resolveMediaUrl, hasRole } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
 
 type Purpose = 'brochure' | 'product' | 'testimonial';
@@ -51,6 +52,10 @@ export default function AssetsPage() {
   const [marketplaceUrl, setMarketplaceUrl] = useState('');
   const [triggerKeywords, setTriggerKeywords] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // edit modal
+  const [editing, setEditing] = useState<Asset | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   function load() {
     setLoading(true);
@@ -97,6 +102,29 @@ export default function AssetsPage() {
       setAssets((prev) => prev.filter((a) => a.id !== id));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Gagal menghapus');
+    }
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    setSavingEdit(true);
+    setError(null);
+    try {
+      const body = {
+        title: editing.title,
+        purpose: editing.purpose,
+        caption: editing.caption ?? '',
+        marketplaceUrl: editing.marketplaceUrl ?? '',
+        triggerKeywords: editing.triggerKeywords,
+        status: editing.status,
+      };
+      const updated = await api<Asset>(`/assets/${editing.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      setAssets((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+      setEditing(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gagal menyimpan');
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -191,7 +219,18 @@ export default function AssetsPage() {
                           <LinkIcon className="h-3 w-3" /> {a.marketplaceUrl}
                         </a>
                       )}
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        {a.status === 'draft' && <Badge tone="neutral" className="text-[10px]">draft</Badge>}
+                        {a.triggerKeywords.map((k) => (
+                          <span key={k} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">{k}</span>
+                        ))}
+                      </div>
                     </div>
+                    {canManage && (
+                      <button type="button" onClick={() => setEditing(a)} title="Edit" className="shrink-0 self-start text-gray-400 hover:text-hermes-600">
+                        <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      </button>
+                    )}
                     {canDelete && (
                       <button type="button" onClick={() => remove(a.id)} title="Hapus" className="shrink-0 self-start text-gray-400 hover:text-danger-600">
                         <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -204,6 +243,52 @@ export default function AssetsPage() {
           </ul>
         )}
       </div>
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit aset">
+        {editing && (
+          <div className="space-y-3 text-[13px]">
+            <label className="block">
+              <span className="mb-1 block text-gray-600 dark:text-gray-300">Judul</span>
+              <input value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} className="h-9 w-full rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-gray-600 dark:text-gray-300">Tujuan</span>
+                <select value={editing.purpose} onChange={(e) => setEditing({ ...editing, purpose: e.target.value as Purpose })} className="h-9 w-full rounded border border-gray-200 bg-gray-50 px-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                  <option value="brochure">Brosur / Dokumen</option>
+                  <option value="product">Produk</option>
+                  <option value="testimonial">Testimoni</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-gray-600 dark:text-gray-300">Status</span>
+                <select value={editing.status} onChange={(e) => setEditing({ ...editing, status: e.target.value })} className="h-9 w-full rounded border border-gray-200 bg-gray-50 px-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                  <option value="active">Aktif</option>
+                  <option value="draft">Draft</option>
+                </select>
+              </label>
+            </div>
+            <label className="block">
+              <span className="mb-1 block text-gray-600 dark:text-gray-300">Caption</span>
+              <input value={editing.caption ?? ''} onChange={(e) => setEditing({ ...editing, caption: e.target.value })} className="h-9 w-full rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+            </label>
+            {editing.purpose === 'product' && (
+              <label className="block">
+                <span className="mb-1 block text-gray-600 dark:text-gray-300">Link marketplace</span>
+                <input value={editing.marketplaceUrl ?? ''} onChange={(e) => setEditing({ ...editing, marketplaceUrl: e.target.value })} placeholder="https://shopee.co.id/..." className="h-9 w-full rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+              </label>
+            )}
+            <label className="block">
+              <span className="mb-1 block text-gray-600 dark:text-gray-300">Kata pemicu (pisahkan koma)</span>
+              <input value={editing.triggerKeywords.join(', ')} onChange={(e) => setEditing({ ...editing, triggerKeywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })} placeholder="brosur, katalog, harga" className="h-9 w-full rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={() => setEditing(null)}>Batal</Button>
+              <Button size="sm" onClick={saveEdit} disabled={savingEdit || !editing.title.trim()}>{savingEdit ? 'Menyimpan…' : 'Simpan'}</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </AppLayout>
   );
 }
