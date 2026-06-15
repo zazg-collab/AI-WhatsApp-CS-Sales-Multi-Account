@@ -125,14 +125,30 @@ export async function extractFromFile(
     return { text: normalise(result.value ?? ''), kind: 'word' };
   }
 
-  if (ext === 'xlsx' || ext === 'xls') {
-    const XLSX = await import('xlsx');
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
+  if (ext === 'xls') {
+    throw new BadRequestException(
+      'Format Excel lama (.xls) tidak didukung. Simpan ulang sebagai .xlsx lalu unggah kembali.',
+    );
+  }
+
+  if (ext === 'xlsx') {
+    const ExcelJS = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
     const parts: string[] = [];
-    for (const name of workbook.SheetNames) {
-      const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[name]);
-      if (csv.trim()) parts.push(`# Sheet: ${name}\n${csv}`);
-    }
+    workbook.eachSheet((sheet) => {
+      const lines: string[] = [];
+      sheet.eachRow({ includeEmpty: false }, (row) => {
+        const cells: string[] = [];
+        row.eachCell({ includeEmpty: true }, (cell) => {
+          const text = (cell.text ?? '').toString();
+          cells.push(/[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text);
+        });
+        lines.push(cells.join(','));
+      });
+      const csv = lines.join('\n');
+      if (csv.trim()) parts.push(`# Sheet: ${sheet.name}\n${csv}`);
+    });
     return { text: normalise(parts.join('\n\n')), kind: 'excel' };
   }
 

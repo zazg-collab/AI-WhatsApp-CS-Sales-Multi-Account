@@ -1,11 +1,13 @@
 /** Convert a phone number (digits only) to a WhatsApp JID. */
 export function phoneToJid(phone: string): string {
+  if (phone.includes('@')) return phone;
   const digits = phone.replace(/\D/g, '');
   return `${digits}@s.whatsapp.net`;
 }
 
 /** Extract the bare phone number from a WhatsApp JID. */
 export function jidToPhone(jid: string): string {
+  if (jid.endsWith('@lid')) return jid;
   return jid.split('@')[0].split(':')[0];
 }
 
@@ -13,9 +15,12 @@ export function isDirectChatJid(jid: string): boolean {
   return jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
 }
 
-/** True when the JID is a WhatsApp Linked Device ID (not a phone-based JID). */
-export function isLidJid(jid: string): boolean {
-  return jid.endsWith('@lid');
+export function isGroupJid(jid: string): boolean {
+  return jid.endsWith('@g.us');
+}
+
+export function isSupportedChatJid(jid: string): boolean {
+  return isDirectChatJid(jid) || isGroupJid(jid);
 }
 
 /** Keywords (case-insensitive) that signal a customer wants to opt out. */

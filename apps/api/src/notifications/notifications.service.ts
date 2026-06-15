@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { spawn } from 'node:child_process';
+import { SettingsService } from '../modules/settings/settings.service';
 
 /**
  * Outbound alert channel — delegated to the Hermes Agent messaging gateway
@@ -22,20 +23,27 @@ import { spawn } from 'node:child_process';
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
-  private readonly target: string;
+  private readonly envTarget: string;
   private readonly bin: string;
 
-  constructor(config: ConfigService) {
-    this.target = config.get<string>('HERMES_NOTIFY_TARGET') ?? '';
+  constructor(
+    config: ConfigService,
+    private readonly settings: SettingsService,
+  ) {
+    this.envTarget = config.get<string>('HERMES_NOTIFY_TARGET') ?? '';
     this.bin = config.get<string>('HERMES_BIN') ?? 'hermes';
   }
 
+  /** Cheap env-based hint (e.g. health check). The live target used for sending
+   *  is resolved from settings in send(). */
   get enabled(): boolean {
-    return Boolean(this.target);
+    return Boolean(this.envTarget);
   }
 
   async send(text: string): Promise<void> {
-    if (!this.enabled) return;
+    // Authoritative, runtime-editable target (falls back to env via settings).
+    const { hermesNotifyTarget: target } = await this.settings.notifications();
+    if (!target) return;
     await new Promise<void>((resolve) => {
       let stderr = '';
       let settled = false;
@@ -45,7 +53,7 @@ export class NotificationsService {
         clearTimeout(timer);
         resolve();
       };
-      const child = spawn(this.bin, ['send', '--to', this.target], {
+      const child = spawn(this.bin, ['send', '--to', target], {
         stdio: ['pipe', 'ignore', 'pipe'],
       });
       // Timeout guard (H8): never let a hung CLI block the caller indefinitely.

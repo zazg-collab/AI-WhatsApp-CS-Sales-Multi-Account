@@ -59,11 +59,21 @@ export class CustomersController {
   @Roles('viewer')
   @Get()
   list(
+    @CurrentUser() user: AuthUser,
     @Query('stage') stage?: LeadStage,
     @Query('tag') tag?: string,
     @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.customers.list({ stage, tag, search });
+    return this.customers.list({
+      stage,
+      tag,
+      search,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 50,
+      user,
+    });
   }
 
   @ApiOperation({ summary: 'Bulk CRM actions on customers' })
@@ -76,8 +86,8 @@ export class CustomersController {
   @ApiOperation({ summary: 'Get a customer by ID' })
   @Roles('viewer')
   @Get(':id')
-  get(@Param('id') id: string) {
-    return this.customers.get(id);
+  get(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.customers.get(id, user);
   }
 
   @ApiOperation({ summary: 'Update a customer' })

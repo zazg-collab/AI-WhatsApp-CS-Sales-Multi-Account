@@ -2,10 +2,15 @@ import { ServiceUnavailableException } from '@nestjs/common';
 import { AiProviderService } from './ai-provider.service';
 
 function makeService(env: Record<string, string> = {}) {
-  const config = {
-    get: (k: string) => env[k],
-  } as any;
-  return new AiProviderService(config);
+  const ai = {
+    baseUrl: (env.AI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, ''),
+    apiKey: env.AI_API_KEY ?? '',
+    model: env.AI_MODEL ?? 'gpt-4o-mini',
+    temperature: env.AI_TEMPERATURE ? Number(env.AI_TEMPERATURE) : 0.6,
+    timeoutMs: env.AI_TIMEOUT_MS ? Number(env.AI_TIMEOUT_MS) : 30_000,
+  };
+  const settings = { ai: async () => ai } as any;
+  return new AiProviderService(settings);
 }
 
 describe('AiProviderService', () => {
@@ -15,18 +20,18 @@ describe('AiProviderService', () => {
     jest.restoreAllMocks();
   });
 
-  it('getConfig + model return defaults', () => {
+  it('getConfig + defaultModel return defaults', async () => {
     const s = makeService();
-    expect(s.getConfig()).toEqual({
+    expect(await s.getConfig()).toEqual({
       baseUrl: 'https://api.openai.com/v1',
       defaultModel: 'gpt-4o-mini',
     });
-    expect(s.model).toBe('gpt-4o-mini');
+    expect(await s.defaultModel()).toBe('gpt-4o-mini');
   });
 
-  it('strips trailing slash from base url', () => {
+  it('strips trailing slash from base url', async () => {
     const s = makeService({ AI_BASE_URL: 'http://x/v1/' });
-    expect(s.getConfig().baseUrl).toBe('http://x/v1');
+    expect((await s.getConfig()).baseUrl).toBe('http://x/v1');
   });
 
   describe('listModels', () => {

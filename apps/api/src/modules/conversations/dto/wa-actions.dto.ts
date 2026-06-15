@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class SendLocationDto {
   @IsNumber()
@@ -27,7 +27,7 @@ export class ContactEntryDto {
 
 export class SendContactDto {
   @IsArray()
-  @MinLength(1)
+  @ArrayMinSize(1)
   contacts!: ContactEntryDto[];
 }
 

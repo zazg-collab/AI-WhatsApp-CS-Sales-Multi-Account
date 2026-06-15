@@ -13,10 +13,108 @@ import {
   X,
 } from 'lucide-react';
 import { AppLayout } from '@/components/AppLayout';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { api, getToken } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Field, TextareaField, SelectField } from '@/components/ui/Field';
+import { useT, type Dict } from '@/lib/i18n';
+
+const dict: Dict = {
+  subtitle: {
+    id: 'Pengiriman terkontrol dengan persetujuan, antrean, batas laju, dan audit.',
+    en: 'Controlled sending with approval, queueing, rate limits, and audit.',
+  },
+  createDraftHeading: { id: 'Buat draf campaign', en: 'Create campaign draft' },
+  nameLabel: { id: 'Nama campaign', en: 'Campaign name' },
+  senderAccountLabel: { id: 'Akun WhatsApp pengirim', en: 'Sending WhatsApp account' },
+  selectAccount: { id: 'Pilih akun WhatsApp', en: 'Select a WhatsApp account' },
+  messageLabel: { id: 'Isi pesan', en: 'Message body' },
+  messageHint: {
+    id: 'Gunakan token {{name}} / {{phone}} untuk personalisasi.',
+    en: 'Use {{name}} / {{phone}} tokens for personalization.',
+  },
+  leadStageLabel: { id: 'Tahap lead', en: 'Lead stage' },
+  allStages: { id: 'Semua tahap', en: 'All stages' },
+  tagFilterLabel: { id: 'Filter tag', en: 'Tag filter' },
+  tagPlaceholder: { id: 'mis. promo-juni', en: 'e.g. june-promo' },
+  rateLabel: { id: 'Laju/menit', en: 'Rate/minute' },
+  rateHint: { id: 'Maks. 30 pesan per menit.', en: 'Max. 30 messages per minute.' },
+  scheduleLabel: { id: 'Jadwal kirim', en: 'Send schedule' },
+  scheduleHint: {
+    id: 'Opsional. Kosongkan untuk kirim manual.',
+    en: 'Optional. Leave empty to send manually.',
+  },
+  preview: { id: 'Pratinjau', en: 'Preview' },
+  createDraft: { id: 'Buat draf', en: 'Create draft' },
+  eligibleRecipients: { id: 'penerima memenuhi syarat', en: 'eligible recipients' },
+  skipped: { id: 'Dilewati:', en: 'Skipped:' },
+  none: { id: 'tidak ada', en: 'none' },
+  noCampaigns: { id: 'Belum ada campaign.', en: 'No campaigns yet.' },
+  createDraftAbove: { id: 'Buat draf di atas untuk memulai.', en: 'Create a draft above to get started.' },
+  waitingDraft: { id: 'Menunggu draf dibuat oleh admin.', en: 'Waiting for an admin to create a draft.' },
+  noAccount: { id: 'Tanpa akun', en: 'No account' },
+  recipientsSuffix: { id: 'penerima', en: 'recipients' },
+  closeToast: { id: 'Tutup notifikasi', en: 'Close notification' },
+  emptyDetail: {
+    id: 'Pilih campaign untuk melihat detail dan progres pengiriman.',
+    en: 'Select a campaign to view details and sending progress.',
+  },
+  ratePer: { id: 'laju {n}/menit', en: 'rate {n}/minute' },
+  submitApproval: { id: 'Ajukan persetujuan', en: 'Submit for approval' },
+  approve: { id: 'Setujui', en: 'Approve' },
+  startQueue: { id: 'Mulai antrean', en: 'Start queue' },
+  pauseAction: { id: 'Jeda', en: 'Pause' },
+  cancelAction: { id: 'Batalkan', en: 'Cancel' },
+  retryFailed: { id: 'Coba ulang yang gagal', en: 'Retry failed' },
+  statusPending: { id: 'Menunggu', en: 'Pending' },
+  statusQueued: { id: 'Antrean', en: 'Queued' },
+  statusSending: { id: 'Mengirim', en: 'Sending' },
+  statusSent: { id: 'Terkirim', en: 'Sent' },
+  statusFailed: { id: 'Gagal', en: 'Failed' },
+  recipientSample: { id: 'Contoh daftar penerima', en: 'Sample recipient list' },
+  noRecipients: {
+    id: 'Belum ada penerima. Jalankan pratinjau lalu buat draf untuk mengisi antrean.',
+    en: 'No recipients yet. Run a preview then create a draft to fill the queue.',
+  },
+  toastLoadCampaigns: {
+    id: 'Gagal memuat campaign. Coba muat ulang.',
+    en: 'Failed to load campaigns. Try reloading.',
+  },
+  toastLoadDetail: { id: 'Gagal memuat detail campaign.', en: 'Failed to load campaign details.' },
+  toastSelectAccount: {
+    id: 'Pilih akun WhatsApp dulu sebelum melihat pratinjau.',
+    en: 'Select a WhatsApp account before previewing.',
+  },
+  toastPreviewFailed: { id: 'Pratinjau gagal dimuat.', en: 'Preview failed to load.' },
+  toastRequired: {
+    id: 'Nama, pesan, dan akun WhatsApp wajib diisi.',
+    en: 'Name, message, and WhatsApp account are required.',
+  },
+  toastDraftCreated: {
+    id: 'Draf campaign dibuat. Ajukan persetujuan dulu sebelum dikirim.',
+    en: 'Campaign draft created. Submit for approval before sending.',
+  },
+  toastCreateFailed: { id: 'Gagal membuat campaign.', en: 'Failed to create campaign.' },
+  toastActionOk: { id: 'Aksi "{action}" berhasil.', en: 'Action "{action}" succeeded.' },
+  toastActionFailed: {
+    id: 'Aksi "{action}" gagal dijalankan.',
+    en: 'Action "{action}" failed to run.',
+  },
+  confirmApprove: {
+    id: 'Setujui campaign ini? Setelah disetujui, campaign siap dikirim ke semua penerima.',
+    en: 'Approve this campaign? Once approved, it is ready to send to all recipients.',
+  },
+  confirmStart: {
+    id: 'Mulai kirim campaign ini ke semua penerima dalam antrean sekarang?',
+    en: 'Start sending this campaign to all queued recipients now?',
+  },
+  confirmCancel: {
+    id: 'Batalkan campaign ini? Penerima yang masih menunggu akan dilewati.',
+    en: 'Cancel this campaign? Recipients still waiting will be skipped.',
+  },
+};
 
 type Role = 'owner' | 'supervisor' | 'admin' | 'viewer';
 type LeadStage = 'cold' | 'warm' | 'hot' | 'very_hot';
@@ -59,9 +157,6 @@ const statusTone: Record<string, BadgeTone> = {
   failed: 'danger',
 };
 
-const inputClass =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
-
 function getRoleFromToken(): Role | null {
   if (typeof window === 'undefined') return null;
   const token = getToken();
@@ -74,12 +169,15 @@ function getRoleFromToken(): Role | null {
 }
 
 export default function CampaignsPage() {
+  const t = useT(dict);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Campaign | null>(null);
   const [role, setRole] = useState<Role | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; tone: 'error' | 'success' } | null>(null);
+  const showError = (msg: string) => setToast({ msg, tone: 'error' });
+  const showOk = (msg: string) => setToast({ msg, tone: 'success' });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
@@ -116,19 +214,19 @@ export default function CampaignsPage() {
       setAccounts(accountData);
       if (!whatsappAccountId && accountData[0]) setWhatsappAccountId(accountData[0].id);
     } catch (err) {
-      setToast(err instanceof Error ? err.message : 'Failed to load campaigns');
+      showError(err instanceof Error ? err.message : t('toastLoadCampaigns'));
     } finally {
       setLoading(false);
     }
-  }, [whatsappAccountId]);
+  }, [whatsappAccountId, t]);
 
   const loadDetail = useCallback(async (id: string) => {
     try {
       setDetail(await api<Campaign>(`/campaigns/${id}`));
     } catch (err) {
-      setToast(err instanceof Error ? err.message : 'Failed to load campaign detail');
+      showError(err instanceof Error ? err.message : t('toastLoadDetail'));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     setRole(getRoleFromToken());
@@ -142,7 +240,7 @@ export default function CampaignsPage() {
 
   async function handlePreview() {
     if (!whatsappAccountId) {
-      setToast('Select a WhatsApp account first.');
+      showError(t('toastSelectAccount'));
       return;
     }
     setSubmitting(true);
@@ -152,7 +250,7 @@ export default function CampaignsPage() {
         body: JSON.stringify({ whatsappAccountId, targetFilter }),
       }));
     } catch (err) {
-      setToast(err instanceof Error ? err.message : 'Preview failed');
+      showError(err instanceof Error ? err.message : t('toastPreviewFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -160,7 +258,7 @@ export default function CampaignsPage() {
 
   async function createCampaign() {
     if (!name.trim() || !messageTemplate.trim() || !whatsappAccountId) {
-      setToast('Name, message, and WhatsApp account are required.');
+      showError(t('toastRequired'));
       return;
     }
     setSubmitting(true);
@@ -176,13 +274,13 @@ export default function CampaignsPage() {
           scheduledAt: scheduledAt || undefined,
         }),
       });
-      setToast('Campaign draft created. Submit for approval before sending.');
+      showOk(t('toastDraftCreated'));
       setSelectedId(campaign.id);
       setName('');
       setMessageTemplate('');
       await loadCampaigns();
     } catch (err) {
-      setToast(err instanceof Error ? err.message : 'Create campaign failed');
+      showError(err instanceof Error ? err.message : t('toastCreateFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -193,20 +291,20 @@ export default function CampaignsPage() {
     // Confirm high-consequence actions: approving or starting a campaign
     // authorizes outbound messages to real customers.
     const confirmMessages: Partial<Record<typeof action, string>> = {
-      approve: 'Approve this campaign? It will be cleared for sending to all recipients.',
-      start: 'Start sending this campaign to all queued recipients now?',
-      cancel: 'Cancel this campaign? Pending recipients will be skipped.',
+      approve: t('confirmApprove'),
+      start: t('confirmStart'),
+      cancel: t('confirmCancel'),
     };
     const confirmMsg = confirmMessages[action];
     if (confirmMsg && !window.confirm(confirmMsg)) return;
     setSubmitting(true);
     try {
       await api(`/campaigns/${selectedCampaign.id}/${action}`, { method: 'POST' });
-      setToast(`Campaign ${action} succeeded.`);
+      showOk(t('toastActionOk', { action }));
       await loadCampaigns();
       await loadDetail(selectedCampaign.id);
     } catch (err) {
-      setToast(err instanceof Error ? err.message : `Action ${action} failed`);
+      showError(err instanceof Error ? err.message : t('toastActionFailed', { action }));
     } finally {
       setSubmitting(false);
     }
@@ -214,7 +312,8 @@ export default function CampaignsPage() {
 
   return (
     <AppLayout>
-      <div className="flex flex-1 overflow-hidden">
+      <PageHeader title="Campaigns" subtitle="Controlled outbound WhatsApp messaging with approval & rate limits" />
+      <div className="flex flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         {/* Left: create + list */}
         <aside className="scrollbar-thin w-96 shrink-0 overflow-y-auto border-r border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
           <div className="mb-4">
@@ -223,73 +322,90 @@ export default function CampaignsPage() {
               Campaigns
             </h1>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Controlled messaging with approval, queue, rate limit, and audit.
+              {t('subtitle')}
             </p>
           </div>
 
           {canManage && (
             <Card className="mb-4 space-y-3 p-4">
-              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Create campaign draft</h2>
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Campaign name" className={inputClass} />
-              <select value={whatsappAccountId} onChange={(e) => setWhatsappAccountId(e.target.value)} className={inputClass}>
-                <option value="">Select WhatsApp account</option>
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('createDraftHeading')}</h2>
+              <Field
+                label={t('nameLabel')}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Campaign name"
+              />
+              <SelectField
+                label={t('senderAccountLabel')}
+                value={whatsappAccountId}
+                onChange={(e) => setWhatsappAccountId(e.target.value)}
+              >
+                <option value="">{t('selectAccount')}</option>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>{account.accountName} ({account.phoneNumber})</option>
                 ))}
-              </select>
-              <textarea
+              </SelectField>
+              <TextareaField
+                label={t('messageLabel')}
+                hint={t('messageHint')}
+                rows={4}
                 value={messageTemplate}
                 onChange={(e) => setMessageTemplate(e.target.value)}
                 placeholder="Campaign message… use {{name}} / {{phone}} tokens"
-                className={`h-28 ${inputClass}`}
+                className="resize-none"
               />
               <div className="grid grid-cols-2 gap-2">
-                <select value={leadStage} onChange={(e) => setLeadStage(e.target.value)} className={inputClass}>
-                  <option value="">All stages</option>
+                <SelectField
+                  label={t('leadStageLabel')}
+                  value={leadStage}
+                  onChange={(e) => setLeadStage(e.target.value)}
+                >
+                  <option value="">{t('allStages')}</option>
                   <option value="cold">Cold</option>
                   <option value="warm">Warm</option>
                   <option value="hot">Hot</option>
                   <option value="very_hot">Very Hot</option>
-                </select>
-                <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="Filter tag" className={inputClass} />
+                </SelectField>
+                <Field
+                  label={t('tagFilterLabel')}
+                  value={tag}
+                  onChange={(e) => setTag(e.target.value)}
+                  placeholder={t('tagPlaceholder')}
+                />
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-xs text-gray-500 dark:text-gray-400">
-                  Rate/min
-                  <input
-                    type="number"
-                    min={1}
-                    max={30}
-                    value={rateLimitPerMinute}
-                    onChange={(e) => setRateLimitPerMinute(Number(e.target.value))}
-                    className={`mt-1 ${inputClass}`}
-                  />
-                </label>
-                <label className="text-xs text-gray-500 dark:text-gray-400">
-                  Schedule
-                  <input
-                    type="datetime-local"
-                    value={scheduledAt}
-                    onChange={(e) => setScheduledAt(e.target.value)}
-                    className={`mt-1 ${inputClass}`}
-                  />
-                </label>
+                <Field
+                  label={t('rateLabel')}
+                  hint={t('rateHint')}
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={rateLimitPerMinute}
+                  onChange={(e) => setRateLimitPerMinute(Number(e.target.value))}
+                />
+                <Field
+                  label={t('scheduleLabel')}
+                  hint={t('scheduleHint')}
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(e) => setScheduledAt(e.target.value)}
+                />
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="md" className="flex-1" onClick={handlePreview} disabled={submitting}>
                   <Eye className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                  Preview
+                  {t('preview')}
                 </Button>
                 <Button size="md" className="flex-1" onClick={createCampaign} disabled={submitting}>
                   <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                  Create draft
+                  {t('createDraft')}
                 </Button>
               </div>
               {preview && (
                 <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                  <div><span className="font-semibold text-hermes-600">{preview.eligibleCount}</span> eligible recipients</div>
+                  <div><span className="font-semibold text-hermes-600">{preview.eligibleCount}</span> {t('eligibleRecipients')}</div>
                   <div className="mt-1 text-gray-400">
-                    Skipped: {Object.entries(preview.skipped).map(([key, value]) => `${key} ${value}`).join(', ') || 'none'}
+                    {t('skipped')} {Object.entries(preview.skipped).map(([key, value]) => `${key} ${value}`).join(', ') || t('none')}
                   </div>
                 </div>
               )}
@@ -298,7 +414,11 @@ export default function CampaignsPage() {
 
           <div className="space-y-2">
             {loading ? (
-              <p className="text-sm text-gray-500">Loading…</p>
+              [1, 2, 3].map((n) => <div key={n} className="h-16 rounded-lg animate-shimmer" />)
+            ) : campaigns.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-gray-200 px-3 py-6 text-center text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                {t('noCampaigns')} {canManage ? t('createDraftAbove') : t('waitingDraft')}
+              </p>
             ) : (
               campaigns.map((campaign) => {
                 const isActive = selectedId === campaign.id;
@@ -317,7 +437,7 @@ export default function CampaignsPage() {
                       <Badge tone={statusTone[campaign.status] ?? 'neutral'}>{campaign.status}</Badge>
                     </div>
                     <div className="mt-1 text-xs text-gray-400">
-                      {campaign.whatsappAccount?.accountName ?? 'No account'} · {campaign._count?.recipients ?? 0} recipients
+                      {campaign.whatsappAccount?.accountName ?? t('noAccount')} · {campaign._count?.recipients ?? 0} {t('recipientsSuffix')}
                     </div>
                   </button>
                 );
@@ -331,9 +451,14 @@ export default function CampaignsPage() {
           {toast && (
             <button
               onClick={() => setToast(null)}
-              className="mb-4 flex items-center gap-2 rounded-lg border border-hermes-100 bg-hermes-50 px-3 py-2 text-sm text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-200"
+              aria-label={t('closeToast')}
+              className={`mb-4 flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                toast.tone === 'error'
+                  ? 'border-danger-200 bg-danger-50 text-danger-700 dark:border-danger-900 dark:bg-danger-900/30 dark:text-danger-100'
+                  : 'border-channel-100 bg-channel-50 text-channel-700 dark:border-channel-700 dark:bg-channel-700/20 dark:text-channel-100'
+              }`}
             >
-              {toast}
+              {toast.msg}
               <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
             </button>
           )}
@@ -341,7 +466,7 @@ export default function CampaignsPage() {
           {!detail ? (
             <div className="flex h-full flex-col items-center justify-center text-center text-gray-400">
               <Megaphone className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
-              <p className="text-sm">Select a campaign to view details.</p>
+              <p className="text-sm">{t('emptyDetail')}</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -350,7 +475,7 @@ export default function CampaignsPage() {
                   <div>
                     <h2 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">{detail.name}</h2>
                     <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      {detail.whatsappAccount?.accountName} · rate {detail.rateLimitPerMinute}/min
+                      {detail.whatsappAccount?.accountName} · {t('ratePer', { n: detail.rateLimitPerMinute })}
                     </p>
                   </div>
                   <Badge tone={statusTone[detail.status] ?? 'neutral'}>{detail.status}</Badge>
@@ -362,47 +487,61 @@ export default function CampaignsPage() {
                   {canManage && ['draft', 'pending_approval'].includes(detail.status) && (
                     <Button variant="review" size="sm" onClick={() => runAction('submit')} disabled={submitting}>
                       <Send className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                      Submit for approval
+                      {t('submitApproval')}
                     </Button>
                   )}
                   {canApprove && detail.status === 'pending_approval' && (
                     <Button size="sm" onClick={() => runAction('approve')} disabled={submitting}>
                       <CircleCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                      Approve
+                      {t('approve')}
                     </Button>
                   )}
                   {canApprove && ['approved', 'paused', 'scheduled'].includes(detail.status) && (
                     <Button size="sm" onClick={() => runAction('start')} disabled={submitting}>
                       <Send className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                      Start queue
+                      {t('startQueue')}
                     </Button>
                   )}
                   {canApprove && ['running', 'scheduled'].includes(detail.status) && (
                     <Button variant="outline" size="sm" onClick={() => runAction('pause')} disabled={submitting}>
                       <Pause className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                      Pause
+                      {t('pauseAction')}
                     </Button>
                   )}
                   {canApprove && !['completed', 'cancelled'].includes(detail.status) && (
                     <Button variant="danger" size="sm" onClick={() => runAction('cancel')} disabled={submitting}>
                       <CircleX className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                      Cancel
+                      {t('cancelAction')}
                     </Button>
                   )}
                   {canApprove && detail.status === 'failed' && (
                     <Button variant="outline" size="sm" onClick={() => runAction('retry-failed')} disabled={submitting}>
                       <RotateCcw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
-                      Retry failed
+                      {t('retryFailed')}
                     </Button>
                   )}
                 </div>
               </Card>
 
               <section className="grid gap-3 md:grid-cols-5">
-                {['pending', 'queued', 'sending', 'sent', 'failed'].map((status) => (
+                {([
+                  ['pending', 'statusPending'],
+                  ['queued', 'statusQueued'],
+                  ['sending', 'statusSending'],
+                  ['sent', 'statusSent'],
+                  ['failed', 'statusFailed'],
+                ] as const).map(([status, labelKey]) => (
                   <Card key={status} className="p-4">
-                    <div className="text-[11px] uppercase tracking-wider text-gray-400">{status}</div>
-                    <div className="mt-1 text-2xl font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                    <div className="text-[11px] uppercase tracking-wider text-gray-400">{t(labelKey)}</div>
+                    <div
+                      className={`mt-1 text-2xl font-semibold tabular-nums ${
+                        status === 'failed' && (detail.recipientStats?.failed ?? 0) > 0
+                          ? 'text-danger-600 dark:text-danger-400'
+                          : status === 'sent'
+                            ? 'text-channel-700 dark:text-channel-500'
+                            : 'text-gray-900 dark:text-gray-100'
+                      }`}
+                    >
                       {detail.recipientStats?.[status] ?? 0}
                     </div>
                   </Card>
@@ -411,9 +550,14 @@ export default function CampaignsPage() {
 
               <Card>
                 <div className="border-b border-gray-100 px-4 py-3 text-sm font-medium text-gray-800 dark:border-gray-800 dark:text-gray-200">
-                  Recipients sample
+                  {t('recipientSample')}
                 </div>
                 <div className="scrollbar-thin max-h-[420px] overflow-y-auto">
+                  {!(detail as any).recipients?.length && (
+                    <p className="px-4 py-6 text-center text-xs text-gray-500 dark:text-gray-400">
+                      {t('noRecipients')}
+                    </p>
+                  )}
                   {(detail as any).recipients?.map((recipient: any) => (
                     <div
                       key={recipient.id}

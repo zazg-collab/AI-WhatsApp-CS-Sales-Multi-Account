@@ -21,6 +21,7 @@ import { UsersModule } from './modules/users/users.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
 import { SlaModule } from './modules/sla/sla.module';
+import { SettingsModule } from './modules/settings/settings.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { RateLimitGuard } from './common/rate-limit.guard';
 import { RequestIdMiddleware } from './common/request-id.middleware';
@@ -65,6 +66,7 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
     CampaignsModule,
     QuickRepliesModule,
     SlaModule,
+    SettingsModule,
   ],
   controllers: [HealthController],
   providers: [

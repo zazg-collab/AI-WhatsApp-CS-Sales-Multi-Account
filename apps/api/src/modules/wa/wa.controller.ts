@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -14,6 +15,7 @@ import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import { WaService } from './wa.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ContactSyncService } from './contact-sync.service';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { logAudit } from '../../common/audit.util';
@@ -27,6 +29,7 @@ export class WaController {
   constructor(
     private readonly wa: WaService,
     private readonly prisma: PrismaService,
+    private readonly contacts: ContactSyncService,
   ) {}
 
   @ApiOperation({ summary: 'List all WhatsApp accounts' })
@@ -79,6 +82,23 @@ export class WaController {
     };
   }
 
+  @ApiOperation({ summary: 'List synced WhatsApp contact book entries' })
+  @Roles('viewer')
+  @Get(':id/contacts')
+  contactsForAccount(
+    @Param('id') id: string,
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.contacts.list({
+      accountId: id,
+      search,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
   @ApiOperation({ summary: 'Restart a WhatsApp session' })
   @Roles('owner', 'supervisor', 'admin')
   @Post(':id/restart')
@@ -87,17 +107,20 @@ export class WaController {
     return { success: true };
   }
 
-  @ApiOperation({ summary: 'Log out WhatsApp session (disconnect without deleting account)' })
+  @ApiOperation({ summary: 'Delete a WhatsApp account and clean up its session' })
   @Roles('owner', 'supervisor')
-  @Post(':id/logout')
-  async logout(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    await this.wa.logout(id);
+  @Delete(':id')
+  async remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    const account = await this.prisma.whatsappAccount.findUnique({ where: { id } });
+    if (!account) return { success: true };
     await logAudit(this.prisma, {
       userId: user.id,
-      action: 'account_logout',
+      action: 'account_delete',
       entityType: 'whatsapp_account',
       entityId: id,
+      oldValue: { accountName: account.accountName, phoneNumber: account.phoneNumber },
     });
+    await this.wa.removeAccount(id);
     return { success: true };
   }
 
@@ -121,23 +144,5 @@ export class WaController {
       newValue: dto as Record<string, unknown>,
     });
     return account;
-  }
-
-  @ApiOperation({ summary: 'Log out and delete a WhatsApp account' })
-  @Roles('owner', 'supervisor')
-  @Delete(':id')
-  async remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    // Log out the Baileys session (removes linked device from phone).
-    await this.wa.logout(id).catch(() => undefined);
-    // Delete the account record and all related data (cascade).
-    const account = await this.prisma.whatsappAccount.delete({ where: { id } });
-    await logAudit(this.prisma, {
-      userId: user.id,
-      action: 'account_delete',
-      entityType: 'whatsapp_account',
-      entityId: id,
-      oldValue: { accountName: account.accountName, phoneNumber: account.phoneNumber },
-    });
-    return { success: true };
   }
 }

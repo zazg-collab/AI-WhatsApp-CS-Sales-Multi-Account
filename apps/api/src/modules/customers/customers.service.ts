@@ -3,11 +3,30 @@ import { LeadStage, Prisma } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BulkCustomerActionDto, UpdateCustomerDto } from './dto/customers.dto';
+import { allowedAccountIds, type ScopedUser } from '../../common/account-scope.util';
 
 interface ListFilters {
   stage?: LeadStage;
   tag?: string;
   search?: string;
+  page?: number;
+  limit?: number;
+  user?: ScopedUser;
+}
+
+/**
+ * For a scoped (admin) user, restrict customers to those sourced from an
+ * account they can access, plus unassigned-source and directly-assigned ones.
+ */
+function customerScopeWhere(scope: string[] | null, user?: ScopedUser): Prisma.CustomerWhereInput | null {
+  if (scope === null) return null;
+  return {
+    OR: [
+      { sourceAccountId: { in: scope } },
+      { sourceAccountId: null },
+      ...(user ? [{ assignedAdminId: user.id }] : []),
+    ],
+  };
 }
 
 @Injectable()
@@ -17,7 +36,7 @@ export class CustomersService {
     private readonly audit: AuditService,
   ) {}
 
-  list(filters: ListFilters) {
+  async list(filters: ListFilters) {
     const where: Prisma.CustomerWhereInput = {};
     if (filters.stage) where.leadStage = filters.stage;
     if (filters.tag) where.tags = { has: filters.tag };
@@ -27,17 +46,27 @@ export class CustomersService {
         { phoneNumber: { contains: filters.search } },
       ];
     }
-    return this.prisma.customer.findMany({
-      where,
-      orderBy: { lastMessageAt: 'desc' },
-      include: {
-        assignedAdmin: { select: { id: true, name: true, email: true } },
-      },
-      take: 100,
-    });
+    const scope = await allowedAccountIds(this.prisma, filters.user);
+    const scopeWhere = customerScopeWhere(scope, filters.user);
+    if (scopeWhere) where.AND = scopeWhere;
+    const page = Math.max(1, filters.page ?? 1);
+    const limit = Math.min(Math.max(1, filters.limit ?? 50), 100);
+    const [total, items] = await Promise.all([
+      this.prisma.customer.count({ where }),
+      this.prisma.customer.findMany({
+        where,
+        orderBy: { lastMessageAt: 'desc' },
+        include: {
+          assignedAdmin: { select: { id: true, name: true, email: true } },
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
+    return { total, page, limit, items };
   }
 
-  async get(id: string) {
+  async get(id: string, user?: ScopedUser) {
     const customer = await this.prisma.customer.findUnique({
       where: { id },
       include: {
@@ -46,6 +75,15 @@ export class CustomersService {
       },
     });
     if (!customer) throw new NotFoundException('Customer not found');
+    const scope = await allowedAccountIds(this.prisma, user);
+    if (
+      scope !== null &&
+      customer.sourceAccountId !== null &&
+      !scope.includes(customer.sourceAccountId) &&
+      customer.assignedAdminId !== user?.id
+    ) {
+      throw new NotFoundException('Customer not found');
+    }
     return customer;
   }
 

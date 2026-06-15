@@ -12,12 +12,20 @@ function baseUrl(): string {
   return api.replace(/\/api\/v1\/?$/, '');
 }
 
-export function getSocket(): Socket {
+export function getSocket(): Socket | null {
+  const token = getToken();
+  if (!token) return null;
   if (!socket) {
     // The gateway now requires a JWT (C1) — pass it in the handshake auth.
     socket = io(`${baseUrl()}/events`, {
-      transports: ['websocket'],
-      auth: { token: getToken() ?? '' },
+      // Allow polling as a fallback so the connection still works behind proxies
+      // or when the websocket upgrade is blocked; socket.io upgrades to ws when it can.
+      transports: ['websocket', 'polling'],
+      auth: { token },
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
     });
   }
   return socket;

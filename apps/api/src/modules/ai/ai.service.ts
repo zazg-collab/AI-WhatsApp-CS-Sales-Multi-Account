@@ -61,7 +61,7 @@ export class AiService {
     useCache = false,
   ): Promise<GeneratedReply> {
     const messages = await this.prompts.buildForConversation(conversationId);
-    const resolvedModel = model ?? this.provider.model;
+    const resolvedModel = model ?? (await this.provider.defaultModel());
 
     // Conservative caching: only for short, generic latest questions. The
     // cache is opt-in (useCache) so existing callers keep prior behavior.
@@ -91,7 +91,7 @@ export class AiService {
 
     const text = await this.provider.chat(messages, {
       model,
-      temperature: 0.6,
+      // temperature omitted → uses the admin-configured value from settings.
       maxTokens: 500,
     });
 
