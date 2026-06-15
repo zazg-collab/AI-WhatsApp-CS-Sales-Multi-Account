@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SenderType } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AiProviderService, ChatMessage } from '../ai/ai-provider.service';
@@ -37,10 +38,20 @@ interface Transcript {
 export class LearningService {
   private readonly logger = new Logger(LearningService.name);
 
+  /**
+   * Optional cheaper model for batch mining (set AI_MINING_MODEL). Mining is
+   * not latency-sensitive and runs many calls, so a smaller model saves tokens
+   * without hurting customer-facing replies. Undefined → use the default model.
+   */
+  private readonly miningModel?: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly provider: AiProviderService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.miningModel = config.get<string>('AI_MINING_MODEL') || undefined;
+  }
 
   // ── Public API ────────────────────────────────────────────────────────
 
@@ -55,6 +66,22 @@ export class LearningService {
       playbook: 0,
       skippedDuplicates: 0,
     };
+
+    // Skip the whole run when nothing has arrived since the last mining — no
+    // new messages means re-mining would only re-pay tokens and create dupes.
+    const accountIds = bot.accounts.map((a) => a.id);
+    if (bot.lastMinedAt && accountIds.length > 0) {
+      const newer = await this.prisma.message.count({
+        where: {
+          conversation: { whatsappAccountId: { in: accountIds } },
+          createdAt: { gt: bot.lastMinedAt },
+        },
+      });
+      if (newer === 0) {
+        this.logger.log(`mineAll: no new messages since ${bot.lastMinedAt.toISOString()} — skipping`);
+        return result;
+      }
+    }
 
     const k = await this.mineKnowledge(botId).catch((e) => {
       this.logger.warn(`mineKnowledge failed: ${e}`);
@@ -78,6 +105,10 @@ export class LearningService {
       return 0;
     })) as number;
 
+    await this.prisma.bot.update({
+      where: { id: botId },
+      data: { lastMinedAt: new Date() },
+    });
     await logAudit(this.prisma, {
       action: 'learning_mine',
       entityType: 'bot',
@@ -113,6 +144,7 @@ title = pertanyaan ringkas. content = jawaban faktual berdasarkan balasan admin.
     ];
 
     const raw = await this.provider.chat(messages, {
+      model: this.miningModel,
       temperature: 0,
       json: true,
       maxTokens: 4000,
@@ -176,6 +208,7 @@ soulMd = deskripsi persona dalam Bahasa Indonesia (3-6 kalimat). forbiddenWords 
     ];
 
     const raw = await this.provider.chat(messages, {
+      model: this.miningModel,
       temperature: 0.2,
       json: true,
       maxTokens: 2500,
@@ -231,6 +264,7 @@ title = nama keberatan/situasi. content = teknik/respon yang dipakai admin. Maks
     ];
 
     const raw = await this.provider.chat(messages, {
+      model: this.miningModel,
       temperature: 0.1,
       json: true,
       maxTokens: 3500,
@@ -334,7 +368,7 @@ Balas HANYA JSON: {"facts": string[]}. Kosongkan array jika tidak ada fakta jela
       },
       { role: 'user', content: text },
     ];
-    const raw = await this.provider.chat(messages, { temperature: 0, json: true, maxTokens: 1200 });
+    const raw = await this.provider.chat(messages, { model: this.miningModel, temperature: 0, json: true, maxTokens: 1200 });
     const obj = this.parseObject(raw);
     const facts = Array.isArray(obj?.facts)
       ? obj.facts.map(String).filter((f: string) => f.trim().length > 0).slice(0, 6)
@@ -417,7 +451,7 @@ Balas HANYA JSON: {"botId": string, "reason": string}. reason singkat Bahasa Ind
       { role: 'user', content: `Pesan pelanggan:\n${customerLines}\n\nKandidat bot:\n${botList}\n\nPilih satu sebagai JSON.` },
     ];
 
-    const raw = await this.provider.chat(messages, { temperature: 0, json: true, maxTokens: 600 });
+    const raw = await this.provider.chat(messages, { model: this.miningModel, temperature: 0, json: true, maxTokens: 600 });
     const obj = this.parseObject(raw);
     const chosen = bots.find((b) => b.id === String(obj?.botId));
     if (!chosen) return null; // model returned an unknown id → no suggestion
