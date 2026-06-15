@@ -150,6 +150,11 @@ const dict: Dict = {
   botPersonaField: { id: 'Bot / Persona', en: 'Bot / Persona' },
   botDefaultOption: { id: 'Default (dari akun)', en: 'Default (from account)' },
   activePersona: { id: 'Persona aktif', en: 'Active persona' },
+  suggestPersona: { id: 'Saran persona (AI)', en: 'Suggest persona (AI)' },
+  suggestingPersona: { id: 'Menganalisa…', en: 'Analyzing…' },
+  suggestedPersona: { id: 'Saran', en: 'Suggested' },
+  applySuggestion: { id: 'Terapkan', en: 'Apply' },
+  dismiss: { id: 'Tutup', en: 'Dismiss' },
   workflowStatusField: { id: 'Status alur', en: 'Workflow status' },
   labelField: { id: 'Label', en: 'Label' },
   labelPlaceholder: { id: 'prioritas, renewal, tagihan', en: 'priority, renewal, invoice' },
@@ -403,6 +408,8 @@ function InboxInner() {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showRightPanel, setShowRightPanel] = useState(false);
   const [bots, setBots] = useState<Array<{ id: string; botName: string; persona?: { name: string } | null }>>([]);
+  const [botSuggestion, setBotSuggestion] = useState<{ botId: string; botName: string; personaName: string | null; reason: string } | null>(null);
+  const [suggestingBot, setSuggestingBot] = useState(false);
   const activeIdRef = useRef<string | null>(activeId);
   activeIdRef.current = activeId;
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -811,6 +818,19 @@ function InboxInner() {
   const markRead = () => act(() => api(`/conversations/${activeId}/read`, { method: 'POST' }));
   const setAiMode = (aiMode: string) => act(() => api(`/conversations/${activeId}/ai-mode`, { method: 'PATCH', body: JSON.stringify({ aiMode }) }));
   const setBot = (botId: string) => act(() => api(`/conversations/${activeId}/bot`, { method: 'PATCH', body: JSON.stringify({ botId: botId || null }) }));
+  const suggestBot = async () => {
+    if (!activeId) return;
+    setSuggestingBot(true);
+    setBotSuggestion(null);
+    try {
+      const s = await api<{ botId: string; botName: string; personaName: string | null; reason: string } | null>(`/learning/conversations/${activeId}/suggest-bot`);
+      setBotSuggestion(s);
+    } catch {
+      setBotSuggestion(null);
+    } finally {
+      setSuggestingBot(false);
+    }
+  };
   const setWorkflowStatus = (status: string) => act(() => api(`/conversations/${activeId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }));
   const sendLocation = () => act(async () => {
     const [latRaw, lngRaw, ...nameParts] = locationDraft.split(',').map((part) => part.trim());
@@ -1502,6 +1522,24 @@ function InboxInner() {
                     </select>
                     {active.bot?.persona && (
                       <span className="mt-1 block text-[11px] text-gray-400">{t('activePersona')}: {active.bot.persona.name}</span>
+                    )}
+                    {bots.length >= 2 && (
+                      <button type="button" onClick={suggestBot} disabled={suggestingBot || busy} className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-hermes-600 hover:underline disabled:opacity-50 dark:text-hermes-400">
+                        <Zap className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                        {suggestingBot ? t('suggestingPersona') : t('suggestPersona')}
+                      </button>
+                    )}
+                    {botSuggestion && (
+                      <div className="mt-1.5 rounded-md border border-hermes-200 bg-hermes-50 p-2 text-[11px] dark:border-hermes-700/40 dark:bg-hermes-900/20">
+                        <p className="font-medium text-hermes-800 dark:text-hermes-200">{t('suggestedPersona')}: {botSuggestion.botName}{botSuggestion.personaName ? ` · ${botSuggestion.personaName}` : ''}</p>
+                        <p className="mt-0.5 text-gray-600 dark:text-gray-300">{botSuggestion.reason}</p>
+                        <div className="mt-1.5 flex gap-2">
+                          {botSuggestion.botId !== (active.bot?.id ?? '') && (
+                            <button type="button" onClick={() => { setBot(botSuggestion.botId); setBotSuggestion(null); }} disabled={busy} className="font-semibold text-hermes-700 hover:underline dark:text-hermes-300">{t('applySuggestion')}</button>
+                          )}
+                          <button type="button" onClick={() => setBotSuggestion(null)} className="text-gray-500 hover:underline">{t('dismiss')}</button>
+                        </div>
+                      </div>
                     )}
                   </label>
                   <label className="block">

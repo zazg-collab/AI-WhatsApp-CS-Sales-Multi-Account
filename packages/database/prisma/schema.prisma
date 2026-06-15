@@ -224,6 +224,9 @@ model Bot {
   defaultAiMode   AiMode    @default(ai_draft) @map("default_ai_mode")
   language        String    @default("id")
   status          BotStatus @default(draft)
+  /// Last time AI Learning mined this bot's history. Lets a re-run skip the
+  /// transcript miners when no new messages have arrived since.
+  lastMinedAt     DateTime? @map("last_mined_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 

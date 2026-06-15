@@ -46,15 +46,20 @@ describe('PromptBuilderService', () => {
     ]);
 
     const msgs = await service.buildForConversation('c1');
+    // [0] shared stable block (persona + knowledge + rules), [1] per-customer.
     expect(msgs[0].role).toBe('system');
     expect(msgs[0].content).toContain('Saya ramah');
     expect(msgs[0].content).toContain('Paket A');
-    expect(msgs[0].content).toContain('Budi');
+    expect(msgs[1].role).toBe('system');
+    expect(msgs[1].content).toContain('Budi');
+    // Customer data must NOT be in the cacheable shared prefix.
+    expect(msgs[0].content).not.toContain('Budi');
     // Internal admin notes must never leak into the bot prompt (M6).
     expect(msgs[0].content).not.toContain('pelanggan lama');
+    expect(msgs[1].content).not.toContain('pelanggan lama');
     // history reversed: customer first then ai
-    expect(msgs[1]).toEqual({ role: 'user', content: 'Berapa harga?' });
-    expect(msgs[2]).toEqual({ role: 'assistant', content: 'Halo kak' });
+    expect(msgs[2]).toEqual({ role: 'user', content: 'Berapa harga?' });
+    expect(msgs[3]).toEqual({ role: 'assistant', content: 'Halo kak' });
   });
 
   it('always embeds the safety rules (anti-fabrication, fallback, escalation, anti-injection)', async () => {
@@ -103,11 +108,12 @@ describe('PromptBuilderService', () => {
     });
 
     const msgs = await service.buildForConversation('c1', 40);
-    const nonSystem = msgs.slice(1);
-    // first non-system turn is the summary placeholder
-    expect(nonSystem[0].role).toBe('system');
-    expect(nonSystem[0].content).toContain('Ringkasan percakapan sebelumnya');
-    const turns = nonSystem.slice(1);
+    // Skip the two leading system messages (shared block + per-customer block).
+    const afterSystem = msgs.slice(2);
+    // first entry is the summary placeholder (also role system)
+    expect(afterSystem[0].role).toBe('system');
+    expect(afterSystem[0].content).toContain('Ringkasan percakapan sebelumnya');
+    const turns = afterSystem.slice(1);
     expect(turns.length).toBeLessThanOrEqual(MAX_HISTORY_MESSAGES);
   });
 

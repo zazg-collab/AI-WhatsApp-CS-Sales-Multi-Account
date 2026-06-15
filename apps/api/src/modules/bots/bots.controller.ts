@@ -88,4 +88,11 @@ export class BotsController {
   updatePersona(@Param('id') id: string, @Body() dto: UpdatePersonaDto) {
     return this.bots.updatePersona(id, dto);
   }
+
+  @ApiOperation({ summary: 'Delete a persona (detaches it from any bots first)' })
+  @Roles('owner', 'supervisor')
+  @Delete('personas/:id')
+  deletePersona(@Param('id') id: string) {
+    return this.bots.deletePersona(id);
+  }
 }

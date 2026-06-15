@@ -60,7 +60,13 @@ export class PromptBuilderService {
 
     const memory = this.customerMemory(conversation.customer);
 
-    const system = [
+    // Split the prompt so the LARGE shared block (persona + knowledge + rules)
+    // is byte-identical across every conversation of this bot. That stable
+    // prefix is what providers with prompt caching (OpenAI auto-caches a >1k
+    // token prefix; Anthropic via cache_control) reuse at ~10% cost. The small
+    // per-customer block is kept as a separate later message so it doesn't
+    // change the cacheable prefix.
+    const sharedSystem = [
       'Kamu adalah AI customer service/sales WhatsApp.',
       '',
       'Persona (Soul):',
@@ -69,11 +75,10 @@ export class PromptBuilderService {
       'Product knowledge:',
       knowledge || '(belum ada knowledge — jangan mengarang)',
       '',
-      'Data customer:',
-      memory,
-      '',
       BASE_RULES,
     ].join('\n');
+
+    const customerSystem = ['Data customer:', memory].join('\n');
 
     // Messages come newest-first; map to chronological user/assistant turns.
     const ordered = conversation.messages
@@ -112,7 +117,11 @@ export class PromptBuilderService {
       history = [{ role: 'system', content: note }, ...history];
     }
 
-    return [{ role: 'system', content: system }, ...history];
+    return [
+      { role: 'system', content: sharedSystem },
+      { role: 'system', content: customerSystem },
+      ...history,
+    ];
   }
 
   private async loadKnowledge(knowledgeBaseId: string | null): Promise<string> {

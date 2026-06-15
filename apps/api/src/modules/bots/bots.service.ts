@@ -85,6 +85,17 @@ export class BotsService {
     return this.prisma.persona.update({ where: { id }, data: dto });
   }
 
+  async deletePersona(id: string) {
+    const p = await this.prisma.persona.findUnique({ where: { id } });
+    if (!p) throw new NotFoundException('Persona not found');
+    // Bot.personaId FK is RESTRICT, so detach any bots using this persona
+    // first (they fall back to no persona) before deleting.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.bot.updateMany({ where: { personaId: id }, data: { personaId: null } });
+      return tx.persona.delete({ where: { id } });
+    });
+  }
+
   async assignToAccount(botId: string, accountId: string) {
     await this.get(botId);
     const account = await this.prisma.whatsappAccount.findUnique({ where: { id: accountId } });
