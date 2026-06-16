@@ -51,6 +51,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { StatusLabel, type StatusKind } from '@/components/ui/StatusLabel';
 import { WhatsAppMark } from '@/components/WhatsAppMark';
+import { Avatar } from '@/components/ui/Avatar';
 import { cn } from '@/lib/cn';
 import { contactDisplayName, formatPhone } from '@/lib/contact';
 import { useT, type Dict } from '@/lib/i18n';
@@ -247,7 +248,7 @@ interface ConvSummary {
   unreadCount?: number;
   isGroup?: boolean;
   groupSubject?: string | null;
-  customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[] };
+  customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[]; avatarUrl?: string | null };
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
   assignedAdmin?: AdminUser | null;
   messages?: { status: string }[];
@@ -266,7 +267,7 @@ interface ConvDetail {
   isGroup?: boolean;
   groupSubject?: string | null;
   groupParticipants?: Array<{ jid: string; admin?: string | null }> | null;
-  customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[]; notes: string | null };
+  customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[]; notes: string | null; avatarUrl?: string | null };
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
   bot: { id: string; botName: string; persona?: { id: string; name: string } | null } | null;
   assignedAdmin?: AdminUser | null;
@@ -322,11 +323,6 @@ const riskTone: Record<string, 'success' | 'review' | 'danger'> = {
   high: 'review',
   critical: 'danger',
 };
-
-function initials(name: string | null, phone: string): string {
-  const base = name?.trim() || phone;
-  return base.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
-}
 
 function relTime(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -1051,8 +1047,8 @@ function InboxInner() {
                       isActive ? 'bg-hermes-50/70 dark:bg-hermes-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50',
                     )}
                   >
-                    <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[13px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                      {c.isGroup ? <UsersRound className="h-4 w-4" /> : initials(c.customer.name, c.customer.phoneNumber)}
+                    <span className="relative shrink-0">
+                      <Avatar name={c.customer.name} phone={c.customer.phoneNumber} avatarUrl={c.customer.avatarUrl} isGroup={c.isGroup} className="h-10 w-10 text-[13px] font-semibold" />
                       <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border border-white bg-channel-500 text-white dark:border-gray-900" title="WhatsApp" aria-label="WhatsApp channel"><WhatsAppMark className="h-2.5 w-2.5" /></span>
                     </span>
                     <div className="min-w-0 flex-1">
@@ -1097,9 +1093,7 @@ function InboxInner() {
                   >
                     <ArrowLeft className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
                   </button>
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[13px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                    {active.isGroup ? <UsersRound className="h-4 w-4" /> : initials(active.customer.name, active.customer.phoneNumber)}
-                  </span>
+                  <Avatar name={active.customer.name} phone={active.customer.phoneNumber} avatarUrl={active.customer.avatarUrl} isGroup={active.isGroup} className="h-9 w-9 text-[13px] font-semibold" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
                       {active.isGroup ? active.groupSubject || active.customer.name || active.customer.phoneNumber : contactDisplayName(active.customer.name, active.customer.phoneNumber, t('hiddenContact'))}
@@ -1545,9 +1539,7 @@ function InboxInner() {
                   </Button>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-sm font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                    {initials(active.customer.name, active.customer.phoneNumber)}
-                  </span>
+                  <Avatar name={active.customer.name} phone={active.customer.phoneNumber} avatarUrl={active.customer.avatarUrl} className="h-11 w-11 text-sm font-semibold" />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">{active.customer.name || t('noName')}</p>
                     <p className="truncate text-xs text-gray-400">{formatPhone(active.customer.phoneNumber, t('hiddenNumber'))}</p>
@@ -1908,9 +1900,7 @@ function InboxInner() {
                         </Button>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                          {initials(active.customer.name, active.customer.phoneNumber)}
-                        </span>
+                        <Avatar name={active.customer.name} phone={active.customer.phoneNumber} avatarUrl={active.customer.avatarUrl} className="h-10 w-10 text-xs font-semibold" />
                         <div className="min-w-0">
                           <p className="truncate text-xs font-semibold text-gray-900 dark:text-gray-100">{active.customer.name || t('noName')}</p>
                           <p className="truncate text-[11px] text-gray-400">{formatPhone(active.customer.phoneNumber, t('hiddenNumber'))}</p>
