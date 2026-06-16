@@ -1,4 +1,6 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { SchedulerRegistry } from '@nestjs/schedule';
 import { createSign } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Client } from 'pg';
@@ -18,10 +20,47 @@ const FETCH_TIMEOUT_MS = 15_000;
 const FETCH_MAX_BYTES = 5 * 1024 * 1024;
 
 @Injectable()
-export class ProductsService {
+export class ProductsService implements OnModuleInit {
   private readonly logger = new Logger(ProductsService.name);
+  private autoSyncing = false;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly scheduler: SchedulerRegistry,
+  ) {}
+
+  /**
+   * Optionally keep stock fresh by re-syncing every configured source on a
+   * timer. Off unless PRODUCT_AUTOSYNC_MINUTES > 0. In-process timer (runs per
+   * API instance) — fine for a single-instance deploy.
+   */
+  onModuleInit() {
+    const minutes = Number(this.config.get('PRODUCT_AUTOSYNC_MINUTES')) || 0;
+    if (minutes <= 0) return;
+    const ms = Math.max(1, minutes) * 60_000;
+    const timer = setInterval(() => {
+      void this.autoSyncAll();
+    }, ms);
+    this.scheduler.addInterval('product-autosync', timer);
+    this.logger.log(`Product auto-sync enabled: every ${minutes} min`);
+  }
+
+  /** Re-sync every active source. Best-effort; one failure doesn't stop others. */
+  async autoSyncAll() {
+    if (this.autoSyncing) return; // no overlap
+    this.autoSyncing = true;
+    try {
+      const sources = await this.prisma.productSource.findMany({ where: { status: 'active' } });
+      for (const s of sources) {
+        await this.syncSource(s.id).catch((err) =>
+          this.logger.warn(`Auto-sync source ${s.id} failed: ${err instanceof Error ? err.message : err}`),
+        );
+      }
+    } finally {
+      this.autoSyncing = false;
+    }
+  }
 
   list(filter: { search?: string; status?: string }) {
     return this.prisma.product.findMany({
@@ -184,7 +223,7 @@ export class ProductsService {
   }
 
   /** Re-sync a configured source (Google Sheet CSV or external Postgres). */
-  async syncSource(id: string, userId: string) {
+  async syncSource(id: string, userId?: string) {
     const source = await this.prisma.productSource.findUnique({ where: { id } });
     if (!source) throw new NotFoundException('Source not found');
 

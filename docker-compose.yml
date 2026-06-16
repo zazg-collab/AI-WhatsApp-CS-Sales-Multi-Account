@@ -60,6 +60,8 @@ services:
       # Encrypts external product-source credentials (DB connection strings,
       # Google service-account keys) at rest. Set a strong random value in prod.
       - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY:-}
+      # Minutes between automatic product-stock re-syncs (0/unset = manual only).
+      - PRODUCT_AUTOSYNC_MINUTES=${PRODUCT_AUTOSYNC_MINUTES:-}
     volumes:
       - hermes_sessions:/app/data/wa-sessions
       - hermes_media:/app/data/wa-media
