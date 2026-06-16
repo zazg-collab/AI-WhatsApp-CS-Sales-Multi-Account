@@ -86,6 +86,24 @@ const dict: Dict = {
   deleting: { id: 'Menghapus…', en: 'Deleting…' },
   healthLive: { id: 'Socket aktif', en: 'Live socket' },
   healthReconnect: { id: 'Reconnect #{attempt}', en: 'Reconnect #{attempt}' },
+  // Status copy
+  statusConnected: { id: 'Terhubung', en: 'Connected' },
+  statusConnecting: { id: 'Sedang terhubung...', en: 'Connecting...' },
+  statusQrRequired: { id: 'Perlu scan ulang', en: 'Needs re-scan' },
+  statusDisconnected: { id: 'Terputus', en: 'Disconnected' },
+  statusBanned: { id: 'Akun ditangguhkan WhatsApp', en: 'WhatsApp suspended' },
+  reconnectHint: {
+    id: 'Reconnect otomatis sedang berjalan. Jika berlanjut, scan QR ulang.',
+    en: 'Auto-reconnect in progress. If it persists, re-scan the QR.',
+  },
+  qrExpiredHint: {
+    id: 'QR kadaluwarsa. Klik "Coba lagi" untuk muat QR baru.',
+    en: 'QR expired. Click "Try again" to load a new QR.',
+  },
+  bannedHint: {
+    id: 'WhatsApp mendeteksi aktivitas mencurigakan. Hubungi support WhatsApp atau coba akun lain.',
+    en: 'WhatsApp detected suspicious activity. Contact WhatsApp support or try another account.',
+  },
 };
 
 interface Account {
@@ -113,6 +131,18 @@ const statusTone: Record<string, BadgeTone> = {
   disconnected: 'danger',
   banned: 'danger',
 };
+
+// Map raw status to operator-friendly copy
+function getStatusLabel(status: string, t: ReturnType<typeof useT>): { label: string; hint?: string } {
+  const map: Record<string, { label: string; hint?: string }> = {
+    connected: { label: t('statusConnected') },
+    connecting: { label: t('statusConnecting'), hint: t('reconnectHint') },
+    qr_required: { label: t('statusQrRequired'), hint: t('qrExpiredHint') },
+    disconnected: { label: t('statusDisconnected'), hint: t('reconnectHint') },
+    banned: { label: t('statusBanned'), hint: t('bannedHint') },
+  };
+  return map[status] || { label: status };
+}
 
 const inputClass =
   'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
@@ -384,17 +414,24 @@ export default function AccountsPage() {
                           <p className="text-xs text-gray-400">{a.phoneNumber}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {health[a.id] && (
-                          <span className="flex items-center gap-1 text-[11px] text-gray-400" title={health[a.id].liveSocket ? t('healthLive') : t('healthReconnect', { attempt: String(health[a.id].reconnectAttempts) })}>
-                            <Activity className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
-                            {health[a.id].liveSocket ? 'live' : `#${health[a.id].reconnectAttempts}`}
-                          </span>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <div className="flex items-center gap-2">
+                          {health[a.id] && (
+                            <span className="flex items-center gap-1 text-[11px] text-gray-400" title={health[a.id].liveSocket ? t('healthLive') : t('healthReconnect', { attempt: String(health[a.id].reconnectAttempts) })}>
+                              <Activity className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
+                              {health[a.id].liveSocket ? 'live' : `retry #${health[a.id].reconnectAttempts}`}
+                            </span>
+                          )}
+                          <Badge tone={statusTone[a.sessionStatus] ?? 'neutral'}>
+                            {disconnected && <Unplug className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />}
+                            {getStatusLabel(a.sessionStatus, t).label}
+                          </Badge>
+                        </div>
+                        {getStatusLabel(a.sessionStatus, t).hint && (
+                          <p className="text-[11px] text-gray-500 dark:text-gray-400 text-right max-w-xs">
+                            {getStatusLabel(a.sessionStatus, t).hint}
+                          </p>
                         )}
-                        <Badge tone={statusTone[a.sessionStatus] ?? 'neutral'}>
-                          {disconnected && <Unplug className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />}
-                          {a.sessionStatus}
-                        </Badge>
                       </div>
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2">

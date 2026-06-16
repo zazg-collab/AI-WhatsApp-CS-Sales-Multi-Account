@@ -33,6 +33,23 @@ const dict: Dict = {
   modeAiDraft: { id: 'Draf', en: 'Draft' },
   modeAiSupervised: { id: 'Diawasi', en: 'Supervised' },
   modeAiPaused: { id: 'Dijeda', en: 'Paused' },
+  // Filters
+  filterDateRange: { id: 'Rentang tanggal', en: 'Date range' },
+  filterLastDays: { id: 'Hari terakhir', en: 'Last days' },
+  filter7d: { id: '7 hari', en: '7 days' },
+  filter30d: { id: '30 hari', en: '30 days' },
+  filter90d: { id: '90 hari', en: '90 days' },
+  // Interpretation
+  interpretation: { id: 'Interpretasi', en: 'Interpretation' },
+  nextAction: { id: 'Tindakan selanjutnya', en: 'Next action' },
+  leadFunnelInterpretation: {
+    id: 'Mayoritas lead berada di stage cold. Fokus nurturing untuk move ke warm.',
+    en: 'Most leads are cold. Focus nurturing campaigns to move them to warm.'
+  },
+  aiModeInterpretation: {
+    id: 'AI OFF dominan. Pertimbangkan enable AI untuk leads warm/hot.',
+    en: 'AI OFF is dominant. Consider enabling AI for warm/hot leads.'
+  },
 };
 
 const MODE_LABEL_KEY: Record<string, string> = {
@@ -87,6 +104,7 @@ export default function AnalyticsPage() {
   const [aiModeBreakdown, setAiModeBreakdown] = useState<AiModeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [daysRange, setDaysRange] = useState(7);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,7 +113,7 @@ export default function AnalyticsPage() {
       const [s, lf, mv, ai] = await Promise.all([
         api<Summary>('/dashboard/summary'),
         api<LeadFunnelItem[]>('/dashboard/lead-funnel'),
-        api<MessageVolumeItem[]>('/dashboard/message-volume?days=7'),
+        api<MessageVolumeItem[]>(`/dashboard/message-volume?days=${daysRange}`),
         api<AiModeItem[]>('/dashboard/ai-mode-breakdown'),
       ]);
       setSummary(s);
@@ -107,7 +125,7 @@ export default function AnalyticsPage() {
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, daysRange]);
 
   useEffect(() => {
     load();
@@ -145,6 +163,30 @@ export default function AnalyticsPage() {
       </PageHeader>
 
       <div className="scrollbar-thin flex-1 overflow-y-auto p-5">
+        {/* Filters */}
+        <div className="mb-6 flex gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{t('filterDateRange')}</span>
+            {[
+              { label: t('filter7d'), value: 7 },
+              { label: t('filter30d'), value: 30 },
+              { label: t('filter90d'), value: 90 },
+            ].map(({ label, value }) => (
+              <button
+                key={value}
+                onClick={() => setDaysRange(value)}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                  daysRange === value
+                    ? 'bg-hermes-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {loading ? (
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -180,48 +222,87 @@ export default function AnalyticsPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <Panel title={t('leadFunnel')}>
-                {leadFunnel.length === 0 ? (
-                  <Empty />
-                ) : (
-                  <div className="space-y-3">
-                    {leadFunnel.map((item) => {
-                      const total = leadFunnel.reduce((s, i) => s + i.count, 0);
-                      const pct = total > 0 ? Math.round((item.count / total) * 100) : 0;
-                      return (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="lg:col-span-1">
+                <Panel title={t('leadFunnel')}>
+                  {leadFunnel.length === 0 ? (
+                    <Empty />
+                  ) : (
+                    <div className="space-y-3">
+                      {leadFunnel.map((item) => {
+                        const total = leadFunnel.reduce((s, i) => s + i.count, 0);
+                        const pct = total > 0 ? Math.round((item.count / total) * 100) : 0;
+                        return (
+                          <Bar
+                            key={item.stage}
+                            label={item.stage.replace('_', ' ').toUpperCase()}
+                            meta={`${item.count} (${pct}%)`}
+                            pct={pct}
+                            color={leadColors[item.stage] ?? 'bg-gray-300 dark:bg-gray-600'}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </Panel>
+              </div>
+
+              <div className="lg:col-span-2">
+                <Card className="p-5 h-full">
+                  <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{t('interpretation')}</h3>
+                  <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
+                    {t('leadFunnelInterpretation')}
+                  </p>
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h4 className="mb-2 text-xs font-semibold text-gray-600 dark:text-gray-400">{t('nextAction')}</h4>
+                    <ul className="text-sm space-y-1 text-gray-600 dark:text-gray-400">
+                      <li>• Trigger nurture campaign untuk lead cold</li>
+                      <li>• Assign hot leads ke team sales untuk follow-up</li>
+                    </ul>
+                  </div>
+                </Card>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div className="lg:col-span-1">
+                <Panel title={t('aiModeDistribution')}>
+                  {aiModeBreakdown.length === 0 ? (
+                    <Empty />
+                  ) : (
+                    <div className="space-y-3">
+                      {aiModeBreakdown.map((item) => (
                         <Bar
-                          key={item.stage}
-                          label={item.stage.replace('_', ' ').toUpperCase()}
-                          meta={`${item.count} (${pct}%)`}
-                          pct={pct}
-                          color={leadColors[item.stage] ?? 'bg-gray-300 dark:bg-gray-600'}
+                          key={item.mode}
+                          label={MODE_LABEL_KEY[item.mode] ? t(MODE_LABEL_KEY[item.mode]) : item.mode}
+                          meta={`${item.count} (${item.percentage}%)`}
+                          pct={item.percentage}
+                          color={modeColors[item.mode] ?? 'bg-gray-300 dark:bg-gray-600'}
                         />
-                      );
-                    })}
-                  </div>
-                )}
-              </Panel>
+                      ))}
+                    </div>
+                  )}
+                </Panel>
+              </div>
 
-              <Panel title={t('aiModeDistribution')}>
-                {aiModeBreakdown.length === 0 ? (
-                  <Empty />
-                ) : (
-                  <div className="space-y-3">
-                    {aiModeBreakdown.map((item) => (
-                      <Bar
-                        key={item.mode}
-                        label={MODE_LABEL_KEY[item.mode] ? t(MODE_LABEL_KEY[item.mode]) : item.mode}
-                        meta={`${item.count} (${item.percentage}%)`}
-                        pct={item.percentage}
-                        color={modeColors[item.mode] ?? 'bg-gray-300 dark:bg-gray-600'}
-                      />
-                    ))}
+              <div className="lg:col-span-2">
+                <Card className="p-5 h-full">
+                  <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{t('interpretation')}</h3>
+                  <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
+                    {t('aiModeInterpretation')}
+                  </p>
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <h4 className="mb-2 text-xs font-semibold text-gray-600 dark:text-gray-400">{t('nextAction')}</h4>
+                    <ul className="text-sm space-y-1 text-gray-600 dark:text-gray-400">
+                      <li>• Review AI draft & supervised confidence</li>
+                      <li>• Test AI ON untuk konversasi low-risk</li>
+                    </ul>
                   </div>
-                )}
-              </Panel>
+                </Card>
+              </div>
+            </div>
 
-              <Panel title={t('messageVolume7d')} className="lg:col-span-2">
+            <Panel title={t('messageVolume7d')}>
                 {messageVolume.length === 0 ? (
                   <Empty />
                 ) : (
@@ -249,20 +330,19 @@ export default function AnalyticsPage() {
                 )}
               </Panel>
 
-              {summary && summary.topAccounts.length > 0 && (
-                <Panel title={t('topAccounts7d')} className="lg:col-span-2">
-                  <div className="space-y-1">
-                    {summary.topAccounts.map((acc, i) => (
-                      <div key={acc.id} className="flex items-center gap-3 rounded-md px-1 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                        <span className="w-5 text-center text-xs tabular-nums text-gray-400">{i + 1}</span>
-                        <span className="flex-1 text-gray-800 dark:text-gray-200">{acc.name}</span>
-                        <span className="tabular-nums text-gray-500 dark:text-gray-400">{t('messagesUnit', { n: acc.messageCount })}</span>
-                      </div>
-                    ))}
-                  </div>
-                </Panel>
-              )}
-            </div>
+            {summary && summary.topAccounts.length > 0 && (
+              <Panel title={t('topAccounts7d')}>
+                <div className="space-y-1">
+                  {summary.topAccounts.map((acc, i) => (
+                    <div key={acc.id} className="flex items-center gap-3 rounded-md px-1 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <span className="w-5 text-center text-xs tabular-nums text-gray-400">{i + 1}</span>
+                      <span className="flex-1 text-gray-800 dark:text-gray-200">{acc.name}</span>
+                      <span className="tabular-nums text-gray-500 dark:text-gray-400">{t('messagesUnit', { n: acc.messageCount })}</span>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            )}
           </>
         )}
       </div>
