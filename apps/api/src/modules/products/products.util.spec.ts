@@ -3,6 +3,7 @@ import {
   mapRecordToProduct,
   assertReadOnlySelect,
   maskConnString,
+  pgSslOption,
 } from './products.util';
 
 describe('parseProductCsv', () => {
@@ -72,5 +73,18 @@ describe('assertReadOnlySelect', () => {
 describe('maskConnString', () => {
   it('hides the password', () => {
     expect(maskConnString('postgresql://user:secret@host:5432/db')).toBe('postgresql://user:****@host:5432/db');
+  });
+});
+
+describe('pgSslOption', () => {
+  it('validates the cert by default when TLS is indicated', () => {
+    expect(pgSslOption('postgresql://u:p@db.abc.supabase.co:5432/postgres')).toEqual({ rejectUnauthorized: true });
+    expect(pgSslOption('postgresql://u:p@h:5432/db?sslmode=require')).toEqual({ rejectUnauthorized: true });
+  });
+  it('disables verification only on explicit sslmode=no-verify', () => {
+    expect(pgSslOption('postgresql://u:p@h:5432/db?sslmode=no-verify')).toEqual({ rejectUnauthorized: false });
+  });
+  it('returns undefined for a plain local connection', () => {
+    expect(pgSslOption('postgresql://u:p@localhost:5432/db')).toBeUndefined();
   });
 });

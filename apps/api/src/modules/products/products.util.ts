@@ -50,6 +50,19 @@ export function assertReadOnlySelect(query: string): void {
   if (FORBIDDEN_SQL.test(q)) throw new Error('Query hanya boleh membaca (SELECT), tanpa perintah tulis/DDL');
 }
 
+/**
+ * TLS option for an external Postgres connection. Validates the server
+ * certificate by default (MITM protection). Only disables verification when the
+ * admin explicitly opts out via `sslmode=no-verify` in the connection string.
+ * Returns undefined (no TLS) when neither TLS nor a managed host is indicated.
+ */
+export function pgSslOption(connectionString: string): { rejectUnauthorized: boolean } | undefined {
+  const cs = connectionString ?? '';
+  if (/sslmode=no-verify/i.test(cs)) return { rejectUnauthorized: false };
+  if (/supabase|neon\.tech|sslmode=require|sslmode=verify/i.test(cs)) return { rejectUnauthorized: true };
+  return undefined;
+}
+
 /** Hide the password in a Postgres connection string for safe display. */
 export function maskConnString(cs: string): string {
   try {

@@ -10,6 +10,7 @@ import {
   mapRecordToProduct,
   maskConnString,
   parseProductCsv,
+  pgSslOption,
   ProductRow,
 } from './products.util';
 
@@ -266,8 +267,7 @@ export class ProductsService {
       connectionString,
       connectionTimeoutMillis: 10_000,
       statement_timeout: 15_000,
-      // Supabase/managed PG usually require TLS; allow it without pinning a CA.
-      ssl: /supabase|sslmode=require/i.test(connectionString) ? { rejectUnauthorized: false } : undefined,
+      ssl: pgSslOption(connectionString),
       application_name: 'hermes-product-sync',
     });
     try {
