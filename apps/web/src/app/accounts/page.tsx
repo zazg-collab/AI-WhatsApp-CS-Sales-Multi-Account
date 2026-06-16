@@ -40,6 +40,18 @@ const dict: Dict = {
     id: 'Menunggu admin memindai kode QR.',
     en: 'Waiting for an admin to scan the QR code.',
   },
+  pairingCodeTitle: {
+    id: 'Kode Pairing (Alternatif)',
+    en: 'Pairing Code (Alternative)',
+  },
+  pairingCodeHint: {
+    id: 'Masukkan kode ini di WhatsApp → Pengaturan → Linked Devices',
+    en: 'Enter this code in WhatsApp → Settings → Linked Devices',
+  },
+  copyCode: { id: 'Salin kode', en: 'Copy code' },
+  codeCopied: { id: 'Kode disalin!', en: 'Code copied!' },
+  switchToQr: { id: 'Tampilkan QR', en: 'Show QR' },
+  switchToPairingCode: { id: 'Tampilkan Kode Pairing', en: 'Show Pairing Code' },
   loadFailed: { id: 'Gagal memuat daftar akun.', en: 'Failed to load the account list.' },
   addFailed: { id: 'Gagal menambahkan akun.', en: 'Failed to add the account.' },
   businessHoursToggle: {
@@ -223,6 +235,9 @@ export default function AccountsPage() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [qr, setQr] = useState<Record<string, string>>({});
+  const [pairingCode, setPairingCode] = useState<Record<string, string>>({});
+  const [pairingMode, setPairingMode] = useState<Record<string, 'qr' | 'code'>>({});
+  const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<Record<string, { liveSocket: boolean; reconnectAttempts: number }>>({});
@@ -263,9 +278,14 @@ export default function AccountsPage() {
     socket.on('wa:qr', ({ accountId, qr }: { accountId: string; qr: string }) =>
       setQr((prev) => ({ ...prev, [accountId]: qr })),
     );
+    socket.on('wa:pairing-code', ({ accountId, code }: { accountId: string; code: string }) => {
+      setPairingCode((prev) => ({ ...prev, [accountId]: code }));
+      setPairingMode((prev) => ({ ...prev, [accountId]: 'code' }));
+    });
     socket.on('wa:status', () => load());
     return () => {
       socket.off('wa:qr');
+      socket.off('wa:pairing-code');
       socket.off('wa:status');
     };
   }, [load]);
@@ -403,8 +423,63 @@ export default function AccountsPage() {
                       )}
                     </div>
                     {a.sessionStatus === 'qr_required' &&
-                      (canScan && qr[a.id] ? (
-                        <img src={qr[a.id]} alt="WhatsApp QR code" className="mt-4 h-48 w-48 rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-700" />
+                      (canScan ? (
+                        <div className="mt-4">
+                          {(qr[a.id] || pairingCode[a.id]) && (
+                            <div className="mb-3 flex gap-2">
+                              {qr[a.id] && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPairingMode((prev) => ({ ...prev, [a.id]: 'qr' }))}
+                                  className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                                    pairingMode[a.id] !== 'code'
+                                      ? 'bg-hermes-600 text-white'
+                                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
+                                  }`}
+                                >
+                                  {t('switchToQr')}
+                                </button>
+                              )}
+                              {pairingCode[a.id] && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPairingMode((prev) => ({ ...prev, [a.id]: 'code' }))}
+                                  className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                                    pairingMode[a.id] === 'code'
+                                      ? 'bg-hermes-600 text-white'
+                                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
+                                  }`}
+                                >
+                                  {t('switchToPairingCode')}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                          {pairingMode[a.id] === 'code' && pairingCode[a.id] ? (
+                            <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
+                              <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t('pairingCodeTitle')}</p>
+                              <p className="mb-3 text-[32px] font-mono font-bold tracking-widest text-gray-900 dark:text-gray-100 text-center">
+                                {pairingCode[a.id].replace(/(.{4})/, '$1-')}
+                              </p>
+                              <p className="mb-3 text-xs text-gray-600 dark:text-gray-400 text-center">{t('pairingCodeHint')}</p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(pairingCode[a.id]);
+                                  setCopiedAccountId(a.id);
+                                  setTimeout(() => setCopiedAccountId(null), 2000);
+                                }}
+                                className="w-full rounded-lg bg-hermes-600 px-3 py-2 text-sm font-medium text-white hover:bg-hermes-700 transition-colors"
+                              >
+                                {copiedAccountId === a.id ? t('codeCopied') : t('copyCode')}
+                              </button>
+                            </div>
+                          ) : qr[a.id] ? (
+                            <img src={qr[a.id]} alt="WhatsApp QR code" className="h-48 w-48 rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-700" />
+                          ) : (
+                            <p className="text-xs text-gray-500">{t('waitingScan')}</p>
+                          )}
+                        </div>
                       ) : (
                         !canScan && (
                           <p className="mt-4 flex items-center gap-1.5 text-xs text-gray-500">
