@@ -242,8 +242,8 @@ export default function ProductsPage() {
             {search ? `Tidak ada produk cocok "${search}".` : 'Belum ada produk. Upload CSV, hubungkan Google Sheet, atau database gudang di atas untuk mulai.'}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
-            <table className="w-full text-[13px]">
+          <div className="scrollbar-thin overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
+            <table className="w-full min-w-[28rem] text-[13px]">
               <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500 dark:bg-gray-800 dark:text-gray-400">
                 <tr><th className="px-3 py-2">Produk</th><th className="px-3 py-2">SKU</th><th className="px-3 py-2 text-right">Harga</th><th className="px-3 py-2 text-right">Stok</th></tr>
               </thead>
