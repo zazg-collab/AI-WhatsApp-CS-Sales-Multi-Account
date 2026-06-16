@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Client } from 'pg';
 import { assertSafeMediaUrl } from '../../common/media-url.util';
 import { logAudit } from '../../common/audit.util';
+import { encryptSecret, decryptSecret, encryptionEnabled, isEncrypted } from '../../common/secret-crypto.util';
 import {
   assertReadOnlySelect,
   mapRecordToProduct,
@@ -104,7 +105,9 @@ export class ProductsService {
     const sources = await this.prisma.productSource.findMany({ orderBy: { createdAt: 'desc' } });
     return sources.map((s) => {
       const config = { ...((s.config ?? {}) as Record<string, unknown>) };
-      if (typeof config.connectionString === 'string') config.connectionString = maskConnString(config.connectionString);
+      if (typeof config.connectionString === 'string') {
+        config.connectionString = isEncrypted(config.connectionString) ? '•••• (terenkripsi)' : maskConnString(config.connectionString);
+      }
       if (typeof config.privateKey === 'string') config.privateKey = '****';
       return { ...s, config };
     });
@@ -128,6 +131,13 @@ export class ProductsService {
         data: { type: dto.type, name: dto.name, config: { url: dto.url } },
       });
     }
+    if (dto.type === 'postgres' || dto.type === 'gsheet_api') {
+      if (!encryptionEnabled()) {
+        this.logger.warn(
+          `Membuat sumber ${dto.type} TANPA SECRET_ENCRYPTION_KEY — kredensial tersimpan plaintext. Set env tsb di produksi.`,
+        );
+      }
+    }
     if (dto.type === 'postgres') {
       if (!dto.connectionString || !dto.query) {
         throw new BadRequestException('connectionString & query wajib untuk postgres');
@@ -141,7 +151,7 @@ export class ProductsService {
         data: {
           type: dto.type,
           name: dto.name,
-          config: { connectionString: dto.connectionString, query: dto.query },
+          config: { connectionString: encryptSecret(dto.connectionString), query: dto.query },
         },
       });
     }
@@ -157,7 +167,7 @@ export class ProductsService {
             spreadsheetId: dto.spreadsheetId,
             range: dto.range || 'A:Z',
             clientEmail: dto.clientEmail,
-            privateKey: dto.privateKey,
+            privateKey: encryptSecret(dto.privateKey),
           },
         },
       });
@@ -250,13 +260,14 @@ export class ProductsService {
       throw new BadRequestException('Source has no connection configured');
     }
     assertReadOnlySelect(config.query);
+    const connectionString = decryptSecret(config.connectionString);
 
     const client = new Client({
-      connectionString: config.connectionString,
+      connectionString,
       connectionTimeoutMillis: 10_000,
       statement_timeout: 15_000,
       // Supabase/managed PG usually require TLS; allow it without pinning a CA.
-      ssl: /supabase|sslmode=require/i.test(config.connectionString) ? { rejectUnauthorized: false } : undefined,
+      ssl: /supabase|sslmode=require/i.test(connectionString) ? { rejectUnauthorized: false } : undefined,
       application_name: 'hermes-product-sync',
     });
     try {
@@ -298,7 +309,7 @@ export class ProductsService {
       throw new BadRequestException('spreadsheetId, clientEmail, privateKey wajib untuk gsheet_api');
     }
 
-    const token = await this.googleAccessToken(clientEmail, privateKey);
+    const token = await this.googleAccessToken(clientEmail, decryptSecret(privateKey));
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}`;
     let res: Response;
     try {
