@@ -24,7 +24,9 @@ describe('PromptBuilderService', () => {
       conversation: { findUnique: jest.fn() },
       knowledgeItem: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    service = new PromptBuilderService(prisma);
+    // No relevant products by default → no extra product system message.
+    const products = { relevantForQuery: jest.fn().mockResolvedValue([]) } as any;
+    service = new PromptBuilderService(prisma, products);
   });
 
   it('throws when conversation missing', async () => {

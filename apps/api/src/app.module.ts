@@ -24,6 +24,7 @@ import { SlaModule } from './modules/sla/sla.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { LearningModule } from './modules/learning/learning.module';
 import { AssetsModule } from './modules/assets/assets.module';
+import { ProductsModule } from './modules/products/products.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { RateLimitGuard } from './common/rate-limit.guard';
 import { RequestIdMiddleware } from './common/request-id.middleware';
@@ -71,6 +72,7 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
     SettingsModule,
     LearningModule,
     AssetsModule,
+    ProductsModule,
   ],
   controllers: [HealthController],
   providers: [
