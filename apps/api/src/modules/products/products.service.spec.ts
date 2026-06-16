@@ -10,7 +10,9 @@ describe('ProductsService.relevantForQuery', () => {
 
   beforeEach(() => {
     const prisma: any = { product: { findMany: jest.fn().mockResolvedValue(products) } };
-    service = new ProductsService(prisma);
+    const config: any = { get: jest.fn().mockReturnValue(undefined) };
+    const scheduler: any = { addInterval: jest.fn() };
+    service = new ProductsService(prisma, config, scheduler);
   });
 
   it('returns only products matching the query terms', async () => {

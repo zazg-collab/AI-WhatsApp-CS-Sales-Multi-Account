@@ -13,6 +13,7 @@ All are optional with safe defaults; set them deliberately in production.
 | `AI_MINING_MODEL` | _(uses `AI_MODEL`)_ | Optional cheaper model for batch **AI Learning** mining (it runs many calls and isn't latency-sensitive). |
 | `AI_JSON_STRICT` | `false` | Set `true` for clean-JSON models (Claude/GPT/Gemini) to shrink mining output budgets. Leave `false` for reasoning models (minimax/deepseek-r1) to avoid truncation. |
 | `ASSET_AUTOSEND_ENABLED` | `false` | Global kill-switch for the bot auto-sending media assets. **Keep off** until you trust the trigger keywords. |
+| `PRODUCT_AUTOSYNC_MINUTES` | _(unset → manual)_ | Re-sync every product source automatically every N minutes so stock stays fresh (e.g. `30`). Runs per API instance; leave unset to sync only on demand. |
 
 ## Product stock (so the bot answers availability from real data)
 
