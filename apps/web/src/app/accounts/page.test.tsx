@@ -42,7 +42,8 @@ describe('AccountsPage', () => {
 
     expect(await screen.findByText('Sales Bot')).toBeInTheDocument();
     expect(screen.getByText('628123')).toBeInTheDocument();
-    expect(screen.getByText('connected')).toBeInTheDocument();
+    // Status is now translated via getStatusLabel() — check for the translated label, not raw status
+    expect(screen.getByText(/Connected|Terhubung/)).toBeInTheDocument();
   });
 
   it('submits a new account then reloads', async () => {
