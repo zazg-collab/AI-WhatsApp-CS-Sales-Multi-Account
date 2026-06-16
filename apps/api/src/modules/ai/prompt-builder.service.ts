@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { SenderType } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ChatMessage } from './ai-provider.service';
+import { ProductsService } from '../products/products.service';
 
 const BASE_RULES = `Aturan:
 1. Jawab hanya berdasarkan product knowledge yang tersedia.
@@ -30,7 +31,10 @@ export function estimateTokens(text: string): number {
 
 @Injectable()
 export class PromptBuilderService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly products: ProductsService,
+  ) {}
 
   /**
    * Builds the full message array for a reply: a system prompt assembled
@@ -73,12 +77,26 @@ export class PromptBuilderService {
 
     const memory = this.customerMemory(conversation.customer);
 
-    // Split the prompt so the LARGE shared block (persona + knowledge + rules)
-    // is byte-identical across every conversation of this bot. That stable
-    // prefix is what providers with prompt caching (OpenAI auto-caches a >1k
-    // token prefix; Anthropic via cache_control) reuse at ~10% cost. The small
-    // per-customer block is kept as a separate later message so it doesn't
-    // change the cacheable prefix.
+    // Live product stock relevant to the customer's question. The bot answers
+    // availability only from this real data — never fabricated. Embedded in the
+    // primary system message (not a trailing one) because models heed the first
+    // system block strongest; otherwise the fallback rule overrides it.
+    const products = query ? await this.products.relevantForQuery(query) : [];
+    const productBlock = products.length
+      ? [
+          'DATA STOK PRODUK TERKINI & SAH (dari sistem gudang). Untuk produk yang ADA di daftar ini, jawab ketersediaan/stok/harga LANGSUNG dari sini — JANGAN bilang "konfirmasi dulu ke admin". Stok > 0 → sebutkan tersedia (boleh sebut jumlahnya); HABIS → katakan sedang habis & tawarkan alternatif. Jangan mengarang angka.',
+          ...products.map((p) => {
+            const price = p.price != null ? ` — Rp${p.price.toLocaleString('id-ID')}` : '';
+            const avail = p.stock > 0 ? `TERSEDIA (stok ${p.stock}${p.unit ? ` ${p.unit}` : ''})` : 'HABIS';
+            return `• ${p.name}${p.category ? ` (${p.category})` : ''}${price} — ${avail}`;
+          }),
+        ].join('\n')
+      : null;
+
+    // The LARGE shared block (persona + knowledge + rules [+ stock]) leads the
+    // prompt. When no product matched it is byte-identical across conversations
+    // of a bot — the cacheable prefix providers reuse at ~10% cost; the small
+    // per-customer block stays a separate later message.
     const sharedSystem = [
       'Kamu adalah AI customer service/sales WhatsApp.',
       '',
@@ -89,6 +107,7 @@ export class PromptBuilderService {
       knowledge || '(belum ada knowledge — jangan mengarang)',
       '',
       BASE_RULES,
+      ...(productBlock ? ['', productBlock] : []),
     ].join('\n');
 
     const customerSystem = ['Data customer:', memory].join('\n');

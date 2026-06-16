@@ -648,3 +648,45 @@ model Asset {
   @@index([status])
   @@map("assets")
 }
+
+/// Product catalog with live stock, synced from the warehouse system
+/// (spreadsheet export, published Google Sheet, or — phase 2 — an external
+/// database). The bot answers stock questions only from this data; it never
+/// fabricates availability.
+model Product {
+  id           String    @id @default(uuid())
+  sku          String    @unique
+  name         String
+  category     String?
+  price        Int?
+  stock        Int       @default(0)
+  unit         String?
+  description  String?
+  status       String    @default("active")
+  /// Where this row was last synced from (e.g. "csv", "gsheet:<id>").
+  source       String?
+  lastSyncedAt DateTime? @map("last_synced_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@index([status])
+  @@map("products")
+}
+
+/// A configured product data source that can be re-synced on demand.
+/// `type`: gsheet_csv (published-CSV URL) | postgres (phase 2)
+model ProductSource {
+  id           String    @id @default(uuid())
+  type         String
+  name         String
+  /// Type-specific config, e.g. { "url": "https://.../pub?output=csv" }.
+  config       Json
+  status       String    @default("active")
+  lastSyncedAt DateTime? @map("last_synced_at")
+  lastResult   String?   @map("last_result")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("product_sources")
+}
