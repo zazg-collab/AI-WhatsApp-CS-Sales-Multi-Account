@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RefreshCw, Cpu, Save, ShieldAlert, MessageSquare, Bell, Clock } from 'lucide-react';
+import { RefreshCw, Cpu, Save, ShieldAlert, MessageSquare, Bell, Clock, Megaphone } from 'lucide-react';
 import { api, hasRole } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -45,9 +45,24 @@ const dict: Dict = {
   notifyHint: { id: 'mis. "telegram", "slack:#alerts", "whatsapp". Kosongkan untuk menonaktifkan.', en: 'e.g. "telegram", "slack:#alerts", "whatsapp". Empty disables it.' },
   slaMinutes: { id: 'Ambang SLA balasan (menit)', en: 'SLA response threshold (minutes)' },
   slaHint: { id: 'Chat pelanggan yang belum dibalas melebihi ini ditandai melanggar SLA.', en: 'Customer chats unanswered beyond this are flagged as SLA breaches.' },
+  // Hermes
+  tabHermes: { id: 'Hermes Supervisor', en: 'Hermes Supervisor' },
+  confidenceThreshold: { id: 'Ambang keyakinan untuk approve otomatis', en: 'Confidence threshold for auto-approve' },
+  confidenceHint: { id: 'Skor >= ini akan di-approve otomatis. Defaultnya 90.', en: 'Scores >= this auto-approve. Default: 90.' },
+  riskKeywords: { id: 'Keyword berisiko tinggi', en: 'High-risk keywords' },
+  riskKeywordsHint: { id: 'Kata kunci yang trigger pause_ai otomatis', en: 'Keywords that trigger auto pause_ai' },
+  reviewMode: { id: 'Mode review', en: 'Review mode' },
+  reviewModeHint: { id: 'pre_send (sebelum kirim) atau post_send (setelah kirim)', en: 'pre_send (before sending) or post_send (after sending)' },
+  // Campaign
+  tabCampaign: { id: 'Keamanan Campaign', en: 'Campaign Safety' },
+  campaignApproval: { id: 'Perlu approval sebelum sending', en: 'Require approval before sending' },
+  campaignRate: { id: 'Rate limit per akun (pesan/jam)', en: 'Rate limit per account (msg/hour)' },
+  campaignOptout: { id: 'Keyword auto opt-out', en: 'Auto opt-out keyword' },
+  campaignOptoutHint: { id: 'Kata kunci yang auto-mengoptout customer', en: 'Keyword that auto-opts out customers' },
+  comingSoon: { id: 'Fitur akan datang. Backend belum implement. Lihat Accounts untuk keamanan WhatsApp.', en: 'Feature coming soon. Backend not implemented yet. See Accounts for WhatsApp safety.' },
 };
 
-type Tab = 'ai' | 'wa' | 'notif';
+type Tab = 'ai' | 'wa' | 'notif' | 'hermes' | 'campaign';
 
 interface SettingsShape {
   ai: { baseUrl: string; model: string; temperature: number; timeoutMs: number; apiKeySet: boolean };
@@ -139,6 +154,8 @@ export default function SettingsPage() {
     { key: 'ai', label: t('tabAi'), icon: Cpu },
     { key: 'wa', label: t('tabWa'), icon: MessageSquare },
     { key: 'notif', label: t('tabNotif'), icon: Bell },
+    { key: 'hermes', label: t('tabHermes'), icon: ShieldAlert },
+    { key: 'campaign', label: t('tabCampaign'), icon: Bell },
   ];
 
   return (
@@ -267,6 +284,26 @@ export default function SettingsPage() {
                       value={data.sla.responseMinutes} onChange={(e) => patch('sla', 'responseMinutes', e.target.value)} />
                   </div>
                 </Field>
+              </div>
+            )}
+
+            {tab === 'hermes' && (
+              <div className="space-y-4 py-4 text-center">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-review-50 dark:bg-review-900/20 mx-auto">
+                  <ShieldAlert className="h-6 w-6 text-review-600" strokeWidth={1.75} aria-hidden="true" />
+                </div>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('tabHermes')}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t('comingSoon')}</p>
+              </div>
+            )}
+
+            {tab === 'campaign' && (
+              <div className="space-y-4 py-4 text-center">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-hermes-50 dark:bg-hermes-900/20 mx-auto">
+                  <Megaphone className="h-6 w-6 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
+                </div>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('tabCampaign')}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t('comingSoon')}</p>
               </div>
             )}
 
