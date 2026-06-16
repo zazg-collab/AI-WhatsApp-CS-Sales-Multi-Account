@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Search, Smartphone } from 'lucide-react';
+import { RefreshCw, Search } from 'lucide-react';
+import { Avatar } from '@/components/ui/Avatar';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -170,9 +171,7 @@ export default function WhatsappContactsPage() {
                     <tr key={contact.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/60">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-hermes-50 text-hermes-700 dark:bg-hermes-900/40 dark:text-hermes-200">
-                            <Smartphone className="h-4 w-4" />
-                          </div>
+                          <Avatar name={displayName(contact)} phone={contact.phoneNumber ?? contact.jid} avatarUrl={contact.avatarUrl} className="h-9 w-9 text-[12px] font-semibold" />
                           <div className="min-w-0">
                             <div className="truncate font-medium text-gray-950 dark:text-gray-50">
                               {displayName(contact)}

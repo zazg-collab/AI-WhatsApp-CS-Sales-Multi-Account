@@ -673,6 +673,7 @@ function InboxInner() {
     socket.on('conversation:sla-breach', onConvUpdate);
     socket.on('conversation:sla-cleared', onConvUpdate);
     socket.on('hermes:alert', onConvUpdate);
+    socket.on('customer:avatar', onConvUpdate);
 
     // Customer typing indicator from Baileys presence updates.
     // Only show for the currently active conversation.
@@ -701,6 +702,7 @@ function InboxInner() {
       socket.off('conversation:sla-breach', onConvUpdate);
       socket.off('conversation:sla-cleared', onConvUpdate);
       socket.off('hermes:alert', onConvUpdate);
+      socket.off('customer:avatar', onConvUpdate);
       socket.off('wa:presence', onPresence);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

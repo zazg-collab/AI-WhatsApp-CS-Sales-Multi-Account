@@ -7,7 +7,7 @@ function jwt(role: string) {
 }
 
 const apiMock = vi.fn();
-vi.mock('@/lib/api', () => ({ api: (...a: any[]) => apiMock(...a), getToken: () => jwt('owner') }));
+vi.mock('@/lib/api', () => ({ api: (...a: any[]) => apiMock(...a), getToken: () => jwt('owner'), resolveMediaUrl: () => null }));
 vi.mock('@/lib/socket', () => ({ getSocket: () => ({ on: vi.fn(), off: vi.fn() }) }));
 
 import CustomersPage from './page';
