@@ -90,6 +90,12 @@
       "sourceType": "local",
       "skillPath": ".agents/skills/frontend-uiux-ai-slop-audit/SKILL.md",
       "computedHash": "6f9115d89c2443601c953ba9bbe331357a3b081ae008351cd889510edc0aad92"
+    },
+    "hermes-salesops-enterprise-uiux": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/hermes-salesops-enterprise-uiux/SKILL.md",
+      "computedHash": "07210d2876fc56c3f5bc20f914c7a48966ae753a821120b86958e497dfe45460"
     }
   }
 }

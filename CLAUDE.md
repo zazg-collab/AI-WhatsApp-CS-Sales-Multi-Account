@@ -307,7 +307,7 @@ Phase 1 (build first):
 
 ## Audit skills
 
-Two local audit skills live under `.agents/skills/` (registered in `skills-lock.json`):
+Local audit skills live under `.agents/skills/` (registered in `skills-lock.json`):
 
 - **`fullstack-ai-slop-audit`** — backend + frontend + AI layer + security +
   database + production readiness.
@@ -316,3 +316,11 @@ Two local audit skills live under `.agents/skills/` (registered in `skills-lock.
   accessibility, and component-system quality. Use this before merging changes
   that affect page layout, admin dashboards, chat/conversation UI, forms,
   tables/lists, component systems, responsive behavior, accessibility, or microcopy.
+- **`hermes-salesops-enterprise-uiux`** — Hermes-specific enterprise UI/UX
+  audit skill for WhatsApp/Baileys account health, QR/reconnect/session states,
+  chat/inbox, right intelligence panels, analytics, settings, responsive
+  behavior, overlays/dropdowns, and anti-AI-slop SalesOps presentation.
+
+Claude Code install mirrors live under `.claude/skills/`. Use:
+- `/hermes-uiux-audit` for a full no-edit audit report.
+- `/hermes-uiux-implement` when the user explicitly wants P0/P1 UI fixes applied.

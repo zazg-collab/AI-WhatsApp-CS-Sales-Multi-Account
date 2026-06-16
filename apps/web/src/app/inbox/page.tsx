@@ -407,6 +407,7 @@ function InboxInner() {
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showRightPanel, setShowRightPanel] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ type: 'retract' | 'block'; messageId?: string } | null>(null);
   const [bots, setBots] = useState<Array<{ id: string; botName: string; persona?: { name: string } | null }>>([]);
   const [assetsList, setAssetsList] = useState<Array<{ id: string; title: string; kind: string; purpose: string }>>([]);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
@@ -835,7 +836,22 @@ function InboxInner() {
     composerRef.current?.focus();
   };
 
-  const deleteMessage = (msgId: string) => act(() => api(`/conversations/${activeId}/messages/${msgId}`, { method: 'DELETE' }));
+  const deleteMessage = (msgId: string) => {
+    setConfirmAction({ type: 'retract', messageId: msgId });
+    setHoveredMessageId(null);
+  };
+  const confirmDeleteMessage = (msgId: string) => {
+    setConfirmAction(null);
+    act(() => api(`/conversations/${activeId}/messages/${msgId}`, { method: 'DELETE' }));
+  };
+  const blockDraftWithConfirm = (msgId: string) => {
+    setConfirmAction({ type: 'block', messageId: msgId });
+    setHoveredMessageId(null);
+  };
+  const confirmBlockDraft = (msgId: string) => {
+    setConfirmAction(null);
+    act(() => api(`/conversations/${activeId}/messages/${msgId}/block`, { method: 'POST' }));
+  };
   const clearReaction = (msgId: string) => act(() => api(`/conversations/${activeId}/messages/${msgId}/react`, { method: 'POST', body: JSON.stringify({ emoji: '' }) }));
   const reactToMessage = (msgId: string, emoji: string) => act(() => api(`/conversations/${activeId}/messages/${msgId}/react`, { method: 'POST', body: JSON.stringify({ emoji }) }));
   const markRead = () => act(() => api(`/conversations/${activeId}/read`, { method: 'POST' }));
@@ -1085,8 +1101,8 @@ function InboxInner() {
             </div>
           ) : (
             <>
-              <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-4 dark:border-gray-800 dark:bg-gray-900">
-                <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-gray-200 bg-white px-4 dark:border-gray-800 dark:bg-gray-900 flex-wrap md:flex-nowrap">
+                <div className="flex min-w-0 items-center gap-3 w-full md:w-auto">
                   <button
                     onClick={() => { setActiveId(null); setShowRightPanel(false); }}
                     className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 md:hidden"
@@ -1100,7 +1116,7 @@ function InboxInner() {
                     <p className="truncate text-sm font-semibold text-gray-900 dark:text-gray-100">
                       {active.isGroup ? active.groupSubject || active.customer.name || active.customer.phoneNumber : contactDisplayName(active.customer.name, active.customer.phoneNumber, t('hiddenContact'))}
                     </p>
-                    <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                    <div className="flex items-center gap-1.5 text-xs text-gray-400 flex-wrap">
                       <Badge tone="channel">
                         <WhatsAppMark className="h-3 w-3" />
                         WhatsApp
@@ -1109,6 +1125,16 @@ function InboxInner() {
                         <Badge tone="neutral">
                           <UsersRound className="h-3 w-3" />
                           {active.groupParticipants?.length ? `${active.groupParticipants.length} members` : 'Group'}
+                        </Badge>
+                      )}
+                      <Badge tone="hermes" className="md:hidden">
+                        <Workflow className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                        {aiModeLabel[active.aiMode] ?? active.aiMode}
+                      </Badge>
+                      {review && (review.riskLevel === 'high' || review.riskLevel === 'critical') && (
+                        <Badge tone="danger" className="md:hidden">
+                          <TriangleAlert className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                          {review.riskLevel} risk
                         </Badge>
                       )}
                     </div>
@@ -1150,6 +1176,27 @@ function InboxInner() {
                           <FileSearch className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
                           Tampilkan Detail
                         </button>
+                        {takenOver ? (
+                          <button
+                            type="button"
+                            onClick={() => { returnToAi(); setShowMoreMenu(false); }}
+                            disabled={busy}
+                            className="flex w-full items-center gap-2.5 border-b border-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800 sm:hidden"
+                          >
+                            <RotateCcw className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                            {t('returnToAi')}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { takeOver(); setShowMoreMenu(false); }}
+                            disabled={busy}
+                            className="flex w-full items-center gap-2.5 border-b border-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800 sm:hidden"
+                          >
+                            <Hand className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                            {t('takeover')}
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => { markRead(); setShowMoreMenu(false); }}
@@ -1205,7 +1252,7 @@ function InboxInner() {
                               <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                               {t('editDraft')}
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => blockDraft(m.id)} disabled={busy} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
+                            <Button variant="ghost" size="sm" onClick={() => blockDraftWithConfirm(m.id)} disabled={busy} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
                               <CircleX className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
                               {t('blockSend')}
                             </Button>
@@ -1255,13 +1302,26 @@ function InboxInner() {
                           </span>
                         </div>
                         {isHovered && (
-                          <div className={cn('absolute top-0 -translate-y-8 whitespace-nowrap rounded-lg border bg-white px-2 py-1 text-[11px] shadow-lg dark:border-gray-700 dark:bg-gray-800', isCustomer ? 'left-0' : 'right-0')}>
-                            <div className="flex items-center gap-1.5">
-                              {!m.deletedAt && (
+                          <div className={cn('absolute top-0 -translate-y-8 rounded-lg border bg-white px-2 py-1 text-[11px] shadow-lg dark:border-gray-700 dark:bg-gray-800 z-50', isCustomer ? 'left-0' : 'right-0', m.status === 'failed' ? 'w-48' : 'whitespace-nowrap')}>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              {m.status === 'failed' && !isCustomer && (
                                 <>
-                                  <button type="button" onClick={() => quoteReply(m)} className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white" title={t('reply')}>
-                                    <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5z" /></svg>
+                                  <button type="button" onClick={() => act(() => api(`/conversations/${activeId}/messages/${m.id}/retry`, { method: 'POST' }))} className="text-hermes-600 hover:text-hermes-900 dark:text-hermes-300 dark:hover:text-hermes-100 font-medium" title="Retry send">
+                                    <RotateCcw className="inline h-3.5 w-3.5 mr-1" strokeWidth={1.75} aria-hidden="true" />Retry
                                   </button>
+                                  <button type="button" onClick={() => { navigator.clipboard.writeText(m.content ?? ''); }} className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white" title="Copy message">
+                                    <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M8 3a1 1 0 011-1h2a1 1 0 011 1v2h2V3a3 3 0 00-3-3H9a3 3 0 00-3 3v2H4a1 1 0 000 2h.089l.493 8.374C4.756 16.447 6.121 18 7.75 18h4.5c1.629 0 2.994-1.553 3.168-3.626L16.911 7H20a1 1 0 000-2h-3V3z" /></svg>
+                                  </button>
+                                  <span className="text-danger-600 text-[10px]">Failed to send</span>
+                                </>
+                              )}
+                              {!m.deletedAt && m.status !== 'failed' && (
+                                <>
+                                  {!isCustomer && (
+                                    <button type="button" onClick={() => quoteReply(m)} className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white" title={t('reply')}>
+                                      <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5z" /></svg>
+                                    </button>
+                                  )}
                                   <button type="button" onClick={() => setMessageStarred(m.id, !m.isStarred)} className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white" title={m.isStarred ? 'Unstar' : 'Star'}>
                                     <Star className={cn('h-3.5 w-3.5', m.isStarred && 'fill-current')} strokeWidth={1.75} aria-hidden="true" />
                                   </button>
@@ -1270,9 +1330,14 @@ function InboxInner() {
                                       <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
                                     </button>
                                   )}
-                                  <button type="button" onClick={() => deleteMessage(m.id)} className="text-gray-600 hover:text-danger-600 dark:text-gray-300 dark:hover:text-danger-400" title={t('retract')}>
-                                    <CircleX className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
-                                  </button>
+                                  {!isCustomer && (
+                                    <button type="button" onClick={() => deleteMessage(m.id)} className="text-gray-600 hover:text-danger-600 dark:text-gray-300 dark:hover:text-danger-400" title={t('retract')}>
+                                      <CircleX className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                                    </button>
+                                  )}
+                                  {isCustomer && (
+                                    <span className="text-gray-400 text-[10px]">Reply in composer</span>
+                                  )}
                                   <span className="text-gray-300 dark:text-gray-600">|</span>
                                   {reactionOptions.map((reaction) => (
                                     <button
@@ -1871,14 +1936,14 @@ function InboxInner() {
                     {/* Handle bar indicator */}
                     <div className="mb-2 h-1 w-12 rounded-full bg-gray-300 dark:bg-gray-600" />
                     <div className="flex w-full items-center justify-between">
-                      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Informasi Pelanggan</h3>
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Customer & Review</h3>
                       <Button variant="ghost" size="sm" onClick={() => setShowRightPanel(false)} className="h-7 w-7 p-0">
                         <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                       </Button>
                     </div>
                   </div>
                   {/* Content */}
-                  <div className="scrollbar-thin overflow-y-auto">
+                  <div className="scrollbar-thin overflow-y-auto max-h-[calc(85vh-60px)]">
                     {/* Customer */}
                     <div className="border-b border-gray-100 p-4 dark:border-gray-800">
                       <div className="mb-3 grid grid-cols-2 gap-2">
@@ -1952,11 +2017,129 @@ function InboxInner() {
                         </label>
                       </div>
                     </div>
+
+                    {/* Hermes review — MOBILE */}
+                    <div className="border-b border-gray-100 p-4 dark:border-gray-800">
+                      <div className="mb-2 flex items-center justify-between">
+                        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-gray-900 dark:text-gray-100">
+                          <ShieldCheck className="h-3.5 w-3.5 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
+                          {t('hermesReview')}
+                        </h3>
+                        {review && (
+                          <Badge tone={riskTone[review.riskLevel] ?? 'neutral'} className="text-[10px]">{review.decision.replace('_', ' ')}</Badge>
+                        )}
+                      </div>
+                      {review ? (
+                        <>
+                          <dl className="space-y-1 text-[11px]">
+                            <div className="flex items-center justify-between">
+                              <dt className="text-gray-400">{t('confidenceScore')}</dt>
+                              <dd className="font-medium tabular-nums text-gray-800 dark:text-gray-100">{review.confidenceScore}</dd>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <dt className="text-gray-400">{t('riskScore')}</dt>
+                              <dd className="font-medium tabular-nums text-gray-800 dark:text-gray-100">{review.riskScore}</dd>
+                            </div>
+                          </dl>
+                          {review.reason && (
+                            <div className="mt-2 rounded-md bg-gray-50 px-2 py-1.5 text-[11px] leading-relaxed text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                              {review.reason}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-gray-400">{t('noHermesReview')}</p>
+                      )}
+                    </div>
+
+                    {/* Risk flags — MOBILE */}
+                    <div className="border-b border-gray-100 p-4 dark:border-gray-800">
+                      <h3 className="mb-2 text-xs font-semibold text-gray-900 dark:text-gray-100">{t('riskFlags')}</h3>
+                      <div className="flex flex-wrap gap-1.5">
+                        {active.slaBreachedAt && (
+                          <Badge tone="review" className="text-[10px]">
+                            <Clock className="h-2.5 w-2.5" strokeWidth={1.75} aria-hidden="true" />
+                            {t('slaMissed')}
+                          </Badge>
+                        )}
+                        {active.aiMode === 'ai_paused' && (
+                          <Badge tone="danger" className="text-[10px]">
+                            <CircleX className="h-2.5 w-2.5" strokeWidth={1.75} aria-hidden="true" />
+                            {t('aiPausedFlag')}
+                          </Badge>
+                        )}
+                        {review && (review.riskLevel === 'high' || review.riskLevel === 'critical') && (
+                          <Badge tone="danger" className="text-[10px]">
+                            <TriangleAlert className="h-2.5 w-2.5" strokeWidth={1.75} aria-hidden="true" />
+                            {t('riskLevelFlag', { level: review.riskLevel })}
+                          </Badge>
+                        )}
+                        {!active.slaBreachedAt && active.aiMode !== 'ai_paused' && !(review && (review.riskLevel === 'high' || review.riskLevel === 'critical')) && (
+                          <span className="text-[11px] text-gray-400">{t('noActiveRisk')}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Audit — MOBILE */}
+                    <div className="p-4">
+                      <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-900 dark:text-gray-100">
+                        <ScrollText className="h-3.5 w-3.5 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                        {t('auditTrail')}
+                      </h3>
+                      <ol className="space-y-2 text-[11px]">
+                        {buildAudit(active).map((e, i) => {
+                          const Icon = e.icon;
+                          return (
+                            <li key={i} className="flex gap-2">
+                              <Icon className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', e.tone)} strokeWidth={1.75} aria-hidden="true" />
+                              <div className="flex-1">
+                                <p className="text-gray-700 dark:text-gray-200">{t(e.label, e.vars)}</p>
+                                {e.time && <p className="text-gray-400">{clockTime(e.time)}</p>}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </div>
                   </div>
                 </div>
               </>
             )}
           </>
+        )}
+
+        {/* Confirm dialog for retract / block */}
+        {confirmAction && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirmAction(null)}>
+            <div role="dialog" aria-modal="true" className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-700 dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
+              <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                {confirmAction.type === 'retract' ? 'Retract message?' : 'Block this draft?'}
+              </h3>
+              <p className="mb-4 text-xs text-gray-600 dark:text-gray-400">
+                {confirmAction.type === 'retract'
+                  ? 'This message will be deleted and the customer will see it was retracted.'
+                  : 'This draft will be blocked and cannot be sent. The AI will not suggest this reply again.'}
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setConfirmAction(null)}>Cancel</Button>
+                <Button
+                  size="sm"
+                  className={confirmAction.type === 'retract' ? 'bg-danger-600 hover:bg-danger-700' : 'bg-danger-600 hover:bg-danger-700'}
+                  onClick={() => {
+                    if (confirmAction.messageId) {
+                      if (confirmAction.type === 'retract') {
+                        confirmDeleteMessage(confirmAction.messageId);
+                      } else {
+                        confirmBlockDraft(confirmAction.messageId);
+                      }
+                    }
+                  }}
+                >
+                  {confirmAction.type === 'retract' ? 'Retract' : 'Block'}
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </AppLayout>
