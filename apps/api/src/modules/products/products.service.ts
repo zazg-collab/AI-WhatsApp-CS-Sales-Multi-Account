@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { createSign } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { Client } from 'pg';
 import { assertSafeMediaUrl } from '../../common/media-url.util';
@@ -102,11 +103,10 @@ export class ProductsService {
   async listSources() {
     const sources = await this.prisma.productSource.findMany({ orderBy: { createdAt: 'desc' } });
     return sources.map((s) => {
-      const config = (s.config ?? {}) as Record<string, unknown>;
-      if (typeof config.connectionString === 'string') {
-        return { ...s, config: { ...config, connectionString: maskConnString(config.connectionString) } };
-      }
-      return s;
+      const config = { ...((s.config ?? {}) as Record<string, unknown>) };
+      if (typeof config.connectionString === 'string') config.connectionString = maskConnString(config.connectionString);
+      if (typeof config.privateKey === 'string') config.privateKey = '****';
+      return { ...s, config };
     });
   }
 
@@ -116,6 +116,10 @@ export class ProductsService {
     url?: string;
     connectionString?: string;
     query?: string;
+    spreadsheetId?: string;
+    range?: string;
+    clientEmail?: string;
+    privateKey?: string;
   }) {
     if (dto.type === 'gsheet_csv') {
       if (!dto.url) throw new BadRequestException('url wajib untuk gsheet_csv');
@@ -141,7 +145,24 @@ export class ProductsService {
         },
       });
     }
-    throw new BadRequestException('Tipe sumber tidak didukung (gsheet_csv | postgres).');
+    if (dto.type === 'gsheet_api') {
+      if (!dto.spreadsheetId || !dto.clientEmail || !dto.privateKey) {
+        throw new BadRequestException('spreadsheetId, clientEmail, privateKey wajib untuk gsheet_api');
+      }
+      return this.prisma.productSource.create({
+        data: {
+          type: dto.type,
+          name: dto.name,
+          config: {
+            spreadsheetId: dto.spreadsheetId,
+            range: dto.range || 'A:Z',
+            clientEmail: dto.clientEmail,
+            privateKey: dto.privateKey,
+          },
+        },
+      });
+    }
+    throw new BadRequestException('Tipe sumber tidak didukung (gsheet_csv | gsheet_api | postgres).');
   }
 
   async deleteSource(id: string) {
@@ -158,9 +179,13 @@ export class ProductsService {
 
     let rows: ProductRow[];
     try {
-      rows = source.type === 'postgres'
-        ? await this.fetchPostgresRows(source.config as { connectionString: string; query: string })
-        : await this.fetchSheetRows(source.config as { url?: string });
+      if (source.type === 'postgres') {
+        rows = await this.fetchPostgresRows(source.config as { connectionString: string; query: string });
+      } else if (source.type === 'gsheet_api') {
+        rows = await this.fetchGsheetApiRows(source.config as Record<string, string>);
+      } else {
+        rows = await this.fetchSheetRows(source.config as { url?: string });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await this.prisma.productSource.update({
@@ -253,6 +278,90 @@ export class ProductsService {
     } finally {
       await client.end().catch(() => undefined);
     }
+  }
+
+  /**
+   * Read a PRIVATE Google Sheet via the Sheets API using a service account.
+   * The sheet must be shared with the service account's client_email. We mint a
+   * short-lived OAuth token by signing a JWT with the service account key (pure
+   * crypto — no extra dependency), then read the values range.
+   */
+  private async fetchGsheetApiRows(config: {
+    spreadsheetId?: string;
+    range?: string;
+    clientEmail?: string;
+    privateKey?: string;
+  }): Promise<ProductRow[]> {
+    const { spreadsheetId, clientEmail, privateKey } = config;
+    const range = config.range || 'A:Z';
+    if (!spreadsheetId || !clientEmail || !privateKey) {
+      throw new BadRequestException('spreadsheetId, clientEmail, privateKey wajib untuk gsheet_api');
+    }
+
+    const token = await this.googleAccessToken(clientEmail, privateKey);
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}`;
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        headers: { authorization: `Bearer ${token}` },
+      });
+    } catch (err) {
+      throw new Error(`Gagal mengambil sheet API: ${err instanceof Error ? err.message : err}`);
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Sheets API status ${res.status}${body ? `: ${body.slice(0, 160)}` : ''}`);
+    }
+    const data = (await res.json()) as { values?: unknown[][] };
+    const values = Array.isArray(data.values) ? data.values : [];
+    if (values.length < 2) return [];
+
+    const headers = (values[0] as unknown[]).map((h) => String(h ?? ''));
+    const rows: ProductRow[] = [];
+    for (let i = 1; i < values.length; i++) {
+      const cells = values[i] as unknown[];
+      const record: Record<string, unknown> = {};
+      headers.forEach((h, idx) => { record[h] = cells[idx]; });
+      const mapped = mapRecordToProduct(record);
+      if (mapped) rows.push(mapped);
+    }
+    return rows;
+  }
+
+  /** Mint a Google OAuth2 access token from a service account (JWT-bearer flow). */
+  private async googleAccessToken(clientEmail: string, privateKeyRaw: string): Promise<string> {
+    const privateKey = privateKeyRaw.replace(/\\n/g, '\n');
+    const enc = (obj: unknown) => Buffer.from(JSON.stringify(obj)).toString('base64url');
+    const now = Math.floor(Date.now() / 1000);
+    const signingInput = `${enc({ alg: 'RS256', typ: 'JWT' })}.${enc({
+      iss: clientEmail,
+      scope: 'https://www.googleapis.com/auth/spreadsheets.readonly',
+      aud: 'https://oauth2.googleapis.com/token',
+      iat: now,
+      exp: now + 3600,
+    })}`;
+    let signature: string;
+    try {
+      signature = createSign('RSA-SHA256').update(signingInput).sign(privateKey).toString('base64url');
+    } catch {
+      throw new BadRequestException('Private key service account tidak valid');
+    }
+    const assertion = `${signingInput}.${signature}`;
+
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}&assertion=${encodeURIComponent(assertion)}`,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Auth Google gagal (${res.status})${body ? `: ${body.slice(0, 160)}` : ''}`);
+    }
+    const json = (await res.json()) as { access_token?: string };
+    if (!json.access_token) throw new Error('Token Google kosong');
+    return json.access_token;
   }
 
   // ── Bot integration ───────────────────────────────────────────────────────
