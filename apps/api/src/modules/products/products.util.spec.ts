@@ -1,4 +1,9 @@
-import { parseProductCsv } from './products.util';
+import {
+  parseProductCsv,
+  mapRecordToProduct,
+  assertReadOnlySelect,
+  maskConnString,
+} from './products.util';
 
 describe('parseProductCsv', () => {
   it('parses headers (EN/ID aliases) and rows', () => {
@@ -33,5 +38,39 @@ describe('parseProductCsv', () => {
   it('returns [] for empty or header-only input', () => {
     expect(parseProductCsv('')).toEqual([]);
     expect(parseProductCsv('sku,name')).toEqual([]);
+  });
+});
+
+describe('mapRecordToProduct', () => {
+  it('maps a DB row object with aliased keys', () => {
+    expect(mapRecordToProduct({ kode: 'A1', nama: 'X', stok: 7, harga: 9000 })).toMatchObject({
+      sku: 'A1',
+      name: 'X',
+      stock: 7,
+      price: 9000,
+    });
+  });
+  it('returns undefined without sku+name', () => {
+    expect(mapRecordToProduct({ nama: 'X' })).toBeUndefined();
+  });
+});
+
+describe('assertReadOnlySelect', () => {
+  it('allows a single SELECT / WITH', () => {
+    expect(() => assertReadOnlySelect('SELECT * FROM products')).not.toThrow();
+    expect(() => assertReadOnlySelect('with x as (select 1) select * from x')).not.toThrow();
+    expect(() => assertReadOnlySelect('SELECT * FROM products;')).not.toThrow();
+  });
+  it('rejects writes, DDL, and multiple statements', () => {
+    expect(() => assertReadOnlySelect('DELETE FROM products')).toThrow();
+    expect(() => assertReadOnlySelect('SELECT 1; DROP TABLE x')).toThrow();
+    expect(() => assertReadOnlySelect('UPDATE products SET stock=0')).toThrow();
+    expect(() => assertReadOnlySelect('')).toThrow();
+  });
+});
+
+describe('maskConnString', () => {
+  it('hides the password', () => {
+    expect(maskConnString('postgresql://user:secret@host:5432/db')).toBe('postgresql://user:****@host:5432/db');
   });
 });

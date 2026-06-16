@@ -40,8 +40,11 @@ export default function ProductsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [srcType, setSrcType] = useState<'gsheet_csv' | 'postgres'>('gsheet_csv');
   const [srcName, setSrcName] = useState('');
   const [srcUrl, setSrcUrl] = useState('');
+  const [srcConn, setSrcConn] = useState('');
+  const [srcQuery, setSrcQuery] = useState('');
 
   function load() {
     api<Product[]>(`/products${search ? `?search=${encodeURIComponent(search)}` : ''}`).then(setProducts).catch((e) => setError(e instanceof Error ? e.message : 'Gagal memuat'));
@@ -66,11 +69,15 @@ export default function ProductsPage() {
   }
 
   async function addSource() {
-    if (!srcName.trim() || !srcUrl.trim()) return;
+    if (!srcName.trim()) return;
+    const payload = srcType === 'gsheet_csv'
+      ? { type: 'gsheet_csv', name: srcName.trim(), url: srcUrl.trim() }
+      : { type: 'postgres', name: srcName.trim(), connectionString: srcConn.trim(), query: srcQuery.trim() };
+    if (srcType === 'gsheet_csv' ? !srcUrl.trim() : (!srcConn.trim() || !srcQuery.trim())) return;
     setBusy(true); setError(null);
     try {
-      await api('/products/sources', { method: 'POST', body: JSON.stringify({ type: 'gsheet_csv', name: srcName.trim(), url: srcUrl.trim() }) });
-      setSrcName(''); setSrcUrl('');
+      await api('/products/sources', { method: 'POST', body: JSON.stringify(payload) });
+      setSrcName(''); setSrcUrl(''); setSrcConn(''); setSrcQuery('');
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Gagal menambah sumber');
@@ -112,11 +119,25 @@ export default function ProductsPage() {
 
             {canConfigure && (
               <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800">
-                <p className="mb-2 text-[12px] font-medium text-gray-600 dark:text-gray-300">Google Sheet (publish-to-web CSV) — bisa di-sync ulang kapan saja</p>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input value={srcName} onChange={(e) => setSrcName(e.target.value)} placeholder="Nama sumber (mis. Gudang Utama)" className="h-9 flex-1 rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
-                  <input value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} placeholder="https://docs.google.com/.../pub?output=csv" className="h-9 flex-[2] rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
-                  <Button size="sm" onClick={addSource} disabled={busy || !srcName.trim() || !srcUrl.trim()}><Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" /> Tambah</Button>
+                <p className="mb-2 text-[12px] font-medium text-gray-600 dark:text-gray-300">Sumber yang bisa di-sync ulang</p>
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <select value={srcType} onChange={(e) => setSrcType(e.target.value as 'gsheet_csv' | 'postgres')} className="h-9 rounded border border-gray-200 bg-gray-50 px-2 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+                      <option value="gsheet_csv">Google Sheet (CSV)</option>
+                      <option value="postgres">Database (Postgres/Supabase)</option>
+                    </select>
+                    <input value={srcName} onChange={(e) => setSrcName(e.target.value)} placeholder="Nama sumber (mis. Gudang Utama)" className="h-9 flex-1 rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+                  </div>
+                  {srcType === 'gsheet_csv' ? (
+                    <input value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} placeholder="https://docs.google.com/.../pub?output=csv" className="h-9 rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+                  ) : (
+                    <>
+                      <input value={srcConn} onChange={(e) => setSrcConn(e.target.value)} placeholder="postgresql://user:password@host:5432/db (read-only)" className="h-9 rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+                      <textarea value={srcQuery} onChange={(e) => setSrcQuery(e.target.value)} rows={2} placeholder="SELECT sku, nama, stok, harga FROM produk  (hanya SELECT)" className="rounded border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+                      <p className="text-[11px] text-gray-400">Kolom hasil query: sku, nama/name, stok/stock, harga/price, kategori. Kredensial disimpan & ditutup di tampilan.</p>
+                    </>
+                  )}
+                  <div><Button size="sm" onClick={addSource} disabled={busy || !srcName.trim()}><Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" /> Tambah sumber</Button></div>
                 </div>
                 {sources.length > 0 && (
                   <ul className="mt-2 space-y-1">

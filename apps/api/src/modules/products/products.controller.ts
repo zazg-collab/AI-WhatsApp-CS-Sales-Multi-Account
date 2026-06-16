@@ -28,9 +28,11 @@ class UpdateProductDto {
 }
 
 class CreateSourceDto {
-  @IsIn(['gsheet_csv']) type!: string;
+  @IsIn(['gsheet_csv', 'postgres']) type!: string;
   @IsString() name!: string;
-  @IsString() url!: string;
+  @IsOptional() @IsString() url?: string;
+  @IsOptional() @IsString() connectionString?: string;
+  @IsOptional() @IsString() query?: string;
 }
 
 @ApiTags('products')
