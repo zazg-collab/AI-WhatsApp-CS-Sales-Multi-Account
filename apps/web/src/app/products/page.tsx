@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Boxes, Upload, RefreshCw, Trash2, Plus, Search } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Boxes, Upload, RefreshCw, Trash2, Plus, Search, PackageX, TriangleAlert } from 'lucide-react';
 import { api, uploadFile, hasRole } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -39,6 +39,7 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
   const [srcType, setSrcType] = useState<'gsheet_csv' | 'gsheet_api' | 'postgres'>('gsheet_csv');
   const [srcName, setSrcName] = useState('');
@@ -51,10 +52,36 @@ export default function ProductsPage() {
   const [srcKey, setSrcKey] = useState('');
 
   function load() {
-    api<Product[]>(`/products${search ? `?search=${encodeURIComponent(search)}` : ''}`).then(setProducts).catch((e) => setError(e instanceof Error ? e.message : 'Gagal memuat'));
+    setLoading(true);
+    api<Product[]>(`/products${search ? `?search=${encodeURIComponent(search)}` : ''}`)
+      .then(setProducts)
+      .catch((e) => setError(e instanceof Error ? e.message : 'Gagal memuat'))
+      .finally(() => setLoading(false));
     if (canManage) api<Source[]>('/products/sources/list').then(setSources).catch(() => setSources([]));
   }
   useEffect(load, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const LOW_STOCK = 5;
+  const stats = useMemo(() => {
+    const out = products.filter((p) => p.stock <= 0).length;
+    const low = products.filter((p) => p.stock > 0 && p.stock <= LOW_STOCK).length;
+    const lastSync = products.reduce<string | null>(
+      (acc, p) => (p.lastSyncedAt && (!acc || p.lastSyncedAt > acc) ? p.lastSyncedAt : acc),
+      null,
+    );
+    return { total: products.length, out, low, lastSync };
+  }, [products]);
+
+  function relTime(iso: string | null): string {
+    if (!iso) return '—';
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.round(diff / 60000);
+    if (m < 1) return 'baru saja';
+    if (m < 60) return `${m} mnt lalu`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `${h} jam lalu`;
+    return `${Math.round(h / 24)} hr lalu`;
+  }
 
   async function uploadCsv(file: File) {
     setBusy(true); setError(null); setNotice(null);
@@ -112,8 +139,31 @@ export default function ProductsPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Produk & Stok" subtitle="Sinkron stok dari spreadsheet (upload CSV atau Google Sheet). Bot menjawab ketersediaan dari data nyata ini." />
+      <PageHeader title="Produk & Stok" subtitle="Sinkron stok dari spreadsheet, Google Sheet, atau database gudang. Bot menjawab ketersediaan dari data nyata ini.">
+        {stats.total > 0 && (
+          <span className="hidden text-[12px] text-gray-400 sm:inline" title="Stok terakhir disinkronkan">
+            Disinkron {relTime(stats.lastSync)}
+          </span>
+        )}
+      </PageHeader>
       <div className="scrollbar-thin mx-auto w-full max-w-4xl flex-1 overflow-y-auto p-4 sm:p-5">
+        {/* Needs-attention summary — decision-first */}
+        {stats.total > 0 && (
+          <div className="mb-4 grid grid-cols-3 gap-2">
+            <Card className="p-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">Total produk</p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">{stats.total}</p>
+            </Card>
+            <Card className={stats.low > 0 ? 'border-amber-200 bg-amber-50/60 p-3 dark:border-amber-700/40 dark:bg-amber-900/15' : 'p-3'}>
+              <p className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400"><TriangleAlert className="h-3 w-3" strokeWidth={2} aria-hidden="true" />Stok menipis (≤{LOW_STOCK})</p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">{stats.low}</p>
+            </Card>
+            <Card className={stats.out > 0 ? 'border-danger-200 bg-danger-50/60 p-3 dark:border-danger-700/40 dark:bg-danger-900/15' : 'p-3'}>
+              <p className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-danger-600 dark:text-danger-400"><PackageX className="h-3 w-3" strokeWidth={2} aria-hidden="true" />Habis</p>
+              <p className="mt-0.5 text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">{stats.out}</p>
+            </Card>
+          </div>
+        )}
         {error && <Card className="mb-4 border-danger-200 bg-danger-50 p-3 text-[13px] text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20">{error}</Card>}
         {notice && <Card className="mb-4 border-hermes-200 bg-hermes-50 p-3 text-[13px] text-hermes-700 dark:border-hermes-700/40 dark:bg-hermes-900/20">{notice}</Card>}
 
@@ -184,10 +234,12 @@ export default function ProductsPage() {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari produk / SKU / kategori" className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-[13px] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
         </div>
 
-        {products.length === 0 ? (
+        {loading && products.length === 0 ? (
+          <div className="space-y-2">{[1, 2, 3, 4, 5].map((n) => <div key={n} className="h-10 rounded animate-shimmer" />)}</div>
+        ) : products.length === 0 ? (
           <div className="flex flex-col items-center py-16 text-center text-sm text-gray-400">
             <Boxes className="mb-2 h-8 w-8 text-gray-300" strokeWidth={1.5} aria-hidden="true" />
-            Belum ada produk. Upload CSV atau hubungkan Google Sheet di atas.
+            {search ? `Tidak ada produk cocok "${search}".` : 'Belum ada produk. Upload CSV, hubungkan Google Sheet, atau database gudang di atas untuk mulai.'}
           </div>
         ) : (
           <div className="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
@@ -202,10 +254,14 @@ export default function ProductsPage() {
                     <td className="px-3 py-2 tabular-nums text-gray-500">{p.sku}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-200">{p.price != null ? `Rp${p.price.toLocaleString('id-ID')}` : '—'}</td>
                     <td className="px-3 py-2 text-right">
-                      {p.stock > 0 ? (
-                        <span className="tabular-nums font-medium text-gray-900 dark:text-gray-100">{p.stock}{p.unit ? ` ${p.unit}` : ''}</span>
+                      {p.stock <= 0 ? (
+                        <Badge tone="danger">Habis</Badge>
+                      ) : p.stock <= LOW_STOCK ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[12px] font-medium tabular-nums text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" title="Stok menipis">
+                          <TriangleAlert className="h-3 w-3" strokeWidth={2} aria-hidden="true" />{p.stock}{p.unit ? ` ${p.unit}` : ''}
+                        </span>
                       ) : (
-                        <Badge tone="danger">HABIS</Badge>
+                        <span className="tabular-nums font-medium text-gray-900 dark:text-gray-100">{p.stock}{p.unit ? ` ${p.unit}` : ''}</span>
                       )}
                     </td>
                   </tr>
