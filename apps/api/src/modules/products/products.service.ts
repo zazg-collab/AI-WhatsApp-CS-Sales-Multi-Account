@@ -1,8 +1,15 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Client } from 'pg';
 import { assertSafeMediaUrl } from '../../common/media-url.util';
 import { logAudit } from '../../common/audit.util';
-import { parseProductCsv, ProductRow } from './products.util';
+import {
+  assertReadOnlySelect,
+  mapRecordToProduct,
+  maskConnString,
+  parseProductCsv,
+  ProductRow,
+} from './products.util';
 
 const FETCH_TIMEOUT_MS = 15_000;
 const FETCH_MAX_BYTES = 5 * 1024 * 1024;
@@ -91,18 +98,50 @@ export class ProductsService {
 
   // ── Sources (re-syncable) ────────────────────────────────────────────────
 
-  listSources() {
-    return this.prisma.productSource.findMany({ orderBy: { createdAt: 'desc' } });
+  /** List sources with any secrets (DB connection string) masked. */
+  async listSources() {
+    const sources = await this.prisma.productSource.findMany({ orderBy: { createdAt: 'desc' } });
+    return sources.map((s) => {
+      const config = (s.config ?? {}) as Record<string, unknown>;
+      if (typeof config.connectionString === 'string') {
+        return { ...s, config: { ...config, connectionString: maskConnString(config.connectionString) } };
+      }
+      return s;
+    });
   }
 
-  async createSource(dto: { type: string; name: string; url: string }) {
-    if (dto.type !== 'gsheet_csv') {
-      throw new BadRequestException('Sumber yang didukung saat ini: gsheet_csv (link publish-to-web CSV).');
+  async createSource(dto: {
+    type: string;
+    name: string;
+    url?: string;
+    connectionString?: string;
+    query?: string;
+  }) {
+    if (dto.type === 'gsheet_csv') {
+      if (!dto.url) throw new BadRequestException('url wajib untuk gsheet_csv');
+      assertSafeMediaUrl(dto.url); // SSRF guard: https/http only, no private hosts
+      return this.prisma.productSource.create({
+        data: { type: dto.type, name: dto.name, config: { url: dto.url } },
+      });
     }
-    assertSafeMediaUrl(dto.url); // SSRF guard: https/http only, no private hosts
-    return this.prisma.productSource.create({
-      data: { type: dto.type, name: dto.name, config: { url: dto.url } },
-    });
+    if (dto.type === 'postgres') {
+      if (!dto.connectionString || !dto.query) {
+        throw new BadRequestException('connectionString & query wajib untuk postgres');
+      }
+      try {
+        assertReadOnlySelect(dto.query);
+      } catch (err) {
+        throw new BadRequestException(err instanceof Error ? err.message : 'Query tidak valid');
+      }
+      return this.prisma.productSource.create({
+        data: {
+          type: dto.type,
+          name: dto.name,
+          config: { connectionString: dto.connectionString, query: dto.query },
+        },
+      });
+    }
+    throw new BadRequestException('Tipe sumber tidak didukung (gsheet_csv | postgres).');
   }
 
   async deleteSource(id: string) {
@@ -112,43 +151,33 @@ export class ProductsService {
     return { ok: true };
   }
 
-  /** Fetch a published-CSV Google Sheet and upsert its rows. */
+  /** Re-sync a configured source (Google Sheet CSV or external Postgres). */
   async syncSource(id: string, userId: string) {
     const source = await this.prisma.productSource.findUnique({ where: { id } });
     if (!source) throw new NotFoundException('Source not found');
-    const url = (source.config as { url?: string })?.url;
-    if (!url) throw new BadRequestException('Source has no URL configured');
-    assertSafeMediaUrl(url);
 
-    let text: string;
+    let rows: ProductRow[];
     try {
-      const res = await fetch(url, {
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-        redirect: 'follow',
-        headers: { 'user-agent': 'HermesProductSync/1.0' },
-      });
-      if (!res.ok) throw new Error(`status ${res.status}`);
-      const raw = Buffer.from(await res.arrayBuffer());
-      if (raw.length > FETCH_MAX_BYTES) throw new Error('file too large (max 5MB)');
-      text = raw.toString('utf8');
+      rows = source.type === 'postgres'
+        ? await this.fetchPostgresRows(source.config as { connectionString: string; query: string })
+        : await this.fetchSheetRows(source.config as { url?: string });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       await this.prisma.productSource.update({
         where: { id },
         data: { lastSyncedAt: new Date(), lastResult: `Gagal: ${msg}` },
       });
-      throw new BadRequestException(`Gagal mengambil sheet: ${msg}`);
+      throw new BadRequestException(msg);
     }
 
-    const rows = parseProductCsv(text);
     if (rows.length === 0) {
       await this.prisma.productSource.update({
         where: { id },
         data: { lastSyncedAt: new Date(), lastResult: 'Tidak ada baris valid' },
       });
-      throw new BadRequestException('Tidak ada baris produk valid di sheet (perlu kolom sku & nama).');
+      throw new BadRequestException('Tidak ada baris produk valid (perlu kolom sku & nama).');
     }
-    const { upserted } = await this.upsertRows(rows, `gsheet:${id}`);
+    const { upserted } = await this.upsertRows(rows, `${source.type}:${id}`);
     await this.prisma.productSource.update({
       where: { id },
       data: { lastSyncedAt: new Date(), lastResult: `OK: ${upserted} produk` },
@@ -158,9 +187,72 @@ export class ProductsService {
       action: 'product_sync_source',
       entityType: 'product_source',
       entityId: id,
-      newValue: { upserted },
+      newValue: { type: source.type, upserted },
     });
     return { upserted, parsed: rows.length };
+  }
+
+  /** Fetch a published-CSV Google Sheet → product rows. */
+  private async fetchSheetRows(config: { url?: string }): Promise<ProductRow[]> {
+    const url = config?.url;
+    if (!url) throw new BadRequestException('Source has no URL configured');
+    assertSafeMediaUrl(url);
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        redirect: 'follow',
+        headers: { 'user-agent': 'HermesProductSync/1.0' },
+      });
+    } catch (err) {
+      throw new Error(`Gagal mengambil sheet: ${err instanceof Error ? err.message : err}`);
+    }
+    if (!res.ok) throw new Error(`Gagal mengambil sheet: status ${res.status}`);
+    const raw = Buffer.from(await res.arrayBuffer());
+    if (raw.length > FETCH_MAX_BYTES) throw new Error('Sheet terlalu besar (maks 5MB)');
+    return parseProductCsv(raw.toString('utf8'));
+  }
+
+  /**
+   * Connect to an external Postgres/Supabase database (read-only) and map the
+   * configured SELECT's rows to products. Hardened: the query is validated as a
+   * single SELECT, runs inside a READ ONLY transaction with a statement
+   * timeout, and on a capped connection time. Credentials are never logged.
+   */
+  private async fetchPostgresRows(config: { connectionString: string; query: string }): Promise<ProductRow[]> {
+    if (!config?.connectionString || !config?.query) {
+      throw new BadRequestException('Source has no connection configured');
+    }
+    assertReadOnlySelect(config.query);
+
+    const client = new Client({
+      connectionString: config.connectionString,
+      connectionTimeoutMillis: 10_000,
+      statement_timeout: 15_000,
+      // Supabase/managed PG usually require TLS; allow it without pinning a CA.
+      ssl: /supabase|sslmode=require/i.test(config.connectionString) ? { rejectUnauthorized: false } : undefined,
+      application_name: 'hermes-product-sync',
+    });
+    try {
+      await client.connect();
+      await client.query('BEGIN TRANSACTION READ ONLY');
+      // Wrap as a subquery so the row cap applies to any SELECT/WITH safely.
+      const inner = config.query.trim().replace(/;+\s*$/, '');
+      const result = await client.query(`SELECT * FROM (${inner}) AS _hermes_src LIMIT 5000`);
+      await client.query('COMMIT');
+      const rows: ProductRow[] = [];
+      for (const record of result.rows as Record<string, unknown>[]) {
+        const mapped = mapRecordToProduct(record);
+        if (mapped) rows.push(mapped);
+      }
+      return rows;
+    } catch (err) {
+      // Never surface the connection string; just the DB error message.
+      throw new Error(`Query DB gagal: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      await client.end().catch(() => undefined);
+    }
   }
 
   // ── Bot integration ───────────────────────────────────────────────────────
