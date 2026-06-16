@@ -1204,10 +1204,9 @@ export class WaService implements OnModuleInit {
     // resolved lazily to avoid a module cycle, fire-and-forget so a failure
     // never affects the text reply).
     try {
-      // Lazy require avoids a static circular import (see import note above).
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { AssetsService } = require('../assets/assets.service');
-      const assets = this.moduleRef.get<AssetsService>(AssetsService, { strict: false });
+      // Resolve by string token (registered in AssetsModule) to avoid importing
+      // the class — a value import would create a circular module reference.
+      const assets = this.moduleRef.get<AssetsService>('ASSETS_SERVICE', { strict: false });
       void assets
         .maybeAutoSend(conversationId)
         .catch((err: unknown) => this.logger.warn(`asset auto-send failed: ${err}`));
