@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Boxes, Upload, RefreshCw, Trash2, Plus, Search, PackageX, TriangleAlert } from 'lucide-react';
+import { Cube, UploadSimple, ArrowsClockwise, Trash, Plus, MagnifyingGlass, Package, Warning } from '@phosphor-icons/react';
 import { api, uploadFile, hasRole } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -155,11 +155,11 @@ export default function ProductsPage() {
               <p className="mt-0.5 text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">{stats.total}</p>
             </Card>
             <Card className={stats.low > 0 ? 'border-amber-200 bg-amber-50/60 p-3 dark:border-amber-700/40 dark:bg-amber-900/15' : 'p-3'}>
-              <p className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400"><TriangleAlert className="h-3 w-3" strokeWidth={2} aria-hidden="true" />Stok menipis (≤{LOW_STOCK})</p>
+              <p className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-amber-600 dark:text-amber-400"><Warning className="h-3 w-3" aria-hidden="true" />Stok menipis (≤{LOW_STOCK})</p>
               <p className="mt-0.5 text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">{stats.low}</p>
             </Card>
             <Card className={stats.out > 0 ? 'border-danger-200 bg-danger-50/60 p-3 dark:border-danger-700/40 dark:bg-danger-900/15' : 'p-3'}>
-              <p className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-danger-600 dark:text-danger-400"><PackageX className="h-3 w-3" strokeWidth={2} aria-hidden="true" />Habis</p>
+              <p className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-danger-600 dark:text-danger-400"><Package className="h-3 w-3" aria-hidden="true" />Habis</p>
               <p className="mt-0.5 text-lg font-semibold tabular-nums text-gray-900 dark:text-gray-100">{stats.out}</p>
             </Card>
           </div>
@@ -173,7 +173,7 @@ export default function ProductsPage() {
             <div className="flex flex-wrap items-center gap-2">
               <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCsv(f); }} />
               <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={busy}>
-                <Upload className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" /> Upload CSV
+                <UploadSimple className="h-4 w-4" aria-hidden="true" /> Upload CSV
               </Button>
               <span className="text-[11px] text-gray-400">Kolom: sku, nama, harga, stok (alias ID/EN didukung)</span>
             </div>
@@ -211,15 +211,15 @@ export default function ProductsPage() {
                       <p className="text-[11px] text-gray-400">Share sheet ke email service account (Viewer). Baris pertama = header (sku, nama, stok, harga…). Kunci disimpan & ditutup di tampilan.</p>
                     </>
                   )}
-                  <div><Button size="sm" onClick={addSource} disabled={busy || !srcName.trim()}><Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" /> Tambah sumber</Button></div>
+                  <div><Button size="sm" onClick={addSource} disabled={busy || !srcName.trim()}><Plus className="h-4 w-4" aria-hidden="true" /> Tambah sumber</Button></div>
                 </div>
                 {sources.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {sources.map((s) => (
                       <li key={s.id} className="flex items-center gap-2 rounded bg-gray-50 px-2.5 py-1.5 text-[12px] dark:bg-gray-800">
                         <span className="min-w-0 flex-1 truncate"><strong>{s.name}</strong> {s.lastResult && <span className="text-gray-400">· {s.lastResult}</span>}</span>
-                        <button type="button" onClick={() => syncSource(s.id)} disabled={busy} title="Sync sekarang" className="text-hermes-600 hover:text-hermes-700"><RefreshCw className="h-4 w-4" strokeWidth={1.75} /></button>
-                        <button type="button" onClick={() => delSource(s.id)} title="Hapus" className="text-gray-400 hover:text-danger-600"><Trash2 className="h-4 w-4" strokeWidth={1.75} /></button>
+                        <button type="button" onClick={() => syncSource(s.id)} disabled={busy} title="Sync sekarang" className="text-hermes-600 hover:text-hermes-700"><ArrowsClockwise className="h-4 w-4" /></button>
+                        <button type="button" onClick={() => delSource(s.id)} title="Hapus" className="text-gray-400 hover:text-danger-600"><Trash className="h-4 w-4" /></button>
                       </li>
                     ))}
                   </ul>
@@ -230,7 +230,7 @@ export default function ProductsPage() {
         )}
 
         <div className="relative mb-3">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+          <MagnifyingGlass className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari produk / SKU / kategori" className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-[13px] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
         </div>
 
@@ -238,7 +238,7 @@ export default function ProductsPage() {
           <div className="space-y-2">{[1, 2, 3, 4, 5].map((n) => <div key={n} className="h-10 rounded animate-shimmer" />)}</div>
         ) : products.length === 0 ? (
           <div className="flex flex-col items-center py-16 text-center text-sm text-gray-400">
-            <Boxes className="mb-2 h-8 w-8 text-gray-300" strokeWidth={1.5} aria-hidden="true" />
+            <Cube className="mb-2 h-8 w-8 text-gray-300" aria-hidden="true" />
             {search ? `Tidak ada produk cocok "${search}".` : 'Belum ada produk. Upload CSV, hubungkan Google Sheet, atau database gudang di atas untuk mulai.'}
           </div>
         ) : (
@@ -258,7 +258,7 @@ export default function ProductsPage() {
                         <Badge tone="danger">Habis</Badge>
                       ) : p.stock <= LOW_STOCK ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[12px] font-medium tabular-nums text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" title="Stok menipis">
-                          <TriangleAlert className="h-3 w-3" strokeWidth={2} aria-hidden="true" />{p.stock}{p.unit ? ` ${p.unit}` : ''}
+                          <Warning className="h-3 w-3" aria-hidden="true" />{p.stock}{p.unit ? ` ${p.unit}` : ''}
                         </span>
                       ) : (
                         <span className="tabular-nums font-medium text-gray-900 dark:text-gray-100">{p.stock}{p.unit ? ` ${p.unit}` : ''}</span>

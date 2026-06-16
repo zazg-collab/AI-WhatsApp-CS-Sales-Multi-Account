@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, History, CircleX } from 'lucide-react';
+import { CaretLeft, CaretRight, ClockCounterClockwise, XCircle } from '@phosphor-icons/react';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -133,7 +133,7 @@ export default function AuditPage() {
 
         {error && (
           <Card className="mb-4 flex items-start gap-2 border-danger-200 bg-danger-50 p-3 dark:border-danger-700/40 dark:bg-danger-900/20">
-            <CircleX className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" strokeWidth={1.75} aria-hidden="true" />
+            <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" aria-hidden="true" />
             <div>
               <p className="text-[13px] font-medium text-danger-700 dark:text-danger-400">{error}</p>
               <button
@@ -168,7 +168,7 @@ export default function AuditPage() {
                   {entries.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-4 py-12 text-center">
-                        <History className="mx-auto mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+                        <ClockCounterClockwise className="mx-auto mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
                         <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                           {hasFilters ? t('noMatch') : t('noActivity')}
                         </p>
@@ -227,7 +227,7 @@ export default function AuditPage() {
             {totalPages > 1 && (
               <div className="mt-4 flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={() => handlePageChange(page - 1)} disabled={page === 0}>
-                  <ChevronLeft className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  <CaretLeft className="h-4 w-4" aria-hidden="true" />
                   {t('sebelumnya')}
                 </Button>
                 <span className="text-xs text-gray-400">
@@ -240,7 +240,7 @@ export default function AuditPage() {
                   disabled={page >= totalPages - 1}
                 >
                   {t('berikutnya')}
-                  <ChevronRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  <CaretRight className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </div>
             )}

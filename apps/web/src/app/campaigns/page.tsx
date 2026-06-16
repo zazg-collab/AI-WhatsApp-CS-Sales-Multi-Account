@@ -2,22 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Megaphone,
+  MegaphoneSimple,
   Eye,
   Plus,
-  Send,
-  CircleCheck,
+  PaperPlaneTilt,
+  CheckCircle,
   Pause,
-  CircleX,
-  RotateCcw,
+  XCircle,
+  ArrowCounterClockwise,
   X,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { api, getToken } from '@/lib/api';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Modal } from '@/components/ui/Modal';
 import { Field, TextareaField, SelectField } from '@/components/ui/Field';
 import { useT, type Dict } from '@/lib/i18n';
 
@@ -118,6 +119,9 @@ const dict: Dict = {
     id: 'Batalkan campaign ini? Penerima yang masih menunggu akan dilewati.',
     en: 'Cancel this campaign? Recipients still waiting will be skipped.',
   },
+  confirmActionTitle: { id: 'Konfirmasi aksi', en: 'Confirm action' },
+  confirmActionButton: { id: 'Ya, lanjutkan', en: 'Yes, continue' },
+  cancelButton: { id: 'Batal', en: 'Cancel' },
 };
 
 type Role = 'owner' | 'supervisor' | 'admin' | 'viewer';
@@ -194,6 +198,7 @@ export default function CampaignsPage() {
   const [rateLimitPerMinute, setRateLimitPerMinute] = useState(6);
   const [scheduledAt, setScheduledAt] = useState('');
   const [assetId, setAssetId] = useState('');
+  const [pendingAction, setPendingAction] = useState<{ action: 'approve' | 'start' | 'cancel'; message: string } | null>(null);
   const [assetOptions, setAssetOptions] = useState<Array<{ id: string; title: string; kind: string; purpose: string }>>([]);
 
   const canManage = role === 'owner' || role === 'supervisor' || role === 'admin';
@@ -307,7 +312,15 @@ export default function CampaignsPage() {
       cancel: t('confirmCancel'),
     };
     const confirmMsg = confirmMessages[action];
-    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    if (confirmMsg) {
+      setPendingAction({ action: action as 'approve' | 'start' | 'cancel', message: confirmMsg });
+      return;
+    }
+    await executeAction(action);
+  }
+
+  async function executeAction(action: 'submit' | 'approve' | 'start' | 'pause' | 'cancel' | 'retry-failed') {
+    if (!selectedCampaign) return;
     setSubmitting(true);
     try {
       await api(`/campaigns/${selectedCampaign.id}/${action}`, { method: 'POST' });
@@ -409,11 +422,11 @@ export default function CampaignsPage() {
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="md" className="flex-1" onClick={handlePreview} disabled={submitting}>
-                  <Eye className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  <Eye className="h-4 w-4" aria-hidden="true" />
                   {t('preview')}
                 </Button>
                 <Button size="md" className="flex-1" onClick={createCampaign} disabled={submitting}>
-                  <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  <Plus className="h-4 w-4" aria-hidden="true" />
                   {t('createDraft')}
                 </Button>
               </div>
@@ -475,13 +488,13 @@ export default function CampaignsPage() {
               }`}
             >
               {toast.msg}
-              <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           )}
 
           {!detail ? (
             <div className="flex h-full flex-col items-center justify-center text-center text-gray-400">
-              <Megaphone className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+              <MegaphoneSimple className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
               <p className="text-sm">{t('emptyDetail')}</p>
             </div>
           ) : (
@@ -502,37 +515,37 @@ export default function CampaignsPage() {
                 <div className="mt-4 flex flex-wrap gap-2">
                   {canManage && ['draft', 'pending_approval'].includes(detail.status) && (
                     <Button variant="review" size="sm" onClick={() => runAction('submit')} disabled={submitting}>
-                      <Send className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      <PaperPlaneTilt className="h-4 w-4" aria-hidden="true" />
                       {t('submitApproval')}
                     </Button>
                   )}
                   {canApprove && detail.status === 'pending_approval' && (
                     <Button size="sm" onClick={() => runAction('approve')} disabled={submitting}>
-                      <CircleCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      <CheckCircle className="h-4 w-4" aria-hidden="true" />
                       {t('approve')}
                     </Button>
                   )}
                   {canApprove && ['approved', 'paused', 'scheduled'].includes(detail.status) && (
                     <Button size="sm" onClick={() => runAction('start')} disabled={submitting}>
-                      <Send className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      <PaperPlaneTilt className="h-4 w-4" aria-hidden="true" />
                       {t('startQueue')}
                     </Button>
                   )}
                   {canApprove && ['running', 'scheduled'].includes(detail.status) && (
                     <Button variant="outline" size="sm" onClick={() => runAction('pause')} disabled={submitting}>
-                      <Pause className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      <Pause className="h-4 w-4" aria-hidden="true" />
                       {t('pauseAction')}
                     </Button>
                   )}
                   {canApprove && !['completed', 'cancelled'].includes(detail.status) && (
                     <Button variant="danger" size="sm" onClick={() => runAction('cancel')} disabled={submitting}>
-                      <CircleX className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      <XCircle className="h-4 w-4" aria-hidden="true" />
                       {t('cancelAction')}
                     </Button>
                   )}
                   {canApprove && detail.status === 'failed' && (
                     <Button variant="outline" size="sm" onClick={() => runAction('retry-failed')} disabled={submitting}>
-                      <RotateCcw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      <ArrowCounterClockwise className="h-4 w-4" aria-hidden="true" />
                       {t('retryFailed')}
                     </Button>
                   )}
@@ -594,6 +607,33 @@ export default function CampaignsPage() {
           )}
         </main>
       </div>
+
+      <Modal
+        open={!!pendingAction}
+        onClose={() => setPendingAction(null)}
+        title={t('confirmActionTitle')}
+        description={pendingAction?.message ?? ''}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setPendingAction(null)}>{t('cancelButton')}</Button>
+            <Button
+              size="sm"
+              disabled={submitting}
+              onClick={async () => {
+                if (!pendingAction) return;
+                const { action } = pendingAction;
+                setPendingAction(null);
+                await executeAction(action);
+              }}
+            >
+              {t('confirmActionButton')}
+            </Button>
+          </>
+        }
+      >
+        {null}
+      </Modal>
     </AppLayout>
   );
 }

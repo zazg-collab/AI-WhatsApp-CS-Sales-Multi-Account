@@ -3,15 +3,16 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  ShieldCheck,
-  TriangleAlert,
-  CircleX,
-  Unplug,
+  ShieldStar,
+  Warning,
+  XCircle,
+  PlugsConnected,
   Clock,
   ArrowUpRight,
-  ChartNoAxesCombined,
+  ChartLineUp,
   Hand,
-} from 'lucide-react';
+  type Icon as PhosphorIcon,
+} from '@phosphor-icons/react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { AppLayout } from '@/components/AppLayout';
@@ -19,7 +20,6 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { useT, type Dict } from '@/lib/i18n';
-import type { LucideIcon } from 'lucide-react';
 
 const dict: Dict = {
   title: { id: 'Prioritaskan lead, review balasan AI, dan kendalikan campaign hari ini.', en: 'Prioritise leads, review AI replies, and control campaigns today.' },
@@ -108,10 +108,10 @@ const toneRing: Record<QueueTone, string> = {
   danger: 'text-danger-600',
 };
 
-const stateMeta: Record<AttnState, { label: string; icon: LucideIcon; tone: 'review' | 'danger' | 'neutral' }> = {
+const stateMeta: Record<AttnState, { label: string; icon: PhosphorIcon; tone: 'review' | 'danger' | 'neutral' }> = {
   'human-takeover': { label: 'st_takeover', icon: Hand, tone: 'neutral' },
-  'needs-review': { label: 'st_review', icon: TriangleAlert, tone: 'review' },
-  'sending-blocked': { label: 'st_blocked', icon: CircleX, tone: 'danger' },
+  'needs-review': { label: 'st_review', icon: Warning, tone: 'review' },
+  'sending-blocked': { label: 'st_blocked', icon: XCircle, tone: 'danger' },
 };
 
 function relTime(iso: string | null | undefined): string {
@@ -206,13 +206,13 @@ export default function OverviewPage() {
     count: number;
     hint: string;
     href: string;
-    icon: LucideIcon;
+    icon: PhosphorIcon;
     tone: QueueTone;
   }[] = [
-    { key: 'reviews', label: t('q_reviews'), count: pendingReviews, hint: t('q_reviews_h'), href: '/hermes', icon: ShieldCheck, tone: 'review' },
-    { key: 'risk', label: t('q_risk'), count: highRisk, hint: t('q_risk_h'), href: '/hermes', icon: TriangleAlert, tone: 'danger' },
-    { key: 'failed', label: t('q_failed'), count: failed, hint: t('q_failed_h'), href: '/inbox', icon: CircleX, tone: 'danger' },
-    { key: 'disconnected', label: t('q_disc'), count: disconnected, hint: t('q_disc_h'), href: '/accounts', icon: Unplug, tone: 'danger' },
+    { key: 'reviews', label: t('q_reviews'), count: pendingReviews, hint: t('q_reviews_h'), href: '/hermes', icon: ShieldStar, tone: 'review' },
+    { key: 'risk', label: t('q_risk'), count: highRisk, hint: t('q_risk_h'), href: '/hermes', icon: Warning, tone: 'danger' },
+    { key: 'failed', label: t('q_failed'), count: failed, hint: t('q_failed_h'), href: '/inbox', icon: XCircle, tone: 'danger' },
+    { key: 'disconnected', label: t('q_disc'), count: disconnected, hint: t('q_disc_h'), href: '/accounts', icon: PlugsConnected, tone: 'danger' },
     { key: 'sla', label: t('q_sla'), count: slaRisk, hint: t('q_sla_h'), href: '/inbox', icon: Clock, tone: 'review' },
   ];
 
@@ -238,7 +238,7 @@ export default function OverviewPage() {
           href="/analytics"
           className="inline-flex h-9 items-center gap-2 rounded border border-gray-200 bg-white px-4 text-[13px] font-semibold text-gray-700 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
         >
-          <ChartNoAxesCombined className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          <ChartLineUp className="h-4 w-4" aria-hidden="true" />
           {t('fullAnalytics')}
         </Link>
       </PageHeader>
@@ -273,11 +273,11 @@ export default function OverviewPage() {
                       <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${muted ? 'bg-gray-100 dark:bg-gray-800' : q.tone === 'danger' ? 'bg-danger-50 dark:bg-danger-900/30' : 'bg-review-50 dark:bg-review-900/30'}`}>
                         <Icon
                           className={`h-4 w-4 ${muted ? 'text-gray-300' : toneRing[q.tone]}`}
-                          strokeWidth={1.75}
+                         
                           aria-hidden="true"
                         />
                       </span>
-                      <ArrowUpRight className="h-3.5 w-3.5 text-gray-300 transition-colors group-hover:text-gray-500" strokeWidth={1.75} aria-hidden="true" />
+                      <ArrowUpRight className="h-3.5 w-3.5 text-gray-300 transition-colors group-hover:text-gray-500" aria-hidden="true" />
                     </div>
                     <p className={`mt-3 text-3xl font-bold tabular-nums tracking-tight ${muted ? 'text-gray-300' : 'text-gray-900 dark:text-gray-100'}`}>
                       {loading ? '—' : q.count}
@@ -298,7 +298,7 @@ export default function OverviewPage() {
               <CardTitle id="attn-h">{t('needDecision')}</CardTitle>
               <Link href="/inbox" className="inline-flex items-center gap-1 rounded-lg bg-hermes-50 px-2.5 py-1 text-[12px] font-semibold text-hermes-700 hover:bg-hermes-100 dark:bg-hermes-900/30 dark:text-hermes-300 dark:hover:bg-hermes-900/50">
                 {t('openInbox')}
-                <ArrowUpRight className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
+                <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
               </Link>
             </CardHeader>
             {loading ? (
@@ -308,7 +308,7 @@ export default function OverviewPage() {
             ) : attention.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-14 text-center">
                 <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-channel-50 dark:bg-channel-900/20">
-                  <ShieldCheck className="h-5 w-5 text-channel-600 dark:text-channel-500" strokeWidth={1.75} aria-hidden="true" />
+                  <ShieldStar className="h-5 w-5 text-channel-600 dark:text-channel-500" aria-hidden="true" />
                 </span>
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('allClear')}</p>
                 <p className="mt-1 text-xs text-gray-400">{t('allClearSub')}</p>
@@ -339,7 +339,7 @@ export default function OverviewPage() {
                           </p>
                         </div>
                         <Badge tone={meta.tone}>
-                          <Icon className="h-3 w-3" strokeWidth={2} aria-hidden="true" />
+                          <Icon className="h-3 w-3" aria-hidden="true" />
                           {t(meta.label)}
                         </Badge>
                         <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-gray-400">

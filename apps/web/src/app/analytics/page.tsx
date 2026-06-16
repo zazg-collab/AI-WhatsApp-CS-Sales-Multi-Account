@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Download } from 'lucide-react';
+import Link from 'next/link';
+import { DownloadSimple, Pulse } from '@phosphor-icons/react';
 import { api, downloadFile } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -12,6 +13,7 @@ import { useT, type Dict } from '@/lib/i18n';
 const dict: Dict = {
   title: { id: 'Analytics', en: 'Analytics' },
   subtitle: { id: 'Tren penjualan dan percakapan', en: 'Sales and conversation trends' },
+  viewMonitoring: { id: 'Lihat Monitoring (ops)', en: 'View Monitoring (ops)' },
   exportCustomers: { id: 'Ekspor pelanggan CSV', en: 'Export customers CSV' },
   exportConversations: { id: 'Ekspor percakapan CSV', en: 'Export conversations CSV' },
   errLoad: { id: 'Gagal memuat analitik dari API.', en: 'Failed to load analytics from the API.' },
@@ -22,9 +24,10 @@ const dict: Dict = {
   aiActive: { id: 'AI aktif', en: 'AI active' },
   pendingFollowUps: { id: 'Follow-up tertunda', en: 'Pending follow-ups' },
   messages24h: { id: 'Pesan (24 jam)', en: 'Messages (24h)' },
+  avgResponseTime: { id: 'Rata-rata respons', en: 'Avg response time' },
   leadFunnel: { id: 'Corong lead', en: 'Lead funnel' },
   aiModeDistribution: { id: 'Distribusi mode AI', en: 'AI mode distribution' },
-  messageVolume7d: { id: 'Volume pesan — 7 hari terakhir', en: 'Message volume — last 7 days' },
+  messageVolumeRange: { id: 'Volume pesan — {days} hari terakhir', en: 'Message volume — last {days} days' },
   topAccounts7d: { id: 'Akun teraktif — 7 hari terakhir', en: 'Most active accounts — last 7 days' },
   messagesUnit: { id: '{n} pesan', en: '{n} messages' },
   empty: { id: 'Belum ada data untuk ditampilkan.', en: 'No data to display yet.' },
@@ -42,13 +45,45 @@ const dict: Dict = {
   // Interpretation
   interpretation: { id: 'Interpretasi', en: 'Interpretation' },
   nextAction: { id: 'Tindakan selanjutnya', en: 'Next action' },
+  leadFunnelEmpty: {
+    id: 'Belum ada lead pada rentang ini.',
+    en: 'No leads recorded in this range yet.',
+  },
   leadFunnelInterpretation: {
-    id: 'Mayoritas lead berada di stage cold. Fokus nurturing untuk move ke warm.',
-    en: 'Most leads are cold. Focus nurturing campaigns to move them to warm.'
+    id: '{pct}% lead berada di stage {stage}. {hotPct}% ({hotCount}) berstatus hot/very hot dan siap di-closing.',
+    en: '{pct}% of leads are at the {stage} stage. {hotPct}% ({hotCount}) are hot/very hot and ready to close.',
+  },
+  leadActionNurtureCold: {
+    id: 'Jalankan kampanye nurturing untuk {count} lead cold agar naik ke warm.',
+    en: 'Run a nurture campaign for the {count} cold leads to move them toward warm.',
+  },
+  leadActionAssignHot: {
+    id: 'Tugaskan {count} lead hot/very hot ke tim sales untuk follow-up segera.',
+    en: 'Assign the {count} hot/very-hot leads to sales for immediate follow-up.',
+  },
+  leadActionNoHot: {
+    id: 'Belum ada lead hot. Tinjau kriteria lead scoring atau dorong lebih banyak engagement.',
+    en: 'No hot leads yet. Review the lead-scoring criteria or drive more engagement.',
+  },
+  aiModeEmpty: {
+    id: 'Belum ada percakapan pada rentang ini.',
+    en: 'No conversations recorded in this range yet.',
   },
   aiModeInterpretation: {
-    id: 'AI OFF dominan. Pertimbangkan enable AI untuk leads warm/hot.',
-    en: 'AI OFF is dominant. Consider enabling AI for warm/hot leads.'
+    id: '{pct}% percakapan berada dalam mode {mode}.',
+    en: '{pct}% of conversations are in {mode} mode.',
+  },
+  aiModeActionOffDominant: {
+    id: 'Mode AI OFF dominan ({pct}%). Pertimbangkan AI draft/supervised untuk lead warm/hot agar admin lebih efisien.',
+    en: 'AI OFF is dominant ({pct}%). Consider AI draft/supervised for warm/hot leads to free up admin time.',
+  },
+  aiModeActionPaused: {
+    id: '{count} percakapan dijeda AI karena risiko terdeteksi — tinjau di Hermes Review.',
+    en: '{count} conversations have AI paused due to detected risk — review them in Hermes Review.',
+  },
+  aiModeActionSupervisedHealthy: {
+    id: 'Distribusi mode terlihat sehat. Pantau confidence score Hermes pada percakapan supervised.',
+    en: 'Mode distribution looks healthy. Keep an eye on Hermes confidence scores for supervised conversations.',
   },
 };
 
@@ -155,15 +190,59 @@ export default function AnalyticsPage() {
     ai_paused: 'bg-danger-500',
   };
 
+  // Lead funnel interpretation derived from actual counts — never fabricated.
+  const leadTotal = leadFunnel.reduce((s, i) => s + i.count, 0);
+  const dominantLead = leadFunnel.reduce<LeadFunnelItem | null>((best, item) => (!best || item.count > best.count ? item : best), null);
+  const hotCount = leadFunnel.filter((i) => i.stage === 'hot' || i.stage === 'very_hot').reduce((s, i) => s + i.count, 0);
+  const leadFunnelInterpretation = leadTotal === 0
+    ? t('leadFunnelEmpty')
+    : t('leadFunnelInterpretation', {
+        pct: String(dominantLead ? Math.round((dominantLead.count / leadTotal) * 100) : 0),
+        stage: dominantLead ? (leadColorLabels[dominantLead.stage] ?? dominantLead.stage) : '',
+        hotPct: String(Math.round((hotCount / leadTotal) * 100)),
+        hotCount: String(hotCount),
+      });
+  const coldCount = leadFunnel.find((i) => i.stage === 'cold')?.count ?? 0;
+  const leadNextActions = leadTotal === 0
+    ? []
+    : [
+        coldCount > 0 ? t('leadActionNurtureCold', { count: String(coldCount) }) : null,
+        hotCount > 0 ? t('leadActionAssignHot', { count: String(hotCount) }) : t('leadActionNoHot'),
+      ].filter((x): x is string => !!x);
+
+  // AI mode interpretation derived from actual counts.
+  const modeTotal = aiModeBreakdown.reduce((s, i) => s + i.count, 0);
+  const dominantMode = aiModeBreakdown.reduce<AiModeItem | null>((best, item) => (!best || item.count > best.count ? item : best), null);
+  const aiModeInterpretation = modeTotal === 0
+    ? t('aiModeEmpty')
+    : t('aiModeInterpretation', {
+        pct: String(dominantMode?.percentage ?? 0),
+        mode: dominantMode ? (MODE_LABEL_KEY[dominantMode.mode] ? t(MODE_LABEL_KEY[dominantMode.mode]) : dominantMode.mode) : '',
+      });
+  const pausedCount = aiModeBreakdown.find((i) => i.mode === 'ai_paused')?.count ?? 0;
+  const offPct = aiModeBreakdown.find((i) => i.mode === 'ai_off')?.percentage ?? 0;
+  const aiModeNextActions = modeTotal === 0
+    ? []
+    : [
+        pausedCount > 0 ? t('aiModeActionPaused', { count: String(pausedCount) }) : null,
+        dominantMode?.mode === 'ai_off' && offPct > 50 ? t('aiModeActionOffDominant', { pct: String(offPct) }) : t('aiModeActionSupervisedHealthy'),
+      ].filter((x): x is string => !!x);
+
   return (
     <AppLayout>
       <PageHeader title={t('title')} subtitle={t('subtitle')}>
+        <Link href="/monitoring">
+          <Button variant="outline" size="sm">
+            <Pulse className="h-4 w-4" aria-hidden="true" />
+            {t('viewMonitoring')}
+          </Button>
+        </Link>
         <Button variant="outline" size="sm" onClick={() => exportCsv('/customers/export', 'customers.csv')}>
-          <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          <DownloadSimple className="h-4 w-4" aria-hidden="true" />
           {t('exportCustomers')}
         </Button>
         <Button variant="outline" size="sm" onClick={() => exportCsv('/conversations/export', 'conversations.csv')}>
-          <Download className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          <DownloadSimple className="h-4 w-4" aria-hidden="true" />
           {t('exportConversations')}
         </Button>
       </PageHeader>
@@ -195,8 +274,8 @@ export default function AnalyticsPage() {
 
         {loading ? (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              {[1, 2, 3, 4, 5].map((n) => (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              {[1, 2, 3, 4, 5, 6].map((n) => (
                 <div key={n} className="h-[72px] rounded animate-shimmer" />
               ))}
             </div>
@@ -219,12 +298,18 @@ export default function AnalyticsPage() {
         ) : (
           <>
             {summary && (
-              <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+              <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 <SummaryCard label={t('totalConversations')} value={summary.totalConversations} />
                 <SummaryCard label={t('waitingAdmin')} value={summary.activeConversations} tone="text-review-600" />
                 <SummaryCard label={t('aiActive')} value={summary.aiOnConversations} tone="text-channel-700" />
                 <SummaryCard label={t('pendingFollowUps')} value={summary.pendingFollowUps} tone="text-review-600" />
                 <SummaryCard label={t('messages24h')} value={summary.messagesLast24h} tone="text-hermes-600" />
+                <SummaryCard
+                  label={t('avgResponseTime')}
+                  value={summary.avgResponseTime}
+                  formatted={formatResponseTime(summary.avgResponseTime)}
+                  tone="text-hermes-600"
+                />
               </div>
             )}
 
@@ -268,15 +353,16 @@ export default function AnalyticsPage() {
                 <Card className="p-5 h-full">
                   <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{t('interpretation')}</h3>
                   <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
-                    {t('leadFunnelInterpretation')}
+                    {leadFunnelInterpretation}
                   </p>
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <h4 className="mb-2 text-xs font-semibold text-gray-600 dark:text-gray-400">{t('nextAction')}</h4>
-                    <ul className="text-sm space-y-1 text-gray-600 dark:text-gray-400">
-                      <li>• Trigger nurture campaign untuk lead cold</li>
-                      <li>• Assign hot leads ke team sales untuk follow-up</li>
-                    </ul>
-                  </div>
+                  {leadNextActions.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <h4 className="mb-2 text-xs font-semibold text-gray-600 dark:text-gray-400">{t('nextAction')}</h4>
+                      <ul className="text-sm space-y-1 text-gray-600 dark:text-gray-400">
+                        {leadNextActions.map((action, i) => <li key={i}>• {action}</li>)}
+                      </ul>
+                    </div>
+                  )}
                 </Card>
               </div>
             </div>
@@ -331,20 +417,21 @@ export default function AnalyticsPage() {
                 <Card className="p-5 h-full">
                   <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">{t('interpretation')}</h3>
                   <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300 mb-4">
-                    {t('aiModeInterpretation')}
+                    {aiModeInterpretation}
                   </p>
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <h4 className="mb-2 text-xs font-semibold text-gray-600 dark:text-gray-400">{t('nextAction')}</h4>
-                    <ul className="text-sm space-y-1 text-gray-600 dark:text-gray-400">
-                      <li>• Review AI draft & supervised confidence</li>
-                      <li>• Test AI ON untuk konversasi low-risk</li>
-                    </ul>
-                  </div>
+                  {aiModeNextActions.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                      <h4 className="mb-2 text-xs font-semibold text-gray-600 dark:text-gray-400">{t('nextAction')}</h4>
+                      <ul className="text-sm space-y-1 text-gray-600 dark:text-gray-400">
+                        {aiModeNextActions.map((action, i) => <li key={i}>• {action}</li>)}
+                      </ul>
+                    </div>
+                  )}
                 </Card>
               </div>
             </div>
 
-            <Panel title={t('messageVolume7d')}>
+            <Panel title={t('messageVolumeRange', { days: String(daysRange) })}>
                 {messageVolume.length === 0 ? (
                   <Empty />
                 ) : (
@@ -392,15 +479,22 @@ export default function AnalyticsPage() {
   );
 }
 
-function SummaryCard({ label, value, tone }: { label: string; value: number; tone?: string }) {
+function SummaryCard({ label, value, tone, formatted }: { label: string; value: number; tone?: string; formatted?: string }) {
   return (
     <Card className="p-3.5">
       <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
       <p className={`mt-1 text-2xl font-semibold tabular-nums ${tone ?? 'text-gray-900 dark:text-gray-100'}`}>
-        {value}
+        {formatted ?? value}
       </p>
     </Card>
   );
+}
+
+// avgResponseTime comes from the API in seconds; show whichever unit reads cleanest.
+function formatResponseTime(seconds: number): string {
+  if (!seconds || seconds <= 0) return '–';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  return `${Math.round(seconds / 60)}m`;
 }
 
 function Panel({

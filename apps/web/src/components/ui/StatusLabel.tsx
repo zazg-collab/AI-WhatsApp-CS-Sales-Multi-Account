@@ -1,12 +1,12 @@
 import {
-  Workflow,
-  ShieldCheck,
-  TriangleAlert,
+  ArrowsSplit,
+  ShieldStar,
+  Warning,
   Hand,
-  CircleX,
-  CircleCheck,
-  type LucideIcon,
-} from 'lucide-react';
+  XCircle,
+  CheckCircle,
+  type Icon,
+} from '@phosphor-icons/react';
 import { Badge } from './Badge';
 
 /**
@@ -24,22 +24,22 @@ export type StatusKind =
 
 const map: Record<
   StatusKind,
-  { label: string; icon: LucideIcon; tone: 'hermes' | 'accent' | 'review' | 'danger' | 'success' | 'neutral' }
+  { label: string; icon: Icon; tone: 'hermes' | 'accent' | 'review' | 'danger' | 'success' | 'neutral' }
 > = {
   // AI presence is informational → blue (accent); supervisor review → teal (hermes).
-  'ai-generated': { label: 'AI generated', icon: Workflow, tone: 'accent' },
-  'hermes-reviewed': { label: 'Hermes reviewed', icon: ShieldCheck, tone: 'hermes' },
-  'needs-review': { label: 'Needs review', icon: TriangleAlert, tone: 'review' },
+  'ai-generated': { label: 'AI generated', icon: ArrowsSplit, tone: 'accent' },
+  'hermes-reviewed': { label: 'Hermes reviewed', icon: ShieldStar, tone: 'hermes' },
+  'needs-review': { label: 'Needs review', icon: Warning, tone: 'review' },
   'human-takeover': { label: 'Human takeover', icon: Hand, tone: 'neutral' },
-  'sending-blocked': { label: 'Sending blocked', icon: CircleX, tone: 'danger' },
-  sent: { label: 'Sent', icon: CircleCheck, tone: 'success' },
+  'sending-blocked': { label: 'Sending blocked', icon: XCircle, tone: 'danger' },
+  sent: { label: 'Sent', icon: CheckCircle, tone: 'success' },
 };
 
 export function StatusLabel({ kind }: { kind: StatusKind }) {
   const { label, icon: Icon, tone } = map[kind];
   return (
     <Badge tone={tone}>
-      <Icon className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
       {label}
     </Badge>
   );

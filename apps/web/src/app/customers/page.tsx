@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Search, RefreshCw, ContactRound, X } from 'lucide-react';
+import { MagnifyingGlass, ArrowsClockwise, AddressBook, X } from '@phosphor-icons/react';
 import { api, getToken } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -284,9 +284,9 @@ export default function CustomersPage() {
         <section className="border-b border-gray-200 bg-white px-5 py-3 dark:border-gray-800 dark:bg-gray-900">
           <div className="grid gap-2 lg:grid-cols-[1fr_180px_180px_auto]">
             <div className="relative">
-              <Search
+              <MagnifyingGlass
                 className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-                strokeWidth={1.75}
+               
                 aria-hidden="true"
               />
               <input
@@ -316,7 +316,7 @@ export default function CustomersPage() {
               className={inputClass}
             />
             <Button variant="outline" size="md" onClick={loadCustomers}>
-              <RefreshCw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              <ArrowsClockwise className="h-4 w-4" aria-hidden="true" />
               {t('reload')}
             </Button>
           </div>
@@ -390,7 +390,7 @@ export default function CustomersPage() {
             className="mx-5 mt-3 flex items-center gap-2 self-start rounded-lg border border-hermes-100 bg-hermes-50 px-3 py-2 text-left text-sm text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-200"
           >
             {toast}
-            <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         )}
 
@@ -403,13 +403,13 @@ export default function CustomersPage() {
             </div>
           ) : customers.length === 0 ? (
             <Card className="flex flex-col items-center justify-center py-16 text-center">
-              <ContactRound className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+              <AddressBook className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('emptyTitle')}</p>
               <p className="mt-1 text-[13px] text-gray-400">
                 {t('emptyHint')}
               </p>
               <Button variant="outline" size="sm" className="mt-3" onClick={loadCustomers}>
-                <RefreshCw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                <ArrowsClockwise className="h-4 w-4" aria-hidden="true" />
                 {t('retry')}
               </Button>
             </Card>

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Star } from 'lucide-react';
+import Link from 'next/link';
+import { Star, ChartLineUp } from '@phosphor-icons/react';
 import { AppLayout } from '@/components/AppLayout';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -12,6 +13,7 @@ import { useT, type Dict } from '@/lib/i18n';
 const dict: Dict = {
   title: { id: 'Performance Monitoring', en: 'Performance Monitoring' },
   subtitle: { id: 'Waktu respons, kualitas AI, pengiriman, dan volume pesan', en: 'Response time, AI quality, delivery, and message volume' },
+  viewAnalytics: { id: 'Lihat Analytics (sales)', en: 'View Analytics (sales)' },
   rangeLabel: { id: 'Rentang waktu', en: 'Time range' },
   range7: { id: '7 hari terakhir', en: 'Last 7 days' },
   range14: { id: '14 hari terakhir', en: 'Last 14 days' },
@@ -194,6 +196,12 @@ export default function MonitoringPage() {
         title={t('title')}
         subtitle={t('subtitle')}
       >
+        <Link href="/analytics">
+          <Button variant="outline" size="sm">
+            <ChartLineUp className="h-4 w-4" aria-hidden="true" />
+            {t('viewAnalytics')}
+          </Button>
+        </Link>
         <label htmlFor="range-select" className="sr-only">
           {t('rangeLabel')}
         </label>
@@ -316,7 +324,7 @@ export default function MonitoringPage() {
                         <div key={score} className="flex items-center gap-2 text-sm">
                           <span className="flex w-10 items-center gap-0.5 tabular-nums text-gray-500">
                             {score}
-                            <Star className="h-3.5 w-3.5 text-review-500" strokeWidth={1.75} aria-hidden="true" />
+                            <Star className="h-3.5 w-3.5 text-review-500" aria-hidden="true" />
                           </span>
                           <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
                             <div className="h-full bg-review-500" style={{ width: `${pct}%` }} />

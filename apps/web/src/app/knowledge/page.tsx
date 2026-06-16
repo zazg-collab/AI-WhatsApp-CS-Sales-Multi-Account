@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Upload, Link2, Plus, BookOpen } from 'lucide-react';
+import { UploadSimple, Link, Plus, Books } from '@phosphor-icons/react';
 import { api, uploadFile } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -236,7 +236,7 @@ export default function KnowledgePage() {
                 required
               />
               <Button type="submit" size="sm" className="w-full">
-                <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                <Plus className="h-4 w-4" aria-hidden="true" />
                 {t('createBase')}
               </Button>
             </form>
@@ -281,7 +281,7 @@ export default function KnowledgePage() {
             <>
               <Card className="p-4">
                 <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  <Upload className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                  <UploadSimple className="h-4 w-4 text-gray-400" aria-hidden="true" />
                   {t('importHeading')}
                 </h2>
                 <p className="mb-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
@@ -293,7 +293,7 @@ export default function KnowledgePage() {
                       ingesting ? 'opacity-50' : ''
                     }`}
                   >
-                    <Upload className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    <UploadSimple className="h-4 w-4" aria-hidden="true" />
                     {ingesting ? t('processing') : t('uploadFile')}
                     <input
                       ref={fileRef}
@@ -320,7 +320,7 @@ export default function KnowledgePage() {
                       />
                     </div>
                     <Button type="submit" variant="outline" size="md" disabled={!ingestUrl.trim() || ingesting}>
-                      <Link2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      <Link className="h-4 w-4" aria-hidden="true" />
                       {t('pullUrl')}
                     </Button>
                   </form>
@@ -358,7 +358,7 @@ export default function KnowledgePage() {
                     required
                   />
                   <Button type="submit" size="sm">
-                    <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    <Plus className="h-4 w-4" aria-hidden="true" />
                     {t('addItem')}
                   </Button>
                 </form>
@@ -372,7 +372,7 @@ export default function KnowledgePage() {
                 </div>
               ) : items.length === 0 ? (
                 <Card className="flex flex-col items-center justify-center py-12 text-center">
-                  <BookOpen className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+                  <Books className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('emptyItemsTitle')}</p>
                   <p className="mt-1 text-[13px] text-gray-400">
                     {t('emptyItemsHint')}
@@ -401,7 +401,7 @@ export default function KnowledgePage() {
             </>
           ) : (
             <Card className="flex flex-col items-center justify-center py-16 text-center">
-              <BookOpen className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+              <Books className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('pickBaseTitle')}</p>
               <p className="mt-1 text-[13px] text-gray-400">
                 {t('pickBaseHint')}

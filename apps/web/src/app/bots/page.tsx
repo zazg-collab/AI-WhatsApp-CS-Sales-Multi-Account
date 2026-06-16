@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Workflow, X } from 'lucide-react';
+import { Plus, PencilSimple, Trash, ArrowsSplit, X } from '@phosphor-icons/react';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -327,7 +327,7 @@ function BotModal({
               ))}
             </SelectField>
             <button type="button" onClick={() => setShowPersonaModal(true)} className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-hermes-700 hover:text-hermes-800">
-              <Plus className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
               {t('createNewPersona')}
             </button>
           </div>
@@ -421,11 +421,11 @@ function BotCard({ bot, onEdit, onDelete }: { bot: Bot; onEdit: () => void; onDe
         </div>
         <div className="flex shrink-0 gap-1.5">
           <Button variant="outline" size="sm" onClick={onEdit}>
-            <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            <PencilSimple className="h-4 w-4" aria-hidden="true" />
             {t('edit')}
           </Button>
           <Button variant="ghost" size="sm" onClick={onDelete} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
-            <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            <Trash className="h-4 w-4" aria-hidden="true" />
             {t('delete')}
           </Button>
         </div>
@@ -504,7 +504,7 @@ export default function BotsPage() {
     <AppLayout>
       <PageHeader title="Bots & Personas" subtitle={t('pageSubtitle')}>
         <Button size="sm" onClick={() => setEditBot(null)}>
-          <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+          <Plus className="h-4 w-4" aria-hidden="true" />
           {t('newBotBtn')}
         </Button>
       </PageHeader>
@@ -514,7 +514,7 @@ export default function BotsPage() {
           <div className="mb-4 flex items-center justify-between rounded-lg border border-danger-100 bg-danger-50 px-3 py-2 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-700/10 dark:text-danger-500">
             {error}
             <button onClick={() => setError(null)} aria-label={t('closeNotif')}>
-              <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
         )}
@@ -525,11 +525,11 @@ export default function BotsPage() {
           </div>
         ) : bots.length === 0 ? (
           <Card className="flex flex-col items-center justify-center border-dashed py-16 text-center">
-            <Workflow className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+            <ArrowsSplit className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('noBots')}</p>
             <p className="mt-1 text-[13px] text-gray-400">{t('noBotsHint')}</p>
             <Button size="sm" className="mt-4" onClick={() => setEditBot(null)}>
-              <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              <Plus className="h-4 w-4" aria-hidden="true" />
               {t('newBotBtn')}
             </Button>
           </Card>
@@ -565,7 +565,7 @@ export default function BotsPage() {
               <>
                 <Button variant="ghost" onClick={() => setConfirmDelete(null)}>{t('cancel')}</Button>
                 <Button variant="danger" onClick={() => handleDelete(confirmDelete)}>
-                  <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  <Trash className="h-4 w-4" aria-hidden="true" />
                   {t('deleteBotBtn')}
                 </Button>
               </>

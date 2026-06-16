@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, UsersRound, ShieldAlert } from 'lucide-react';
+import { Plus, PencilSimple, Trash, UsersThree, ShieldWarning } from '@phosphor-icons/react';
 import { api, getToken } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -233,7 +233,7 @@ function DeleteConfirmModal({ user, onClose, onConfirm, isLoading }: { user: Use
         <>
           <Button variant="outline" onClick={onClose}>{t('cancel')}</Button>
           <Button variant="danger" onClick={onConfirm} disabled={isLoading}>
-            <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            <Trash className="h-4 w-4" aria-hidden="true" />
             {isLoading ? t('deleting') : t('deleteUserBtn')}
           </Button>
         </>
@@ -280,7 +280,7 @@ export default function UsersPage() {
       <AppLayout>
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
           <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-review-50 dark:bg-review-900/20">
-            <ShieldAlert className="h-5 w-5 text-review-600" strokeWidth={1.75} aria-hidden="true" />
+            <ShieldWarning className="h-5 w-5 text-review-600" aria-hidden="true" />
           </span>
           <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{t('accessRestricted')}</p>
           <p className="mt-1 max-w-sm text-[13px] text-gray-500">
@@ -309,7 +309,7 @@ export default function UsersPage() {
       <PageHeader title="Team" subtitle={t('pageSubtitle')}>
         {authUser?.role === 'owner' && (
           <Button size="sm" onClick={() => setShowCreateModal(true)}>
-            <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+            <Plus className="h-4 w-4" aria-hidden="true" />
             Create user
           </Button>
         )}
@@ -328,12 +328,12 @@ export default function UsersPage() {
           </div>
         ) : users.length === 0 ? (
           <Card className="flex flex-col items-center justify-center py-16 text-center">
-            <UsersRound className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+            <UsersThree className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('noUsers')}</p>
             <p className="mt-1 text-[13px] text-gray-400">{t('noUsersHint')}</p>
             {authUser?.role === 'owner' && (
               <Button size="sm" className="mt-4" onClick={() => setShowCreateModal(true)}>
-                <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                <Plus className="h-4 w-4" aria-hidden="true" />
                 Create user
               </Button>
             )}
@@ -368,11 +368,11 @@ export default function UsersPage() {
                         {authUser?.role === 'owner' && (
                           <>
                             <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}>
-                              <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                              <PencilSimple className="h-4 w-4" aria-hidden="true" />
                               {t('edit')}
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => setDeletingUser(user)} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
-                              <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                              <Trash className="h-4 w-4" aria-hidden="true" />
                               {t('delete')}
                             </Button>
                           </>

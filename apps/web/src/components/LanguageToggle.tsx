@@ -1,6 +1,6 @@
 'use client';
 
-import { Languages } from 'lucide-react';
+import { Translate } from '@phosphor-icons/react';
 import { useLang } from '@/lib/i18n';
 
 /**
@@ -19,7 +19,7 @@ export function LanguageToggle() {
       aria-label={label}
       className="flex w-full items-center justify-center gap-2.5 rounded-md px-2 py-2 text-[13px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50 lg:justify-start lg:px-2.5"
     >
-      <Languages className="h-[17px] w-[17px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
+      <Translate className="h-[17px] w-[17px] shrink-0" aria-hidden="true" />
       <span className="hidden items-center gap-1.5 lg:flex">
         <span className={lang === 'id' ? 'font-semibold text-hermes-300' : ''}>ID</span>
         <span className="text-gray-600">/</span>

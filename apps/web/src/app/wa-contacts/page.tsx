@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Search } from 'lucide-react';
+import { ArrowsClockwise, MagnifyingGlass } from '@phosphor-icons/react';
 import { Avatar } from '@/components/ui/Avatar';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
@@ -108,7 +108,7 @@ export default function WhatsappContactsPage() {
           subtitle="Kontak asli dari history sync dan contacts update Baileys"
         >
           <Button variant="outline" size="sm" onClick={loadContacts} disabled={loading || !accountId}>
-            <RefreshCw className="h-4 w-4" />
+            <ArrowsClockwise className="h-4 w-4" />
             Muat ulang
           </Button>
         </PageHeader>
@@ -131,7 +131,7 @@ export default function WhatsappContactsPage() {
               <Badge tone="neutral">{data.total} kontak tersync</Badge>
             </div>
             <label className="relative block w-full max-w-md">
-              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <MagnifyingGlass className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
               <input
                 className={`${inputClass} w-full pl-9`}
                 value={search}

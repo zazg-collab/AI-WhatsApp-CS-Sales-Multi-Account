@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, History, Workflow, UsersRound } from 'lucide-react';
+import { ShieldStar, ClockCounterClockwise, ArrowsSplit, UsersThree } from '@phosphor-icons/react';
 import { api, setToken } from '@/lib/api';
 import { useT, type Dict } from '@/lib/i18n';
 
@@ -28,10 +28,10 @@ export default function LoginPage() {
   const router = useRouter();
 
   const features = [
-    { icon: Workflow, text: t('feat1') },
-    { icon: ShieldCheck, text: t('feat2') },
-    { icon: History, text: t('feat3') },
-    { icon: UsersRound, text: t('feat4') },
+    { icon: ArrowsSplit, text: t('feat1') },
+    { icon: ShieldStar, text: t('feat2') },
+    { icon: ClockCounterClockwise, text: t('feat3') },
+    { icon: UsersThree, text: t('feat4') },
   ];
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -61,7 +61,7 @@ export default function LoginPage() {
       <section className="hidden w-[46%] flex-col justify-between border-r border-gray-800 bg-gray-950 p-10 text-white lg:flex">
         <div className="flex items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded bg-hermes-700 text-white">
-            <ShieldCheck className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+            <ShieldStar className="h-5 w-5" aria-hidden="true" />
           </span>
           <div>
             <p className="text-sm font-semibold tracking-tight">Hermes Control Center</p>
@@ -84,7 +84,7 @@ export default function LoginPage() {
           <ul className="grid gap-2">
             {features.map(({ icon: Icon, text }) => (
               <li key={text} className="flex items-center gap-3 rounded border border-gray-800 bg-gray-900/70 px-3 py-2.5 text-[13px] text-gray-300">
-                <Icon className="h-4 w-4 text-hermes-300" strokeWidth={1.75} aria-hidden="true" />
+                <Icon className="h-4 w-4 text-hermes-300" aria-hidden="true" />
                 {text}
               </li>
             ))}
@@ -98,7 +98,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm rounded border border-gray-200 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-gray-800 dark:bg-gray-900">
           <div className="mb-6 flex items-start gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded bg-hermes-700 text-white lg:hidden">
-              <ShieldCheck className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+              <ShieldStar className="h-5 w-5" aria-hidden="true" />
             </span>
             <div>
               <h2 className="text-xl font-semibold tracking-tight text-gray-950 dark:text-gray-50">{t('signinTitle')}</h2>
@@ -142,7 +142,7 @@ export default function LoginPage() {
               className="flex h-10 w-full items-center justify-center gap-2 rounded border border-hermes-800 bg-hermes-700 text-sm font-semibold text-white transition-colors hover:bg-hermes-800 disabled:opacity-60"
               aria-label="Sign in"
             >
-              <ShieldCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              <ShieldStar className="h-4 w-4" aria-hidden="true" />
               {loading ? t('submitting') : t('submit')}
             </button>
           </form>

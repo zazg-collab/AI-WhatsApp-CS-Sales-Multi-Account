@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { UsersRound } from 'lucide-react';
+import { UsersThree } from '@phosphor-icons/react';
 import { resolveMediaUrl } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
@@ -47,7 +47,7 @@ export function Avatar({
   }
   return (
     <span className={base}>
-      {isGroup ? <UsersRound className={cn('h-4 w-4', iconClassName)} aria-hidden="true" /> : <span>{initialsFor(name, phone)}</span>}
+      {isGroup ? <UsersThree className={cn('h-4 w-4', iconClassName)} aria-hidden="true" /> : <span>{initialsFor(name, phone)}</span>}
     </span>
   );
 }

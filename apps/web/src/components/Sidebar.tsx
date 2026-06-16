@@ -4,27 +4,27 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-  LayoutDashboard,
-  Inbox,
-  ContactRound,
-  Megaphone,
+  SquaresFour,
+  Tray,
+  AddressBook,
+  MegaphoneSimple,
+  Books,
+  ShieldStar,
+  ClockCounterClockwise,
+  ChartLineUp,
+  UsersThree,
+  Gear,
+  DeviceMobile,
+  ArrowsSplit,
+  Pulse,
+  SignOut,
+  FileText,
   BookOpen,
-  ShieldCheck,
-  History,
-  ChartNoAxesCombined,
-  UsersRound,
-  Settings,
-  Smartphone,
-  Workflow,
-  Activity,
-  LogOut,
-  BookText,
-  BookUser,
   GraduationCap,
   Images,
-  Boxes,
-  type LucideIcon,
-} from 'lucide-react';
+  Cube,
+  type Icon as PhosphorIcon,
+} from '@phosphor-icons/react';
 import { getToken, clearToken, api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { cn } from '@/lib/cn';
@@ -35,7 +35,7 @@ import { useT, type Dict } from '@/lib/i18n';
 interface NavItem {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: PhosphorIcon;
   requiredRole?: 'owner' | 'supervisor' | 'admin' | 'viewer';
 }
 
@@ -74,34 +74,34 @@ function canView(userRole: string | null, requiredRole?: string): boolean {
 const sections: NavSection[] = [
   {
     items: [
-      { href: '/overview', label: 'Overview', icon: LayoutDashboard },
-      { href: '/inbox', label: 'Inbox', icon: Inbox },
-      { href: '/customers', label: 'Contacts', icon: ContactRound },
-      { href: '/wa-contacts', label: 'WA Contacts', icon: BookUser },
-      { href: '/hermes', label: 'Hermes Review', icon: ShieldCheck },
+      { href: '/overview', label: 'Overview', icon: SquaresFour },
+      { href: '/inbox', label: 'Inbox', icon: Tray },
+      { href: '/customers', label: 'Contacts', icon: AddressBook },
+      { href: '/wa-contacts', label: 'WA Contacts', icon: BookOpen },
+      { href: '/hermes', label: 'Hermes Review', icon: ShieldStar },
     ],
   },
   {
     heading: 'Growth',
     items: [
-      { href: '/campaigns', label: 'Campaigns', icon: Megaphone, requiredRole: 'admin' },
-      { href: '/knowledge', label: 'Knowledge Base', icon: BookOpen },
-      { href: '/products', label: 'Produk & Stok', icon: Boxes },
+      { href: '/campaigns', label: 'Campaigns', icon: MegaphoneSimple, requiredRole: 'admin' },
+      { href: '/knowledge', label: 'Knowledge Base', icon: Books },
+      { href: '/products', label: 'Produk & Stok', icon: Cube },
       { href: '/assets', label: 'Media Library', icon: Images },
       { href: '/learning', label: 'AI Learning', icon: GraduationCap, requiredRole: 'supervisor' },
-      { href: '/analytics', label: 'Analytics', icon: ChartNoAxesCombined },
-      { href: '/monitoring', label: 'Monitoring', icon: Activity, requiredRole: 'supervisor' },
+      { href: '/analytics', label: 'Analytics', icon: ChartLineUp },
+      { href: '/monitoring', label: 'Monitoring', icon: Pulse, requiredRole: 'supervisor' },
     ],
   },
   {
     heading: 'Operations',
     items: [
-      { href: '/accounts', label: 'Accounts', icon: Smartphone },
-      { href: '/bots', label: 'Automation Mode', icon: Workflow },
-      { href: '/templates', label: 'Templates', icon: BookText },
-      { href: '/audit', label: 'Audit Log', icon: History, requiredRole: 'supervisor' },
-      { href: '/admin/users', label: 'Team', icon: UsersRound, requiredRole: 'supervisor' },
-      { href: '/settings/ai', label: 'Settings', icon: Settings },
+      { href: '/accounts', label: 'Accounts', icon: DeviceMobile },
+      { href: '/bots', label: 'Automation Mode', icon: ArrowsSplit },
+      { href: '/templates', label: 'Templates', icon: FileText },
+      { href: '/audit', label: 'Audit Log', icon: ClockCounterClockwise, requiredRole: 'supervisor' },
+      { href: '/admin/users', label: 'Team', icon: UsersThree, requiredRole: 'supervisor' },
+      { href: '/settings/ai', label: 'Settings', icon: Gear },
     ],
   },
 ];
@@ -171,7 +171,7 @@ export function Sidebar() {
       {/* Brand */}
       <div className="flex h-16 items-center gap-2.5 border-b border-gray-800 px-3 lg:px-4">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-hermes-600 text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
-          <ShieldCheck className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
+          <ShieldStar className="h-[18px] w-[18px]" weight="duotone" aria-hidden="true" />
         </span>
         <span className="hidden min-w-0 lg:block">
           <span className="block truncate text-sm font-semibold tracking-tight text-gray-50">
@@ -218,7 +218,7 @@ export function Sidebar() {
                     <span className="relative shrink-0">
                       <Icon
                         className="h-[18px] w-[18px]"
-                        strokeWidth={isActive ? 2 : 1.75}
+                        weight={isActive ? 'duotone' : 'regular'}
                         aria-hidden="true"
                       />
                       {item.href === '/inbox' && unread > 0 && !open && (
@@ -264,7 +264,7 @@ export function Sidebar() {
           title="Sign out"
           className="flex w-full items-center justify-center gap-2.5 rounded-md px-2 py-2 text-[13px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50 lg:justify-start lg:px-2.5"
         >
-          <LogOut className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
+          <SignOut className="h-[18px] w-[18px] shrink-0" weight="regular" aria-hidden="true" />
           <span className="hidden lg:block">{t('signOut')}</span>
         </button>
       </div>

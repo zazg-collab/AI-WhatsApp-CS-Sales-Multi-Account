@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RefreshCw, Cpu, Save, ShieldAlert, MessageSquare, Bell, Clock, Megaphone } from 'lucide-react';
+import { ArrowsClockwise, Cpu, FloppyDisk, ShieldWarning, ChatCircle, Bell, Clock, MegaphoneSimple, type Icon } from '@phosphor-icons/react';
 import { api, hasRole } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -47,19 +47,16 @@ const dict: Dict = {
   slaHint: { id: 'Chat pelanggan yang belum dibalas melebihi ini ditandai melanggar SLA.', en: 'Customer chats unanswered beyond this are flagged as SLA breaches.' },
   // Hermes
   tabHermes: { id: 'Hermes Supervisor', en: 'Hermes Supervisor' },
-  confidenceThreshold: { id: 'Ambang keyakinan untuk approve otomatis', en: 'Confidence threshold for auto-approve' },
-  confidenceHint: { id: 'Skor >= ini akan di-approve otomatis. Defaultnya 90.', en: 'Scores >= this auto-approve. Default: 90.' },
-  riskKeywords: { id: 'Keyword berisiko tinggi', en: 'High-risk keywords' },
-  riskKeywordsHint: { id: 'Kata kunci yang trigger pause_ai otomatis', en: 'Keywords that trigger auto pause_ai' },
-  reviewMode: { id: 'Mode review', en: 'Review mode' },
-  reviewModeHint: { id: 'pre_send (sebelum kirim) atau post_send (setelah kirim)', en: 'pre_send (before sending) or post_send (after sending)' },
+  hermesComingSoon: {
+    id: 'Ambang keyakinan, keyword berisiko, dan mode review saat ini ditentukan di kode (rules.engine.ts), bukan lewat pengaturan. Konfigurasi UI akan ditambahkan di iterasi berikutnya.',
+    en: 'Confidence thresholds, risk keywords, and review mode are currently fixed in code (rules.engine.ts), not configurable here. UI configuration is planned for a future iteration.',
+  },
   // Campaign
   tabCampaign: { id: 'Keamanan Campaign', en: 'Campaign Safety' },
-  campaignApproval: { id: 'Perlu approval sebelum sending', en: 'Require approval before sending' },
-  campaignRate: { id: 'Rate limit per akun (pesan/jam)', en: 'Rate limit per account (msg/hour)' },
-  campaignOptout: { id: 'Keyword auto opt-out', en: 'Auto opt-out keyword' },
-  campaignOptoutHint: { id: 'Kata kunci yang auto-mengoptout customer', en: 'Keyword that auto-opts out customers' },
-  comingSoon: { id: 'Fitur akan datang. Backend belum implement. Lihat Accounts untuk keamanan WhatsApp.', en: 'Feature coming soon. Backend not implemented yet. See Accounts for WhatsApp safety.' },
+  campaignComingSoon: {
+    id: 'Approval, rate limit, dan opt-out campaign sudah diatur per-campaign di halaman Campaigns. Pengaturan global belum tersedia di sini.',
+    en: 'Campaign approval, rate limiting, and opt-out are already configured per-campaign on the Campaigns page. Global settings here are not available yet.',
+  },
 };
 
 type Tab = 'ai' | 'wa' | 'notif' | 'hermes' | 'campaign';
@@ -150,11 +147,11 @@ export default function SettingsPage() {
     }
   }
 
-  const tabs: { key: Tab; label: string; icon: typeof Cpu }[] = [
+  const tabs: { key: Tab; label: string; icon: Icon }[] = [
     { key: 'ai', label: t('tabAi'), icon: Cpu },
-    { key: 'wa', label: t('tabWa'), icon: MessageSquare },
+    { key: 'wa', label: t('tabWa'), icon: ChatCircle },
     { key: 'notif', label: t('tabNotif'), icon: Bell },
-    { key: 'hermes', label: t('tabHermes'), icon: ShieldAlert },
+    { key: 'hermes', label: t('tabHermes'), icon: ShieldWarning },
     { key: 'campaign', label: t('tabCampaign'), icon: Bell },
   ];
 
@@ -178,7 +175,7 @@ export default function SettingsPage() {
                     : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200',
                 )}
               >
-                <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                <Icon className="h-4 w-4" aria-hidden="true" />
                 {tb.label}
               </button>
             );
@@ -187,7 +184,7 @@ export default function SettingsPage() {
 
         {!canEdit && (
           <Card className="mb-4 flex items-start gap-2 border-review-200 bg-review-50 p-3 dark:border-review-700/40 dark:bg-review-900/20">
-            <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-review-600" strokeWidth={1.75} aria-hidden="true" />
+            <ShieldWarning className="mt-0.5 h-4 w-4 shrink-0 text-review-600" aria-hidden="true" />
             <p className="text-[13px] text-review-700 dark:text-review-300">{t('readOnly')}</p>
           </Card>
         )}
@@ -223,7 +220,7 @@ export default function SettingsPage() {
                       {models.map((m) => <option key={m} value={m} />)}
                     </datalist>
                     <Button variant="outline" size="sm" onClick={loadModels} disabled={loadingModels} className="shrink-0">
-                      <RefreshCw className={cn('h-4 w-4', loadingModels && 'animate-spin')} strokeWidth={1.75} aria-hidden="true" />
+                      <ArrowsClockwise className={cn('h-4 w-4', loadingModels && 'animate-spin')} aria-hidden="true" />
                       {t('loadModels')}
                     </Button>
                   </div>
@@ -279,7 +276,7 @@ export default function SettingsPage() {
                 </Field>
                 <Field label={t('slaMinutes')} hint={t('slaHint')}>
                   <div className="relative">
-                    <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                    <Clock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
                     <input type="number" min="1" max="1440" className={cn(fieldCls, 'pl-9')} disabled={!canEdit}
                       value={data.sla.responseMinutes} onChange={(e) => patch('sla', 'responseMinutes', e.target.value)} />
                   </div>
@@ -290,27 +287,27 @@ export default function SettingsPage() {
             {tab === 'hermes' && (
               <div className="space-y-4 py-4 text-center">
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-review-50 dark:bg-review-900/20 mx-auto">
-                  <ShieldAlert className="h-6 w-6 text-review-600" strokeWidth={1.75} aria-hidden="true" />
+                  <ShieldWarning className="h-6 w-6 text-review-600" aria-hidden="true" />
                 </div>
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('tabHermes')}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{t('comingSoon')}</p>
+                <p className="mx-auto max-w-md text-xs text-gray-500 dark:text-gray-400">{t('hermesComingSoon')}</p>
               </div>
             )}
 
             {tab === 'campaign' && (
               <div className="space-y-4 py-4 text-center">
                 <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-hermes-50 dark:bg-hermes-900/20 mx-auto">
-                  <Megaphone className="h-6 w-6 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
+                  <MegaphoneSimple className="h-6 w-6 text-hermes-600" aria-hidden="true" />
                 </div>
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('tabCampaign')}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{t('comingSoon')}</p>
+                <p className="mx-auto max-w-md text-xs text-gray-500 dark:text-gray-400">{t('campaignComingSoon')}</p>
               </div>
             )}
 
             {canEdit && (
               <div className="mt-6 flex items-center gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">
                 <Button onClick={save} disabled={saving}>
-                  <Save className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  <FloppyDisk className="h-4 w-4" aria-hidden="true" />
                   {saving ? t('saving') : t('save')}
                 </Button>
                 {savedMsg && <span className="text-[13px] font-medium text-hermes-600">{savedMsg}</span>}

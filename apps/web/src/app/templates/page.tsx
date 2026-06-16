@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, MessageSquareText } from 'lucide-react';
+import { Plus, PencilSimple, Trash, ChatText } from '@phosphor-icons/react';
 import { AppLayout } from '@/components/AppLayout';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -227,12 +227,12 @@ export default function TemplatesPage() {
                 <Button onClick={handleSubmit} className="flex-1">
                   {editingId ? (
                     <>
-                      <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      <PencilSimple className="h-4 w-4" aria-hidden="true" />
                       {t('save')}
                     </>
                   ) : (
                     <>
-                      <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      <Plus className="h-4 w-4" aria-hidden="true" />
                       Add
                     </>
                   )}
@@ -254,7 +254,7 @@ export default function TemplatesPage() {
               </div>
             ) : items.length === 0 ? (
               <Card className="flex flex-col items-center justify-center py-16 text-center">
-                <MessageSquareText className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+                <ChatText className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('noTemplates')}</p>
                 <p className="mt-1 text-[13px] text-gray-400">
                   {t('noTemplatesHint')}
@@ -274,11 +274,11 @@ export default function TemplatesPage() {
                     </div>
                     <div className="flex shrink-0 gap-1.5">
                       <Button variant="outline" size="sm" onClick={() => startEdit(item)}>
-                        <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                        <PencilSimple className="h-4 w-4" aria-hidden="true" />
                         {t('edit')}
                       </Button>
                       <Button variant="ghost" size="sm" onClick={() => setDeleting(item)} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
-                        <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                        <Trash className="h-4 w-4" aria-hidden="true" />
                         {t('delete')}
                       </Button>
                     </div>
@@ -300,7 +300,7 @@ export default function TemplatesPage() {
             <>
               <Button variant="outline" onClick={() => setDeleting(null)}>{t('cancel')}</Button>
               <Button variant="danger" onClick={confirmDelete}>
-                <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                <Trash className="h-4 w-4" aria-hidden="true" />
                 {t('deleteConfirmAction')}
               </Button>
             </>

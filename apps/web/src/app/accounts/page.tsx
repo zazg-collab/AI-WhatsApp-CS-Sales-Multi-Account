@@ -2,17 +2,17 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import {
-  ChevronDown,
-  ChevronRight,
-  CircleCheck,
+  CaretDown,
+  CaretRight,
+  CheckCircle,
   Plus,
-  Smartphone,
-  Unplug,
+  DeviceMobile,
+  PlugsConnected,
   QrCode,
-  RotateCcw,
-  Trash2,
-  Activity,
-} from 'lucide-react';
+  ArrowCounterClockwise,
+  Trash,
+  Pulse,
+} from '@phosphor-icons/react';
 import { api, hasRole } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { AppLayout } from '@/components/AppLayout';
@@ -21,6 +21,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Field, TextareaField } from '@/components/ui/Field';
+import { Modal } from '@/components/ui/Modal';
 import { useT, type Dict } from '@/lib/i18n';
 
 const dict: Dict = {
@@ -48,6 +49,10 @@ const dict: Dict = {
     id: 'Masukkan kode ini di WhatsApp → Pengaturan → Linked Devices',
     en: 'Enter this code in WhatsApp → Settings → Linked Devices',
   },
+  qrFreshJustNow: { id: 'QR baru saja diperbarui', en: 'QR just refreshed' },
+  qrFreshSecondsAgo: { id: 'Diperbarui {seconds}s lalu', en: 'Updated {seconds}s ago' },
+  qrFreshStale: { id: 'QR mungkin sudah kedaluwarsa — menunggu pembaruan otomatis…', en: 'QR may be stale — waiting for an automatic refresh…' },
+  qrAutoRefresh: { id: 'QR diperbarui otomatis oleh WhatsApp', en: 'WhatsApp refreshes this QR automatically' },
   copyCode: { id: 'Salin kode', en: 'Copy code' },
   codeCopied: { id: 'Kode disalin!', en: 'Code copied!' },
   switchToQr: { id: 'Tampilkan QR', en: 'Show QR' },
@@ -83,18 +88,26 @@ const dict: Dict = {
     id: 'Hapus akun WhatsApp "{name}"? Semua data sesi akan dihapus. Tindakan ini tidak dapat dibatalkan.',
     en: 'Delete WhatsApp account "{name}"? All session data will be removed. This cannot be undone.',
   },
+  deleteConfirmTitle: { id: 'Hapus akun WhatsApp?', en: 'Delete WhatsApp account?' },
+  cancel: { id: 'Batal', en: 'Cancel' },
   deleting: { id: 'Menghapus…', en: 'Deleting…' },
   healthLive: { id: 'Socket aktif', en: 'Live socket' },
   healthReconnect: { id: 'Reconnect #{attempt}', en: 'Reconnect #{attempt}' },
   // Status copy
   statusConnected: { id: 'Terhubung', en: 'Connected' },
   statusConnecting: { id: 'Sedang terhubung...', en: 'Connecting...' },
+  statusReconnecting: { id: 'Menyambung ulang...', en: 'Reconnecting...' },
   statusQrRequired: { id: 'Perlu scan ulang', en: 'Needs re-scan' },
   statusDisconnected: { id: 'Terputus', en: 'Disconnected' },
   statusBanned: { id: 'Akun ditangguhkan WhatsApp', en: 'WhatsApp suspended' },
+  statusPaused: { id: 'Dijeda manual', en: 'Manually paused' },
   reconnectHint: {
     id: 'Reconnect otomatis sedang berjalan. Jika berlanjut, scan QR ulang.',
     en: 'Auto-reconnect in progress. If it persists, re-scan the QR.',
+  },
+  reconnectingHint: {
+    id: 'Sesi terputus sebentar dan sedang disambungkan kembali otomatis. Pesan akan tertunda sampai tersambung.',
+    en: 'Session dropped briefly and is auto-reconnecting. Messages will queue until it reconnects.',
   },
   qrExpiredHint: {
     id: 'QR kadaluwarsa. Klik "Coba lagi" untuk muat QR baru.',
@@ -103,6 +116,10 @@ const dict: Dict = {
   bannedHint: {
     id: 'WhatsApp mendeteksi aktivitas mencurigakan. Hubungi support WhatsApp atau coba akun lain.',
     en: 'WhatsApp detected suspicious activity. Contact WhatsApp support or try another account.',
+  },
+  pausedHint: {
+    id: 'Akun ini dijeda secara manual dan tidak akan mengirim/menerima pesan sampai diaktifkan kembali.',
+    en: 'This account is manually paused and will not send/receive until reactivated.',
   },
 };
 
@@ -128,8 +145,10 @@ const statusTone: Record<string, BadgeTone> = {
   connected: 'success',
   qr_required: 'review',
   connecting: 'review',
+  reconnecting: 'review',
   disconnected: 'danger',
   banned: 'danger',
+  paused: 'neutral',
 };
 
 // Map raw status to operator-friendly copy
@@ -137,11 +156,28 @@ function getStatusLabel(status: string, t: ReturnType<typeof useT>): { label: st
   const map: Record<string, { label: string; hint?: string }> = {
     connected: { label: t('statusConnected') },
     connecting: { label: t('statusConnecting'), hint: t('reconnectHint') },
+    reconnecting: { label: t('statusReconnecting'), hint: t('reconnectingHint') },
     qr_required: { label: t('statusQrRequired'), hint: t('qrExpiredHint') },
     disconnected: { label: t('statusDisconnected'), hint: t('reconnectHint') },
     banned: { label: t('statusBanned'), hint: t('bannedHint') },
+    paused: { label: t('statusPaused'), hint: t('pausedHint') },
   };
   return map[status] || { label: status };
+}
+
+function QrFreshness({ receivedAt, t }: { receivedAt: number; t: ReturnType<typeof useT> }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const seconds = Math.floor((now - receivedAt) / 1000);
+  const stale = seconds >= 45;
+  return (
+    <p className={`mt-2 text-center text-[11px] ${stale ? 'text-review-600 dark:text-review-400' : 'text-gray-400'}`}>
+      {stale ? t('qrFreshStale') : seconds < 2 ? t('qrFreshJustNow') : t('qrFreshSecondsAgo', { seconds: String(seconds) })}
+    </p>
+  );
 }
 
 const inputClass =
@@ -192,9 +228,9 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
         className="flex items-center gap-1 text-xs font-medium text-hermes-600 hover:text-hermes-700"
       >
         {open ? (
-          <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+          <CaretDown className="h-3.5 w-3.5" aria-hidden="true" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+          <CaretRight className="h-3.5 w-3.5" aria-hidden="true" />
         )}
         {t('businessHoursToggle')}
         {account.businessHoursEnabled ? t('active') : ''}
@@ -248,7 +284,7 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
             </Button>
             {saved && (
               <span className="flex items-center gap-1 text-xs text-channel-700">
-                <CircleCheck className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                <CheckCircle className="h-3.5 w-3.5" aria-hidden="true" />
                 {t('saved')}
               </span>
             )}
@@ -265,6 +301,7 @@ export default function AccountsPage() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [qr, setQr] = useState<Record<string, string>>({});
+  const [qrReceivedAt, setQrReceivedAt] = useState<Record<string, number>>({});
   const [pairingCode, setPairingCode] = useState<Record<string, string>>({});
   const [pairingMode, setPairingMode] = useState<Record<string, 'qr' | 'code'>>({});
   const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null);
@@ -273,6 +310,7 @@ export default function AccountsPage() {
   const [health, setHealth] = useState<Record<string, { liveSocket: boolean; reconnectAttempts: number }>>({});
   const [restarting, setRestarting] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; accountName: string } | null>(null);
   // The QR grants full control of a WhatsApp number — only admins+ may scan.
   const canScan = hasRole('admin');
   const canEditHours = hasRole('supervisor');
@@ -305,9 +343,10 @@ export default function AccountsPage() {
     load();
     const socket = getSocket();
     if (!socket) return;
-    socket.on('wa:qr', ({ accountId, qr }: { accountId: string; qr: string }) =>
-      setQr((prev) => ({ ...prev, [accountId]: qr })),
-    );
+    socket.on('wa:qr', ({ accountId, qr }: { accountId: string; qr: string }) => {
+      setQr((prev) => ({ ...prev, [accountId]: qr }));
+      setQrReceivedAt((prev) => ({ ...prev, [accountId]: Date.now() }));
+    });
     socket.on('wa:pairing-code', ({ accountId, code }: { accountId: string; code: string }) => {
       setPairingCode((prev) => ({ ...prev, [accountId]: code }));
       setPairingMode((prev) => ({ ...prev, [accountId]: 'code' }));
@@ -345,15 +384,14 @@ export default function AccountsPage() {
     setRestarting(null);
   }
 
-  async function deleteAccount(id: string, accountName: string) {
-    const msg = t('deleteConfirm', { name: accountName });
-    if (!window.confirm(msg)) return;
+  async function deleteAccount(id: string) {
     setDeleting(id);
     try {
       await api(`/wa/accounts/${id}`, { method: 'DELETE' });
       load();
     } catch { /* ignore */ }
     setDeleting(null);
+    setConfirmDelete(null);
   }
 
   return (
@@ -366,7 +404,7 @@ export default function AccountsPage() {
             <input aria-label={t('accountNameLabel')} placeholder="Account name" value={name} onChange={(e) => setName(e.target.value)} className={`flex-1 ${inputClass}`} required />
             <input aria-label={t('phoneLabel')} placeholder="Number (e.g. 628123…)" value={phone} onChange={(e) => setPhone(e.target.value)} className={`flex-1 ${inputClass}`} required />
             <Button type="submit" size="md">
-              <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              <Plus className="h-4 w-4" aria-hidden="true" />
               Add account
             </Button>
           </form>
@@ -390,7 +428,7 @@ export default function AccountsPage() {
         ) : accounts.length === 0 && !error ? (
           <Card className="flex flex-col items-center justify-center py-16 text-center">
             <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-lg bg-gray-100 text-gray-400 dark:bg-gray-800">
-              <Smartphone className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+              <DeviceMobile className="h-5 w-5" aria-hidden="true" />
             </span>
             <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('noAccounts')}</p>
             <p className="mt-1 max-w-xs text-xs text-gray-500 dark:text-gray-400">
@@ -400,14 +438,14 @@ export default function AccountsPage() {
         ) : (
           <ul className="space-y-3">
             {accounts.map((a) => {
-              const disconnected = a.sessionStatus === 'disconnected' || a.sessionStatus === 'banned';
+              const disconnected = a.sessionStatus === 'disconnected' || a.sessionStatus === 'banned' || a.sessionStatus === 'reconnecting';
               return (
                 <li key={a.id}>
                   <Card className="p-4">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-3">
                         <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800">
-                          <Smartphone className="h-[18px] w-[18px]" strokeWidth={1.75} aria-hidden="true" />
+                          <DeviceMobile className="h-[18px] w-[18px]" aria-hidden="true" />
                         </span>
                         <div>
                           <p className="font-medium text-gray-900 dark:text-gray-100">{a.accountName}</p>
@@ -418,12 +456,12 @@ export default function AccountsPage() {
                         <div className="flex items-center gap-2">
                           {health[a.id] && (
                             <span className="flex items-center gap-1 text-[11px] text-gray-400" title={health[a.id].liveSocket ? t('healthLive') : t('healthReconnect', { attempt: String(health[a.id].reconnectAttempts) })}>
-                              <Activity className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
+                              <Pulse className="h-3 w-3" aria-hidden="true" />
                               {health[a.id].liveSocket ? 'live' : `retry #${health[a.id].reconnectAttempts}`}
                             </span>
                           )}
                           <Badge tone={statusTone[a.sessionStatus] ?? 'neutral'}>
-                            {disconnected && <Unplug className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />}
+                            {disconnected && <PlugsConnected className="h-3.5 w-3.5" aria-hidden="true" />}
                             {getStatusLabel(a.sessionStatus, t).label}
                           </Badge>
                         </div>
@@ -442,7 +480,7 @@ export default function AccountsPage() {
                         onClick={() => restartAccount(a.id)}
                         disabled={restarting === a.id}
                       >
-                        <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                        <ArrowCounterClockwise className="h-3.5 w-3.5" aria-hidden="true" />
                         {restarting === a.id ? t('restarting') : t('restart')}
                       </Button>
                       {canDelete && (
@@ -451,10 +489,10 @@ export default function AccountsPage() {
                           variant="outline"
                           size="sm"
                           className="border-danger-200 text-danger-600 hover:bg-danger-50 dark:border-danger-800 dark:text-danger-400"
-                          onClick={() => deleteAccount(a.id, a.accountName)}
+                          onClick={() => setConfirmDelete({ id: a.id, accountName: a.accountName })}
                           disabled={deleting === a.id}
                         >
-                          <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                          <Trash className="h-3.5 w-3.5" aria-hidden="true" />
                           {deleting === a.id ? t('deleting') : t('delete')}
                         </Button>
                       )}
@@ -512,7 +550,14 @@ export default function AccountsPage() {
                               </button>
                             </div>
                           ) : qr[a.id] ? (
-                            <img src={qr[a.id]} alt="WhatsApp QR code" className="h-48 w-48 rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-700" />
+                            <div>
+                              <img src={qr[a.id]} alt="WhatsApp QR code" className="h-48 w-48 rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-700" />
+                              {qrReceivedAt[a.id] ? (
+                                <QrFreshness receivedAt={qrReceivedAt[a.id]} t={t} />
+                              ) : (
+                                <p className="mt-2 text-center text-[11px] text-gray-400">{t('qrAutoRefresh')}</p>
+                              )}
+                            </div>
                           ) : (
                             <p className="text-xs text-gray-500">{t('waitingScan')}</p>
                           )}
@@ -520,7 +565,7 @@ export default function AccountsPage() {
                       ) : (
                         !canScan && (
                           <p className="mt-4 flex items-center gap-1.5 text-xs text-gray-500">
-                            <QrCode className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                            <QrCode className="h-4 w-4" aria-hidden="true" />
                             {t('waitingScan')}
                           </p>
                         )
@@ -533,6 +578,31 @@ export default function AccountsPage() {
           </ul>
         )}
       </div>
+
+      <Modal
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        title={t('deleteConfirmTitle')}
+        description={confirmDelete ? t('deleteConfirm', { name: confirmDelete.accountName }) : ''}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setConfirmDelete(null)}>
+              {t('cancel')}
+            </Button>
+            <Button
+              size="sm"
+              className="bg-danger-600 hover:bg-danger-700"
+              disabled={!!deleting}
+              onClick={() => confirmDelete && deleteAccount(confirmDelete.id)}
+            >
+              {deleting ? t('deleting') : t('delete')}
+            </Button>
+          </>
+        }
+      >
+        {null}
+      </Modal>
     </AppLayout>
   );
 }

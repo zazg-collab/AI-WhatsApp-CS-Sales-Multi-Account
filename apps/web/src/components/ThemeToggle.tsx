@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Sun, Moon } from 'lucide-react';
+import { Sun, Moon } from '@phosphor-icons/react';
 import { useT, type Dict } from '@/lib/i18n';
 
 const THEME_KEY = 'hermes_theme';
@@ -43,9 +43,9 @@ export function ThemeToggle() {
       className="flex w-full items-center justify-center gap-2.5 rounded-md px-2 py-2 text-[13px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50 lg:justify-start lg:px-2.5"
     >
       {dark ? (
-        <Sun className="h-[17px] w-[17px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
+        <Sun className="h-[17px] w-[17px] shrink-0" aria-hidden="true" />
       ) : (
-        <Moon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.75} aria-hidden="true" />
+        <Moon className="h-[17px] w-[17px] shrink-0" aria-hidden="true" />
       )}
       <span className="hidden lg:block">{dark ? t('light') : t('dark')}</span>
     </button>

@@ -1,49 +1,51 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
-  Search,
-  ShieldCheck,
-  TriangleAlert,
+  MagnifyingGlass,
+  ShieldStar,
+  Warning,
   Hand,
-  Pencil,
-  CircleCheck,
+  PencilSimple,
+  CheckCircle,
   ArrowUpRight,
   ArrowLeft,
-  FileSearch,
-  Send,
-  Workflow,
-  ScrollText,
-  History,
+  FileMagnifyingGlass,
+  PaperPlaneTilt,
+  ArrowsSplit,
+  Scroll,
+  ClockCounterClockwise,
   Clock,
-  CircleX,
-  RotateCcw,
-  Inbox as InboxIcon,
+  XCircle,
+  ArrowCounterClockwise,
+  Tray as InboxIcon,
   Paperclip,
   Images,
-  UserRound,
-  UsersRound,
-  UserX,
+  User,
+  UsersThree,
+  UserMinus,
   Image as ImageIcon,
   FileText,
   Video,
-  CheckCheck,
+  Checks,
   Check,
-  Zap,
-  CalendarClock,
+  Lightning,
+  CalendarCheck,
   UserPlus,
   PhoneCall,
-  Ban,
-  Contact,
+  Prohibit,
+  AddressBook,
   Keyboard,
   MapPin,
   Archive,
-  Pin,
+  PushPin,
   Star,
-  VolumeX,
-  Vote,
-} from 'lucide-react';
+  SpeakerSimpleX,
+  Notepad,
+  type Icon as PhosphorIcon,
+} from '@phosphor-icons/react';
 import { api, uploadFile, resolveMediaUrl } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { AppLayout } from '@/components/AppLayout';
@@ -52,6 +54,7 @@ import { Badge } from '@/components/ui/Badge';
 import { StatusLabel, type StatusKind } from '@/components/ui/StatusLabel';
 import { WhatsAppMark } from '@/components/WhatsAppMark';
 import { Avatar } from '@/components/ui/Avatar';
+import { Popover } from '@/components/ui/Popover';
 import { cn } from '@/lib/cn';
 import { contactDisplayName, formatPhone } from '@/lib/contact';
 import { useT, type Dict } from '@/lib/i18n';
@@ -83,6 +86,11 @@ const dict: Dict = {
   // Error fallbacks
   errLoadUsers: { id: 'Failed to load team users from API', en: 'Failed to load team users from API' },
   errLoadAccounts: { id: 'Failed to load WhatsApp accounts from API', en: 'Failed to load WhatsApp accounts from API' },
+  composerBlockedDisconnected: { id: 'Akun WhatsApp ini terputus. Sambungkan kembali sebelum mengirim pesan.', en: 'This WhatsApp account is disconnected. Reconnect it before sending messages.' },
+  composerBlockedBanned: { id: 'Akun WhatsApp ini diblokir/banned. Pesan tidak dapat dikirim.', en: 'This WhatsApp account is banned. Messages cannot be sent.' },
+  composerBlockedPaused: { id: 'AI dihentikan untuk percakapan ini karena risiko terdeteksi. Anda masih dapat mengirim pesan secara manual.', en: 'AI is paused on this conversation due to a detected risk. You can still send manually.' },
+  composerBlockedGoToAccounts: { id: 'Buka Akun', en: 'Open Accounts' },
+  showDetails: { id: 'Tampilkan Detail', en: 'Show details' },
   errLoadConversations: { id: 'Failed to load conversations from API', en: 'Failed to load conversations from API' },
   errLoadConversation: { id: 'Failed to load conversation from API', en: 'Failed to load conversation from API' },
   // Number validation / start results
@@ -209,7 +217,7 @@ const dict: Dict = {
  */
 
 interface AdminUser { id: string; name: string }
-interface WaAccount { id: string; accountName: string; phoneNumber: string }
+interface WaAccount { id: string; accountName: string; phoneNumber: string; sessionStatus?: string }
 
 interface Message {
   id: string;
@@ -341,11 +349,11 @@ function clockTime(iso: string): string {
 
 // WhatsApp-style delivery ticks for outbound (admin/AI) messages.
 function StatusTick({ status }: { status: string }) {
-  if (status === 'pending') return <Clock className="h-3 w-3" strokeWidth={2} aria-label="pending" />;
-  if (status === 'failed') return <TriangleAlert className="h-3 w-3 text-danger-200" strokeWidth={2} aria-label="failed to send" />;
-  if (status === 'read') return <CheckCheck className="h-3.5 w-3.5 text-sky-300" strokeWidth={2.25} aria-label="read" />;
-  if (status === 'delivered') return <CheckCheck className="h-3.5 w-3.5" strokeWidth={2.25} aria-label="delivered" />;
-  return <Check className="h-3.5 w-3.5" strokeWidth={2.25} aria-label="sent" />;
+  if (status === 'pending') return <Clock className="h-3 w-3" aria-label="pending" />;
+  if (status === 'failed') return <Warning className="h-3 w-3 text-danger-200" aria-label="failed to send" />;
+  if (status === 'read') return <Checks className="h-3.5 w-3.5 text-sky-300" aria-label="read" />;
+  if (status === 'delivered') return <Checks className="h-3.5 w-3.5" aria-label="delivered" />;
+  return <Check className="h-3.5 w-3.5" aria-label="sent" />;
 }
 
 // Per-conversation status label for the queue rows.
@@ -712,6 +720,10 @@ function InboxInner() {
   // ── Actions ────────────────────────────────────────────────────────
   async function sendMessage() {
     if (!activeId || !composer.trim() || sending) return;
+    if (composerBlockedReason) {
+      setSendError(t(composerBlockedReason));
+      return;
+    }
     const text = composer.trim();
     setSending(true);
     setSendError(null);
@@ -964,6 +976,15 @@ function InboxInner() {
   const active = conv;
   const takenOver = active?.takeoverStatus === 'admin_takeover';
   const review = active?.hermesReviews?.[0] ?? null;
+  const activeAccount = active ? accounts.find((a) => a.id === active.whatsappAccount?.id) : undefined;
+  const accountDisconnected = activeAccount?.sessionStatus === 'disconnected' || activeAccount?.sessionStatus === 'banned';
+  const composerBlockedReason = !active
+    ? null
+    : activeAccount?.sessionStatus === 'banned'
+      ? 'composerBlockedBanned'
+      : accountDisconnected
+        ? 'composerBlockedDisconnected'
+        : null;
 
   return (
     <AppLayout>
@@ -972,7 +993,7 @@ function InboxInner() {
         <section className={cn('shrink-0 flex-col rounded-l border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900', 'w-full sm:w-56 md:w-60 lg:w-64 xl:w-72', activeId ? 'hidden sm:flex' : 'flex')}>
           <div className="flex h-14 items-center gap-2 border-b border-gray-100 px-3 dark:border-gray-800">
             <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+              <MagnifyingGlass className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
               <input
                 type="search"
                 value={search}
@@ -1003,7 +1024,7 @@ function InboxInner() {
 
           <div className="border-b border-gray-100 p-3 dark:border-gray-800">
             <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-gray-700 dark:text-gray-200">
-              <UserPlus className="h-3.5 w-3.5 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
+              <UserPlus className="h-3.5 w-3.5 text-hermes-600" aria-hidden="true" />
               {t('startChat')}
             </div>
             <div className="space-y-2">
@@ -1034,7 +1055,7 @@ function InboxInner() {
               />
               <div className="grid grid-cols-2 gap-2">
                 <Button variant="outline" size="sm" onClick={validateNumber} disabled={busy || !startAccountId || !startPhone.trim()}>
-                  <PhoneCall className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  <PhoneCall className="h-4 w-4" aria-hidden="true" />
                   {t('checkNumber')}
                 </Button>
                 <Button size="sm" onClick={startConversation} disabled={busy || !startAccountId || !startPhone.trim()}>
@@ -1093,7 +1114,7 @@ function InboxInner() {
         <section className={cn('operations-surface relative min-w-[320px] flex-1 flex-col border-y border-gray-200 dark:border-gray-800 rounded', activeId ? 'flex' : 'hidden sm:flex')}>
           {!active ? (
             <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
-              <InboxIcon className="mb-2 h-7 w-7 text-gray-300" strokeWidth={1.5} aria-hidden="true" />
+              <InboxIcon className="mb-2 h-7 w-7 text-gray-300" aria-hidden="true" />
               <p className={cn('text-sm', detailError && 'text-danger-600')}>
                 {detailError ?? t('pickConversation')}
               </p>
@@ -1108,7 +1129,7 @@ function InboxInner() {
                     title="Back to conversations"
                     aria-label="Back to conversations"
                   >
-                    <ArrowLeft className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                    <ArrowLeft className="h-5 w-5" aria-hidden="true" />
                   </button>
                   <Avatar name={active.customer.name} phone={active.customer.phoneNumber} avatarUrl={active.customer.avatarUrl} isGroup={active.isGroup} className="h-9 w-9 text-[13px] font-semibold" />
                   <div className="min-w-0 flex-1">
@@ -1122,17 +1143,17 @@ function InboxInner() {
                       </Badge>
                       {active.isGroup && (
                         <Badge tone="neutral">
-                          <UsersRound className="h-3 w-3" />
+                          <UsersThree className="h-3 w-3" />
                           {active.groupParticipants?.length ? `${active.groupParticipants.length} members` : 'Group'}
                         </Badge>
                       )}
                       <Badge tone="hermes" className="md:hidden">
-                        <Workflow className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                        <ArrowsSplit className="h-3.5 w-3.5" aria-hidden="true" />
                         {aiModeLabel[active.aiMode] ?? active.aiMode}
                       </Badge>
                       {review && (review.riskLevel === 'high' || review.riskLevel === 'critical') && (
                         <Badge tone="danger" className="md:hidden">
-                          <TriangleAlert className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                          <Warning className="h-3.5 w-3.5" aria-hidden="true" />
                           {review.riskLevel} risk
                         </Badge>
                       )}
@@ -1147,33 +1168,32 @@ function InboxInner() {
                     <span className={cn('h-2 w-2 rounded-full', liveConnected ? 'bg-channel-500' : 'animate-pulse bg-review-500')} />
                   </span>
                   <Badge tone="hermes" className="hidden md:flex">
-                    <Workflow className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                    <ArrowsSplit className="h-3.5 w-3.5" aria-hidden="true" />
                     {aiModeLabel[active.aiMode] ?? active.aiMode}
                   </Badge>
                   {takenOver ? (
                     <Button size="sm" onClick={returnToAi} disabled={busy} className="hidden sm:inline-flex">
-                      <RotateCcw className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      <ArrowCounterClockwise className="h-4 w-4" aria-hidden="true" />
                       <span className="hidden lg:inline">{t('returnToAi')}</span>
                     </Button>
                   ) : (
                     <Button size="sm" onClick={takeOver} disabled={busy} className="hidden sm:inline-flex">
-                      <Hand className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      <Hand className="h-4 w-4" aria-hidden="true" />
                       <span className="hidden lg:inline">{t('takeover')}</span>
                     </Button>
                   )}
                   <div className="relative">
-                    <Button variant="ghost" size="sm" onClick={() => setShowMoreMenu(!showMoreMenu)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400">
+                    <Button variant="ghost" size="sm" onClick={() => { setShowMoreMenu(!showMoreMenu); setShowQuickReplies(false); setShowAssetPicker(false); }} className="text-gray-500 hover:text-gray-700 dark:text-gray-400">
                       <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path d="M3 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM8.5 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM14 10a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0z" /></svg>
                     </Button>
-                    {showMoreMenu && (
-                      <div className="absolute right-0 top-10 z-50 w-44 rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
+                    <Popover open={showMoreMenu} onClose={() => setShowMoreMenu(false)} align="right" className="w-44">
                         <button
                           type="button"
                           onClick={() => { setShowRightPanel(true); setShowMoreMenu(false); }}
                           className="flex w-full items-center gap-2.5 border-b border-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800 xl:hidden"
                         >
-                          <FileSearch className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
-                          Tampilkan Detail
+                          <FileMagnifyingGlass className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                          {t('showDetails')}
                         </button>
                         {takenOver ? (
                           <button
@@ -1182,7 +1202,7 @@ function InboxInner() {
                             disabled={busy}
                             className="flex w-full items-center gap-2.5 border-b border-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800 sm:hidden"
                           >
-                            <RotateCcw className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                            <ArrowCounterClockwise className="h-4 w-4 text-gray-400" aria-hidden="true" />
                             {t('returnToAi')}
                           </button>
                         ) : (
@@ -1192,7 +1212,7 @@ function InboxInner() {
                             disabled={busy}
                             className="flex w-full items-center gap-2.5 border-b border-gray-100 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-800 sm:hidden"
                           >
-                            <Hand className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                            <Hand className="h-4 w-4 text-gray-400" aria-hidden="true" />
                             {t('takeover')}
                           </button>
                         )}
@@ -1202,7 +1222,7 @@ function InboxInner() {
                           disabled={busy}
                           className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-800"
                         >
-                          <CheckCheck className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                          <Checks className="h-4 w-4 text-gray-400" aria-hidden="true" />
                           {t('markRead')}
                         </button>
                         <button
@@ -1211,7 +1231,7 @@ function InboxInner() {
                           disabled={busy}
                           className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:text-gray-200 dark:hover:bg-gray-800"
                         >
-                          <ArrowUpRight className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                          <ArrowUpRight className="h-4 w-4 text-gray-400" aria-hidden="true" />
                           {t('escalate')}
                         </button>
                         <button
@@ -1219,11 +1239,10 @@ function InboxInner() {
                           onClick={() => { setShowSchedule(true); setShowMoreMenu(false); setScheduleErr(null); }}
                           className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
                         >
-                          <CalendarClock className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                          <CalendarCheck className="h-4 w-4 text-gray-400" aria-hidden="true" />
                           Schedule
                         </button>
-                      </div>
-                    )}
+                    </Popover>
                   </div>
                 </div>
               </div>
@@ -1244,15 +1263,15 @@ function InboxInner() {
                           <p className="text-[13px] leading-relaxed text-gray-800 dark:text-gray-100">{m.content}</p>
                           <div className="mt-3 flex flex-wrap items-center gap-2">
                             <Button size="sm" onClick={() => approveDraft(m.id)} disabled={busy}>
-                              <CircleCheck className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                              <CheckCircle className="h-4 w-4" aria-hidden="true" />
                               {t('approveAndSend')}
                             </Button>
                             <Button variant="outline" size="sm" onClick={() => editDraft(m)}>
-                              <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                              <PencilSimple className="h-4 w-4" aria-hidden="true" />
                               {t('editDraft')}
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => blockDraftWithConfirm(m.id)} disabled={busy} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
-                              <CircleX className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                              <XCircle className="h-4 w-4" aria-hidden="true" />
                               {t('blockSend')}
                             </Button>
                           </div>
@@ -1283,7 +1302,7 @@ function InboxInner() {
                         )}
                         {m.aiGenerated && !isCustomer && (
                           <span className="mb-1 flex items-center gap-1 text-[10px] font-medium text-hermes-100">
-                            <Workflow className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
+                            <ArrowsSplit className="h-3 w-3" aria-hidden="true" />
                             {t('aiGeneratedLabel')}
                           </span>
                         )}
@@ -1301,12 +1320,12 @@ function InboxInner() {
                           </span>
                         </div>
                         {isHovered && (
-                          <div className={cn('absolute top-0 -translate-y-8 rounded-lg border bg-white px-2 py-1 text-[11px] shadow-lg dark:border-gray-700 dark:bg-gray-800 z-50', isCustomer ? 'left-0' : 'right-0', m.status === 'failed' ? 'w-48' : 'whitespace-nowrap')}>
+                          <div className={cn('absolute top-full mt-1 rounded-lg border bg-white px-2 py-1 text-[11px] shadow-lg dark:border-gray-700 dark:bg-gray-800 z-50', isCustomer ? 'left-0' : 'right-0', m.status === 'failed' ? 'w-48' : 'whitespace-nowrap')}>
                             <div className="flex flex-wrap items-center gap-1.5">
                               {m.status === 'failed' && !isCustomer && (
                                 <>
                                   <button type="button" onClick={() => act(() => api(`/conversations/${activeId}/messages/${m.id}/retry`, { method: 'POST' }))} className="text-hermes-600 hover:text-hermes-900 dark:text-hermes-300 dark:hover:text-hermes-100 font-medium" title="Retry send">
-                                    <RotateCcw className="inline h-3.5 w-3.5 mr-1" strokeWidth={1.75} aria-hidden="true" />Retry
+                                    <ArrowCounterClockwise className="inline h-3.5 w-3.5 mr-1" aria-hidden="true" />Retry
                                   </button>
                                   <button type="button" onClick={() => { navigator.clipboard.writeText(m.content ?? ''); }} className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white" title="Copy message">
                                     <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M8 3a1 1 0 011-1h2a1 1 0 011 1v2h2V3a3 3 0 00-3-3H9a3 3 0 00-3 3v2H4a1 1 0 000 2h.089l.493 8.374C4.756 16.447 6.121 18 7.75 18h4.5c1.629 0 2.994-1.553 3.168-3.626L16.911 7H20a1 1 0 000-2h-3V3z" /></svg>
@@ -1322,16 +1341,16 @@ function InboxInner() {
                                     </button>
                                   )}
                                   <button type="button" onClick={() => setMessageStarred(m.id, !m.isStarred)} className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white" title={m.isStarred ? 'Unstar' : 'Star'}>
-                                    <Star className={cn('h-3.5 w-3.5', m.isStarred && 'fill-current')} strokeWidth={1.75} aria-hidden="true" />
+                                    <Star className={cn('h-3.5 w-3.5', m.isStarred && 'fill-current')} aria-hidden="true" />
                                   </button>
                                   {!isCustomer && (
                                     <button type="button" onClick={() => editSentMessage(m)} className="text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white" title={t('edit')}>
-                                      <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                                      <PencilSimple className="h-3.5 w-3.5" aria-hidden="true" />
                                     </button>
                                   )}
                                   {!isCustomer && (
                                     <button type="button" onClick={() => deleteMessage(m.id)} className="text-gray-600 hover:text-danger-600 dark:text-gray-300 dark:hover:text-danger-400" title={t('retract')}>
-                                      <CircleX className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                                      <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
                                     </button>
                                   )}
                                   {isCustomer && (
@@ -1390,6 +1409,17 @@ function InboxInner() {
                     ))}
                   </div>
                 )}
+                {composerBlockedReason && (
+                  <div className="mb-2 flex items-center justify-between gap-2 rounded border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700 dark:border-danger-800 dark:bg-danger-900/30 dark:text-danger-300">
+                    <span>{t(composerBlockedReason)}</span>
+                    <Link href="/accounts" className="shrink-0 font-semibold underline">{t('composerBlockedGoToAccounts')}</Link>
+                  </div>
+                )}
+                {!composerBlockedReason && active?.aiMode === 'ai_paused' && (
+                  <div className="mb-2 rounded border border-review-200 bg-review-50 px-3 py-2 text-xs text-review-700 dark:border-review-900 dark:bg-review-900/30 dark:text-review-400">
+                    {t('composerBlockedPaused')}
+                  </div>
+                )}
                 {sendError && (
                   <div className="mb-2 flex items-center justify-between rounded border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700 dark:border-danger-800 dark:bg-danger-900/30 dark:text-danger-300">
                     <span>{sendError}</span>
@@ -1412,13 +1442,12 @@ function InboxInner() {
                     <button
                       type="button"
                       title="Quick replies"
-                      onClick={() => setShowQuickReplies((v) => !v)}
+                      onClick={() => { setShowQuickReplies((v) => !v); setShowAssetPicker(false); }}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                     >
-                      <Zap className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      <Lightning className="h-4 w-4" aria-hidden="true" />
                     </button>
-                    {showQuickReplies && (
-                      <div className="absolute bottom-11 left-0 z-20 max-h-72 w-72 overflow-y-auto rounded-lg border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+                    <Popover open={showQuickReplies} onClose={() => setShowQuickReplies(false)} side="top" className="max-h-72 w-72 overflow-y-auto p-1">
                         {quickReplies.length === 0 ? (
                           <p className="px-3 py-4 text-center text-xs text-gray-400">No quick replies. Add them under Templates.</p>
                         ) : (
@@ -1437,8 +1466,7 @@ function InboxInner() {
                             </button>
                           ))
                         )}
-                      </div>
-                    )}
+                    </Popover>
                   </div>
                   <button
                     type="button"
@@ -1449,7 +1477,7 @@ function InboxInner() {
                   >
                     {uploadingMedia
                       ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-hermes-500" />
-                      : <Paperclip className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                      : <Paperclip className="h-4 w-4" aria-hidden="true" />
                     }
                   </button>
                   {assetsList.length > 0 && (
@@ -1458,13 +1486,12 @@ function InboxInner() {
                         type="button"
                         title={t('sendFromLibrary')}
                         disabled={busy}
-                        onClick={() => setShowAssetPicker((v) => !v)}
+                        onClick={() => { setShowAssetPicker((v) => !v); setShowQuickReplies(false); }}
                         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-gray-500 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
                       >
-                        <Images className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                        <Images className="h-4 w-4" aria-hidden="true" />
                       </button>
-                      {showAssetPicker && (
-                        <div className="absolute bottom-11 left-0 z-50 max-h-72 w-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
+                      <Popover open={showAssetPicker} onClose={() => setShowAssetPicker(false)} side="top" className="max-h-72 w-64 overflow-y-auto">
                           <div className="border-b border-gray-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:border-gray-800">{t('sendFromLibrary')}</div>
                           {assetsList.map((a) => (
                             <button
@@ -1479,8 +1506,7 @@ function InboxInner() {
                               <Badge tone="neutral" className="shrink-0 text-[10px]">{a.purpose}</Badge>
                             </button>
                           ))}
-                        </div>
-                      )}
+                      </Popover>
                     </div>
                   )}
                   <input
@@ -1518,8 +1544,8 @@ function InboxInner() {
                     aria-label={t('composerAriaLabel')}
                     className="scrollbar-thin max-h-32 min-h-[40px] flex-1 resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                   />
-                  <Button size="md" onClick={sendMessage} disabled={sending || !composer.trim()}>
-                    <Send className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                  <Button size="md" onClick={sendMessage} disabled={sending || !composer.trim() || !!composerBlockedReason}>
+                    <PaperPlaneTilt className="h-4 w-4" aria-hidden="true" />
                     {editingMessage ? t('save') : t('send')}
                   </Button>
                 </div>
@@ -1529,7 +1555,7 @@ function InboxInner() {
                 <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowSchedule(false)}>
                   <div role="dialog" aria-modal="true" aria-labelledby="schedule-title" className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-4 shadow-xl dark:border-gray-700 dark:bg-gray-900" onClick={(e) => e.stopPropagation()}>
                     <h3 id="schedule-title" className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      <CalendarClock className="h-4 w-4 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
+                      <CalendarCheck className="h-4 w-4 text-hermes-600" aria-hidden="true" />
                       Schedule a message
                     </h3>
                     <label htmlFor="schedule-at" className="mb-1 block text-xs text-gray-500 dark:text-gray-400">Send at</label>
@@ -1565,7 +1591,7 @@ function InboxInner() {
                     <div className="flex justify-end gap-2">
                       <Button variant="outline" size="sm" onClick={() => setShowSchedule(false)}>Close</Button>
                       <Button size="sm" onClick={scheduleFollowUp} disabled={!scheduleAt || !scheduleMsg.trim()}>
-                        <CalendarClock className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                        <CalendarCheck className="h-4 w-4" aria-hidden="true" />
                         Schedule
                       </Button>
                     </div>
@@ -1591,7 +1617,7 @@ function InboxInner() {
                     className="justify-start"
                     onClick={() => reasoningRef.current?.scrollIntoView({ block: 'nearest' })}
                   >
-                    <FileSearch className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    <FileMagnifyingGlass className="h-4 w-4" aria-hidden="true" />
                     {t('viewReasoning')}
                   </Button>
                   <Button
@@ -1600,7 +1626,7 @@ function InboxInner() {
                     className="justify-start"
                     onClick={() => auditRef.current?.scrollIntoView({ block: 'nearest' })}
                   >
-                    <ScrollText className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                    <Scroll className="h-4 w-4" aria-hidden="true" />
                     {t('auditTrail')}
                   </Button>
                 </div>
@@ -1652,7 +1678,7 @@ function InboxInner() {
                     )}
                     {bots.length >= 2 && (
                       <button type="button" onClick={suggestBot} disabled={suggestingBot || busy} className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-hermes-600 hover:underline disabled:opacity-50 dark:text-hermes-400">
-                        <Zap className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                        <Lightning className="h-3.5 w-3.5" aria-hidden="true" />
                         {suggestingBot ? t('suggestingPersona') : t('suggestPersona')}
                       </button>
                     )}
@@ -1690,27 +1716,27 @@ function InboxInner() {
                 <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Quick Actions</h3>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-1.5">
                   <Button variant="outline" size="sm" onClick={() => sendTypingPresence(true)} disabled={busy} title="Show typing indicator" className="justify-center text-[11px] h-9 sm:h-8">
-                    <Keyboard className="h-4 sm:h-3.5 w-4 sm:w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                    <Keyboard className="h-4 sm:h-3.5 w-4 sm:w-3.5" aria-hidden="true" />
                     <span className="hidden sm:inline">Typing</span>
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setChatPinned(!active.isPinned)} disabled={busy} className={cn('justify-center text-[11px] h-9 sm:h-8', active.isPinned && 'bg-amber-50 border-amber-300 text-amber-700')} title={active.isPinned ? 'Unpin chat' : 'Pin chat'}>
-                    <Pin className={cn('h-4 sm:h-3.5 w-4 sm:w-3.5', active.isPinned && 'fill-current')} strokeWidth={1.75} aria-hidden="true" />
+                    <PushPin className={cn('h-4 sm:h-3.5 w-4 sm:w-3.5', active.isPinned && 'fill-current')} aria-hidden="true" />
                     <span className="hidden sm:inline">{active.isPinned ? 'Pinned' : 'Pin'}</span>
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setChatArchived(!active.isArchived)} disabled={busy} title={active.isArchived ? 'Restore from archive' : 'Archive chat'} className="justify-center text-[11px] h-9 sm:h-8 col-span-2 sm:col-span-1">
-                    <Archive className="h-4 sm:h-3.5 w-4 sm:w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                    <Archive className="h-4 sm:h-3.5 w-4 sm:w-3.5" aria-hidden="true" />
                     <span className="hidden sm:inline">{active.isArchived ? 'Archived' : 'Archive'}</span>
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setChatMuted(true)} disabled={busy} title="Mute notifications" className="justify-center text-[11px] h-9 sm:h-8">
-                    <VolumeX className="h-4 sm:h-3.5 w-4 sm:w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                    <SpeakerSimpleX className="h-4 sm:h-3.5 w-4 sm:w-3.5" aria-hidden="true" />
                     <span className="hidden sm:inline">Mute</span>
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setContactBlocked(true)} disabled={busy} className="justify-center text-[11px] text-danger-600 h-9 sm:h-8" title="Block contact">
-                    <Ban className="h-4 sm:h-3.5 w-4 sm:w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                    <Prohibit className="h-4 sm:h-3.5 w-4 sm:w-3.5" aria-hidden="true" />
                     <span className="hidden sm:inline">Block</span>
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => setDisappearing(true)} disabled={busy} title="Enable 7-day disappearing messages" className="justify-center text-[11px] h-9 sm:h-8">
-                    <Clock className="h-4 sm:h-3.5 w-4 sm:w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                    <Clock className="h-4 sm:h-3.5 w-4 sm:w-3.5" aria-hidden="true" />
                     <span className="hidden sm:inline">7d</span>
                   </Button>
                 </div>
@@ -1724,21 +1750,21 @@ function InboxInner() {
                     <span className="mb-1 block text-[12px] font-medium text-gray-600 dark:text-gray-300">Location</span>
                     <div className="flex gap-2">
                       <input value={locationDraft} onChange={(e) => setLocationDraft(e.target.value)} placeholder="-6.2, 106.8, Store" className="h-9 sm:h-8 min-w-0 flex-1 rounded border border-gray-200 bg-gray-50 px-2.5 text-sm sm:text-xs text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
-                      <Button size="sm" variant="outline" onClick={sendLocation} disabled={busy || !locationDraft.trim()} className="h-9 sm:h-8"><MapPin className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" /></Button>
+                      <Button size="sm" variant="outline" onClick={sendLocation} disabled={busy || !locationDraft.trim()} className="h-9 sm:h-8"><MapPin className="h-4 w-4" aria-hidden="true" /></Button>
                     </div>
                   </label>
                   <label className="block">
                     <span className="mb-1 block text-[12px] font-medium text-gray-600 dark:text-gray-300">Poll</span>
                     <div className="flex gap-2">
                       <input value={pollDraft} onChange={(e) => setPollDraft(e.target.value)} placeholder="Question | A | B" className="h-9 sm:h-8 min-w-0 flex-1 rounded border border-gray-200 bg-gray-50 px-2.5 text-sm sm:text-xs text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
-                      <Button size="sm" variant="outline" onClick={sendPoll} disabled={busy || !pollDraft.trim()} className="h-9 sm:h-8"><Vote className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" /></Button>
+                      <Button size="sm" variant="outline" onClick={sendPoll} disabled={busy || !pollDraft.trim()} className="h-9 sm:h-8"><Notepad className="h-4 w-4" aria-hidden="true" /></Button>
                     </div>
                   </label>
                   <label className="block">
                     <span className="mb-1 block text-[12px] font-medium text-gray-600 dark:text-gray-300">Contact</span>
                     <div className="flex gap-2">
                       <input value={contactDraft} onChange={(e) => setContactDraft(e.target.value)} placeholder="Name | 628..." className="h-9 sm:h-8 min-w-0 flex-1 rounded border border-gray-200 bg-gray-50 px-2.5 text-sm sm:text-xs text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
-                      <Button size="sm" variant="outline" onClick={sendContactCard} disabled={busy || !contactDraft.trim()} className="h-9 sm:h-8"><Contact className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" /></Button>
+                      <Button size="sm" variant="outline" onClick={sendContactCard} disabled={busy || !contactDraft.trim()} className="h-9 sm:h-8"><AddressBook className="h-4 w-4" aria-hidden="true" /></Button>
                     </div>
                   </label>
                 </div>
@@ -1748,7 +1774,7 @@ function InboxInner() {
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
                 <div className="mb-2 flex items-center justify-between">
                   <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
-                    <UserRound className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                    <User className="h-4 w-4 text-gray-400" aria-hidden="true" />
                     {t('assignedTo')}
                   </h3>
                   <button
@@ -1766,7 +1792,7 @@ function InboxInner() {
                       onClick={() => assignAdmin(null)}
                       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10"
                     >
-                      <UserX className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                      <UserMinus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                       {t('unassign')}
                     </button>
                     {admins.map((a) => (
@@ -1803,7 +1829,7 @@ function InboxInner() {
               <div ref={reasoningRef} className="border-b border-gray-100 p-4 dark:border-gray-800">
                 <div className="mb-2.5 flex items-center justify-between">
                   <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
-                    <ShieldCheck className="h-4 w-4 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
+                    <ShieldStar className="h-4 w-4 text-hermes-600" aria-hidden="true" />
                     {t('hermesReview')}
                   </h3>
                   {review && (
@@ -1829,7 +1855,7 @@ function InboxInner() {
                     {review.reason && (
                       <div className="mt-2.5 rounded-md bg-gray-50 px-2.5 py-2 text-xs leading-relaxed text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                         <div className="mb-1 flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-200">
-                          <FileSearch className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                          <FileMagnifyingGlass className="h-3.5 w-3.5" aria-hidden="true" />
                           {t('hermesReason')}
                         </div>
                         {review.reason}
@@ -1850,19 +1876,19 @@ function InboxInner() {
                 <div className="flex flex-wrap gap-1.5">
                   {active.slaBreachedAt && (
                     <Badge tone="review">
-                      <Clock className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                      <Clock className="h-3.5 w-3.5" aria-hidden="true" />
                       {t('slaMissed')}
                     </Badge>
                   )}
                   {active.aiMode === 'ai_paused' && (
                     <Badge tone="danger">
-                      <CircleX className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                      <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
                       {t('aiPausedFlag')}
                     </Badge>
                   )}
                   {review && (review.riskLevel === 'high' || review.riskLevel === 'critical') && (
                     <Badge tone="danger">
-                      <TriangleAlert className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                      <Warning className="h-3.5 w-3.5" aria-hidden="true" />
                       {t('riskLevelFlag', { level: review.riskLevel })}
                     </Badge>
                   )}
@@ -1875,7 +1901,7 @@ function InboxInner() {
               {/* Answering bot */}
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
                 <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
-                  <Workflow className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                  <ArrowsSplit className="h-4 w-4 text-gray-400" aria-hidden="true" />
                   {t('automationMode')}
                 </h3>
                 {active.bot ? (
@@ -1891,7 +1917,7 @@ function InboxInner() {
               {/* Audit timeline (derived from message facts) */}
               <div ref={auditRef} className="p-4">
                 <h3 className="mb-2.5 flex items-center gap-1.5 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
-                  <ScrollText className="h-4 w-4 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                  <Scroll className="h-4 w-4 text-gray-400" aria-hidden="true" />
                   {t('auditTrail')}
                 </h3>
                 <ol className="space-y-3 text-xs">
@@ -1899,7 +1925,7 @@ function InboxInner() {
                     const Icon = e.icon;
                     return (
                       <li key={i} className="flex gap-2.5">
-                        <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', e.tone)} strokeWidth={1.75} aria-hidden="true" />
+                        <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', e.tone)} aria-hidden="true" />
                         <div className="flex-1">
                           <p className="text-gray-700 dark:text-gray-200">{t(e.label, e.vars)}</p>
                           {e.time && <p className="text-gray-400">{clockTime(e.time)}</p>}
@@ -1913,7 +1939,7 @@ function InboxInner() {
 
             <div className="border-t border-gray-100 p-3 dark:border-gray-800">
               <Button variant="ghost" size="sm" className="w-full justify-start" onClick={escalate} disabled={busy}>
-                <FileSearch className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                <FileMagnifyingGlass className="h-4 w-4" aria-hidden="true" />
                 {t('escalateToSupervisor')}
               </Button>
             </div>
@@ -1952,7 +1978,7 @@ function InboxInner() {
                           className="justify-start text-[11px]"
                           onClick={() => reasoningRef.current?.scrollIntoView({ block: 'nearest' })}
                         >
-                          <FileSearch className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                          <FileMagnifyingGlass className="h-3.5 w-3.5" aria-hidden="true" />
                           Alasan
                         </Button>
                         <Button
@@ -1961,7 +1987,7 @@ function InboxInner() {
                           className="justify-start text-[11px]"
                           onClick={() => auditRef.current?.scrollIntoView({ block: 'nearest' })}
                         >
-                          <ScrollText className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                          <Scroll className="h-3.5 w-3.5" aria-hidden="true" />
                           Audit
                         </Button>
                       </div>
@@ -2021,7 +2047,7 @@ function InboxInner() {
                     <div className="border-b border-gray-100 p-4 dark:border-gray-800">
                       <div className="mb-2 flex items-center justify-between">
                         <h3 className="flex items-center gap-1.5 text-xs font-semibold text-gray-900 dark:text-gray-100">
-                          <ShieldCheck className="h-3.5 w-3.5 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
+                          <ShieldStar className="h-3.5 w-3.5 text-hermes-600" aria-hidden="true" />
                           {t('hermesReview')}
                         </h3>
                         {review && (
@@ -2057,19 +2083,19 @@ function InboxInner() {
                       <div className="flex flex-wrap gap-1.5">
                         {active.slaBreachedAt && (
                           <Badge tone="review" className="text-[10px]">
-                            <Clock className="h-2.5 w-2.5" strokeWidth={1.75} aria-hidden="true" />
+                            <Clock className="h-2.5 w-2.5" aria-hidden="true" />
                             {t('slaMissed')}
                           </Badge>
                         )}
                         {active.aiMode === 'ai_paused' && (
                           <Badge tone="danger" className="text-[10px]">
-                            <CircleX className="h-2.5 w-2.5" strokeWidth={1.75} aria-hidden="true" />
+                            <XCircle className="h-2.5 w-2.5" aria-hidden="true" />
                             {t('aiPausedFlag')}
                           </Badge>
                         )}
                         {review && (review.riskLevel === 'high' || review.riskLevel === 'critical') && (
                           <Badge tone="danger" className="text-[10px]">
-                            <TriangleAlert className="h-2.5 w-2.5" strokeWidth={1.75} aria-hidden="true" />
+                            <Warning className="h-2.5 w-2.5" aria-hidden="true" />
                             {t('riskLevelFlag', { level: review.riskLevel })}
                           </Badge>
                         )}
@@ -2082,7 +2108,7 @@ function InboxInner() {
                     {/* Audit — MOBILE */}
                     <div className="p-4">
                       <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-900 dark:text-gray-100">
-                        <ScrollText className="h-3.5 w-3.5 text-gray-400" strokeWidth={1.75} aria-hidden="true" />
+                        <Scroll className="h-3.5 w-3.5 text-gray-400" aria-hidden="true" />
                         {t('auditTrail')}
                       </h3>
                       <ol className="space-y-2 text-[11px]">
@@ -2090,7 +2116,7 @@ function InboxInner() {
                           const Icon = e.icon;
                           return (
                             <li key={i} className="flex gap-2">
-                              <Icon className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', e.tone)} strokeWidth={1.75} aria-hidden="true" />
+                              <Icon className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', e.tone)} aria-hidden="true" />
                               <div className="flex-1">
                                 <p className="text-gray-700 dark:text-gray-200">{t(e.label, e.vars)}</p>
                                 {e.time && <p className="text-gray-400">{clockTime(e.time)}</p>}
@@ -2161,7 +2187,7 @@ function MediaContent({ message: m }: { message: Message }) {
     }
     return (
       <span className="flex items-center gap-1.5 italic opacity-80">
-        <ImageIcon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+        <ImageIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
         {m.content ?? t('mediaImage')}
       </span>
     );
@@ -2177,7 +2203,7 @@ function MediaContent({ message: m }: { message: Message }) {
     }
     return (
       <span className="flex items-center gap-1.5 italic opacity-80">
-        <Video className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+        <Video className="h-4 w-4 shrink-0" aria-hidden="true" />
         {m.content ?? t('mediaVideo')}
       </span>
     );
@@ -2192,7 +2218,7 @@ function MediaContent({ message: m }: { message: Message }) {
     }
     return (
       <span className="flex items-center gap-1.5 italic opacity-80">
-        <FileText className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+        <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
         {m.content ?? 'audio'}
       </span>
     );
@@ -2210,7 +2236,7 @@ function MediaContent({ message: m }: { message: Message }) {
   if (m.messageType === 'document' || m.messageType === 'file') {
     return (
       <span className="flex items-center gap-1.5 italic opacity-80">
-        <FileText className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+        <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
         {m.content ?? m.messageType}
       </span>
     );
@@ -2220,12 +2246,12 @@ function MediaContent({ message: m }: { message: Message }) {
 
 // Build a small, truthful audit trail from what the conversation actually shows.
 function buildAudit(conv: ConvDetail) {
-  const out: { label: string; vars?: Record<string, string | number>; time: string | null; icon: typeof Workflow; tone: string }[] = [];
+  const out: { label: string; vars?: Record<string, string | number>; time: string | null; icon: PhosphorIcon; tone: string }[] = [];
   const firstAi = conv.messages.find((m) => m.aiGenerated);
-  if (firstAi) out.push({ label: 'auditAiReply', time: firstAi.createdAt, icon: Workflow, tone: 'text-hermes-600' });
-  if (conv.hermesReviews[0]) out.push({ label: 'auditHermes', vars: { decision: conv.hermesReviews[0].decision.replace('_', ' ') }, time: null, icon: ShieldCheck, tone: 'text-review-600' });
+  if (firstAi) out.push({ label: 'auditAiReply', time: firstAi.createdAt, icon: ArrowsSplit, tone: 'text-hermes-600' });
+  if (conv.hermesReviews[0]) out.push({ label: 'auditHermes', vars: { decision: conv.hermesReviews[0].decision.replace('_', ' ') }, time: null, icon: ShieldStar, tone: 'text-review-600' });
   if (conv.takeoverStatus === 'admin_takeover') out.push({ label: 'auditTakeover', time: null, icon: Hand, tone: 'text-gray-500' });
   if (conv.assignedAdmin) out.push({ label: 'auditAssigned', vars: { name: conv.assignedAdmin.name }, time: null, icon: Hand, tone: 'text-gray-500' });
-  if (out.length === 0) out.push({ label: 'auditNoActions', time: null, icon: History, tone: 'text-gray-400' });
+  if (out.length === 0) out.push({ label: 'auditNoActions', time: null, icon: ClockCounterClockwise, tone: 'text-gray-400' });
   return out;
 }

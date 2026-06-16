@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ServerCog, Unplug } from 'lucide-react';
+import { GearSix, PlugsConnected } from '@phosphor-icons/react';
 import { cn } from '@/lib/cn';
 import { useT, type Dict } from '@/lib/i18n';
 
@@ -48,7 +48,7 @@ export function BackendStatus() {
     };
   }, []);
 
-  const Icon = state === 'offline' ? Unplug : ServerCog;
+  const Icon = state === 'offline' ? PlugsConnected : GearSix;
   const label = t(state);
 
   return (
@@ -60,7 +60,7 @@ export function BackendStatus() {
         state === 'checking' && 'border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400',
       )}
     >
-      <Icon className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
+      <Icon className="h-3 w-3" aria-hidden="true" />
       {label}
     </span>
   );

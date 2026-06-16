@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { ShieldCheck, Send, MessageSquare, TriangleAlert } from 'lucide-react';
+import { ShieldStar, PaperPlaneTilt, ChatCircle, Warning } from '@phosphor-icons/react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { AppLayout } from '@/components/AppLayout';
@@ -199,7 +199,7 @@ export default function HermesPage() {
         {/* Supervisor assistant */}
         <Card className="mb-5 p-4">
           <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
-            <ShieldCheck className="h-4 w-4 text-hermes-600" strokeWidth={1.75} aria-hidden="true" />
+            <ShieldStar className="h-4 w-4 text-hermes-600" aria-hidden="true" />
             {t('askHermes')}
             <Badge tone="hermes">{t('supervisorAssistant')}</Badge>
           </h2>
@@ -212,7 +212,7 @@ export default function HermesPage() {
             {chat.map((c, i) => (
               <div key={i} className="space-y-1">
                 <p className="flex items-start gap-1.5 text-sm text-gray-500 dark:text-gray-400">
-                  <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+                  <ChatCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   {c.q}
                 </p>
                 <p className="whitespace-pre-wrap rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-900 dark:bg-gray-800 dark:text-gray-100">
@@ -231,7 +231,7 @@ export default function HermesPage() {
               className="h-9 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
             />
             <Button type="submit" size="md" disabled={asking}>
-              <Send className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+              <PaperPlaneTilt className="h-4 w-4" aria-hidden="true" />
               {t('ask')}
             </Button>
           </form>
@@ -262,7 +262,7 @@ export default function HermesPage() {
                           t('customer')}
                       </span>
                       <Badge tone={DECISION_TONE[a.decision] ?? RISK_TONE[a.riskLevel] ?? 'neutral'}>
-                        <TriangleAlert className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                        <Warning className="h-3.5 w-3.5" aria-hidden="true" />
                         {a.riskLevel} · {DECISION_LABEL_KEY[a.decision] ? t(DECISION_LABEL_KEY[a.decision]) : a.decision}
                       </Badge>
                     </div>
@@ -279,7 +279,7 @@ export default function HermesPage() {
               {alerts.length === 0 && (
                 <li>
                   <Card className="flex flex-col items-center justify-center py-12 text-center">
-                    <ShieldCheck className="mb-2 h-6 w-6 text-gray-300" strokeWidth={1.75} aria-hidden="true" />
+                    <ShieldStar className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
                     <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
                       {t('noActiveAlerts')}
                     </p>

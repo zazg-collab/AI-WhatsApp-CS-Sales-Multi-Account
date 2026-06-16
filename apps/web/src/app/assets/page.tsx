@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { FileText, Image as ImageIcon, Video, Upload, Trash2, Pencil, Link as LinkIcon } from 'lucide-react';
+import { FileText, Image as ImageIcon, Video, UploadSimple, Trash, PencilSimple, Link as LinkIcon } from '@phosphor-icons/react';
 import { api, uploadFile, resolveMediaUrl, hasRole } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -180,7 +180,7 @@ export default function AssetsPage() {
             </div>
             <div className="mt-3">
               <Button onClick={submit} disabled={uploading || !file || !title.trim()}>
-                <Upload className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                <UploadSimple className="h-4 w-4" aria-hidden="true" />
                 {uploading ? 'Mengunggah…' : 'Unggah aset'}
               </Button>
             </div>
@@ -212,7 +212,7 @@ export default function AssetsPage() {
                       {a.kind === 'image' && src ? (
                         <img src={src} alt={a.title} className="h-full w-full object-cover" />
                       ) : (
-                        <span className="flex h-full w-full items-center justify-center text-gray-400"><Icon className="h-6 w-6" strokeWidth={1.5} /></span>
+                        <span className="flex h-full w-full items-center justify-center text-gray-400"><Icon className="h-6 w-6" /></span>
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -237,12 +237,12 @@ export default function AssetsPage() {
                     </div>
                     {canManage && (
                       <button type="button" onClick={() => setEditing(a)} title="Edit" className="shrink-0 self-start text-gray-400 hover:text-hermes-600">
-                        <Pencil className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                        <PencilSimple className="h-4 w-4" aria-hidden="true" />
                       </button>
                     )}
                     {canDelete && (
                       <button type="button" onClick={() => remove(a.id)} title="Hapus" className="shrink-0 self-start text-gray-400 hover:text-danger-600">
-                        <Trash2 className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                        <Trash className="h-4 w-4" aria-hidden="true" />
                       </button>
                     )}
                   </Card>

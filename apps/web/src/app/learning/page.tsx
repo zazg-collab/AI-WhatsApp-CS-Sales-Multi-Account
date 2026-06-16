@@ -3,17 +3,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   GraduationCap,
-  Sparkles,
+  Sparkle,
   Check,
   X,
-  BookOpen,
-  UserRound,
+  Books,
+  User,
   Brain,
   Target,
-  ChevronDown,
-  ChevronRight,
-  Loader2,
-} from 'lucide-react';
+  CaretDown,
+  CaretRight,
+  SpinnerGap,
+  type Icon,
+} from '@phosphor-icons/react';
 import { api, hasRole } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -52,9 +53,9 @@ interface MineResult {
   skippedDuplicates: number;
 }
 
-const typeMeta: Record<ProposalType, { label: string; icon: typeof BookOpen; tone: 'hermes' | 'channel' | 'neutral' | 'review' }> = {
-  knowledge: { label: 'Knowledge', icon: BookOpen, tone: 'hermes' },
-  persona: { label: 'Persona', icon: UserRound, tone: 'channel' },
+const typeMeta: Record<ProposalType, { label: string; icon: Icon; tone: 'hermes' | 'channel' | 'neutral' | 'review' }> = {
+  knowledge: { label: 'Knowledge', icon: Books, tone: 'hermes' },
+  persona: { label: 'Persona', icon: User, tone: 'channel' },
   customer_memory: { label: 'Memori Pelanggan', icon: Brain, tone: 'neutral' },
   playbook: { label: 'Playbook', icon: Target, tone: 'review' },
 };
@@ -154,7 +155,7 @@ export default function LearningPage() {
           ))}
         </select>
         <Button onClick={mine} disabled={mining || !botId}>
-          {mining ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />}
+          {mining ? <SpinnerGap className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkle className="h-4 w-4" aria-hidden="true" />}
           {mining ? 'Menganalisa…' : 'Pelajari dari Riwayat'}
         </Button>
       </PageHeader>
@@ -200,7 +201,7 @@ export default function LearningPage() {
           </div>
         ) : proposals.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center text-gray-400">
-            <GraduationCap className="mb-2 h-8 w-8 text-gray-300" strokeWidth={1.5} aria-hidden="true" />
+            <GraduationCap className="mb-2 h-8 w-8 text-gray-300" aria-hidden="true" />
             <p className="text-sm">
               {tab === 'pending'
                 ? 'Belum ada usulan. Klik "Pelajari dari Riwayat" untuk menambang dari chat.'
@@ -218,7 +219,7 @@ export default function LearningPage() {
                   <Card className="overflow-hidden">
                     <div className="flex items-start gap-3 p-3.5">
                       <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                        <Icon className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                        <Icon className="h-4 w-4" aria-hidden="true" />
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -237,7 +238,7 @@ export default function LearningPage() {
                           onClick={() => setExpanded(open ? null : p.id)}
                           className="mt-1.5 flex items-center gap-1 text-[12px] font-medium text-hermes-600 hover:underline dark:text-hermes-400"
                         >
-                          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                          {open ? <CaretDown className="h-3.5 w-3.5" /> : <CaretRight className="h-3.5 w-3.5" />}
                           {open ? 'Sembunyikan' : 'Lihat usulan'}
                           {p.sourceMessageIds.length > 0 && (
                             <span className="text-gray-400">· {p.sourceMessageIds.length} pesan sumber</span>
@@ -247,11 +248,11 @@ export default function LearningPage() {
                       {p.status === 'pending' && canReview && (
                         <div className="flex shrink-0 gap-1.5">
                           <Button size="sm" onClick={() => act(p.id, 'approve')} disabled={acting === p.id}>
-                            <Check className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                            <Check className="h-4 w-4" aria-hidden="true" />
                             <span className="hidden sm:inline">Setujui</span>
                           </Button>
                           <Button variant="outline" size="sm" onClick={() => act(p.id, 'reject')} disabled={acting === p.id}>
-                            <X className="h-4 w-4" strokeWidth={2} aria-hidden="true" />
+                            <X className="h-4 w-4" aria-hidden="true" />
                           </Button>
                         </div>
                       )}
