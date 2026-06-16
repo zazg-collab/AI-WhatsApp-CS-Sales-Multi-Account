@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Avatar } from '@/components/ui/Avatar';
 import { formatPhone } from '@/lib/contact';
 import { useT, type Dict } from '@/lib/i18n';
 
@@ -101,6 +102,7 @@ interface Customer {
   lastMessageAt?: string | null;
   assignedAdminId?: string | null;
   assignedAdmin?: { id: string; name: string; email?: string } | null;
+  avatarUrl?: string | null;
 }
 
 interface User {
@@ -448,8 +450,13 @@ export default function CustomersPage() {
                         />
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900 dark:text-gray-100">{customer.name || t('noName')}</div>
-                        <div className="text-xs text-gray-400">{formatPhone(customer.phoneNumber, t('hiddenNumber'))}</div>
+                        <div className="flex items-center gap-2.5">
+                          <Avatar name={customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-8 w-8 text-[11px] font-semibold" />
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-gray-900 dark:text-gray-100">{customer.name || t('noName')}</div>
+                            <div className="text-xs text-gray-400">{formatPhone(customer.phoneNumber, t('hiddenNumber'))}</div>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <Badge tone={stageTone[customer.leadStage]}>{t(stageLabelKey[customer.leadStage])}</Badge>
