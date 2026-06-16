@@ -21,6 +21,51 @@ export class ContactSyncService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * Merge a duplicate customer into the canonical one (same person, e.g. an
+   * @lid-keyed record and the real-phone record created by an admin-started
+   * chat). Conversations are folded into the target's existing conversation on
+   * the same account (messages re-pointed); otherwise the conversation is
+   * re-assigned. Customer-scoped relations follow, then the duplicate is
+   * deleted. No-op when from === to.
+   */
+  async mergeCustomerInto(fromId: string, toId: string) {
+    if (fromId === toId) return;
+    await this.prisma.$transaction(async (tx) => {
+      const fromConvs = await tx.conversation.findMany({ where: { customerId: fromId } });
+      for (const fc of fromConvs) {
+        const target = await tx.conversation.findFirst({
+          where: { customerId: toId, whatsappAccountId: fc.whatsappAccountId },
+          orderBy: { createdAt: 'asc' },
+        });
+        if (target) {
+          // The same WhatsApp message can exist in both conversations (same
+          // externalId). Drop those duplicates from the source first, or the
+          // move violates the unique (conversationId, externalId) constraint.
+          const dup = await tx.message.findMany({
+            where: { conversationId: target.id, externalId: { not: null } },
+            select: { externalId: true },
+          });
+          const extIds = dup.map((m) => m.externalId).filter((e): e is string => !!e);
+          if (extIds.length) {
+            await tx.message.deleteMany({ where: { conversationId: fc.id, externalId: { in: extIds } } });
+          }
+          await tx.message.updateMany({ where: { conversationId: fc.id }, data: { conversationId: target.id } });
+          await tx.followUp.updateMany({ where: { conversationId: fc.id }, data: { conversationId: target.id } }).catch(() => undefined);
+          await tx.campaignRecipient.updateMany({ where: { conversationId: fc.id }, data: { conversationId: target.id } }).catch(() => undefined);
+          await tx.conversation.delete({ where: { id: fc.id } });
+        } else {
+          await tx.conversation.update({ where: { id: fc.id }, data: { customerId: toId } });
+        }
+      }
+      await tx.followUp.updateMany({ where: { customerId: fromId }, data: { customerId: toId } }).catch(() => undefined);
+      await tx.whatsappContact.updateMany({ where: { customerId: fromId }, data: { customerId: toId } }).catch(() => undefined);
+      await tx.learningProposal.updateMany({ where: { customerId: fromId }, data: { customerId: toId } }).catch(() => undefined);
+      await tx.customer.delete({ where: { id: fromId } });
+    });
+    this.logger.log(`Merged duplicate customer ${fromId} into ${toId}`);
+  }
+
+  /**
    * Best-effort resolve a @lid JID to a real phone number by looking up the
    * whatsapp_contacts table. Returns the phone number if found, or the
    * original @lid string if unresolved.
@@ -71,11 +116,16 @@ export class ContactSyncService {
         select: { id: true },
       });
       if (!realCustomer) {
+        // No real-number record yet → just relabel the @lid customer.
         await this.prisma.customer.update({
           where: { id: lidCustomer.id },
           data: { phoneNumber },
         });
         this.logger.log(`Migrated @lid customer ${lidCustomer.id} to phone ${phoneNumber}`);
+      } else if (realCustomer.id !== lidCustomer.id) {
+        // Both exist (e.g. admin-started chat by number + inbound arriving as
+        // @lid): merge the @lid duplicate into the real-number customer.
+        await this.mergeCustomerInto(lidCustomer.id, realCustomer.id);
       }
     }
 
@@ -205,6 +255,8 @@ export class ContactSyncService {
               data: { phoneNumber },
             });
             this.logger.log(`Migrated @lid customer ${lidCustomer.id} to phone ${phoneNumber}`);
+          } else if (realCustomer.id !== lidCustomer.id) {
+            await this.mergeCustomerInto(lidCustomer.id, realCustomer.id);
           }
         }
       }
