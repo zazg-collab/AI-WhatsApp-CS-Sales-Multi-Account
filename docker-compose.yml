@@ -57,6 +57,9 @@ services:
       - REDIS_URL=redis://redis:6379
       - WA_SESSION_DIR=/app/data/wa-sessions
       - WA_MEDIA_DIR=/app/data/wa-media
+      # Encrypts external product-source credentials (DB connection strings,
+      # Google service-account keys) at rest. Set a strong random value in prod.
+      - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY:-}
     volumes:
       - hermes_sessions:/app/data/wa-sessions
       - hermes_media:/app/data/wa-media
