@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsIn,
   IsOptional,
   IsString,
@@ -35,6 +36,11 @@ export class CreateAssetDto {
   @IsArray()
   @IsString({ each: true })
   triggerKeywords?: string[];
+
+  // Multipart form sends this as a string ("true"/"false"); coerced in the service.
+  @IsOptional()
+  @IsString()
+  autoSend?: string;
 }
 
 export class UpdateAssetDto {
@@ -45,6 +51,7 @@ export class UpdateAssetDto {
   @IsOptional() @IsArray() @IsString({ each: true }) tags?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) triggerKeywords?: string[];
   @IsOptional() @IsIn(['active', 'draft']) status?: string;
+  @IsOptional() @IsBoolean() autoSend?: boolean;
 }
 
 export class SendAssetDto {

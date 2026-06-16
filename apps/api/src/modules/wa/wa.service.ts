@@ -39,6 +39,11 @@ import { MediaStorageService } from '../media/media-storage.service';
 import { logAudit } from '../../common/audit.util';
 import { isWithinBusinessHours } from '../../common/business-hours.util';
 import { ContactSyncService } from './contact-sync.service';
+import { ModuleRef } from '@nestjs/core';
+// Type-only import: a value import would create a circular module reference
+// (assets.service imports WaService), corrupting DI metadata. The class token
+// is pulled lazily via require() at call time instead.
+import type { AssetsService } from '../assets/assets.service';
 
 interface Session {
   sock: WASocket;
@@ -89,6 +94,7 @@ export class WaService implements OnModuleInit {
     private readonly storage: MediaStorageService,
     private readonly contactSync: ContactSyncService,
     private readonly settings: SettingsService,
+    private readonly moduleRef: ModuleRef,
     config: ConfigService,
   ) {
     this.sessionDir = config.get<string>('WA_SESSION_DIR') ?? './.wa-sessions';
@@ -1193,6 +1199,21 @@ export class WaService implements OnModuleInit {
 
     // ai_on: send directly, then post-send audit (no gating).
     const message = await this.sendAndStore(convo, text);
+
+    // Optional bot auto-send of a whitelisted media asset (off by default;
+    // resolved lazily to avoid a module cycle, fire-and-forget so a failure
+    // never affects the text reply).
+    try {
+      // Resolve by string token (registered in AssetsModule) to avoid importing
+      // the class — a value import would create a circular module reference.
+      const assets = this.moduleRef.get<AssetsService>('ASSETS_SERVICE', { strict: false });
+      void assets
+        .maybeAutoSend(conversationId)
+        .catch((err: unknown) => this.logger.warn(`asset auto-send failed: ${err}`));
+    } catch {
+      // AssetsService not resolvable — feature simply unavailable.
+    }
+
     this.hermes
       .review(conversationId, text)
       .then((review) =>
