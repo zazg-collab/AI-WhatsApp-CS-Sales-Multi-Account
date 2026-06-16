@@ -24,6 +24,7 @@ interface Asset {
   tags: string[];
   triggerKeywords: string[];
   status: string;
+  autoSend: boolean;
 }
 
 const purposeMeta: Record<Purpose, { label: string; tone: 'hermes' | 'channel' | 'review' }> = {
@@ -51,6 +52,7 @@ export default function AssetsPage() {
   const [caption, setCaption] = useState('');
   const [marketplaceUrl, setMarketplaceUrl] = useState('');
   const [triggerKeywords, setTriggerKeywords] = useState('');
+  const [autoSend, setAutoSend] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // edit modal
@@ -84,9 +86,10 @@ export default function AssetsPage() {
         .map((k) => k.trim())
         .filter(Boolean)
         .forEach((k) => form.append('triggerKeywords[]', k));
+      if (autoSend) form.append('autoSend', 'true');
       await uploadFile('/assets/upload', form);
       setNotice('Aset diunggah.');
-      setFile(null); setTitle(''); setCaption(''); setMarketplaceUrl(''); setTriggerKeywords('');
+      setFile(null); setTitle(''); setCaption(''); setMarketplaceUrl(''); setTriggerKeywords(''); setAutoSend(false);
       if (fileRef.current) fileRef.current.value = '';
       load();
     } catch (e) {
@@ -117,6 +120,7 @@ export default function AssetsPage() {
         marketplaceUrl: editing.marketplaceUrl ?? '',
         triggerKeywords: editing.triggerKeywords,
         status: editing.status,
+        autoSend: editing.autoSend,
       };
       const updated = await api<Asset>(`/assets/${editing.id}`, { method: 'PATCH', body: JSON.stringify(body) });
       setAssets((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
@@ -168,6 +172,10 @@ export default function AssetsPage() {
               <label className="block text-[13px] sm:col-span-2">
                 <span className="mb-1 block text-gray-600 dark:text-gray-300">Kata pemicu (pisahkan koma) — bot akan menyarankan aset ini saat pelanggan menyebutnya</span>
                 <input value={triggerKeywords} onChange={(e) => setTriggerKeywords(e.target.value)} placeholder="brosur, katalog, harga, pricelist" className="h-9 w-full rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+              </label>
+              <label className="flex items-start gap-2 text-[13px] sm:col-span-2">
+                <input type="checkbox" checked={autoSend} onChange={(e) => setAutoSend(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-gray-300" />
+                <span className="text-gray-600 dark:text-gray-300">Boleh dikirim <strong>otomatis</strong> oleh bot saat AI ON & kata pemicu cocok <span className="text-gray-400">(perlu diaktifkan server: ASSET_AUTOSEND_ENABLED)</span></span>
               </label>
             </div>
             <div className="mt-3">
@@ -221,6 +229,7 @@ export default function AssetsPage() {
                       )}
                       <div className="mt-1 flex flex-wrap items-center gap-1">
                         {a.status === 'draft' && <Badge tone="neutral" className="text-[10px]">draft</Badge>}
+                        {a.autoSend && <Badge tone="hermes" className="text-[10px]">auto-send</Badge>}
                         {a.triggerKeywords.map((k) => (
                           <span key={k} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">{k}</span>
                         ))}
@@ -281,6 +290,10 @@ export default function AssetsPage() {
             <label className="block">
               <span className="mb-1 block text-gray-600 dark:text-gray-300">Kata pemicu (pisahkan koma)</span>
               <input value={editing.triggerKeywords.join(', ')} onChange={(e) => setEditing({ ...editing, triggerKeywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })} placeholder="brosur, katalog, harga" className="h-9 w-full rounded border border-gray-200 bg-gray-50 px-2.5 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+            </label>
+            <label className="flex items-start gap-2">
+              <input type="checkbox" checked={editing.autoSend} onChange={(e) => setEditing({ ...editing, autoSend: e.target.checked })} className="mt-0.5 h-4 w-4 rounded border-gray-300" />
+              <span className="text-gray-600 dark:text-gray-300">Boleh dikirim <strong>otomatis</strong> oleh bot (AI ON + kata pemicu cocok)</span>
             </label>
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" size="sm" onClick={() => setEditing(null)}>Batal</Button>

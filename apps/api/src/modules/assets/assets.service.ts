@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { MessageType, SenderType } from '@hermes/database';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { AiMode, MessageType, SenderType, TakeoverStatus } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MediaStorageService } from '../media/media-storage.service';
 import { WaService } from '../wa/wa.service';
@@ -44,12 +45,19 @@ const MAX_SUGGESTIONS = 4;
 
 @Injectable()
 export class AssetsService {
+  private readonly logger = new Logger(AssetsService.name);
+  /** Global kill-switch for bot auto-send. Off unless ASSET_AUTOSEND_ENABLED=true. */
+  private readonly autoSendEnabled: boolean;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: MediaStorageService,
     private readonly wa: WaService,
     private readonly events: EventsGateway,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.autoSendEnabled = config.get<string>('ASSET_AUTOSEND_ENABLED') === 'true';
+  }
 
   list(filter: { purpose?: string; status?: string }) {
     return this.prisma.asset.findMany({
@@ -76,6 +84,7 @@ export class AssetsService {
         marketplaceUrl: dto.marketplaceUrl,
         tags: dto.tags ?? [],
         triggerKeywords: dto.triggerKeywords ?? [],
+        autoSend: dto.autoSend === 'true',
         storageKey: key,
         mediaUrl: url,
         mimeType: file.mimetype,
@@ -224,6 +233,89 @@ export class AssetsService {
       if (suggestions.length >= MAX_SUGGESTIONS) break;
     }
     return suggestions;
+  }
+
+  /**
+   * Bot auto-send (ai_on only). Heavily gated and OFF by default:
+   *   1. global flag ASSET_AUTOSEND_ENABLED must be true,
+   *   2. conversation must be ai_on and not under admin takeover,
+   *   3. only assets explicitly whitelisted (autoSend=true) are eligible,
+   *   4. only an EXACT trigger-keyword match (not the loose hesitation cue),
+   *   5. never re-send the same asset to a conversation (anti-spam).
+   * Returns the asset it sent, or null. Fire-and-forget from the reply path.
+   */
+  async maybeAutoSend(conversationId: string): Promise<{ id: string; title: string } | null> {
+    if (!this.autoSendEnabled) return null;
+
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: { customer: true },
+    });
+    if (!conversation) return null;
+    if (conversation.aiMode !== AiMode.ai_on) return null;
+    if (conversation.takeoverStatus === TakeoverStatus.admin_takeover) return null;
+
+    const last = await this.prisma.message.findFirst({
+      where: { conversationId, senderType: SenderType.customer, content: { not: '' } },
+      orderBy: { createdAt: 'desc' },
+      select: { content: true },
+    });
+    const text = (last?.content ?? '').toLowerCase();
+    if (!text.trim()) return null;
+
+    const assets = await this.prisma.asset.findMany({
+      where: { status: 'active', autoSend: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    const match = assets.find((a) => a.triggerKeywords.some((k) => k && text.includes(k.toLowerCase())));
+    if (!match) return null;
+
+    // Anti-spam: never send the same asset twice in one conversation.
+    const already = await this.prisma.message.findFirst({
+      where: { conversationId, mediaUrl: match.mediaUrl },
+      select: { id: true },
+    });
+    if (already) return null;
+
+    try {
+      const buffer = await this.storage.read(match.storageKey);
+      let caption = match.caption ?? match.title;
+      if (match.purpose === 'product' && match.marketplaceUrl) caption = `${caption}\n${match.marketplaceUrl}`;
+
+      const externalId = await this.wa.sendMediaBuffer(
+        conversation.whatsappAccountId,
+        conversation.customer.phoneNumber,
+        match.kind as 'image' | 'document' | 'audio' | 'video',
+        buffer,
+        match.mimeType,
+        caption,
+        match.title,
+      );
+      const message = await this.prisma.message.create({
+        data: {
+          conversationId,
+          senderType: SenderType.ai,
+          messageType: match.kind as MessageType,
+          content: caption,
+          mediaUrl: match.mediaUrl,
+          status: 'sent',
+          externalId,
+          aiGenerated: true,
+        },
+      });
+      this.events.emitToAccount(conversation.whatsappAccountId, 'message:new', { conversationId, message });
+      await logAudit(this.prisma, {
+        action: 'asset_auto_send',
+        entityType: 'conversation',
+        entityId: conversationId,
+        newValue: { assetId: match.id, title: match.title },
+      });
+      this.logger.log(`Auto-sent asset "${match.title}" to conversation ${conversationId}`);
+      return { id: match.id, title: match.title };
+    } catch (err) {
+      this.logger.warn(`Auto-send failed for ${conversationId}: ${err}`);
+      return null;
+    }
   }
 
   private async getOrThrow(id: string) {

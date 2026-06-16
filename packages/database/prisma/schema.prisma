@@ -634,6 +634,9 @@ model Asset {
   tags            String[] @default([])
   triggerKeywords String[] @default([]) @map("trigger_keywords")
   status          String   @default("active")
+  /// Opt-in whitelist: only assets with autoSend=true may be sent automatically
+  /// by the bot under ai_on (and only when ASSET_AUTOSEND_ENABLED is set).
+  autoSend        Boolean  @default(false) @map("auto_send")
   createdById     String?  @map("created_by")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
