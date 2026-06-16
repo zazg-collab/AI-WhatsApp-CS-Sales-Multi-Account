@@ -140,6 +140,12 @@ export default function AnalyticsPage() {
     hot: 'bg-review-600',
     very_hot: 'bg-danger-500',
   };
+  const leadColorLabels: Record<string, string> = {
+    cold: 'Cold',
+    warm: 'Warm',
+    hot: 'Hot',
+    very_hot: 'Very Hot',
+  };
 
   const modeColors: Record<string, string> = {
     ai_on: 'bg-channel-500',
@@ -242,6 +248,17 @@ export default function AnalyticsPage() {
                           />
                         );
                       })}
+                      <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-700">
+                        <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-2">Legend</p>
+                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                          {Object.entries(leadColorLabels).map(([key, label]) => (
+                            <div key={key} className="flex items-center gap-1.5">
+                              <span className={`h-2 w-2 rounded-sm ${leadColors[key]}`} />
+                              <span className="text-gray-600 dark:text-gray-400">{label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </Panel>
@@ -280,6 +297,31 @@ export default function AnalyticsPage() {
                           color={modeColors[item.mode] ?? 'bg-gray-300 dark:bg-gray-600'}
                         />
                       ))}
+                      <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-700">
+                        <p className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 mb-2">Legend</p>
+                        <div className="grid grid-cols-2 gap-2 text-[11px]">
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-sm bg-channel-500" />
+                            <span className="text-gray-600 dark:text-gray-400">AI ON</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-sm bg-gray-300 dark:bg-gray-600" />
+                            <span className="text-gray-600 dark:text-gray-400">AI OFF</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-sm bg-review-500" />
+                            <span className="text-gray-600 dark:text-gray-400">Draft</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-sm bg-hermes-500" />
+                            <span className="text-gray-600 dark:text-gray-400">Supervised</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-sm bg-danger-500" />
+                            <span className="text-gray-600 dark:text-gray-400">Paused</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </Panel>

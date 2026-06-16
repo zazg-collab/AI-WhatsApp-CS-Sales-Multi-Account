@@ -120,6 +120,7 @@ export function Sidebar() {
   const t = useT(dict);
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
     if (!getToken()) return;
@@ -136,10 +137,14 @@ export function Sidebar() {
     if (!socket) return;
     socket.on('message:new', refresh);
     socket.on('conversation:updated', refresh);
+    socket.on('connect', () => setIsOnline(true));
+    socket.on('disconnect', () => setIsOnline(false));
     return () => {
       if (timer) clearTimeout(timer);
       socket.off('message:new', refresh);
       socket.off('conversation:updated', refresh);
+      socket.off('connect', () => setIsOnline(true));
+      socket.off('disconnect', () => setIsOnline(false));
     };
   }, [pathname]);
 
@@ -235,6 +240,16 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Offline indicator */}
+      {!isOnline && (
+        <div className="border-t border-gray-800 bg-danger-50 px-2 py-2 dark:bg-danger-900/20 lg:px-3">
+          <div className="flex items-center gap-2 rounded px-2 py-1.5 text-[11px] font-medium text-danger-700 dark:text-danger-300">
+            <span className="h-2 w-2 rounded-full bg-danger-600 animate-pulse"></span>
+            <span className="hidden lg:inline">Offline</span>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="border-t border-gray-800 px-2 py-2 lg:px-3">
