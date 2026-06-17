@@ -34,6 +34,10 @@ const dict: Dict = {
   temperature: { id: 'Temperature (0–2)', en: 'Temperature (0–2)' },
   timeout: { id: 'Timeout (ms)', en: 'Timeout (ms)' },
   noModels: { id: 'Tidak ada model ditemukan. Periksa Base URL & API key.', en: 'No models found. Check Base URL & API key.' },
+  testConnection: { id: 'Uji koneksi', en: 'Test connection' },
+  testingConnection: { id: 'Menguji…', en: 'Testing…' },
+  testOk: { id: 'Koneksi berhasil — {n} model tersedia.', en: 'Connection successful — {n} models available.' },
+  testFail: { id: 'Koneksi gagal. Periksa Base URL & API key.', en: 'Connection failed. Check the Base URL & API key.' },
   // WA
   waIntro: { id: 'Jeda mirip-manusia menurunkan risiko banned. Nilai dalam milidetik.', en: 'Human-like delays reduce ban risk. Values in milliseconds.' },
   humanMin: { id: 'Jeda kirim minimum (ms)', en: 'Min send delay (ms)' },
@@ -84,6 +88,8 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [testingConn, setTestingConn] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     api<SettingsShape>('/settings')
@@ -94,6 +100,19 @@ export default function SettingsPage() {
   function patch<K extends keyof SettingsShape>(cat: K, key: keyof SettingsShape[K], value: unknown) {
     setData((prev) => (prev ? { ...prev, [cat]: { ...prev[cat], [key]: value } } : prev));
     setSavedMsg(null);
+  }
+
+  async function testConnection() {
+    setTestingConn(true);
+    setTestResult(null);
+    try {
+      const list = await api<string[]>('/ai/models');
+      setTestResult({ ok: true, msg: t('testOk', { n: list.length }) });
+    } catch {
+      setTestResult({ ok: false, msg: t('testFail') });
+    } finally {
+      setTestingConn(false);
+    }
   }
 
   async function loadModels() {
@@ -212,8 +231,19 @@ export default function SettingsPage() {
             {tab === 'ai' && (
               <div className="space-y-4">
                 <Field label={t('baseUrl')} hint={t('baseUrlHint')}>
-                  <input className={fieldCls} disabled={!canEdit} value={data.ai.baseUrl}
-                    onChange={(e) => patch('ai', 'baseUrl', e.target.value)} />
+                  <div className="flex gap-2">
+                    <input className={fieldCls} disabled={!canEdit} value={data.ai.baseUrl}
+                      onChange={(e) => { patch('ai', 'baseUrl', e.target.value); setTestResult(null); }} />
+                    <Button variant="outline" size="sm" onClick={testConnection} disabled={testingConn || !data.ai.baseUrl} className="shrink-0">
+                      <ArrowsClockwise className={cn('h-4 w-4', testingConn && 'animate-spin')} aria-hidden="true" />
+                      {testingConn ? t('testingConnection') : t('testConnection')}
+                    </Button>
+                  </div>
+                  {testResult && (
+                    <p className={`mt-1 text-xs font-medium ${testResult.ok ? 'text-channel-700 dark:text-channel-400' : 'text-danger-700 dark:text-danger-400'}`}>
+                      {testResult.msg}
+                    </p>
+                  )}
                 </Field>
                 <Field label={t('apiKey')} hint={data.ai.apiKeySet ? t('apiKeySet') : t('apiKeyEmpty')}>
                   <input type="password" className={fieldCls} disabled={!canEdit}

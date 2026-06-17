@@ -38,6 +38,11 @@ const dict: Dict = {
   restartFailed: { id: 'Gagal merestart akun. Coba lagi.', en: 'Failed to restart the account. Try again.' },
   deleteFailed: { id: 'Gagal menghapus akun. Coba lagi.', en: 'Failed to delete the account. Try again.' },
   dismiss: { id: 'Tutup', en: 'Dismiss' },
+  filterAll: { id: 'Semua status', en: 'All statuses' },
+  filterConnected: { id: 'Terhubung', en: 'Connected' },
+  filterDisconnected: { id: 'Terputus', en: 'Disconnected' },
+  filterQr: { id: 'Perlu scan', en: 'Needs scan' },
+  filterBanned: { id: 'Ditangguhkan', en: 'Banned' },
   subtitle: {
     id: 'Nomor WhatsApp, status koneksi, dan jam operasional',
     en: 'WhatsApp numbers, connection status, and business hours',
@@ -326,6 +331,7 @@ export default function AccountsPage() {
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; accountName: string } | null>(null);
   const [confirmRestart, setConfirmRestart] = useState<{ id: string; accountName: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>('');
   // The QR grants full control of a WhatsApp number — only admins+ may scan.
   const canScan = hasRole('admin');
   const canEditHours = hasRole('supervisor');
@@ -416,6 +422,21 @@ export default function AccountsPage() {
     setConfirmDelete(null);
   }
 
+  // Risk-first sort: banned/disconnected → qr_required → reconnecting → connected
+  const STATUS_PRIORITY: Record<string, number> = {
+    banned: 0,
+    disconnected: 1,
+    qr_required: 2,
+    reconnecting: 3,
+    paused: 4,
+    connecting: 5,
+    connected: 6,
+  };
+
+  const visibleAccounts = accounts
+    .filter((a) => !statusFilter || a.sessionStatus === statusFilter)
+    .sort((a, b) => (STATUS_PRIORITY[a.sessionStatus] ?? 7) - (STATUS_PRIORITY[b.sessionStatus] ?? 7));
+
   return (
     <AppLayout>
       <PageHeader title={t('title')} subtitle={t('subtitle')} />
@@ -431,6 +452,23 @@ export default function AccountsPage() {
             </Button>
           </form>
         </Card>
+
+        {accounts.length > 1 && (
+          <div className="mb-3 flex items-center gap-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className={inputClass + ' w-48'}
+              aria-label={t('filterAll')}
+            >
+              <option value="">{t('filterAll')}</option>
+              <option value="connected">{t('filterConnected')}</option>
+              <option value="disconnected">{t('filterDisconnected')}</option>
+              <option value="qr_required">{t('filterQr')}</option>
+              <option value="banned">{t('filterBanned')}</option>
+            </select>
+          </div>
+        )}
 
         {actionError && (
           <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 border-danger-200 bg-danger-50 p-4 dark:border-danger-800 dark:bg-danger-900/20">
@@ -468,7 +506,7 @@ export default function AccountsPage() {
           </Card>
         ) : (
           <ul className="space-y-3">
-            {accounts.map((a) => {
+            {visibleAccounts.map((a) => {
               const disconnected = a.sessionStatus === 'disconnected' || a.sessionStatus === 'banned' || a.sessionStatus === 'reconnecting';
               return (
                 <li key={a.id}>
