@@ -19,6 +19,7 @@ const dict: Dict = {
   readOnly: { id: 'Hanya owner yang dapat mengubah pengaturan. Anda melihat dalam mode baca.', en: 'Only owners can change settings. You are viewing in read-only mode.' },
   loadError: { id: 'Gagal memuat pengaturan dari API.', en: 'Failed to load settings from the API.' },
   saveError: { id: 'Gagal menyimpan pengaturan.', en: 'Failed to save settings.' },
+  delayRangeError: { id: 'Jeda minimum tidak boleh lebih besar dari maksimum.', en: 'Minimum delay cannot be greater than the maximum.' },
   saved: { id: 'Tersimpan.', en: 'Saved.' },
   save: { id: 'Simpan perubahan', en: 'Save changes' },
   saving: { id: 'Menyimpan…', en: 'Saving…' },
@@ -125,6 +126,13 @@ export default function SettingsPage() {
           ...(apiKeyInput.trim() ? { apiKey: apiKeyInput.trim() } : {}),
         };
       } else if (tab === 'wa') {
+        if (
+          Number(data.wa.humanDelayMinMs) > Number(data.wa.humanDelayMaxMs) ||
+          Number(data.wa.typingMinMs) > Number(data.wa.typingMaxMs)
+        ) {
+          setError(t('delayRangeError'));
+          return;
+        }
         payload.wa = {
           humanDelayMinMs: Number(data.wa.humanDelayMinMs),
           humanDelayMaxMs: Number(data.wa.humanDelayMaxMs),

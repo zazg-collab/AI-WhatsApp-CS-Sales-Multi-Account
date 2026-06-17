@@ -341,8 +341,8 @@ export default function LearningPage() {
           <div className="space-y-3">
             <p className="text-sm text-gray-600 dark:text-gray-300">
               {confirmingAction === 'approve'
-                ? t('confirmApprove', { title: proposals.find(p => p.id === confirmingId)?.title })
-                : t('confirmReject', { title: proposals.find(p => p.id === confirmingId)?.title })}
+                ? t('confirmApprove', { title: proposals.find(p => p.id === confirmingId)?.title ?? '' })
+                : t('confirmReject', { title: proposals.find(p => p.id === confirmingId)?.title ?? '' })}
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => { setConfirmingId(null); setConfirmingAction(null); }}>{t('cancel')}</Button>

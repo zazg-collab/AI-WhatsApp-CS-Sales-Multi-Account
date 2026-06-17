@@ -19,7 +19,7 @@ const dict: Dict = {
   errCreatePersona: { id: 'Gagal membuat persona', en: 'Failed to create persona' },
   errSaveBot: { id: 'Gagal menyimpan bot', en: 'Failed to save bot' },
   errAssignAccount: { id: 'Gagal menugaskan akun', en: 'Failed to assign account' },
-  errLoadData: { id: 'Gagal memuat data', en: 'Gagal memuat data' },
+  errLoadData: { id: 'Gagal memuat data', en: 'Failed to load data' },
   errDeleteBot: { id: 'Gagal menghapus bot', en: 'Failed to delete bot' },
 
   // PersonaModal
@@ -56,6 +56,16 @@ const dict: Dict = {
   aiModeOff: { id: 'AI OFF', en: 'AI OFF' },
   aiModeDraft: { id: 'Draft', en: 'Draft' },
   aiModeSupervised: { id: 'Supervised', en: 'Supervised' },
+
+  // Automation risk framing
+  aiModeHelpOn: { id: '⚠ Bot membalas pelanggan OTOMATIS tanpa persetujuan admin. Pastikan persona & knowledge sudah benar sebelum mengaktifkan.', en: '⚠ Bot replies to customers AUTOMATICALLY without admin approval. Make sure the persona & knowledge are correct before enabling.' },
+  aiModeHelpOff: { id: 'Bot tidak membalas. Semua balasan dikirim manual oleh admin.', en: 'Bot does not reply. All replies are sent manually by an admin.' },
+  aiModeHelpDraft: { id: 'Bot menyiapkan draf balasan; admin meninjau lalu mengirim.', en: 'Bot prepares a draft reply; an admin reviews then sends.' },
+  aiModeHelpSupervised: { id: 'Hermes meninjau setiap balasan sebelum dikirim ke pelanggan.', en: 'Hermes reviews every reply before it is sent to the customer.' },
+  activateTitle: { id: 'Aktifkan balasan otomatis?', en: 'Enable automatic replies?' },
+  activateBody: { id: 'Bot "{name}" akan membalas pelanggan secara otomatis tanpa persetujuan admin. Lanjutkan?', en: 'Bot "{name}" will reply to customers automatically without admin approval. Continue?' },
+  activateConfirm: { id: 'Ya, aktifkan otomatis', en: 'Yes, enable automatic' },
+  assignDisconnectedWarn: { id: 'Akun belum terhubung — bot otomatis tidak bisa mengirim sampai akun tersambung.', en: 'Account not connected — an automatic bot cannot send until the account reconnects.' },
   languageLabel: { id: 'Bahasa', en: 'Language' },
   languageId: { id: 'Indonesia', en: 'Indonesian' },
   languageEn: { id: 'English', en: 'English' },
@@ -78,7 +88,8 @@ const dict: Dict = {
   noAssignedAccounts: { id: 'Belum ada akun yang ditugaskan.', en: 'No accounts assigned yet.' },
 
   // Main page
-  pageSubtitle: { id: 'Atur otak chatbot dan tugaskan ke akun WhatsApp', en: 'Manage chatbot brains and assign them to WhatsApp accounts' },
+  pageTitle: { id: 'Automation Mode', en: 'Automation Mode' },
+  pageSubtitle: { id: 'Atur otak chatbot (persona, knowledge, mode AI) dan tugaskan ke akun WhatsApp', en: 'Manage chatbot brains (persona, knowledge, AI mode) and assign them to WhatsApp accounts' },
   newBotBtn: { id: 'Bot baru', en: 'New bot' },
   closeNotif: { id: 'Tutup notifikasi', en: 'Close notification' },
   noBots: { id: 'Belum ada bot', en: 'No bots yet' },
@@ -256,10 +267,25 @@ function BotModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPersonaModal, setShowPersonaModal] = useState(false);
+  const [showActivate, setShowActivate] = useState(false);
   const [localPersonas, setLocalPersonas] = useState(personas);
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Flipping a bot to ai_on means it autonomously messages real customers.
+  // Require an explicit confirmation when turning that on (new bot, or a bot
+  // that wasn't already ai_on).
+  const needsActivationConfirm = form.defaultAiMode === 'ai_on' && (!bot || bot.defaultAiMode !== 'ai_on');
+
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (needsActivationConfirm) {
+      setShowActivate(true);
+      return;
+    }
+    doSave();
+  }
+
+  async function doSave() {
+    setShowActivate(false);
     setLoading(true);
     setError(null);
     try {
@@ -300,6 +326,13 @@ function BotModal({
     { value: 'ai_draft', label: t('aiModeDraft') },
     { value: 'ai_supervised', label: t('aiModeSupervised') },
   ];
+
+  const aiModeHelp: Record<string, string> = {
+    ai_on: t('aiModeHelpOn'),
+    ai_off: t('aiModeHelpOff'),
+    ai_draft: t('aiModeHelpDraft'),
+    ai_supervised: t('aiModeHelpSupervised'),
+  };
 
   return (
     <>
@@ -356,6 +389,10 @@ function BotModal({
             </SelectField>
           </div>
 
+          <p className={`rounded-md px-3 py-2 text-xs ${form.defaultAiMode === 'ai_on' ? 'bg-danger-50 text-danger-700 dark:bg-danger-900/20 dark:text-danger-400' : 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
+            {aiModeHelp[form.defaultAiMode]}
+          </p>
+
           {error && <FormError message={error} />}
         </form>
 
@@ -366,17 +403,23 @@ function BotModal({
             <div className="space-y-1.5">
               {accounts.map((a) => {
                 const assigned = bot.accounts.some((ba) => ba.id === a.id);
+                const autonomousButOffline = form.defaultAiMode === 'ai_on' && a.sessionStatus !== 'connected';
                 return (
-                  <div key={a.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800">
-                    <div className="flex items-center gap-2">
-                      {sessionDot(a.sessionStatus)}
-                      <span className="text-sm text-gray-800 dark:text-gray-200">{a.accountName}</span>
-                      <span className="text-xs text-gray-400">{a.phoneNumber}</span>
+                  <div key={a.id} className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {sessionDot(a.sessionStatus)}
+                        <span className="text-sm text-gray-800 dark:text-gray-200">{a.accountName}</span>
+                        <span className="text-xs text-gray-400">{a.phoneNumber}</span>
+                      </div>
+                      {assigned ? (
+                        <Badge tone="success">{t('assigned')}</Badge>
+                      ) : (
+                        <Button size="sm" onClick={() => handleAssign(a.id)}>{t('assign')}</Button>
+                      )}
                     </div>
-                    {assigned ? (
-                      <Badge tone="success">{t('assigned')}</Badge>
-                    ) : (
-                      <Button size="sm" onClick={() => handleAssign(a.id)}>{t('assign')}</Button>
+                    {autonomousButOffline && (
+                      <p className="mt-1.5 text-[11px] text-review-600 dark:text-review-400">{t('assignDisconnectedWarn')}</p>
                     )}
                   </div>
                 );
@@ -396,6 +439,27 @@ function BotModal({
             setShowPersonaModal(false);
           }}
         />
+      )}
+
+      {showActivate && (
+        <Modal
+          open
+          size="sm"
+          title={t('activateTitle')}
+          onClose={() => setShowActivate(false)}
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setShowActivate(false)}>{t('cancel')}</Button>
+              <Button variant="danger" onClick={doSave} disabled={loading}>
+                {loading ? t('saving') : t('activateConfirm')}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            {t('activateBody', { name: form.botName })}
+          </p>
+        </Modal>
       )}
     </>
   );
@@ -502,7 +566,7 @@ export default function BotsPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Bots & Personas" subtitle={t('pageSubtitle')}>
+      <PageHeader title={t('pageTitle')} subtitle={t('pageSubtitle')}>
         <Button size="sm" onClick={() => setEditBot(null)}>
           <Plus className="h-4 w-4" aria-hidden="true" />
           {t('newBotBtn')}

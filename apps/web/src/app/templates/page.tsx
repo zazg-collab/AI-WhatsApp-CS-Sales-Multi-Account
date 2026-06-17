@@ -13,6 +13,11 @@ import { Field, TextareaField, SelectField } from '@/components/ui/Field';
 import { useT, type Dict } from '@/lib/i18n';
 
 const dict: Dict = {
+  title: { id: 'Templates', en: 'Templates' },
+  addBtn: { id: 'Tambah', en: 'Add' },
+  titlePlaceholder: { id: 'mis. Salam pembuka', en: 'e.g. Greeting' },
+  shortcutPlaceholder: { id: 'salam', en: 'greeting' },
+  messagePlaceholder: { id: 'Halo, terima kasih sudah menghubungi kami…', en: 'Hi, thanks for reaching out to us…' },
   subtitle: {
     id: 'Balasan CS siap pakai — ketik /shortcut di kolom pesan untuk menyisipkan',
     en: 'Ready-to-use CS replies — type /shortcut in the message box to insert',
@@ -164,7 +169,7 @@ export default function TemplatesPage() {
   return (
     <AppLayout>
       <PageHeader
-        title="Templates"
+        title={t('title')}
         subtitle={t('subtitle')}
       />
 
@@ -195,14 +200,14 @@ export default function TemplatesPage() {
                 required
                 value={form.title}
                 onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                placeholder="e.g. Greeting"
+                placeholder={t('titlePlaceholder')}
               />
               <Field
                 label={t('shortcutLabel')}
                 hint={t('shortcutHint')}
                 value={form.shortcut}
                 onChange={(e) => setForm((f) => ({ ...f, shortcut: e.target.value }))}
-                placeholder="greeting"
+                placeholder={t('shortcutPlaceholder')}
               />
               <SelectField
                 label={t('accountLabel')}
@@ -220,7 +225,7 @@ export default function TemplatesPage() {
                 rows={5}
                 value={form.content}
                 onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-                placeholder="Hi, thanks for reaching out to us…"
+                placeholder={t('messagePlaceholder')}
                 className="resize-none"
               />
               <div className="flex gap-2">
@@ -233,7 +238,7 @@ export default function TemplatesPage() {
                   ) : (
                     <>
                       <Plus className="h-4 w-4" aria-hidden="true" />
-                      Add
+                      {t('addBtn')}
                     </>
                   )}
                 </Button>

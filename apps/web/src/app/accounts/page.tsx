@@ -25,6 +25,19 @@ import { Modal } from '@/components/ui/Modal';
 import { useT, type Dict } from '@/lib/i18n';
 
 const dict: Dict = {
+  title: { id: 'Accounts', en: 'Accounts' },
+  addAccount: { id: 'Tambah akun', en: 'Add account' },
+  accountNamePlaceholder: { id: 'Nama akun', en: 'Account name' },
+  phonePlaceholder: { id: 'Nomor (mis. 628123…)', en: 'Number (e.g. 628123…)' },
+  restartConfirmTitle: { id: 'Restart koneksi akun?', en: 'Restart account connection?' },
+  restartConfirmBody: {
+    id: 'Sesi WhatsApp "{name}" akan diputus lalu disambungkan ulang. Pesan masuk/keluar tertunda beberapa saat. Lanjutkan?',
+    en: 'The WhatsApp session for "{name}" will drop and reconnect. Inbound/outbound messages pause briefly. Continue?',
+  },
+  restartConfirmAction: { id: 'Ya, restart', en: 'Yes, restart' },
+  restartFailed: { id: 'Gagal merestart akun. Coba lagi.', en: 'Failed to restart the account. Try again.' },
+  deleteFailed: { id: 'Gagal menghapus akun. Coba lagi.', en: 'Failed to delete the account. Try again.' },
+  dismiss: { id: 'Tutup', en: 'Dismiss' },
   subtitle: {
     id: 'Nomor WhatsApp, status koneksi, dan jam operasional',
     en: 'WhatsApp numbers, connection status, and business hours',
@@ -311,6 +324,8 @@ export default function AccountsPage() {
   const [restarting, setRestarting] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; accountName: string } | null>(null);
+  const [confirmRestart, setConfirmRestart] = useState<{ id: string; accountName: string } | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   // The QR grants full control of a WhatsApp number — only admins+ may scan.
   const canScan = hasRole('admin');
   const canEditHours = hasRole('supervisor');
@@ -377,38 +392,54 @@ export default function AccountsPage() {
 
   async function restartAccount(id: string) {
     setRestarting(id);
+    setActionError(null);
     try {
       await api(`/wa/accounts/${id}/restart`, { method: 'POST' });
       load();
-    } catch { /* ignore */ }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : t('restartFailed'));
+    }
     setRestarting(null);
+    setConfirmRestart(null);
   }
 
   async function deleteAccount(id: string) {
     setDeleting(id);
+    setActionError(null);
     try {
       await api(`/wa/accounts/${id}`, { method: 'DELETE' });
       load();
-    } catch { /* ignore */ }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : t('deleteFailed'));
+    }
     setDeleting(null);
     setConfirmDelete(null);
   }
 
   return (
     <AppLayout>
-      <PageHeader title="Accounts" subtitle={t('subtitle')} />
+      <PageHeader title={t('title')} subtitle={t('subtitle')} />
 
       <div className="scrollbar-thin mx-auto w-full max-w-3xl flex-1 overflow-y-auto p-5">
         <Card className="mb-5 p-4">
           <form onSubmit={addAccount} className="flex flex-wrap gap-2">
-            <input aria-label={t('accountNameLabel')} placeholder="Account name" value={name} onChange={(e) => setName(e.target.value)} className={`flex-1 ${inputClass}`} required />
-            <input aria-label={t('phoneLabel')} placeholder="Number (e.g. 628123…)" value={phone} onChange={(e) => setPhone(e.target.value)} className={`flex-1 ${inputClass}`} required />
+            <input aria-label={t('accountNameLabel')} placeholder={t('accountNamePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} className={`flex-1 ${inputClass}`} required />
+            <input aria-label={t('phoneLabel')} placeholder={t('phonePlaceholder')} value={phone} onChange={(e) => setPhone(e.target.value)} className={`flex-1 ${inputClass}`} required />
             <Button type="submit" size="md">
               <Plus className="h-4 w-4" aria-hidden="true" />
-              Add account
+              {t('addAccount')}
             </Button>
           </form>
         </Card>
+
+        {actionError && (
+          <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 border-danger-200 bg-danger-50 p-4 dark:border-danger-800 dark:bg-danger-900/20">
+            <p className="text-sm text-danger-700 dark:text-danger-300">{actionError}</p>
+            <Button variant="outline" size="sm" onClick={() => setActionError(null)}>
+              {t('dismiss')}
+            </Button>
+          </Card>
+        )}
 
         {error && (
           <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 border-danger-200 bg-danger-50 p-4 dark:border-danger-800 dark:bg-danger-900/20">
@@ -477,7 +508,7 @@ export default function AccountsPage() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => restartAccount(a.id)}
+                        onClick={() => setConfirmRestart({ id: a.id, accountName: a.accountName })}
                         disabled={restarting === a.id}
                       >
                         <ArrowCounterClockwise className="h-3.5 w-3.5" aria-hidden="true" />
@@ -597,6 +628,30 @@ export default function AccountsPage() {
               onClick={() => confirmDelete && deleteAccount(confirmDelete.id)}
             >
               {deleting ? t('deleting') : t('delete')}
+            </Button>
+          </>
+        }
+      >
+        {null}
+      </Modal>
+
+      <Modal
+        open={!!confirmRestart}
+        onClose={() => setConfirmRestart(null)}
+        title={t('restartConfirmTitle')}
+        description={confirmRestart ? t('restartConfirmBody', { name: confirmRestart.accountName }) : ''}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setConfirmRestart(null)}>
+              {t('cancel')}
+            </Button>
+            <Button
+              size="sm"
+              disabled={!!restarting}
+              onClick={() => confirmRestart && restartAccount(confirmRestart.id)}
+            >
+              {restarting ? t('restarting') : t('restartConfirmAction')}
             </Button>
           </>
         }

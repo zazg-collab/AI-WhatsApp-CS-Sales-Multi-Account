@@ -133,6 +133,7 @@ interface Account {
   id: string;
   accountName: string;
   phoneNumber: string;
+  sessionStatus?: string;
 }
 
 interface Campaign {

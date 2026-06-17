@@ -54,9 +54,11 @@ const dict: Dict = {
   // Main page
   errLoadUsers: { id: 'Gagal memuat daftar pengguna', en: 'Failed to load the user list' },
   errDeleteUser: { id: 'Gagal menghapus pengguna', en: 'Failed to delete user' },
+  pageTitle: { id: 'Team', en: 'Team' },
+  createUserBtnTop: { id: 'Tambah pengguna', en: 'Create user' },
   pageSubtitle: { id: 'Kelola pengguna sistem dan hak aksesnya', en: 'Manage system users and their access rights' },
   accessRestricted: { id: 'Akses dibatasi', en: 'Access restricted' },
-  noPermissionHint: { id: 'You do not have permission to view this page. Hubungi owner untuk meminta akses manajemen tim.', en: 'You do not have permission to view this page. Contact the owner to request team management access.' },
+  noPermissionHint: { id: 'Anda tidak memiliki izin untuk melihat halaman ini. Hubungi owner untuk meminta akses manajemen tim.', en: 'You do not have permission to view this page. Contact the owner to request team management access.' },
   tryAgain: { id: 'Coba lagi', en: 'Try again' },
   noUsers: { id: 'Belum ada pengguna', en: 'No users yet' },
   noUsersHint: { id: 'Tambahkan anggota tim pertama untuk mulai berkolaborasi.', en: 'Add your first team member to start collaborating.' },
@@ -66,6 +68,8 @@ const dict: Dict = {
   thAksi: { id: 'Aksi', en: 'Actions' },
   edit: { id: 'Edit', en: 'Edit' },
   delete: { id: 'Hapus', en: 'Delete' },
+  cantDeleteSelf: { id: 'Anda tidak bisa menghapus akun sendiri.', en: 'You cannot delete your own account.' },
+  cantDeleteLastOwner: { id: 'Owner terakhir tidak bisa dihapus.', en: 'The last owner cannot be deleted.' },
 };
 
 interface User {
@@ -79,6 +83,7 @@ interface User {
 }
 
 interface AuthUser {
+  id?: string;
   role: 'owner' | 'supervisor' | 'admin' | 'viewer';
 }
 
@@ -111,7 +116,7 @@ function getRoleFromToken(): AuthUser | null {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
     const payload = JSON.parse(atob(parts[1]));
-    return { role: payload.role };
+    return { id: payload.sub, role: payload.role };
   } catch {
     return null;
   }
@@ -306,11 +311,11 @@ export default function UsersPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Team" subtitle={t('pageSubtitle')}>
+      <PageHeader title={t('pageTitle')} subtitle={t('pageSubtitle')}>
         {authUser?.role === 'owner' && (
           <Button size="sm" onClick={() => setShowCreateModal(true)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
-            Create user
+            {t('createUserBtnTop')}
           </Button>
         )}
       </PageHeader>
@@ -334,7 +339,7 @@ export default function UsersPage() {
             {authUser?.role === 'owner' && (
               <Button size="sm" className="mt-4" onClick={() => setShowCreateModal(true)}>
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                Create user
+                {t('createUserBtnTop')}
               </Button>
             )}
           </Card>
@@ -352,7 +357,12 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((user) => (
+                {users.map((user) => {
+                const ownerCount = users.filter((u) => u.role === 'owner').length;
+                const isSelf = authUser?.id === user.id;
+                const isLastOwner = user.role === 'owner' && ownerCount <= 1;
+                const deleteBlockedReason = isSelf ? t('cantDeleteSelf') : isLastOwner ? t('cantDeleteLastOwner') : null;
+                return (
                   <tr key={user.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40">
                     <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{user.email}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{user.name}</td>
@@ -371,7 +381,14 @@ export default function UsersPage() {
                               <PencilSimple className="h-4 w-4" aria-hidden="true" />
                               {t('edit')}
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => setDeletingUser(user)} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeletingUser(user)}
+                              disabled={!!deleteBlockedReason}
+                              title={deleteBlockedReason ?? undefined}
+                              className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10"
+                            >
                               <Trash className="h-4 w-4" aria-hidden="true" />
                               {t('delete')}
                             </Button>
@@ -380,7 +397,8 @@ export default function UsersPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                );
+                })}
               </tbody>
             </table>
           </Card>
