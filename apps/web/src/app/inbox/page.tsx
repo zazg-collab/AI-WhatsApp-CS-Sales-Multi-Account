@@ -54,7 +54,13 @@ import { Popover } from '@/components/ui/Popover';
 import { cn } from '@/lib/cn';
 import { contactDisplayName, formatPhone } from '@/lib/contact';
 import { useT, type Dict } from '@/lib/i18n';
-import { StatusTick, MediaContent } from '@/features/inbox/components';
+import {
+  StatusTick,
+  MediaContent,
+  ConversationList,
+  ChatThread,
+  IntelligencePanel,
+} from '@/features/inbox/components';
 
 const dict: Dict = {
   // Filters
