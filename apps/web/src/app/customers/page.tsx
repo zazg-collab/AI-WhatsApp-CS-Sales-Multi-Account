@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { MagnifyingGlass, ArrowsClockwise, AddressBook, X } from '@phosphor-icons/react';
+import { MagnifyingGlass, ArrowsClockwise, AddressBook } from '@phosphor-icons/react';
 import { api, getToken } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Avatar } from '@/components/ui/Avatar';
+import { Toast } from '@/components/ui/Toast';
 import { formatPhone } from '@/lib/contact';
 import { useT, type Dict } from '@/lib/i18n';
 
@@ -385,22 +386,8 @@ export default function CustomersPage() {
         )}
 
         {toast && (
-          <div
-            role="alert"
-            className={`mx-5 mt-3 flex items-center justify-between self-start rounded-lg border px-3 py-2 text-sm ${
-              toast.tone === 'success'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200'
-                : 'border-danger-200 bg-danger-50 text-danger-700 dark:border-danger-800 dark:bg-danger-900/30 dark:text-danger-200'
-            }`}
-          >
-            <span>{toast.message}</span>
-            <button
-              onClick={() => setToast(null)}
-              aria-label="Dismiss"
-              className="ml-2 shrink-0"
-            >
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
+          <div className="mx-5 mt-3 self-start">
+            <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />
           </div>
         )}
 

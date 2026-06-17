@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import Link from 'next/link';
-import { ShieldStar, PaperPlaneTilt, ChatCircle, Warning, ArrowUpRight } from '@phosphor-icons/react';
+import { ShieldStar, PaperPlaneTilt, ChatCircle } from '@phosphor-icons/react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { AppLayout } from '@/components/AppLayout';
@@ -10,6 +9,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { StatCard } from '@/components/ui/StatCard';
+import { HermesAlertCard } from '@/components/HermesAlertCard';
 import { useT, type Dict } from '@/lib/i18n';
 
 const dict: Dict = {
@@ -124,6 +125,28 @@ export default function HermesPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const liveRegionRef = useRef<HTMLDivElement>(null);
+
+  // Restore Ask Hermes chat from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('hermes_chat_history');
+      if (stored) {
+        setChat(JSON.parse(stored));
+      }
+    } catch {
+      // Silently ignore storage errors
+    }
+  }, []);
+
+  // Persist Ask Hermes chat to sessionStorage on change
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('hermes_chat_history', JSON.stringify(chat));
+    } catch {
+      // Silently ignore storage errors
+    }
+  }, [chat]);
 
   async function ask(e: React.FormEvent) {
     e.preventDefault();
@@ -136,12 +159,18 @@ export default function HermesPage() {
         method: 'POST',
         body: JSON.stringify({ question: q }),
       });
-      setChat((prev) => [...prev, { q, a: res.answer }]);
+      const answer = res.answer;
+      setChat((prev) => [...prev, { q, a: answer }]);
+      // Announce to screen readers
+      if (liveRegionRef.current) {
+        liveRegionRef.current.textContent = answer;
+      }
     } catch (err) {
-      setChat((prev) => [
-        ...prev,
-        { q, a: err instanceof Error ? err.message : t('askFail') },
-      ]);
+      const message = err instanceof Error ? err.message : t('askFail');
+      setChat((prev) => [...prev, { q, a: message }]);
+      if (liveRegionRef.current) {
+        liveRegionRef.current.textContent = message;
+      }
     } finally {
       setAsking(false);
     }
@@ -222,16 +251,15 @@ export default function HermesPage() {
               const blockRate = decisionTotal > 0 ? Math.round((((decisions.block ?? 0) + (decisions.pause_ai ?? 0)) / decisionTotal) * 100) : 0;
               return (
                 <>
-                  <Stat label={t('approvalRate')} value={`${approvalRate}%`} />
-                  <Stat label={t('blockRate')} value={`${blockRate}%`} tone={blockRate > 0 ? 'text-danger-600' : undefined} />
-                  <Stat label={t('hotLeads')} value={report.hotLeads} />
-                  <Link href="/inbox?filter=blocked" className="block">
-                    <Stat
-                      label={t('escalations')}
-                      value={heldOrBlocked}
-                      tone={heldOrBlocked > 0 ? 'text-danger-600' : undefined}
-                    />
-                  </Link>
+                  <StatCard label={t('approvalRate')} value={`${approvalRate}%`} href="/analytics?metric=approval" />
+                  <StatCard label={t('blockRate')} value={`${blockRate}%`} tone={blockRate > 0 ? 'text-danger-600' : undefined} href="/analytics?metric=block" />
+                  <StatCard label={t('hotLeads')} value={report.hotLeads} href="/analytics?metric=hotLeads" />
+                  <StatCard
+                    label={t('escalations')}
+                    value={heldOrBlocked}
+                    tone={heldOrBlocked > 0 ? 'text-danger-600' : undefined}
+                    href="/inbox?filter=blocked"
+                  />
                 </>
               );
             })()}
@@ -265,6 +293,7 @@ export default function HermesPage() {
             {asking && <p className="text-sm text-gray-400">{t('analyzing')}</p>}
             <div ref={chatEndRef} />
           </div>
+          <div ref={liveRegionRef} aria-live="polite" aria-atomic="true" className="sr-only" />
           <form onSubmit={ask} className="flex gap-2">
             <input
               value={question}
@@ -297,38 +326,24 @@ export default function HermesPage() {
             <ul className="space-y-2">
               {alerts.map((a) => (
                 <li key={a.id}>
-                  <Card className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-900 dark:text-gray-100">
-                            {a.conversation?.customer?.name ??
-                              a.conversation?.customer?.phoneNumber ??
-                              t('customer')}
-                          </span>
-                          <span className="text-xs text-gray-400">{relTime(a.createdAt)}</span>
-                        </div>
-                      </div>
-                      <Badge tone={DECISION_TONE[a.decision] ?? RISK_TONE[a.riskLevel] ?? 'neutral'}>
-                        <Warning className="h-3.5 w-3.5" aria-hidden="true" />
-                        {t(RISK_LABEL_KEY[a.riskLevel] ?? 'riskMedium')} · {DECISION_LABEL_KEY[a.decision] ? t(DECISION_LABEL_KEY[a.decision]) : a.decision}
-                      </Badge>
-                    </div>
-                    <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">{a.reason}</p>
-                    {a.recommendation && (
-                      <p className="mt-1 text-xs text-gray-500">{t('recommendation', { value: a.recommendation })}</p>
-                    )}
-                    <p className="mt-1 text-xs tabular-nums text-gray-400">
-                      {t('confRisk', { conf: a.confidenceScore, risk: a.riskScore })}
-                    </p>
-                    <Link
-                      href={`/inbox?conversation=${a.conversationId}`}
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-hermes-50 px-2.5 py-1 text-[12px] font-semibold text-hermes-700 transition-colors hover:bg-hermes-100 dark:bg-hermes-900/30 dark:text-hermes-300 dark:hover:bg-hermes-900/50"
-                    >
-                      {t('openConversation')}
-                      <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
-                    </Link>
-                  </Card>
+                  <HermesAlertCard
+                    id={a.id}
+                    conversationId={a.conversationId}
+                    customer={a.conversation?.customer}
+                    riskLevel={a.riskLevel}
+                    decision={a.decision}
+                    reason={a.reason}
+                    recommendation={a.recommendation}
+                    confidenceScore={a.confidenceScore}
+                    riskScore={a.riskScore}
+                    createdAt={a.createdAt}
+                    decisionToneMap={DECISION_TONE}
+                    riskToneMap={RISK_TONE}
+                    decisionLabelKey={DECISION_LABEL_KEY}
+                    riskLabelKey={RISK_LABEL_KEY}
+                    relTime={relTime}
+                    t={t}
+                  />
                 </li>
               ))}
               {alerts.length === 0 && (
@@ -352,13 +367,3 @@ export default function HermesPage() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number | string; tone?: string }) {
-  return (
-    <Card className="p-3.5">
-      <p className={`text-2xl font-semibold tabular-nums ${tone ?? 'text-gray-900 dark:text-gray-100'}`}>
-        {value}
-      </p>
-      <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
-    </Card>
-  );
-}

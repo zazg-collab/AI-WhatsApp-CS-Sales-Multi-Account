@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { ArrowsClockwise, MagnifyingGlass, DeviceMobile } from '@phosphor-icons/react';
 import { Avatar } from '@/components/ui/Avatar';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -152,16 +152,12 @@ export default function WhatsappContactsPage() {
 
         <main className="flex-1 overflow-auto p-5">
           {accounts.length === 0 && !loading ? (
-            <Card className="flex flex-col items-center justify-center py-16 text-center">
-              <DeviceMobile className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('noAccounts')}</p>
-              <p className="mt-1 text-[13px] text-gray-400">{t('noAccountsHint')}</p>
-              <Link href="/accounts">
-                <Button variant="outline" size="sm" className="mt-3">
-                  {t('addAccount')}
-                </Button>
-              </Link>
-            </Card>
+            <EmptyState
+              icon={DeviceMobile}
+              title={t('noAccounts')}
+              hint={t('noAccountsHint')}
+              action={{ label: t('addAccount'), href: '/accounts' }}
+            />
           ) : (
             <>
               <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
