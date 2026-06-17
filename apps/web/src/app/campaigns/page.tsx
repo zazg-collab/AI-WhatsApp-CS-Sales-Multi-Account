@@ -23,9 +23,10 @@ import { Field, TextareaField, SelectField } from '@/components/ui/Field';
 import { useT, type Dict } from '@/lib/i18n';
 
 const dict: Dict = {
+  title: { id: 'Campaigns', en: 'Campaigns' },
   subtitle: {
     id: 'Pengiriman terkontrol dengan persetujuan, antrean, batas laju, dan audit.',
-    en: 'Controlled sending with approval, queueing, rate limits, and audit.',
+    en: 'Controlled outbound WhatsApp messaging with approval & rate limits',
   },
   createDraftHeading: { id: 'Buat draf campaign', en: 'Create campaign draft' },
   nameLabel: { id: 'Nama campaign', en: 'Campaign name' },
@@ -203,6 +204,8 @@ export default function CampaignsPage() {
 
   const canManage = role === 'owner' || role === 'supervisor' || role === 'admin';
   const canApprove = role === 'owner' || role === 'supervisor';
+  const selectedAccount = accounts.find(a => a.id === whatsappAccountId);
+  const isSelectedAccountConnected = selectedAccount?.sessionStatus === 'connected';
 
   const selectedCampaign = useMemo(
     () => campaigns.find((campaign) => campaign.id === selectedId) ?? null,
@@ -336,7 +339,7 @@ export default function CampaignsPage() {
 
   return (
     <AppLayout>
-      <PageHeader title="Campaigns" subtitle="Controlled outbound WhatsApp messaging with approval & rate limits" />
+      <PageHeader title={t('title')} subtitle={t('subtitle')} />
       <div className="flex flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         {/* Left: create + list */}
         <aside className="scrollbar-thin w-96 shrink-0 overflow-y-auto border-r border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
@@ -355,10 +358,21 @@ export default function CampaignsPage() {
                 onChange={(e) => setWhatsappAccountId(e.target.value)}
               >
                 <option value="">{t('selectAccount')}</option>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>{account.accountName} ({account.phoneNumber})</option>
-                ))}
+                {accounts.map((account) => {
+                  const isConnected = account.sessionStatus === 'connected';
+                  const statusLabel = isConnected ? '' : ` (${account.sessionStatus || 'unknown'})`;
+                  return (
+                    <option key={account.id} value={account.id} disabled={!isConnected}>
+                      {account.accountName} ({account.phoneNumber}){statusLabel}
+                    </option>
+                  );
+                })}
               </SelectField>
+              {whatsappAccountId && !accounts.find(a => a.id === whatsappAccountId)?.sessionStatus?.includes('connected') && (
+                <div className="rounded-lg border border-danger-200 bg-danger-50 p-3 text-xs text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-300">
+                  Account disconnected. <a href="/accounts" className="font-semibold underline">Reconnect in Accounts</a> before sending.
+                </div>
+              )}
               <TextareaField
                 label={t('messageLabel')}
                 hint={assetId ? t('captionHint') : t('messageHint')}
@@ -421,11 +435,11 @@ export default function CampaignsPage() {
                 />
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="md" className="flex-1" onClick={handlePreview} disabled={submitting}>
+                <Button variant="outline" size="md" className="flex-1" onClick={handlePreview} disabled={submitting || !isSelectedAccountConnected}>
                   <Eye className="h-4 w-4" aria-hidden="true" />
                   {t('preview')}
                 </Button>
-                <Button size="md" className="flex-1" onClick={createCampaign} disabled={submitting}>
+                <Button size="md" className="flex-1" onClick={createCampaign} disabled={submitting || !isSelectedAccountConnected}>
                   <Plus className="h-4 w-4" aria-hidden="true" />
                   {t('createDraft')}
                 </Button>
@@ -514,19 +528,19 @@ export default function CampaignsPage() {
                 </pre>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {canManage && ['draft', 'pending_approval'].includes(detail.status) && (
-                    <Button variant="review" size="sm" onClick={() => runAction('submit')} disabled={submitting}>
+                    <Button variant="review" size="sm" onClick={() => runAction('submit')} disabled={submitting || !isSelectedAccountConnected}>
                       <PaperPlaneTilt className="h-4 w-4" aria-hidden="true" />
                       {t('submitApproval')}
                     </Button>
                   )}
                   {canApprove && detail.status === 'pending_approval' && (
-                    <Button size="sm" onClick={() => runAction('approve')} disabled={submitting}>
+                    <Button size="sm" onClick={() => runAction('approve')} disabled={submitting || !isSelectedAccountConnected}>
                       <CheckCircle className="h-4 w-4" aria-hidden="true" />
                       {t('approve')}
                     </Button>
                   )}
                   {canApprove && ['approved', 'paused', 'scheduled'].includes(detail.status) && (
-                    <Button size="sm" onClick={() => runAction('start')} disabled={submitting}>
+                    <Button size="sm" onClick={() => runAction('start')} disabled={submitting || !isSelectedAccountConnected}>
                       <PaperPlaneTilt className="h-4 w-4" aria-hidden="true" />
                       {t('startQueue')}
                     </Button>

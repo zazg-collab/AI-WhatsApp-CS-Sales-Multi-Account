@@ -21,7 +21,9 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/cn';
+import { useT, type Dict } from '@/lib/i18n';
 
 interface Bot {
   id: string;
@@ -53,20 +55,66 @@ interface MineResult {
   skippedDuplicates: number;
 }
 
-const typeMeta: Record<ProposalType, { label: string; icon: Icon; tone: 'hermes' | 'channel' | 'neutral' | 'review' }> = {
-  knowledge: { label: 'Knowledge', icon: Books, tone: 'hermes' },
-  persona: { label: 'Persona', icon: User, tone: 'channel' },
-  customer_memory: { label: 'Memori Pelanggan', icon: Brain, tone: 'neutral' },
-  playbook: { label: 'Playbook', icon: Target, tone: 'review' },
+const dict: Dict = {
+  title: { id: 'AI Learning — Belajar dari Riwayat', en: 'AI Learning — Learn from History' },
+  subtitle: { id: 'Tambang knowledge, persona, playbook, dan memori pelanggan dari chat yang sudah ter-sync. Semua perlu persetujuan sebelum aktif.', en: 'Mine knowledge, personas, playbooks, and customer memories from synced chats. All require approval before becoming active.' },
+  selectBot: { id: 'Pilih bot', en: 'Select bot' },
+  noBot: { id: 'Tidak ada bot', en: 'No bots' },
+  learn: { id: 'Pelajari dari Riwayat', en: 'Learn from History' },
+  analyzing: { id: 'Menganalisa…', en: 'Analyzing…' },
+  loadBotError: { id: 'Gagal memuat bot', en: 'Failed to load bots' },
+  loadProposalError: { id: 'Gagal memuat proposal', en: 'Failed to load proposals' },
+  mineError: { id: 'Mining gagal', en: 'Mining failed' },
+  ownerOnly: { id: 'Hanya owner yang dapat menyetujui/menolak usulan. Anda melihat dalam mode baca.', en: 'Only owners can approve/reject proposals. You are in read-only mode.' },
+  noProposalsPending: { id: 'Belum ada usulan. Klik "Pelajari dari Riwayat" untuk menambang dari chat.', en: 'No proposals yet. Click "Learn from History" to mine from chat.' },
+  noProposalsApproved: { id: 'Tidak ada usulan disetujui.', en: 'No approved proposals.' },
+  noProposalsRejected: { id: 'Tidak ada usulan ditolak.', en: 'No rejected proposals.' },
+  statusPending: { id: 'Menunggu review', en: 'Pending review' },
+  statusApproved: { id: 'Disetujui', en: 'Approved' },
+  statusRejected: { id: 'Ditolak', en: 'Rejected' },
+  typeKnowledge: { id: 'Knowledge', en: 'Knowledge' },
+  typePersona: { id: 'Persona', en: 'Persona' },
+  typeCustomerMemory: { id: 'Memori Pelanggan', en: 'Customer Memory' },
+  typePlaybook: { id: 'Playbook', en: 'Playbook' },
+  confidence: { id: 'confidence', en: 'confidence' },
+  sourceMessages: { id: 'pesan sumber', en: 'source messages' },
+  hide: { id: 'Sembunyikan', en: 'Hide' },
+  view: { id: 'Lihat usulan', en: 'View proposal' },
+  approve: { id: 'Setujui', en: 'Approve' },
+  mineSuccess: { id: '{total} usulan dibuat — Knowledge {k}, Persona {p}, Playbook {pb}, Memori {m}{dup}', en: '{total} proposals created — Knowledge {k}, Persona {p}, Playbook {pb}, Memory {m}{dup}' },
+  mineDuplicates: { id: ' · {n} duplikat dilewati', en: ' · {n} duplicates skipped' },
+  mineEmpty: { id: 'Tidak ada usulan baru ditemukan dari riwayat. Coba lagi setelah ada lebih banyak percakapan.', en: 'No new proposals found in history. Try again after more conversations.' },
+  // ProposalBody field labels
+  fieldSoul: { id: 'Soul / deskripsi', en: 'Soul / description' },
+  fieldTone: { id: 'Tone', en: 'Tone' },
+  fieldStyle: { id: 'Style', en: 'Style' },
+  fieldRules: { id: 'Aturan', en: 'Rules' },
+  fieldForbidden: { id: 'Kata terlarang', en: 'Forbidden words' },
+  fieldContent: { id: 'Isi', en: 'Content' },
+  fieldCategory: { id: 'Kategori', en: 'Category' },
+  confirmApprove: { id: 'Setujui "{title}"?', en: 'Approve "{title}"?' },
+  confirmReject: { id: 'Tolak "{title}"?', en: 'Reject "{title}"?' },
+  reject: { id: 'Tolak', en: 'Reject' },
+  cancel: { id: 'Batal', en: 'Cancel' },
 };
 
-const statusTabs: { key: ProposalStatus; label: string }[] = [
-  { key: 'pending', label: 'Menunggu review' },
-  { key: 'approved', label: 'Disetujui' },
-  { key: 'rejected', label: 'Ditolak' },
+const getTypeMeta = (t: ReturnType<typeof useT>) => ({
+  knowledge: { label: t('typeKnowledge'), icon: Books, tone: 'hermes' as const },
+  persona: { label: t('typePersona'), icon: User, tone: 'channel' as const },
+  customer_memory: { label: t('typeCustomerMemory'), icon: Brain, tone: 'neutral' as const },
+  playbook: { label: t('typePlaybook'), icon: Target, tone: 'review' as const },
+});
+
+const getStatusTabs = (t: ReturnType<typeof useT>): { key: ProposalStatus; label: string }[] => [
+  { key: 'pending', label: t('statusPending') },
+  { key: 'approved', label: t('statusApproved') },
+  { key: 'rejected', label: t('statusRejected') },
 ];
 
 export default function LearningPage() {
+  const t = useT(dict);
+  const typeMeta = getTypeMeta(t);
+  const statusTabs = getStatusTabs(t);
   const canReview = hasRole('owner');
   const [bots, setBots] = useState<Bot[]>([]);
   const [botId, setBotId] = useState('');
@@ -78,6 +126,8 @@ export default function LearningPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmingAction, setConfirmingAction] = useState<'approve' | 'reject' | null>(null);
 
   useEffect(() => {
     api<Bot[]>('/bots')
@@ -85,8 +135,8 @@ export default function LearningPage() {
         setBots(list);
         if (list[0]) setBotId(list[0].id);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Gagal memuat bot'));
-  }, []);
+      .catch((e) => setError(e instanceof Error ? e.message : t('loadBotError')));
+  }, [t]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -94,9 +144,9 @@ export default function LearningPage() {
     if (botId) params.set('botId', botId);
     api<Proposal[]>(`/learning/proposals?${params.toString()}`)
       .then(setProposals)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Gagal memuat proposal'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('loadProposalError')))
       .finally(() => setLoading(false));
-  }, [tab, botId]);
+  }, [tab, botId, t]);
 
   useEffect(() => {
     load();
@@ -112,13 +162,20 @@ export default function LearningPage() {
       const total = r.knowledge + r.persona + r.customerMemory + r.playbook;
       setNotice(
         total === 0
-          ? 'Tidak ada usulan baru ditemukan dari riwayat. Coba lagi setelah ada lebih banyak percakapan.'
-          : `${total} usulan dibuat — Knowledge ${r.knowledge}, Persona ${r.persona}, Playbook ${r.playbook}, Memori ${r.customerMemory}${r.skippedDuplicates ? ` · ${r.skippedDuplicates} duplikat dilewati` : ''}.`,
+          ? t('mineEmpty')
+          : t('mineSuccess', {
+              total,
+              k: r.knowledge,
+              p: r.persona,
+              pb: r.playbook,
+              m: r.customerMemory,
+              dup: r.skippedDuplicates ? t('mineDuplicates', { n: r.skippedDuplicates }) : ''
+            }),
       );
       setTab('pending');
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Mining gagal');
+      setError(e instanceof Error ? e.message : t('mineError'));
     } finally {
       setMining(false);
     }
@@ -131,7 +188,7 @@ export default function LearningPage() {
       await api(`/learning/proposals/${id}/${action}`, { method: 'POST' });
       setProposals((prev) => prev.filter((p) => p.id !== id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : `Gagal ${action}`);
+      setError(e instanceof Error ? e.message : t(action === 'approve' ? 'approve' : 'statusRejected'));
     } finally {
       setActing(null);
     }
@@ -140,30 +197,30 @@ export default function LearningPage() {
   return (
     <AppLayout>
       <PageHeader
-        title="AI Learning — Belajar dari Riwayat"
-        subtitle="Tambang knowledge, persona, playbook, dan memori pelanggan dari chat yang sudah ter-sync. Semua perlu persetujuan sebelum aktif."
+        title={t('title')}
+        subtitle={t('subtitle')}
       >
         <select
           value={botId}
           onChange={(e) => setBotId(e.target.value)}
-          aria-label="Pilih bot"
+          aria-label={t('selectBot')}
           className="h-9 max-w-44 rounded-lg border border-gray-200 bg-white px-2.5 text-[13px] text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
         >
-          {bots.length === 0 && <option value="">Tidak ada bot</option>}
+          {bots.length === 0 && <option value="">{t('noBot')}</option>}
           {bots.map((b) => (
             <option key={b.id} value={b.id}>{b.botName}</option>
           ))}
         </select>
         <Button onClick={mine} disabled={mining || !botId}>
           {mining ? <SpinnerGap className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkle className="h-4 w-4" aria-hidden="true" />}
-          {mining ? 'Menganalisa…' : 'Pelajari dari Riwayat'}
+          {mining ? t('analyzing') : t('learn')}
         </Button>
       </PageHeader>
 
       <div className="scrollbar-thin mx-auto w-full max-w-4xl flex-1 overflow-y-auto p-4 sm:p-5">
         {!canReview && (
           <Card className="mb-4 border-review-200 bg-review-50 p-3 text-[13px] text-review-700 dark:border-review-700/40 dark:bg-review-900/20 dark:text-review-300">
-            Hanya owner yang dapat menyetujui/menolak usulan. Anda melihat dalam mode baca.
+            {t('ownerOnly')}
           </Card>
         )}
         {error && (
@@ -204,8 +261,8 @@ export default function LearningPage() {
             <GraduationCap className="mb-2 h-8 w-8 text-gray-300" aria-hidden="true" />
             <p className="text-sm">
               {tab === 'pending'
-                ? 'Belum ada usulan. Klik "Pelajari dari Riwayat" untuk menambang dari chat.'
-                : `Tidak ada usulan ${tab === 'approved' ? 'disetujui' : 'ditolak'}.`}
+                ? t('noProposalsPending')
+                : tab === 'approved' ? t('noProposalsApproved') : t('noProposalsRejected')}
             </p>
           </div>
         ) : (
@@ -225,7 +282,7 @@ export default function LearningPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge tone={meta.tone}>{meta.label}</Badge>
                           <span className="text-[11px] tabular-nums text-gray-400">
-                            confidence {p.confidence}
+                            {t('confidence')} {p.confidence}
                           </span>
                           {p.bot && <span className="text-[11px] text-gray-400">· {p.bot.botName}</span>}
                         </div>
@@ -239,32 +296,32 @@ export default function LearningPage() {
                           className="mt-1.5 flex items-center gap-1 text-[12px] font-medium text-hermes-600 hover:underline dark:text-hermes-400"
                         >
                           {open ? <CaretDown className="h-3.5 w-3.5" /> : <CaretRight className="h-3.5 w-3.5" />}
-                          {open ? 'Sembunyikan' : 'Lihat usulan'}
+                          {open ? t('hide') : t('view')}
                           {p.sourceMessageIds.length > 0 && (
-                            <span className="text-gray-400">· {p.sourceMessageIds.length} pesan sumber</span>
+                            <span className="text-gray-400">· {p.sourceMessageIds.length} {t('sourceMessages')}</span>
                           )}
                         </button>
                       </div>
                       {p.status === 'pending' && canReview && (
                         <div className="flex shrink-0 gap-1.5">
-                          <Button size="sm" onClick={() => act(p.id, 'approve')} disabled={acting === p.id}>
+                          <Button size="sm" onClick={() => { setConfirmingId(p.id); setConfirmingAction('approve'); }} disabled={acting === p.id}>
                             <Check className="h-4 w-4" aria-hidden="true" />
-                            <span className="hidden sm:inline">Setujui</span>
+                            <span className="hidden sm:inline">{t('approve')}</span>
                           </Button>
-                          <Button variant="outline" size="sm" onClick={() => act(p.id, 'reject')} disabled={acting === p.id}>
+                          <Button variant="outline" size="sm" onClick={() => { setConfirmingId(p.id); setConfirmingAction('reject'); }} disabled={acting === p.id}>
                             <X className="h-4 w-4" aria-hidden="true" />
                           </Button>
                         </div>
                       )}
                       {p.status !== 'pending' && (
                         <Badge tone={p.status === 'approved' ? 'hermes' : 'neutral'}>
-                          {p.status === 'approved' ? 'Disetujui' : 'Ditolak'}
+                          {p.status === 'approved' ? t('statusApproved') : t('statusRejected')}
                         </Badge>
                       )}
                     </div>
                     {open && (
                       <div className="border-t border-gray-100 bg-gray-50 p-3.5 dark:border-gray-800 dark:bg-gray-800/40">
-                        <ProposalBody type={p.type} payload={p.payload} />
+                        <ProposalBody type={p.type} payload={p.payload} t={t} />
                       </div>
                     )}
                   </Card>
@@ -274,22 +331,62 @@ export default function LearningPage() {
           </ul>
         )}
       </div>
+
+      <Modal
+        open={!!confirmingId && !!confirmingAction}
+        onClose={() => { setConfirmingId(null); setConfirmingAction(null); }}
+        title={confirmingAction === 'approve' ? t('approve') : t('reject')}
+      >
+        {confirmingId && proposals.find(p => p.id === confirmingId) && (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              {confirmingAction === 'approve'
+                ? t('confirmApprove', { title: proposals.find(p => p.id === confirmingId)?.title })
+                : t('confirmReject', { title: proposals.find(p => p.id === confirmingId)?.title })}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setConfirmingId(null); setConfirmingAction(null); }}>{t('cancel')}</Button>
+              <Button
+                variant={confirmingAction === 'reject' ? 'danger' : 'primary'}
+                size="sm"
+                onClick={() => {
+                  if (confirmingId && confirmingAction) {
+                    act(confirmingId, confirmingAction);
+                    setConfirmingId(null);
+                    setConfirmingAction(null);
+                  }
+                }}
+                disabled={acting === confirmingId}
+              >
+                {confirmingAction === 'approve' ? t('approve') : t('reject')}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </AppLayout>
   );
 }
 
-function ProposalBody({ type, payload }: { type: ProposalType; payload: Record<string, unknown> }) {
+interface ProposalBodyProps {
+  type: ProposalType;
+  payload: Record<string, unknown>;
+  t?: ReturnType<typeof useT>;
+}
+
+function ProposalBody({ type, payload, t: tProp }: ProposalBodyProps) {
+  const t = tProp || useT(dict);
   if (type === 'persona') {
     return (
       <div className="space-y-2 text-[13px]">
-        <Field label="Soul / deskripsi" value={String(payload.soulMd ?? '')} multiline />
+        <Field label={t('fieldSoul')} value={String(payload.soulMd ?? '')} multiline />
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Tone" value={String(payload.tone ?? '—')} />
-          <Field label="Style" value={String(payload.style ?? '—')} />
+          <Field label={t('fieldTone')} value={String(payload.tone ?? '—')} />
+          <Field label={t('fieldStyle')} value={String(payload.style ?? '—')} />
         </div>
-        {payload.rules ? <Field label="Aturan" value={String(payload.rules)} multiline /> : null}
+        {payload.rules ? <Field label={t('fieldRules')} value={String(payload.rules)} multiline /> : null}
         {Array.isArray(payload.forbiddenWords) && payload.forbiddenWords.length > 0 && (
-          <Field label="Kata terlarang" value={(payload.forbiddenWords as string[]).join(', ')} />
+          <Field label={t('fieldForbidden')} value={(payload.forbiddenWords as string[]).join(', ')} />
         )}
       </div>
     );
@@ -305,8 +402,8 @@ function ProposalBody({ type, payload }: { type: ProposalType; payload: Record<s
   // knowledge / playbook
   return (
     <div className="space-y-2 text-[13px]">
-      <Field label="Isi" value={String(payload.content ?? '')} multiline />
-      {payload.category ? <Field label="Kategori" value={String(payload.category)} /> : null}
+      <Field label={t('fieldContent')} value={String(payload.content ?? '')} multiline />
+      {payload.category ? <Field label={t('fieldCategory')} value={String(payload.category)} /> : null}
     </div>
   );
 }

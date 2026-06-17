@@ -145,16 +145,30 @@ export default function AnalyticsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [s, lf, mv, ai] = await Promise.all([
-        api<Summary>('/dashboard/summary'),
-        api<LeadFunnelItem[]>('/dashboard/lead-funnel'),
-        api<MessageVolumeItem[]>(`/dashboard/message-volume?days=${daysRange}`),
-        api<AiModeItem[]>('/dashboard/ai-mode-breakdown'),
-      ]);
-      setSummary(s);
-      setLeadFunnel(lf);
-      setMessageVolume(mv);
-      setAiModeBreakdown(ai);
+      try {
+        const s = await api<Summary>('/dashboard/summary');
+        setSummary(s);
+      } catch {
+        setSummary(null);
+      }
+      try {
+        const lf = await api<LeadFunnelItem[]>('/dashboard/lead-funnel');
+        setLeadFunnel(lf);
+      } catch {
+        setLeadFunnel([]);
+      }
+      try {
+        const mv = await api<MessageVolumeItem[]>(`/dashboard/message-volume?days=${daysRange}`);
+        setMessageVolume(mv);
+      } catch {
+        setMessageVolume([]);
+      }
+      try {
+        const ai = await api<AiModeItem[]>('/dashboard/ai-mode-breakdown');
+        setAiModeBreakdown(ai);
+      } catch {
+        setAiModeBreakdown([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errLoad'));
     } finally {

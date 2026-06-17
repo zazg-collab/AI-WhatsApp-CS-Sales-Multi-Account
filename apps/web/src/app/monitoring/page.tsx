@@ -165,28 +165,30 @@ export default function MonitoringPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [workloadError, setWorkloadError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await api<PerformanceOverview>(`/dashboard/performance?days=${days}`));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('errMetrics'));
+    } finally {
+      setLoading(false);
+    }
+    setWorkloadError(null);
+    try {
+      setWorkload(await api<AdminWorkload>(`/dashboard/admin-workload?days=${days}`));
+    } catch (err) {
+      setWorkload(null);
+      setWorkloadError(err instanceof Error ? err.message : t('errWorkload'));
+    }
+  };
 
   useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        setData(await api<PerformanceOverview>(`/dashboard/performance?days=${days}`));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : t('errMetrics'));
-      } finally {
-        setLoading(false);
-      }
-      setWorkloadError(null);
-      try {
-        setWorkload(await api<AdminWorkload>(`/dashboard/admin-workload?days=${days}`));
-      } catch (err) {
-        setWorkload(null);
-        setWorkloadError(err instanceof Error ? err.message : t('errWorkload'));
-      }
-    }
     load();
-  }, [days, t]);
+  }, [days, t, refreshKey]);
 
   const maxVolume = Math.max(...(data?.messageVolume.map((item) => item.count) ?? [1]), 1);
 
@@ -238,7 +240,7 @@ export default function MonitoringPage() {
             <p className="mt-1 text-xs text-danger-600/80 dark:text-danger-400/80">
               {t('metricsCantLoad')}
             </p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => setDays((d) => d)}>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => setRefreshKey((k) => k + 1)}>
               {t('cobaLagi')}
             </Button>
           </Card>
