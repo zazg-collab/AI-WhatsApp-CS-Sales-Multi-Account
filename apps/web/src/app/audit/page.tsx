@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState } from 'react';
 import {
   CaretLeft,
   CaretRight,
@@ -12,7 +12,6 @@ import {
   Trash,
   ShieldWarning,
 } from '@phosphor-icons/react';
-import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -20,6 +19,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Field, SelectField } from '@/components/ui/Field';
 import { useT, type Dict } from '@/lib/i18n';
+import { useApiQuery } from '@/lib/hooks/useApiQuery';
 
 const dict: Dict = {
   title: { id: 'Audit Log', en: 'Audit Log' },
@@ -215,55 +215,32 @@ const PAGE_SIZE = 20;
 
 export default function AuditPage() {
   const t = useT(dict);
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
   const [entity, setEntity] = useState('');
   const [action, setAction] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [highRiskOnly, setHighRiskOnly] = useState(false);
 
-  const load = useCallback(async (p: number) => {
-    setLoading(true);
-    try {
-      setError(null);
-      const params = new URLSearchParams();
-      if (entity) params.set('entity', entity);
-      if (action) params.set('action', action);
-      if (from) params.set('from', new Date(from).toISOString());
-      if (to) params.set('to', new Date(to + 'T23:59:59').toISOString());
-      params.set('limit', String(PAGE_SIZE));
-      params.set('offset', String(p * PAGE_SIZE));
-      const data = await api<{ data: AuditEntry[]; total: number }>(`/audit-logs?${params}`);
+  // Build query string for audit logs
+  const params = new URLSearchParams();
+  if (entity) params.set('entity', entity);
+  if (action) params.set('action', action);
+  if (from) params.set('from', new Date(from).toISOString());
+  if (to) params.set('to', new Date(to + 'T23:59:59').toISOString());
+  params.set('limit', String(PAGE_SIZE));
+  params.set('offset', String(page * PAGE_SIZE));
 
-      // High-risk filter is client-side (based on action name pattern)
-      const rows = highRiskOnly
-        ? data.data.filter((e) => classifyRisk(e.action) === 'high')
-        : data.data;
+  const { data, loading, error } = useApiQuery<{ data: AuditEntry[]; total: number }>(
+    `/audit-logs?${params}`,
+    [page, entity, action, from, to],
+  );
 
-      setEntries(rows);
-      setTotal(data.total);
-    } catch (e) {
-      setEntries([]);
-      setTotal(0);
-      setError(e instanceof Error ? e.message : t('errLoad'));
-    } finally {
-      setLoading(false);
-    }
-  }, [entity, action, from, to, highRiskOnly, t]);
-
-  useEffect(() => {
-    setPage(0);
-    load(0);
-  }, [load]);
+  const entries = data ? (highRiskOnly ? data.data.filter((e) => classifyRisk(e.action) === 'high') : data.data) : [];
+  const total = data?.total ?? 0;
 
   function handlePageChange(p: number) {
     setPage(p);
-    load(p);
   }
 
   const hasFilters = Boolean(entity || action || from || to || highRiskOnly);

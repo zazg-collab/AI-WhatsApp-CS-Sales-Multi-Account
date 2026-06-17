@@ -172,9 +172,9 @@ export default function AnalyticsPage() {
   };
 
   // Lead funnel interpretation derived from actual counts — never fabricated.
-  const leadTotal = leadFunnel.reduce((s, i) => s + i.count, 0);
-  const dominantLead = leadFunnel.reduce<LeadFunnelItem | null>((best, item) => (!best || item.count > best.count ? item : best), null);
-  const hotCount = leadFunnel.filter((i) => i.stage === 'hot' || i.stage === 'very_hot').reduce((s, i) => s + i.count, 0);
+  const leadTotal = (leadFunnel ?? []).reduce((s, i) => s + i.count, 0);
+  const dominantLead = (leadFunnel ?? []).reduce<LeadFunnelItem | null>((best, item) => (!best || item.count > best.count ? item : best), null);
+  const hotCount = (leadFunnel ?? []).filter((i) => i.stage === 'hot' || i.stage === 'very_hot').reduce((s, i) => s + i.count, 0);
   const leadFunnelInterpretation = leadTotal === 0
     ? t('leadFunnelEmpty')
     : t('leadFunnelInterpretation', {
@@ -183,7 +183,7 @@ export default function AnalyticsPage() {
         hotPct: String(Math.round((hotCount / leadTotal) * 100)),
         hotCount: String(hotCount),
       });
-  const coldCount = leadFunnel.find((i) => i.stage === 'cold')?.count ?? 0;
+  const coldCount = (leadFunnel ?? []).find((i) => i.stage === 'cold')?.count ?? 0;
   const leadNextActions = leadTotal === 0
     ? []
     : [
@@ -192,16 +192,16 @@ export default function AnalyticsPage() {
       ].filter((x): x is string => !!x);
 
   // AI mode interpretation derived from actual counts.
-  const modeTotal = aiModeBreakdown.reduce((s, i) => s + i.count, 0);
-  const dominantMode = aiModeBreakdown.reduce<AiModeItem | null>((best, item) => (!best || item.count > best.count ? item : best), null);
+  const modeTotal = (aiModeBreakdown ?? []).reduce((s, i) => s + i.count, 0);
+  const dominantMode = (aiModeBreakdown ?? []).reduce<AiModeItem | null>((best, item) => (!best || item.count > best.count ? item : best), null);
   const aiModeInterpretation = modeTotal === 0
     ? t('aiModeEmpty')
     : t('aiModeInterpretation', {
         pct: String(dominantMode?.percentage ?? 0),
         mode: dominantMode ? (MODE_LABEL_KEY[dominantMode.mode] ? t(MODE_LABEL_KEY[dominantMode.mode]) : dominantMode.mode) : '',
       });
-  const pausedCount = aiModeBreakdown.find((i) => i.mode === 'ai_paused')?.count ?? 0;
-  const offPct = aiModeBreakdown.find((i) => i.mode === 'ai_off')?.percentage ?? 0;
+  const pausedCount = (aiModeBreakdown ?? []).find((i) => i.mode === 'ai_paused')?.count ?? 0;
+  const offPct = (aiModeBreakdown ?? []).find((i) => i.mode === 'ai_off')?.percentage ?? 0;
   const aiModeNextActions = modeTotal === 0
     ? []
     : [
@@ -410,11 +410,11 @@ export default function AnalyticsPage() {
             </div>
 
             <Panel title={t('messageVolumeRange', { days: String(daysRange) })}>
-                {messageVolume.length === 0 ? (
+                {!(messageVolume?.length) ? (
                   <Empty />
                 ) : (
                   <div className="flex h-40 items-end gap-2">
-                    {messageVolume.map((item) => {
+                    {(messageVolume ?? []).map((item) => {
                       const heightPct = Math.round((item.count / maxVolume) * 100);
                       const dayLabel = new Date(item.date + 'T00:00:00').toLocaleDateString(undefined, {
                         day: '2-digit',
