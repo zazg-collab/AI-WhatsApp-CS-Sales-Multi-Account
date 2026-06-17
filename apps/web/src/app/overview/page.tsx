@@ -80,6 +80,7 @@ interface Alert {
   id: string;
   decision: string;
   riskLevel: string;
+  conversationId?: string;
 }
 
 interface WaAccount {
@@ -144,26 +145,49 @@ export default function OverviewPage() {
   const [attention, setAttention] = useState<ConvSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sectionErrors, setSectionErrors] = useState<Record<string, string>>({});
   const t = useT(dict);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setSectionErrors({});
     try {
+      // Load each section independently to prevent one failure from blocking others
       const [s, r, a, acc, conv] = await Promise.all([
-        api<Summary>('/dashboard/summary'),
-        api<DailyReport>('/hermes/reports/daily'),
-        api<Alert[]>('/hermes/alerts'),
-        api<WaAccount[]>('/wa/accounts'),
-        api<{ items: ConvSummary[] }>('/conversations?needsAttention=true&limit=25').then((d) => d.items),
+        api<Summary>('/dashboard/summary').catch((err) => {
+          setSectionErrors((prev) => ({ ...prev, summary: err.message }));
+          return null;
+        }),
+        api<DailyReport>('/hermes/reports/daily').catch((err) => {
+          setSectionErrors((prev) => ({ ...prev, report: err.message }));
+          return null;
+        }),
+        api<Alert[]>('/hermes/alerts').catch((err) => {
+          setSectionErrors((prev) => ({ ...prev, alerts: err.message }));
+          return [];
+        }),
+        api<WaAccount[]>('/wa/accounts').catch((err) => {
+          setSectionErrors((prev) => ({ ...prev, accounts: err.message }));
+          return [];
+        }),
+        api<{ items: ConvSummary[] }>('/conversations?needsAttention=true&limit=25')
+          .then((d) => d.items)
+          .catch((err) => {
+            setSectionErrors((prev) => ({ ...prev, attention: err.message }));
+            return [];
+          }),
       ]);
-      setSummary(s);
-      setReport(r);
-      setAlerts(a);
-      setAccounts(acc);
-      setAttention(conv);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('errFallback'));
+      if (s) setSummary(s);
+      if (r) setReport(r);
+      if (a) setAlerts(a);
+      if (acc) setAccounts(acc);
+      if (conv) setAttention(conv);
+
+      // Only set global error if all critical sections failed
+      if (!s && !r && !a && !acc && !conv) {
+        setError(t('errFallback'));
+      }
     } finally {
       setLoading(false);
     }

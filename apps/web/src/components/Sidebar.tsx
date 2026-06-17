@@ -23,6 +23,7 @@ import {
   GraduationCap,
   Images,
   Cube,
+  List,
   type Icon as PhosphorIcon,
 } from '@phosphor-icons/react';
 import { getToken, clearToken, api } from '@/lib/api';
@@ -169,16 +170,26 @@ export function Sidebar() {
       )}
       <aside className="flex h-full w-14 flex-col rounded border border-gray-800 bg-gray-900 shadow-[0_1px_2px_rgba(15,23,42,0.18)] lg:w-60">
       {/* Brand */}
-      <div className="flex h-16 items-center gap-2.5 border-b border-gray-800 px-3 lg:px-4">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-hermes-600 text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
-          <ShieldStar className="h-[18px] w-[18px]" weight="duotone" aria-hidden="true" />
-        </span>
-        <span className="hidden min-w-0 lg:block">
-          <span className="block truncate text-sm font-semibold tracking-tight text-gray-50">
-            Hermes AI
+      <div className="flex h-16 items-center justify-between gap-2.5 border-b border-gray-800 px-3 lg:px-4">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-hermes-600 text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
+            <ShieldStar className="h-[18px] w-[18px]" weight="duotone" aria-hidden="true" />
           </span>
-          <span className="block truncate text-[11px] text-gray-400">{t('tagline')}</span>
-        </span>
+          <span className="hidden min-w-0 lg:block">
+            <span className="block truncate text-sm font-semibold tracking-tight text-gray-50">
+              Hermes AI
+            </span>
+            <span className="block truncate text-[11px] text-gray-400">{t('tagline')}</span>
+          </span>
+        </div>
+        <button
+          type="button"
+          aria-label="Open navigation"
+          onClick={() => setOpen(true)}
+          className="flex lg:hidden h-8 w-8 items-center justify-center rounded text-gray-400 hover:text-gray-50 hover:bg-gray-800 transition-colors"
+        >
+          <List className="h-5 w-5" weight="regular" aria-hidden="true" />
+        </button>
       </div>
 
       {/* Nav */}

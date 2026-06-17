@@ -120,8 +120,8 @@ const stages: { value: LeadStage; labelKey: string }[] = [
 ];
 
 // Lead stages map to the semantic temperature scale.
-const stageTone: Record<LeadStage, 'hermes' | 'review' | 'danger'> = {
-  cold: 'hermes',
+const stageTone: Record<LeadStage, 'hermes' | 'review' | 'danger' | 'neutral'> = {
+  cold: 'neutral',
   warm: 'review',
   hot: 'review',
   very_hot: 'danger',
@@ -170,7 +170,7 @@ export default function CustomersPage() {
   const [role, setRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; tone: 'success' | 'danger' } | null>(null);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 50;
@@ -196,7 +196,7 @@ export default function CustomersPage() {
       setTotal(data.total ?? items.length);
       setSelectedIds((current) => current.filter((id) => items.some((customer) => customer.id === id)));
     } catch (err) {
-      setToast(err instanceof Error ? err.message : t('loadError'));
+      setToast({ message: err instanceof Error ? err.message : t('loadError'), tone: 'danger' });
     } finally {
       setLoading(false);
     }
@@ -247,7 +247,7 @@ export default function CustomersPage() {
     if (bulkNote.trim()) payload.note = bulkNote.trim();
 
     if (Object.keys(payload).length === 1) {
-      setToast(t('pickActionFirst'));
+      setToast({ message: t('pickActionFirst'), tone: 'danger' });
       return;
     }
 
@@ -257,7 +257,7 @@ export default function CustomersPage() {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      setToast(t('bulkSuccess', { n: result.updatedCount }));
+      setToast({ message: t('bulkSuccess', { n: result.updatedCount }), tone: 'success' });
       setBulkStage('');
       setBulkTags('');
       setAssignedAdminId('');
@@ -265,7 +265,7 @@ export default function CustomersPage() {
       setSelectedIds([]);
       await loadCustomers();
     } catch (err) {
-      setToast(err instanceof Error ? err.message : t('bulkError'));
+      setToast({ message: err instanceof Error ? err.message : t('bulkError'), tone: 'danger' });
     } finally {
       setSubmitting(false);
     }
@@ -324,12 +324,12 @@ export default function CustomersPage() {
 
         {/* Bulk action bar */}
         {canBulkEdit && (
-          <section className="border-b border-gray-200 bg-gray-50 px-5 py-3 dark:border-gray-800 dark:bg-gray-950">
+          <section className={`border-b border-gray-200 px-5 py-3 transition-colors dark:border-gray-800 ${selectedCount > 0 ? 'bg-gray-50 dark:bg-gray-950' : 'bg-gray-50/50 dark:bg-gray-950/50'}`}>
             <div className="mb-2 text-xs text-gray-500 dark:text-gray-400">
-              <span className="font-semibold text-hermes-600">{selectedCount}</span> {t('selectedCount')}
+              <span className={`font-semibold ${selectedCount > 0 ? 'text-hermes-600' : 'text-gray-400'}`}>{selectedCount}</span> {t('selectedCount')}
               <span className="ml-2 text-gray-400">{t('bulkLimit')}</span>
             </div>
-            <div className="grid gap-2 xl:grid-cols-[150px_1fr_140px_220px_1fr_auto]">
+            <div className={`grid gap-2 xl:grid-cols-[150px_1fr_140px_220px_1fr_auto] ${selectedCount === 0 ? 'pointer-events-none opacity-50' : ''}`}>
               <select
                 value={bulkStage}
                 onChange={(e) => setBulkStage(e.target.value)}
@@ -385,13 +385,23 @@ export default function CustomersPage() {
         )}
 
         {toast && (
-          <button
-            onClick={() => setToast(null)}
-            className="mx-5 mt-3 flex items-center gap-2 self-start rounded-lg border border-hermes-100 bg-hermes-50 px-3 py-2 text-left text-sm text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-200"
+          <div
+            role="alert"
+            className={`mx-5 mt-3 flex items-center justify-between self-start rounded-lg border px-3 py-2 text-sm ${
+              toast.tone === 'success'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200'
+                : 'border-danger-200 bg-danger-50 text-danger-700 dark:border-danger-800 dark:bg-danger-900/30 dark:text-danger-200'
+            }`}
           >
-            {toast}
-            <X className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
+            <span>{toast.message}</span>
+            <button
+              onClick={() => setToast(null)}
+              aria-label="Dismiss"
+              className="ml-2 shrink-0"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
         )}
 
         <div className="scrollbar-thin flex-1 overflow-auto p-5">
@@ -479,7 +489,7 @@ export default function CustomersPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
-                        {customer.lastMessageAt ? new Date(customer.lastMessageAt).toLocaleString() : '—'}
+                        {customer.lastMessageAt ? new Date(customer.lastMessageAt).toLocaleString('id-ID') : '—'}
                       </td>
                     </tr>
                   ))}

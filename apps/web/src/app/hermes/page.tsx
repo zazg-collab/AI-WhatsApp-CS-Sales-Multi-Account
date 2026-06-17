@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { ShieldStar, PaperPlaneTilt, ChatCircle, Warning } from '@phosphor-icons/react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import Link from 'next/link';
+import { ShieldStar, PaperPlaneTilt, ChatCircle, Warning, ArrowUpRight } from '@phosphor-icons/react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { AppLayout } from '@/components/AppLayout';
@@ -17,10 +18,10 @@ const dict: Dict = {
   cobaLagi: { id: 'Coba lagi', en: 'Try again' },
   errLoad: { id: 'Gagal memuat data pengawasan Hermes dari API.', en: 'Failed to load Hermes supervision data from the API.' },
   askFail: { id: 'Hermes gagal menjawab. Coba lagi.', en: 'Hermes failed to answer. Try again.' },
-  messagesToday: { id: 'Messages today', en: 'Messages today' },
-  newCustomers: { id: 'Pelanggan baru', en: 'New customers' },
+  approvalRate: { id: 'Approval rate', en: 'Approval rate' },
+  blockRate: { id: 'Block rate', en: 'Block rate' },
   hotLeads: { id: 'Lead panas', en: 'Hot leads' },
-  heldBlocked: { id: 'Ditahan / diblokir', en: 'Held / blocked' },
+  escalations: { id: 'Eskalasi', en: 'Escalations' },
   askHermes: { id: 'Tanya Hermes', en: 'Ask Hermes' },
   supervisorAssistant: { id: 'Asisten supervisor', en: 'Supervisor assistant' },
   askPlaceholderHint: { id: 'Tanyakan kondisi lintas-bot, mis. bot mana yang paling bermasalah hari ini.', en: 'Ask about cross-bot conditions, e.g. which bot is the most problematic today.' },
@@ -39,6 +40,11 @@ const dict: Dict = {
   declBlock: { id: 'Diblokir', en: 'Blocked' },
   declPause: { id: 'AI dijeda', en: 'AI paused' },
   declTakeover: { id: 'Ambil alih', en: 'Take over' },
+  riskLow: { id: 'Rendah', en: 'Low' },
+  riskMedium: { id: 'Sedang', en: 'Medium' },
+  riskHigh: { id: 'Tinggi', en: 'High' },
+  riskCritical: { id: 'Kritis', en: 'Critical' },
+  openConversation: { id: 'Buka percakapan', en: 'Open conversation' },
 };
 
 const DECISION_LABEL_KEY: Record<string, string> = {
@@ -49,6 +55,24 @@ const DECISION_LABEL_KEY: Record<string, string> = {
   takeover_required: 'declTakeover',
 };
 
+const RISK_LABEL_KEY: Record<string, string> = {
+  low: 'riskLow',
+  medium: 'riskMedium',
+  high: 'riskHigh',
+  critical: 'riskCritical',
+};
+
+function relTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'now';
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+
 interface Review {
   id: string;
   conversationId: string;
@@ -58,6 +82,7 @@ interface Review {
   riskLevel: string;
   reason: string;
   recommendation: string;
+  createdAt?: string;
   conversation?: { customer?: { name?: string; phoneNumber: string } };
 }
 
@@ -98,6 +123,7 @@ export default function HermesPage() {
   const [asking, setAsking] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   async function ask(e: React.FormEvent) {
     e.preventDefault();
@@ -120,6 +146,10 @@ export default function HermesPage() {
       setAsking(false);
     }
   }
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chat]);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -185,14 +215,26 @@ export default function HermesPage() {
 
         {!loadError && report && (
           <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label={t('messagesToday')} value={report.totalMessages} />
-            <Stat label={t('newCustomers')} value={report.newCustomers} />
-            <Stat label={t('hotLeads')} value={report.hotLeads} />
-            <Stat
-              label={t('heldBlocked')}
-              value={heldOrBlocked}
-              tone={heldOrBlocked > 0 ? 'text-danger-600' : undefined}
-            />
+            {(() => {
+              const decisions = report.reviewsByDecision ?? {};
+              const decisionTotal = Object.values(decisions).reduce((s, n) => s + n, 0);
+              const approvalRate = decisionTotal > 0 ? Math.round(((decisions.approve ?? 0) / decisionTotal) * 100) : 0;
+              const blockRate = decisionTotal > 0 ? Math.round((((decisions.block ?? 0) + (decisions.pause_ai ?? 0)) / decisionTotal) * 100) : 0;
+              return (
+                <>
+                  <Stat label={t('approvalRate')} value={`${approvalRate}%`} />
+                  <Stat label={t('blockRate')} value={`${blockRate}%`} tone={blockRate > 0 ? 'text-danger-600' : undefined} />
+                  <Stat label={t('hotLeads')} value={report.hotLeads} />
+                  <Link href="/inbox?filter=blocked" className="block">
+                    <Stat
+                      label={t('escalations')}
+                      value={heldOrBlocked}
+                      tone={heldOrBlocked > 0 ? 'text-danger-600' : undefined}
+                    />
+                  </Link>
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -203,7 +245,7 @@ export default function HermesPage() {
             {t('askHermes')}
             <Badge tone="hermes">{t('supervisorAssistant')}</Badge>
           </h2>
-          <div className="mb-3 space-y-3">
+          <div className="mb-3 max-h-64 space-y-3 overflow-y-auto">
             {chat.length === 0 && !asking && (
               <p className="text-sm text-gray-400">
                 {t('askPlaceholderHint')}
@@ -221,6 +263,7 @@ export default function HermesPage() {
               </div>
             ))}
             {asking && <p className="text-sm text-gray-400">{t('analyzing')}</p>}
+            <div ref={chatEndRef} />
           </div>
           <form onSubmit={ask} className="flex gap-2">
             <input
@@ -255,24 +298,36 @@ export default function HermesPage() {
               {alerts.map((a) => (
                 <li key={a.id}>
                   <Card className="p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-gray-900 dark:text-gray-100">
-                        {a.conversation?.customer?.name ??
-                          a.conversation?.customer?.phoneNumber ??
-                          t('customer')}
-                      </span>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900 dark:text-gray-100">
+                            {a.conversation?.customer?.name ??
+                              a.conversation?.customer?.phoneNumber ??
+                              t('customer')}
+                          </span>
+                          <span className="text-xs text-gray-400">{relTime(a.createdAt)}</span>
+                        </div>
+                      </div>
                       <Badge tone={DECISION_TONE[a.decision] ?? RISK_TONE[a.riskLevel] ?? 'neutral'}>
                         <Warning className="h-3.5 w-3.5" aria-hidden="true" />
-                        {a.riskLevel} · {DECISION_LABEL_KEY[a.decision] ? t(DECISION_LABEL_KEY[a.decision]) : a.decision}
+                        {t(RISK_LABEL_KEY[a.riskLevel] ?? 'riskMedium')} · {DECISION_LABEL_KEY[a.decision] ? t(DECISION_LABEL_KEY[a.decision]) : a.decision}
                       </Badge>
                     </div>
-                    <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">{a.reason}</p>
+                    <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">{a.reason}</p>
                     {a.recommendation && (
                       <p className="mt-1 text-xs text-gray-500">{t('recommendation', { value: a.recommendation })}</p>
                     )}
                     <p className="mt-1 text-xs tabular-nums text-gray-400">
                       {t('confRisk', { conf: a.confidenceScore, risk: a.riskScore })}
                     </p>
+                    <Link
+                      href={`/inbox?conversation=${a.conversationId}`}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-hermes-50 px-2.5 py-1 text-[12px] font-semibold text-hermes-700 transition-colors hover:bg-hermes-100 dark:bg-hermes-900/30 dark:text-hermes-300 dark:hover:bg-hermes-900/50"
+                    >
+                      {t('openConversation')}
+                      <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+                    </Link>
                   </Card>
                 </li>
               ))}
@@ -297,7 +352,7 @@ export default function HermesPage() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone?: string }) {
+function Stat({ label, value, tone }: { label: string; value: number | string; tone?: string }) {
   return (
     <Card className="p-3.5">
       <p className={`text-2xl font-semibold tabular-nums ${tone ?? 'text-gray-900 dark:text-gray-100'}`}>
