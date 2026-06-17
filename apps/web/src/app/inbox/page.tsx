@@ -26,11 +26,7 @@ import {
   User,
   UsersThree,
   UserMinus,
-  Image as ImageIcon,
-  FileText,
-  Video,
   Checks,
-  Check,
   Lightning,
   CalendarCheck,
   UserPlus,
@@ -58,6 +54,7 @@ import { Popover } from '@/components/ui/Popover';
 import { cn } from '@/lib/cn';
 import { contactDisplayName, formatPhone } from '@/lib/contact';
 import { useT, type Dict } from '@/lib/i18n';
+import { StatusTick, MediaContent } from '@/features/inbox/components';
 
 const dict: Dict = {
   // Filters
@@ -345,15 +342,6 @@ function relTime(iso: string | null | undefined): string {
 
 function clockTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-}
-
-// WhatsApp-style delivery ticks for outbound (admin/AI) messages.
-function StatusTick({ status }: { status: string }) {
-  if (status === 'pending') return <Clock className="h-3 w-3" aria-label="pending" />;
-  if (status === 'failed') return <Warning className="h-3 w-3 text-danger-200" aria-label="failed to send" />;
-  if (status === 'read') return <Checks className="h-3.5 w-3.5 text-sky-300" aria-label="read" />;
-  if (status === 'delivered') return <Checks className="h-3.5 w-3.5" aria-label="delivered" />;
-  return <Check className="h-3.5 w-3.5" aria-label="sent" />;
 }
 
 // Per-conversation status label for the queue rows.
@@ -1077,12 +1065,13 @@ function InboxInner() {
               const isActive = c.id === activeId;
               const name = c.isGroup ? c.groupSubject || c.customer.name || c.customer.phoneNumber : contactDisplayName(c.customer.name, c.customer.phoneNumber, t('hiddenContact'));
               return (
-                <li key={c.id}>
+                <li key={c.id} className="relative">
+                  {isActive && <span className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-r-full bg-hermes-500" aria-hidden="true" />}
                   <button
                     onClick={() => setActiveId(c.id)}
                     className={cn(
                       'flex w-full gap-3 border-b border-gray-100 px-3 py-3 text-left transition-colors dark:border-gray-800',
-                      isActive ? 'bg-hermes-50/70 dark:bg-hermes-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50',
+                      isActive ? 'bg-hermes-50 dark:bg-hermes-900/20' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50',
                     )}
                   >
                     <span className="relative shrink-0">
@@ -1354,7 +1343,9 @@ function InboxInner() {
                                     </button>
                                   )}
                                   {isCustomer && (
-                                    <span className="text-gray-400 text-[10px]">Reply in composer</span>
+                                    <button type="button" onClick={() => quoteReply(m)} className="font-medium text-[10px] text-hermes-600 hover:text-hermes-900 dark:text-hermes-300 dark:hover:text-hermes-100">
+                                      Reply
+                                    </button>
                                   )}
                                   <span className="text-gray-300 dark:text-gray-600">|</span>
                                   {reactionOptions.map((reaction) => (
@@ -1492,7 +1483,7 @@ function InboxInner() {
                         <Images className="h-4 w-4" aria-hidden="true" />
                       </button>
                       <Popover open={showAssetPicker} onClose={() => setShowAssetPicker(false)} side="top" className="max-h-72 w-64 overflow-y-auto">
-                          <div className="border-b border-gray-100 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:border-gray-800">{t('sendFromLibrary')}</div>
+                          <div className="border-b border-gray-100 px-3 py-2 text-[11px] font-semibold text-gray-500 dark:border-gray-800 dark:text-gray-400">{t('sendFromLibrary')}</div>
                           {assetsList.map((a) => (
                             <button
                               key={a.id}
@@ -1579,7 +1570,7 @@ function InboxInner() {
                     {scheduleErr && <p className="mb-2 text-xs text-danger-600">{scheduleErr}</p>}
                     {followUps.filter((f) => f.status === 'scheduled').length > 0 && (
                       <div className="mb-3 space-y-1 border-t border-gray-100 pt-2 dark:border-gray-800">
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Scheduled</p>
+                        <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Scheduled</p>
                         {followUps.filter((f) => f.status === 'scheduled').map((f) => (
                           <div key={f.id} className="flex items-center justify-between gap-2 text-[12px] text-gray-600 dark:text-gray-300">
                             <span className="min-w-0 flex-1 truncate">{new Date(f.scheduledAt).toLocaleString()} — {f.messageTemplate}</span>
@@ -1657,7 +1648,7 @@ function InboxInner() {
 
               {/* Mode & Status */}
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Mode & Status</h3>
+                <h3 className="mb-3 text-[12px] font-semibold text-gray-700 dark:text-gray-300">Mode & Status</h3>
                 <div className="space-y-3 text-xs">
                   <label className="block">
                     <span className="mb-1 block text-gray-600 dark:text-gray-300">{t('aiModeField')}</span>
@@ -1713,7 +1704,7 @@ function InboxInner() {
 
               {/* Quick Actions */}
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Quick Actions</h3>
+                <h3 className="mb-3 text-[12px] font-semibold text-gray-700 dark:text-gray-300">Quick Actions</h3>
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-1.5">
                   <Button variant="outline" size="sm" onClick={() => sendTypingPresence(true)} disabled={busy} title="Show typing indicator" className="justify-center text-[11px] h-9 sm:h-8">
                     <Keyboard className="h-4 sm:h-3.5 w-4 sm:w-3.5" aria-hidden="true" />
@@ -1744,7 +1735,7 @@ function InboxInner() {
 
               {/* Send Content */}
               <div className="border-b border-gray-100 p-4 dark:border-gray-800">
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Send Content</h3>
+                <h3 className="mb-3 text-[12px] font-semibold text-gray-700 dark:text-gray-300">Send Content</h3>
                 <div className="space-y-2.5 text-xs">
                   <label className="block">
                     <span className="mb-1 block text-[12px] font-medium text-gray-600 dark:text-gray-300">Location</span>
@@ -1806,18 +1797,14 @@ function InboxInner() {
                             : 'hover:bg-gray-50 dark:hover:bg-gray-800',
                         )}
                       >
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-200 text-[10px] font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                          {(a.name || '?')[0].toUpperCase()}
-                        </span>
+                        <Avatar name={a.name} phone={a.id} className="h-5 w-5 text-[9px]" />
                         {a.name || a.id}
                       </button>
                     ))}
                   </div>
                 ) : active.assignedAdmin ? (
                   <div className="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-200">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-hermes-100 text-[11px] font-semibold text-hermes-700 dark:bg-hermes-900/40 dark:text-hermes-300">
-                      {(active.assignedAdmin.name || '?')[0].toUpperCase()}
-                    </span>
+                    <Avatar name={active.assignedAdmin.name} phone={active.assignedAdmin.id} className="h-6 w-6 text-[10px]" />
                     {active.assignedAdmin.name}
                   </div>
                 ) : (
@@ -2017,7 +2004,7 @@ function InboxInner() {
 
                     {/* Mode & Status */}
                     <div className="border-b border-gray-100 p-4 dark:border-gray-800">
-                      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Mode & Status</h3>
+                      <h3 className="mb-2 text-[12px] font-semibold text-gray-700 dark:text-gray-300">Mode & Status</h3>
                       <div className="space-y-2 text-xs">
                         <label className="block">
                           <span className="mb-1 block text-gray-600 dark:text-gray-300">{t('aiModeField')}</span>
@@ -2149,7 +2136,7 @@ function InboxInner() {
                 <Button variant="outline" size="sm" onClick={() => setConfirmAction(null)}>Cancel</Button>
                 <Button
                   size="sm"
-                  className={confirmAction.type === 'retract' ? 'bg-danger-600 hover:bg-danger-700' : 'bg-danger-600 hover:bg-danger-700'}
+                  variant="danger"
                   onClick={() => {
                     if (confirmAction.messageId) {
                       if (confirmAction.type === 'retract') {
@@ -2169,79 +2156,6 @@ function InboxInner() {
       </div>
     </AppLayout>
   );
-}
-
-// Render message content: text, or inline media for non-text types.
-function MediaContent({ message: m }: { message: Message }) {
-  const t = useT(dict);
-  const mediaSrc = resolveMediaUrl(m.mediaUrl);
-
-  if (m.messageType === 'image') {
-    if (mediaSrc) {
-      return (
-        <span className="block">
-          <img src={mediaSrc} alt={m.content ?? t('mediaImage')} className="max-h-60 max-w-[280px] rounded-lg object-cover" loading="lazy" />
-          {m.content && <span className="mt-1 block text-[13px] opacity-90">{m.content}</span>}
-        </span>
-      );
-    }
-    return (
-      <span className="flex items-center gap-1.5 italic opacity-80">
-        <ImageIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-        {m.content ?? t('mediaImage')}
-      </span>
-    );
-  }
-  if (m.messageType === 'video') {
-    if (mediaSrc) {
-      return (
-        <span className="block">
-          <video src={mediaSrc} controls preload="none" className="max-h-60 max-w-[280px] rounded-lg" />
-          {m.content && <span className="mt-1 block text-[13px] opacity-90">{m.content}</span>}
-        </span>
-      );
-    }
-    return (
-      <span className="flex items-center gap-1.5 italic opacity-80">
-        <Video className="h-4 w-4 shrink-0" aria-hidden="true" />
-        {m.content ?? t('mediaVideo')}
-      </span>
-    );
-  }
-  if (m.messageType === 'audio') {
-    if (mediaSrc) {
-      return (
-        <span className="block">
-          <audio src={mediaSrc} controls preload="none" className="w-full max-w-[240px]" />
-        </span>
-      );
-    }
-    return (
-      <span className="flex items-center gap-1.5 italic opacity-80">
-        <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
-        {m.content ?? 'audio'}
-      </span>
-    );
-  }
-  if (m.messageType === 'sticker') {
-    if (mediaSrc) {
-      return <img src={mediaSrc} alt="sticker" className="max-h-32 max-w-[160px] object-contain" loading="lazy" />;
-    }
-    return (
-      <span className="flex items-center gap-1.5 italic opacity-80">
-        🏷️ {m.content ?? 'sticker'}
-      </span>
-    );
-  }
-  if (m.messageType === 'document' || m.messageType === 'file') {
-    return (
-      <span className="flex items-center gap-1.5 italic opacity-80">
-        <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
-        {m.content ?? m.messageType}
-      </span>
-    );
-  }
-  return <p>{m.content ?? <span className="italic opacity-70">[{m.messageType}]</span>}</p>;
 }
 
 // Build a small, truthful audit trail from what the conversation actually shows.
