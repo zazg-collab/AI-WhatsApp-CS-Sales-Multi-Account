@@ -74,6 +74,12 @@ const dict: Dict = {
   codeCopied: { id: 'Kode disalin!', en: 'Code copied!' },
   switchToQr: { id: 'Tampilkan QR', en: 'Show QR' },
   switchToPairingCode: { id: 'Tampilkan Kode Pairing', en: 'Show Pairing Code' },
+  requestPairingCode: { id: 'Minta kode pairing', en: 'Request pairing code' },
+  requestingPairingCode: { id: 'Meminta kode…', en: 'Requesting code…' },
+  pairingCodeFailed: { id: 'Gagal meminta kode pairing. Pastikan nomor HP sudah diatur dan coba lagi.', en: 'Failed to request pairing code. Make sure the phone number is set and try again.' },
+  pairingCodeStep1: { id: '1. Buka WhatsApp di ponsel Anda', en: '1. Open WhatsApp on your phone' },
+  pairingCodeStep2: { id: '2. Buka Pengaturan → Perangkat Tertaut → Tautkan Perangkat', en: '2. Go to Settings → Linked Devices → Link a Device' },
+  pairingCodeStep3: { id: '3. Pilih "Tautkan dengan nomor telepon" dan masukkan kode di bawah ini', en: '3. Tap "Link with phone number" and enter the code below' },
   loadFailed: { id: 'Gagal memuat daftar akun.', en: 'Failed to load the account list.' },
   addFailed: { id: 'Gagal menambahkan akun.', en: 'Failed to add the account.' },
   businessHoursToggle: {
@@ -318,6 +324,7 @@ export default function AccountsPage() {
   const [confirmRestart, setConfirmRestart] = useState<{ id: string; accountName: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [requestingCode, setRequestingCode] = useState<Record<string, boolean>>({});
   // The QR grants full control of a WhatsApp number — only admins+ may scan.
   const canScan = hasRole('admin');
   const canEditHours = hasRole('supervisor');
@@ -393,6 +400,21 @@ export default function AccountsPage() {
     }
     setRestarting(null);
     setConfirmRestart(null);
+  }
+
+  async function requestPairingCode(id: string) {
+    setRequestingCode((prev) => ({ ...prev, [id]: true }));
+    setActionError(null);
+    try {
+      const { code } = await api<{ code: string }>(`/wa/accounts/${id}/request-pairing-code`, { method: 'POST' });
+      // Backend also pushes via socket — this handles the REST response as a fallback.
+      setPairingCode((prev) => ({ ...prev, [id]: code }));
+      setPairingMode((prev) => ({ ...prev, [id]: 'code' }));
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : t('pairingCodeFailed'));
+    } finally {
+      setRequestingCode((prev) => ({ ...prev, [id]: false }));
+    }
   }
 
   async function deleteAccount(id: string) {
@@ -556,6 +578,7 @@ export default function AccountsPage() {
                     {a.sessionStatus === 'qr_required' &&
                       (canScan ? (
                         <div className="mt-4">
+                          {/* Mode toggle — only visible when both options are available */}
                           {(qr[a.id] || pairingCode[a.id]) && (
                             <div className="mb-3 flex gap-2">
                               {qr[a.id] && (
@@ -586,13 +609,25 @@ export default function AccountsPage() {
                               )}
                             </div>
                           )}
+
+                          {/* Pairing code panel */}
                           {pairingMode[a.id] === 'code' && pairingCode[a.id] ? (
-                            <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
-                              <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">{t('pairingCodeTitle')}</p>
-                              <p className="mb-3 text-[32px] font-mono font-bold tracking-widest text-gray-900 dark:text-gray-100 text-center">
-                                {pairingCode[a.id].replace(/(.{4})/, '$1-')}
+                            <div className="rounded-lg border border-hermes-200 bg-hermes-50 p-4 dark:border-hermes-700/40 dark:bg-hermes-900/20">
+                              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-hermes-700 dark:text-hermes-400">
+                                {t('pairingCodeTitle')}
                               </p>
-                              <p className="mb-3 text-xs text-gray-600 dark:text-gray-400 text-center">{t('pairingCodeHint')}</p>
+                              {/* Step-by-step instructions */}
+                              <ol className="mb-4 space-y-1 text-[12px] text-gray-600 dark:text-gray-300">
+                                <li>{t('pairingCodeStep1')}</li>
+                                <li>{t('pairingCodeStep2')}</li>
+                                <li>{t('pairingCodeStep3')}</li>
+                              </ol>
+                              {/* Large formatted code */}
+                              <p className="mb-3 select-all text-center text-[36px] font-mono font-bold tracking-[0.3em] text-gray-900 dark:text-gray-100">
+                                {pairingCode[a.id].length === 8
+                                  ? `${pairingCode[a.id].slice(0, 4)}-${pairingCode[a.id].slice(4)}`
+                                  : pairingCode[a.id]}
+                              </p>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -600,22 +635,57 @@ export default function AccountsPage() {
                                   setCopiedAccountId(a.id);
                                   setTimeout(() => setCopiedAccountId(null), 2000);
                                 }}
-                                className="w-full rounded-lg bg-hermes-600 px-3 py-2 text-sm font-medium text-white hover:bg-hermes-700 transition-colors"
+                                className="flex w-full items-center justify-center gap-2 rounded-lg bg-hermes-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-hermes-700"
                               >
-                                {copiedAccountId === a.id ? t('codeCopied') : t('copyCode')}
+                                {copiedAccountId === a.id ? (
+                                  <><CheckCircle className="h-4 w-4" aria-hidden="true" />{t('codeCopied')}</>
+                                ) : (
+                                  <><QrCode className="h-4 w-4" aria-hidden="true" />{t('copyCode')}</>
+                                )}
                               </button>
                             </div>
                           ) : qr[a.id] ? (
-                            <div>
-                              <img src={qr[a.id]} alt="WhatsApp QR code" className="h-48 w-48 rounded-lg border border-gray-200 bg-white p-2 dark:border-gray-700" />
+                            /* QR code panel */
+                            <div className="flex flex-col items-center gap-2">
+                              <img
+                                src={qr[a.id]}
+                                alt="WhatsApp QR code"
+                                className="h-52 w-52 rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700"
+                              />
                               {qrReceivedAt[a.id] ? (
                                 <QrFreshness receivedAt={qrReceivedAt[a.id]} t={t} />
                               ) : (
-                                <p className="mt-2 text-center text-[11px] text-gray-400">{t('qrAutoRefresh')}</p>
+                                <p className="text-[11px] text-gray-400">{t('qrAutoRefresh')}</p>
                               )}
+                              {/* Offer pairing code as alternative */}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => requestPairingCode(a.id)}
+                                disabled={requestingCode[a.id]}
+                                className="mt-1"
+                              >
+                                <QrCode className="h-3.5 w-3.5" aria-hidden="true" />
+                                {requestingCode[a.id] ? t('requestingPairingCode') : t('requestPairingCode')}
+                              </Button>
                             </div>
                           ) : (
-                            <p className="text-xs text-gray-500">{t('waitingScan')}</p>
+                            /* No QR yet — offer to request pairing code immediately */
+                            <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-gray-300 py-6 dark:border-gray-700">
+                              <QrCode className="h-8 w-8 text-gray-300" aria-hidden="true" />
+                              <p className="text-xs text-gray-500">{t('waitingScan')}</p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => requestPairingCode(a.id)}
+                                disabled={requestingCode[a.id]}
+                              >
+                                <QrCode className="h-3.5 w-3.5" aria-hidden="true" />
+                                {requestingCode[a.id] ? t('requestingPairingCode') : t('requestPairingCode')}
+                              </Button>
+                            </div>
                           )}
                         </div>
                       ) : (

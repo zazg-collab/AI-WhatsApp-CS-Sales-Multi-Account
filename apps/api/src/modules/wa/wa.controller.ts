@@ -99,6 +99,14 @@ export class WaController {
     });
   }
 
+  @ApiOperation({ summary: 'Request a phone-linking pairing code for a WhatsApp account' })
+  @Roles('owner', 'supervisor', 'admin')
+  @Post(':id/request-pairing-code')
+  async requestPairingCode(@Param('id') id: string) {
+    const code = await this.wa.requestPairingCode(id);
+    return { code };
+  }
+
   @ApiOperation({ summary: 'Restart a WhatsApp session' })
   @Roles('owner', 'supervisor', 'admin')
   @Post(':id/restart')

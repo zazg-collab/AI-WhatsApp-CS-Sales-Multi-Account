@@ -1672,6 +1672,58 @@ export class WaService implements OnModuleInit {
     return this.sessions.has(accountId);
   }
 
+  /**
+   * Request a pairing code for the given account.
+   *
+   * Baileys generates an 8-char Crockford code and negotiates pairing
+   * over the open WebSocket, so the socket must already be live (i.e.
+   * startSession has run). The code is returned and also pushed to the
+   * dashboard via the 'wa:pairing-code' socket event so the admin can
+   * copy it into the WhatsApp mobile app without polling.
+   *
+   * The phone number must be in E.164 format without the leading '+'.
+   */
+  async requestPairingCode(accountId: string): Promise<string> {
+    const account = await this.prisma.whatsappAccount.findUnique({
+      where: { id: accountId },
+    });
+    if (!account) throw new NotFoundException('Account not found');
+
+    let session = this.sessions.get(accountId);
+
+    // If the session isn't live yet (e.g. first connect attempt hasn't
+    // completed) start it now so the socket is available.
+    if (!session) {
+      await this.startSession(accountId);
+      session = this.sessions.get(accountId);
+    }
+
+    if (!session) throw new Error('Session could not be started');
+
+    // Strip all non-digit characters and the leading '+' — Baileys
+    // requires digits only (E.164 without the plus sign).
+    const digits = (account.phoneNumber ?? '').replace(/\D/g, '');
+    if (!digits) throw new Error('Account has no phone number configured');
+
+    // Cast because Baileys types don't always expose requestPairingCode.
+    const sock = session.sock as WASocket & {
+      requestPairingCode?: (phone: string) => Promise<string>;
+    };
+
+    if (typeof sock.requestPairingCode !== 'function') {
+      throw new Error('requestPairingCode is not available on this Baileys socket');
+    }
+
+    const code = await sock.requestPairingCode(digits);
+
+    this.logger.log(`Account ${accountId}: Pairing code requested — ${code}`);
+
+    // Push to the connected dashboard clients so the UI updates without polling.
+    this.events.emitToAccount(accountId, 'wa:pairing-code', { accountId, code });
+
+    return code;
+  }
+
   async restart(accountId: string) {
     const session = this.sessions.get(accountId);
     if (session) {
