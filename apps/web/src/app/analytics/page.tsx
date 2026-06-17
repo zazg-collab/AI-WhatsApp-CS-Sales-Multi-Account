@@ -1,14 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { DownloadSimple, Pulse } from '@phosphor-icons/react';
-import { api, downloadFile } from '@/lib/api';
+import { downloadFile } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useT, type Dict } from '@/lib/i18n';
+import { useApiQuery } from '@/lib/hooks/useApiQuery';
 
 const dict: Dict = {
   title: { id: 'Analytics', en: 'Analytics' },
@@ -133,54 +134,20 @@ async function exportCsv(path: string, filename: string) {
 
 export default function AnalyticsPage() {
   const t = useT(dict);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [leadFunnel, setLeadFunnel] = useState<LeadFunnelItem[]>([]);
-  const [messageVolume, setMessageVolume] = useState<MessageVolumeItem[]>([]);
-  const [aiModeBreakdown, setAiModeBreakdown] = useState<AiModeItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [daysRange, setDaysRange] = useState(7);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      try {
-        const s = await api<Summary>('/dashboard/summary');
-        setSummary(s);
-      } catch {
-        setSummary(null);
-      }
-      try {
-        const lf = await api<LeadFunnelItem[]>('/dashboard/lead-funnel');
-        setLeadFunnel(lf);
-      } catch {
-        setLeadFunnel([]);
-      }
-      try {
-        const mv = await api<MessageVolumeItem[]>(`/dashboard/message-volume?days=${daysRange}`);
-        setMessageVolume(mv);
-      } catch {
-        setMessageVolume([]);
-      }
-      try {
-        const ai = await api<AiModeItem[]>('/dashboard/ai-mode-breakdown');
-        setAiModeBreakdown(ai);
-      } catch {
-        setAiModeBreakdown([]);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('errLoad'));
-    } finally {
-      setLoading(false);
-    }
-  }, [t, daysRange]);
+  const { data: summary, loading } = useApiQuery<Summary>('/dashboard/summary');
+  const { data: leadFunnel } = useApiQuery<LeadFunnelItem[]>('/dashboard/lead-funnel');
+  const { data: messageVolume } = useApiQuery<MessageVolumeItem[]>(
+    `/dashboard/message-volume?days=${daysRange}`,
+    [daysRange],
+  );
+  const { data: aiModeBreakdown } = useApiQuery<AiModeItem[]>('/dashboard/ai-mode-breakdown');
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  // Determine if any data failed to load
+  const error = !summary && !(leadFunnel?.length) && !(messageVolume?.length) && !(aiModeBreakdown?.length) ? t('errLoad') : null;
 
-  const maxVolume = Math.max(...messageVolume.map((d) => d.count), 1);
+  const maxVolume = Math.max(...(messageVolume?.map((d) => d.count) ?? [1]), 1);
 
   // Lead stages + AI modes carry semantic meaning — keep distinct hues.
   const leadColors: Record<string, string> = {
@@ -305,9 +272,6 @@ export default function AnalyticsPage() {
             <p className="mt-1 text-xs text-danger-600/80 dark:text-danger-400/80">
               {t('errLoadHint')}
             </p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={load}>
-              {t('cobaLagi')}
-            </Button>
           </Card>
         ) : (
           <>
