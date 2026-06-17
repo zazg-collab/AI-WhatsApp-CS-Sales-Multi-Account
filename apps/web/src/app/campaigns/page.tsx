@@ -361,10 +361,10 @@ export default function CampaignsPage() {
                 <option value="">{t('selectAccount')}</option>
                 {accounts.map((account) => {
                   const isConnected = account.sessionStatus === 'connected';
-                  const statusLabel = isConnected ? '' : ` (${account.sessionStatus || 'unknown'})`;
+                  const statusSuffix = isConnected ? '' : ` — ${account.sessionStatus ?? 'unknown'}`;
                   return (
                     <option key={account.id} value={account.id} disabled={!isConnected}>
-                      {account.accountName} ({account.phoneNumber}){statusLabel}
+                      {account.accountName} ({account.phoneNumber}){statusSuffix}
                     </option>
                   );
                 })}

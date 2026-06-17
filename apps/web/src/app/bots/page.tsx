@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Plus, PencilSimple, Trash, ArrowsSplit, X } from '@phosphor-icons/react';
 import { api } from '@/lib/api';
+import { SessionStatusBadge } from '@/components/ui/SessionStatusBadge';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -160,16 +161,9 @@ const statusTone: Record<string, BadgeTone> = {
   draft: 'review',
 };
 
-// Connection dot colour by session status.
+// Connection dot — delegates to the shared SessionStatusBadge component.
 function sessionDot(status: string) {
-  const map: Record<string, string> = {
-    connected: 'bg-channel-500',
-    disconnected: 'bg-gray-300 dark:bg-gray-600',
-    qr_required: 'bg-review-500',
-    banned: 'bg-danger-500',
-    reconnecting: 'bg-hermes-500',
-  };
-  return <span className={`inline-block h-2 w-2 rounded-full ${map[status] ?? 'bg-gray-300 dark:bg-gray-600'}`} aria-hidden="true" />;
+  return <SessionStatusBadge status={status} variant="dot" />;
 }
 
 function FormError({ message }: { message: string }) {

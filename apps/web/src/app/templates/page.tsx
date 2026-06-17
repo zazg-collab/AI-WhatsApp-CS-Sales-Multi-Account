@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Plus, PencilSimple, Trash, ChatText } from '@phosphor-icons/react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
+import { Plus, PencilSimple, Trash, ChatText, MagnifyingGlass, Warning } from '@phosphor-icons/react';
 import { AppLayout } from '@/components/AppLayout';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -29,6 +29,10 @@ const dict: Dict = {
     id: 'Judul dan isi pesan wajib diisi sebelum disimpan.',
     en: 'Title and message body are required before saving.',
   },
+  shortcutDuplicate: {
+    id: 'Shortcut /{shortcut} sudah dipakai oleh template lain.',
+    en: 'Shortcut /{shortcut} is already used by another template.',
+  },
   retry: { id: 'Coba lagi', en: 'Try again' },
   editHeading: { id: 'Edit template', en: 'Edit template' },
   newHeading: { id: 'Template baru', en: 'New template' },
@@ -41,13 +45,21 @@ const dict: Dict = {
   accountLabel: { id: 'Akun WhatsApp', en: 'WhatsApp account' },
   globalOption: { id: 'Global (semua akun)', en: 'Global (all accounts)' },
   messageLabel: { id: 'Isi pesan', en: 'Message body' },
+  tokenHint: {
+    id: 'Gunakan {{name}} dan {{phone}} untuk personalisasi otomatis.',
+    en: 'Use {{name}} and {{phone}} for automatic personalisation.',
+  },
   save: { id: 'Simpan', en: 'Save' },
   cancel: { id: 'Batal', en: 'Cancel' },
+  search: { id: 'Cari template…', en: 'Search templates…' },
+  filterAccount: { id: 'Semua akun', en: 'All accounts' },
   noTemplates: { id: 'Belum ada template', en: 'No templates yet' },
   noTemplatesHint: {
     id: 'Buat template pertama lewat form di samping agar tim bisa membalas lebih cepat.',
     en: 'Create your first template using the form beside this so the team can reply faster.',
   },
+  noMatch: { id: 'Tidak ada template cocok', en: 'No matching templates' },
+  noMatchHint: { id: 'Coba kata kunci atau filter yang berbeda.', en: 'Try a different keyword or filter.' },
   globalBadge: { id: 'Global', en: 'Global' },
   edit: { id: 'Edit', en: 'Edit' },
   delete: { id: 'Hapus', en: 'Delete' },
@@ -88,6 +100,10 @@ export default function TemplatesPage() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<QuickReply | null>(null);
 
+  // Search + account filter
+  const [search, setSearch] = useState('');
+  const [accountFilter, setAccountFilter] = useState('');
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -113,9 +129,23 @@ export default function TemplatesPage() {
     setFormError(null);
   }
 
+  // Duplicate-shortcut guard: check against all other items (excluding the one being edited)
+  function shortcutConflict(shortcut: string): QuickReply | undefined {
+    const s = shortcut.trim().toLowerCase();
+    if (!s) return undefined;
+    return items.find(
+      (it) => it.id !== editingId && it.shortcut?.toLowerCase() === s,
+    );
+  }
+
   async function handleSubmit() {
     if (!form.title.trim() || !form.content.trim()) {
       setFormError(t('formRequired'));
+      return;
+    }
+    const conflict = shortcutConflict(form.shortcut);
+    if (conflict) {
+      setFormError(t('shortcutDuplicate', { shortcut: form.shortcut.trim() }));
       return;
     }
     setFormError(null);
@@ -150,6 +180,8 @@ export default function TemplatesPage() {
       shortcut: item.shortcut ?? '',
       whatsappAccountId: item.whatsappAccountId ?? '',
     });
+    // Scroll form into view on mobile
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function confirmDelete() {
@@ -166,12 +198,30 @@ export default function TemplatesPage() {
     }
   }
 
+  // Client-side filter: search title/content/shortcut, filter by account
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return items.filter((item) => {
+      if (accountFilter && item.whatsappAccountId !== accountFilter) return false;
+      if (!q) return true;
+      return (
+        item.title.toLowerCase().includes(q) ||
+        item.content.toLowerCase().includes(q) ||
+        (item.shortcut ?? '').toLowerCase().includes(q)
+      );
+    });
+  }, [items, search, accountFilter]);
+
+  const hasFilters = search.trim() !== '' || accountFilter !== '';
+
+  // Warn about shortcut collision while user is typing
+  const liveConflict = form.shortcut.trim()
+    ? shortcutConflict(form.shortcut)
+    : undefined;
+
   return (
     <AppLayout>
-      <PageHeader
-        title={t('title')}
-        subtitle={t('subtitle')}
-      />
+      <PageHeader title={t('title')} subtitle={t('subtitle')} />
 
       <main className="scrollbar-thin flex-1 overflow-y-auto p-5">
         {error && (
@@ -184,7 +234,7 @@ export default function TemplatesPage() {
         )}
 
         <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
-          {/* Form */}
+          {/* ── Form panel ── */}
           <Card className="h-fit p-5">
             <h2 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">
               {editingId ? t('editHeading') : t('newHeading')}
@@ -202,13 +252,24 @@ export default function TemplatesPage() {
                 onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                 placeholder={t('titlePlaceholder')}
               />
-              <Field
-                label={t('shortcutLabel')}
-                hint={t('shortcutHint')}
-                value={form.shortcut}
-                onChange={(e) => setForm((f) => ({ ...f, shortcut: e.target.value }))}
-                placeholder={t('shortcutPlaceholder')}
-              />
+
+              {/* Shortcut with live duplicate warning */}
+              <div>
+                <Field
+                  label={t('shortcutLabel')}
+                  hint={liveConflict ? undefined : t('shortcutHint')}
+                  value={form.shortcut}
+                  onChange={(e) => setForm((f) => ({ ...f, shortcut: e.target.value }))}
+                  placeholder={t('shortcutPlaceholder')}
+                />
+                {liveConflict && (
+                  <p className="mt-1 flex items-center gap-1 text-[12px] text-review-600 dark:text-review-400">
+                    <Warning className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    {t('shortcutDuplicate', { shortcut: form.shortcut.trim() })}
+                  </p>
+                )}
+              </div>
+
               <SelectField
                 label={t('accountLabel')}
                 value={form.whatsappAccountId}
@@ -219,17 +280,22 @@ export default function TemplatesPage() {
                   <option key={a.id} value={a.id}>{a.accountName}</option>
                 ))}
               </SelectField>
-              <TextareaField
-                label={t('messageLabel')}
-                required
-                rows={5}
-                value={form.content}
-                onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-                placeholder={t('messagePlaceholder')}
-                className="resize-none"
-              />
+
+              <div>
+                <TextareaField
+                  label={t('messageLabel')}
+                  required
+                  rows={5}
+                  value={form.content}
+                  onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+                  placeholder={t('messagePlaceholder')}
+                  className="resize-none"
+                />
+                <p className="mt-1 text-[11px] text-gray-400">{t('tokenHint')}</p>
+              </div>
+
               <div className="flex gap-2">
-                <Button onClick={handleSubmit} className="flex-1">
+                <Button onClick={handleSubmit} className="flex-1" disabled={!!liveConflict}>
                   {editingId ? (
                     <>
                       <PencilSimple className="h-4 w-4" aria-hidden="true" />
@@ -251,46 +317,77 @@ export default function TemplatesPage() {
             </div>
           </Card>
 
-          {/* List */}
-          <section className="space-y-2">
-            {loading ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map((n) => <div key={n} className="h-24 rounded animate-shimmer" />)}
+          {/* ── List panel ── */}
+          <section>
+            {/* Search + account filter */}
+            {!loading && items.length > 0 && (
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 min-w-[180px]">
+                  <MagnifyingGlass className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={t('search')}
+                    className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-[13px] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                  />
+                </div>
+                {accounts.length > 0 && (
+                  <select
+                    value={accountFilter}
+                    onChange={(e) => setAccountFilter(e.target.value)}
+                    className="h-9 rounded-lg border border-gray-200 bg-gray-50 px-2.5 text-[13px] dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                  >
+                    <option value="">{t('filterAccount')}</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>{a.accountName}</option>
+                    ))}
+                  </select>
+                )}
               </div>
-            ) : items.length === 0 ? (
-              <Card className="flex flex-col items-center justify-center py-16 text-center">
-                <ChatText className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('noTemplates')}</p>
-                <p className="mt-1 text-[13px] text-gray-400">
-                  {t('noTemplatesHint')}
-                </p>
-              </Card>
-            ) : (
-              items.map((item) => (
-                <Card key={item.id} className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-gray-900 dark:text-gray-100">{item.title}</span>
-                        {item.shortcut && <Badge tone="hermes">/{item.shortcut}</Badge>}
-                        <Badge tone="neutral">{item.whatsappAccount?.accountName ?? t('globalBadge')}</Badge>
-                      </div>
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-400">{item.content}</p>
-                    </div>
-                    <div className="flex shrink-0 gap-1.5">
-                      <Button variant="outline" size="sm" onClick={() => startEdit(item)}>
-                        <PencilSimple className="h-4 w-4" aria-hidden="true" />
-                        {t('edit')}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setDeleting(item)} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
-                        <Trash className="h-4 w-4" aria-hidden="true" />
-                        {t('delete')}
-                      </Button>
-                    </div>
-                  </div>
-                </Card>
-              ))
             )}
+
+            <div className="space-y-2">
+              {loading ? (
+                [1, 2, 3].map((n) => <div key={n} className="h-24 rounded animate-shimmer" />)
+              ) : visible.length === 0 ? (
+                <Card className="flex flex-col items-center justify-center py-16 text-center">
+                  <ChatText className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {hasFilters ? t('noMatch') : t('noTemplates')}
+                  </p>
+                  <p className="mt-1 text-[13px] text-gray-400">
+                    {hasFilters ? t('noMatchHint') : t('noTemplatesHint')}
+                  </p>
+                </Card>
+              ) : (
+                visible.map((item) => (
+                  <Card key={item.id} className={`p-4 ${editingId === item.id ? 'ring-2 ring-hermes-400' : ''}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{item.title}</span>
+                          {item.shortcut && <Badge tone="hermes">/{item.shortcut}</Badge>}
+                          <Badge tone="neutral">{item.whatsappAccount?.accountName ?? t('globalBadge')}</Badge>
+                        </div>
+                        <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-400">
+                          {item.content}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 gap-1.5">
+                        <Button variant="outline" size="sm" onClick={() => startEdit(item)}>
+                          <PencilSimple className="h-4 w-4" aria-hidden="true" />
+                          {t('edit')}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setDeleting(item)} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
+                          <Trash className="h-4 w-4" aria-hidden="true" />
+                          {t('delete')}
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))
+              )}
+            </div>
           </section>
         </div>
       </main>

@@ -7,7 +7,6 @@ import {
   CheckCircle,
   Plus,
   DeviceMobile,
-  PlugsConnected,
   QrCode,
   ArrowCounterClockwise,
   Trash,
@@ -19,10 +18,10 @@ import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { Field, TextareaField } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { useT, type Dict } from '@/lib/i18n';
+import { SessionStatusBadge, getSessionLabel, isSessionBroken } from '@/components/ui/SessionStatusBadge';
+import { useT, type Dict, useLang } from '@/lib/i18n';
 
 const dict: Dict = {
   title: { id: 'Accounts', en: 'Accounts' },
@@ -156,31 +155,17 @@ interface Account {
 
 const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
-type BadgeTone = 'success' | 'review' | 'danger' | 'neutral';
-
-// Session status maps to the semantic connection scale.
-const statusTone: Record<string, BadgeTone> = {
-  connected: 'success',
-  qr_required: 'review',
-  connecting: 'review',
-  reconnecting: 'review',
-  disconnected: 'danger',
-  banned: 'danger',
-  paused: 'neutral',
-};
-
-// Map raw status to operator-friendly copy
-function getStatusLabel(status: string, t: ReturnType<typeof useT>): { label: string; hint?: string } {
-  const map: Record<string, { label: string; hint?: string }> = {
-    connected: { label: t('statusConnected') },
-    connecting: { label: t('statusConnecting'), hint: t('reconnectHint') },
-    reconnecting: { label: t('statusReconnecting'), hint: t('reconnectingHint') },
-    qr_required: { label: t('statusQrRequired'), hint: t('qrExpiredHint') },
-    disconnected: { label: t('statusDisconnected'), hint: t('reconnectHint') },
-    banned: { label: t('statusBanned'), hint: t('bannedHint') },
-    paused: { label: t('statusPaused'), hint: t('pausedHint') },
+// Map session status to its context hint key (kept local — hints contain WhatsApp-specific guidance)
+function getStatusHint(status: string, t: ReturnType<typeof useT>): string | undefined {
+  const map: Record<string, string> = {
+    connecting: t('reconnectHint'),
+    reconnecting: t('reconnectingHint'),
+    qr_required: t('qrExpiredHint'),
+    disconnected: t('reconnectHint'),
+    banned: t('bannedHint'),
+    paused: t('pausedHint'),
   };
-  return map[status] || { label: status };
+  return map[status];
 }
 
 function QrFreshness({ receivedAt, t }: { receivedAt: number; t: ReturnType<typeof useT> }) {
@@ -315,6 +300,7 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
 
 export default function AccountsPage() {
   const t = useT(dict);
+  const { lang } = useLang();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -507,7 +493,7 @@ export default function AccountsPage() {
         ) : (
           <ul className="space-y-3">
             {visibleAccounts.map((a) => {
-              const disconnected = a.sessionStatus === 'disconnected' || a.sessionStatus === 'banned' || a.sessionStatus === 'reconnecting';
+              const disconnected = isSessionBroken(a.sessionStatus);
               return (
                 <li key={a.id}>
                   <Card className="p-4">
@@ -529,14 +515,15 @@ export default function AccountsPage() {
                               {health[a.id].liveSocket ? 'live' : `retry #${health[a.id].reconnectAttempts}`}
                             </span>
                           )}
-                          <Badge tone={statusTone[a.sessionStatus] ?? 'neutral'}>
-                            {disconnected && <PlugsConnected className="h-3.5 w-3.5" aria-hidden="true" />}
-                            {getStatusLabel(a.sessionStatus, t).label}
-                          </Badge>
+                          <SessionStatusBadge
+                            status={a.sessionStatus}
+                            lang={lang}
+                            label={getSessionLabel(a.sessionStatus, lang)}
+                          />
                         </div>
-                        {getStatusLabel(a.sessionStatus, t).hint && (
+                        {getStatusHint(a.sessionStatus, t) && (
                           <p className="text-[11px] text-gray-500 dark:text-gray-400 text-right max-w-xs">
-                            {getStatusLabel(a.sessionStatus, t).hint}
+                            {getStatusHint(a.sessionStatus, t)}
                           </p>
                         )}
                       </div>
