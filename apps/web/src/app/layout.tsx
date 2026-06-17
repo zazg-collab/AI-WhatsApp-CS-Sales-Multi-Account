@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import { Providers } from '@/components/Providers';
@@ -14,7 +15,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id" className={GeistMono.variable} suppressHydrationWarning>
+    <html lang="id" className={`${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
       <head>
         {/* Apply the saved theme before first paint to avoid a flash. Light is default. */}
         <script

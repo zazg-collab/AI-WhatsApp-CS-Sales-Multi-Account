@@ -45,7 +45,14 @@ export class WaController {
   @Roles('owner', 'supervisor')
   @Post()
   async create(@Body() dto: CreateAccountDto, @CurrentUser() user: AuthUser) {
-    const account = await this.prisma.whatsappAccount.create({ data: dto });
+    const { assignedBotId, assignedAdminId, ...rest } = dto;
+    const account = await this.prisma.whatsappAccount.create({
+      data: {
+        ...rest,
+        accountName: rest.accountName ?? 'New Account',
+        phoneNumber: rest.phoneNumber ?? '000000000000',
+      },
+    });
     await this.wa.startSession(account.id);
     await logAudit(this.prisma, {
       userId: user.id,

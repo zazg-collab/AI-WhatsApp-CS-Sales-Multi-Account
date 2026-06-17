@@ -219,7 +219,7 @@ export function Sidebar() {
                       'group relative flex items-center gap-2.5 rounded px-2 py-2 text-[13px] font-medium transition-colors duration-150 lg:justify-start lg:px-2.5',
                       open ? 'justify-start' : 'justify-center',
                       isActive
-                        ? 'bg-hermes-50 text-hermes-700 ring-1 ring-hermes-200'
+                        ? 'bg-hermes-500/15 text-hermes-200 ring-1 ring-hermes-500/20'
                         : 'text-gray-400 hover:bg-gray-800 hover:text-gray-50',
                     )}
                   >

@@ -441,10 +441,10 @@ export default function AccountsPage() {
     setAddConnected(false);
   }
 
-  function closeAddModal() {
+  const closeAddModal = useCallback(() => {
     setAddModalOpen(false);
     load(); // refresh list in case account was partially created
-  }
+  }, [load]);
 
   async function handleAddCreate() {
     if (!addName.trim() || !addPhone.trim()) return;

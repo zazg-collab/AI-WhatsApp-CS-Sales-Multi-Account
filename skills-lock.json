@@ -19,17 +19,41 @@
       "skillPath": "skills/taste-skill-v1/SKILL.md",
       "computedHash": "338a6f574f10fcdd6df0f1eae029c49ce075c7770c4217fcfe38ca9cf684bc7c"
     },
+    "frontend-uiux-ai-slop-audit": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/frontend-uiux-ai-slop-audit/SKILL.md",
+      "computedHash": "6f9115d89c2443601c953ba9bbe331357a3b081ae008351cd889510edc0aad92"
+    },
     "full-output-enforcement": {
       "source": "Leonxlnx/taste-skill",
       "sourceType": "github",
       "skillPath": "skills/output-skill/SKILL.md",
       "computedHash": "26bd29ce4c5e02c7666b2d503609bf466bd32290822e91f0e984147048dbb924"
     },
+    "fullstack-ai-slop-audit": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/fullstack-ai-slop-audit/SKILL.md",
+      "computedHash": "fb4831a2bf28da27a617e3e7229215bd289e98e8f4716ca86c6d31c55aafbf2e"
+    },
     "gpt-taste": {
       "source": "Leonxlnx/taste-skill",
       "sourceType": "github",
       "skillPath": "skills/gpt-tasteskill/SKILL.md",
       "computedHash": "cc8f0c601d8240a124e1d11634351a2be7b8a72fd807c75e5b6bf7afcd5ddee0"
+    },
+    "hermes-fullstack-contract-audit": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/hermes-fullstack-contract-audit/SKILL.md",
+      "computedHash": "df236ead6ea43c9f788aa44319a6a15547ed3782f605caa6ce785eb4c6b528e1"
+    },
+    "hermes-salesops-enterprise-uiux": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/hermes-salesops-enterprise-uiux/SKILL.md",
+      "computedHash": "07210d2876fc56c3f5bc20f914c7a48966ae753a821120b86958e497dfe45460"
     },
     "high-end-visual-design": {
       "source": "Leonxlnx/taste-skill",
@@ -71,31 +95,13 @@
       "source": "Leonxlnx/taste-skill",
       "sourceType": "github",
       "skillPath": "skills/redesign-skill/SKILL.md",
-      "computedHash": "b405eee0e0e80fc243f731d9aa368bca307e356db7e6157d27101d369dac6726"
+      "computedHash": "47eced3e960a2c961d3cbee11fa1216264f589344b586a5cbd03967cd6b9c54b"
     },
     "stitch-design-taste": {
       "source": "Leonxlnx/taste-skill",
       "sourceType": "github",
       "skillPath": "skills/stitch-skill/SKILL.md",
       "computedHash": "13322f38406cd3abf16ba45e35bdc9b18002d0153a79b4612b97aefc65d5a335"
-    },
-    "fullstack-ai-slop-audit": {
-      "source": "local",
-      "sourceType": "local",
-      "skillPath": ".agents/skills/fullstack-ai-slop-audit/SKILL.md",
-      "computedHash": "fb4831a2bf28da27a617e3e7229215bd289e98e8f4716ca86c6d31c55aafbf2e"
-    },
-    "frontend-uiux-ai-slop-audit": {
-      "source": "local",
-      "sourceType": "local",
-      "skillPath": ".agents/skills/frontend-uiux-ai-slop-audit/SKILL.md",
-      "computedHash": "6f9115d89c2443601c953ba9bbe331357a3b081ae008351cd889510edc0aad92"
-    },
-    "hermes-salesops-enterprise-uiux": {
-      "source": "local",
-      "sourceType": "local",
-      "skillPath": ".agents/skills/hermes-salesops-enterprise-uiux/SKILL.md",
-      "computedHash": "07210d2876fc56c3f5bc20f914c7a48966ae753a821120b86958e497dfe45460"
     }
   }
 }

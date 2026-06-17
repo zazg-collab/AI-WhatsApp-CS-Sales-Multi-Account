@@ -19,6 +19,7 @@ import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { Avatar } from '@/components/ui/Avatar';
 import { useT, type Dict } from '@/lib/i18n';
 
 const dict: Dict = {
@@ -124,11 +125,6 @@ function relTime(iso: string | null | undefined): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h`;
   return `${Math.floor(h / 24)}d`;
-}
-
-function initials(name: string | null, phone: string): string {
-  const base = name?.trim() || phone;
-  return base.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
 }
 
 function deriveState(c: ConvSummary): AttnState {
@@ -350,9 +346,11 @@ export default function OverviewPage() {
                         href={`/inbox?conversation=${c.id}`}
                         className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40"
                       >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-hermes-100 bg-hermes-50 text-[12px] font-bold text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-300">
-                          {initials(c.customer.name, c.customer.phoneNumber)}
-                        </span>
+                        <Avatar
+                          name={c.customer.name}
+                          phone={c.customer.phoneNumber}
+                          className="h-9 w-9"
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{name}</p>

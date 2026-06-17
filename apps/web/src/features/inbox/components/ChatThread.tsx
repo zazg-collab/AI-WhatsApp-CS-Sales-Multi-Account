@@ -2,15 +2,25 @@
 
 import { useRef } from 'react';
 import { ChatThreadMessage } from './ChatThreadMessage';
+import { ChatThreadHeader } from './ChatThreadHeader';
+import { ChatComposer } from './ChatComposer';
 import type { ConvDetail, Message } from '../inbox.types';
 
 interface ChatThreadProps {
   conversation: ConvDetail | null;
   loading?: boolean;
-  onSendMessage?: (text: string, quotedMessageId?: string) => Promise<void>;
+  composerValue?: string;
+  quoteMessage?: Message | null;
+  editingMessage?: Message | null;
+  onSendMessage?: (text: string) => Promise<void>;
+  onComposerChange?: (value: string) => void;
   onReactMessage?: (messageId: string, emoji: string) => Promise<void>;
   onEditMessage?: (messageId: string, newText: string) => Promise<void>;
   onDeleteMessage?: (messageId: string) => Promise<void>;
+  onBack?: () => void;
+  onShowDetails?: () => void;
+  onClearQuote?: () => void;
+  onClearEdit?: () => void;
 }
 
 /**
@@ -19,22 +29,29 @@ interface ChatThreadProps {
  * Responsibilities:
  * - Message bubble rendering (via ChatThreadMessage)
  * - Timeline scrolling (auto-scroll to latest)
- * - Composer UI (text input + media/location/poll menus)
+ * - Composer UI (via ChatComposer)
  * - Message actions (react, edit, delete, quote, star)
- * - Typing indicators + Hermes draft display
  *
  * The inbox/page.tsx handles:
- * - Which conversation to show (activeId)
- * - Fetching conversation data (via useConversation hook)
- * - High-level message actions (send, approve draft, takeover, etc.)
+ * - State management (composerValue, quoteMessage, etc.)
+ * - API calls (send, edit, delete, react)
+ * - High-level message actions (approve draft, takeover, etc.)
  */
 export function ChatThread({
   conversation,
   loading,
+  composerValue = '',
+  quoteMessage,
+  editingMessage,
   onSendMessage,
+  onComposerChange,
   onReactMessage,
   onEditMessage,
   onDeleteMessage,
+  onBack,
+  onShowDetails,
+  onClearQuote,
+  onClearEdit,
 }: ChatThreadProps) {
   const timelineRef = useRef<HTMLDivElement>(null);
 
@@ -55,9 +72,12 @@ export function ChatThread({
   }
 
   return (
-    <>
-      {/* Header with customer name + online status + actions */}
-      {/* TODO: Extract to <ChatThreadHeader conversation={conversation} /> */}
+    <div className="flex flex-1 flex-col">
+      <ChatThreadHeader
+        conversation={conversation}
+        onBack={onBack}
+        onShowDetails={onShowDetails}
+      />
 
       {/* Message timeline */}
       <div ref={timelineRef} className="scrollbar-thin flex-1 space-y-3 overflow-y-auto px-4 py-5 sm:px-5">
@@ -84,8 +104,17 @@ export function ChatThread({
         )}
       </div>
 
-      {/* Composer (text input + send + media/location/poll/quick-reply menus) */}
-      {/* TODO: Extract to <ChatComposer conversation={conversation} onSend={onSendMessage} /> */}
-    </>
+      <ChatComposer
+        conversation={conversation}
+        disabled={loading}
+        composerValue={composerValue}
+        onComposerChange={onComposerChange || (() => {})}
+        onSend={onSendMessage || (async () => {})}
+        quoteMessage={quoteMessage}
+        editingMessage={editingMessage}
+        onClearQuote={onClearQuote}
+        onClearEdit={onClearEdit}
+      />
+    </div>
   );
 }

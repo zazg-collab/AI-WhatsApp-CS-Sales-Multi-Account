@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hermes Fullstack Contract Audit"
+  short_description: "Audit frontend features against real backend APIs"
+  default_prompt: "Use $hermes-fullstack-contract-audit to audit whether frontend features are backed by real backend APIs, not stubs or fake data."

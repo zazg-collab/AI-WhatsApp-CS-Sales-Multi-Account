@@ -20,6 +20,7 @@ body {
 
   h1, h2, h3 {
     letter-spacing: -0.025em;
+    text-wrap: balance;
   }
 
   :focus-visible {
@@ -83,6 +84,10 @@ body {
     background: linear-gradient(90deg, #f1f5f9 25%, #f8fafc 50%, #f1f5f9 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s ease-in-out infinite;
+  }
+  .dark .animate-shimmer {
+    background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+    background-size: 200% 100%;
   }
   @keyframes shimmer {
     0%   { background-position: 200% 0; }

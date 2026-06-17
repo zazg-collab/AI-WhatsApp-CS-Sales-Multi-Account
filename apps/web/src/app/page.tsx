@@ -139,7 +139,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex h-10 w-full items-center justify-center gap-2 rounded border border-hermes-800 bg-hermes-700 text-sm font-semibold text-white transition-colors hover:bg-hermes-800 disabled:opacity-60"
+              className="flex h-10 w-full items-center justify-center gap-2 rounded border border-hermes-800 bg-hermes-700 text-sm font-semibold text-white transition-all hover:bg-hermes-800 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-60"
               aria-label="Sign in"
             >
               <ShieldStar className="h-4 w-4" aria-hidden="true" />
