@@ -163,6 +163,13 @@ packages/database/  Prisma schema (all 12 PRD tables) + shared client. Import
 - The active knowledge items of a bot's knowledge base are injected into the AI prompt by `PromptBuilderService` (only `status: active` and within `validUntil`). Editing knowledge immediately changes AI answers.
 - All Prisma tables use `@map`/`@@map` snake_case in DB but camelCase in code.
 
+### Frontend Conventions (React/Next.js)
+- **Feature modules**: `apps/web/src/features/[feature]/` contain `components/`, `hooks/`, `[feature].types.ts`. Each feature is self-contained and exports a public API via `index.ts`.
+- **Shared data-fetching**: Use `useApiQuery<T>(path)` from `lib/hooks/useApiQuery.ts` to fetch and cache data (returns `{ data, loading, error, refetch }`). Do not directly call `api()` with inline state management.
+- **Pages** (`app/*/page.tsx`) are thin shells: they route-param lookup, render a feature component, and nothing else. No page should exceed 400 lines.
+- **Types**: Domain types live in `[feature].types.ts` alongside components. Shared types → `lib/types.ts`.
+- **Socket.IO**: Use `getSocket()` from `lib/socket.ts` for live updates; emit/listen inside feature hooks, not inside components.
+
 ## Planned Tech Stack
 
 | Layer | Technology |
@@ -320,7 +327,16 @@ Local audit skills live under `.agents/skills/` (registered in `skills-lock.json
   audit skill for WhatsApp/Baileys account health, QR/reconnect/session states,
   chat/inbox, right intelligence panels, analytics, settings, responsive
   behavior, overlays/dropdowns, and anti-AI-slop SalesOps presentation.
+- **`hermes-fullstack-contract-audit`** — Hermes-specific frontend/backend
+  contract audit skill. Use it to verify that every frontend feature, button,
+  chart, setting, AI/Hermes control, campaign workflow, and Baileys/WhatsApp
+  operation is backed by real backend APIs, DTO validation, auth/roles,
+  persistence, realtime events, and tests rather than stubs, mocks, TODOs, fake
+  data, or frontend-only state.
 
 Claude Code install mirrors live under `.claude/skills/`. Use:
 - `/hermes-uiux-audit` for a full no-edit audit report.
 - `/hermes-uiux-implement` when the user explicitly wants P0/P1 UI fixes applied.
+- `/hermes-contract-audit` for a no-edit frontend/backend contract audit.
+- `/hermes-contract-implement` when the user explicitly wants P0/P1 contract
+  fixes applied.
