@@ -26,8 +26,29 @@ import { useT, type Dict, useLang } from '@/lib/i18n';
 const dict: Dict = {
   title: { id: 'Accounts', en: 'Accounts' },
   addAccount: { id: 'Tambah akun', en: 'Add account' },
-  accountNamePlaceholder: { id: 'Nama akun', en: 'Account name' },
-  phonePlaceholder: { id: 'Nomor (mis. 628123…)', en: 'Number (e.g. 628123…)' },
+  accountNamePlaceholder: { id: 'mis. CS Tokopedia, Sales Jakarta', en: 'e.g. CS Tokopedia, Sales Jakarta' },
+  phonePlaceholder: { id: '628123456789 (tanpa + atau spasi)', en: '628123456789 (no + or spaces)' },
+
+  // Add account modal
+  addModalTitle: { id: 'Tambah akun WhatsApp', en: 'Add WhatsApp account' },
+  addModalDesc: { id: 'Masukkan nama dan nomor akun WhatsApp yang akan dihubungkan.', en: 'Enter the name and number of the WhatsApp account to connect.' },
+  stepDetails: { id: 'Detail akun', en: 'Account details' },
+  stepConnect: { id: 'Hubungkan', en: 'Connect' },
+  nameLabel: { id: 'Nama akun', en: 'Account name' },
+  nameHint: { id: 'Gunakan nama yang mudah dikenali tim, mis. CS Utama atau Sales B2B.', en: 'Use a name your team will recognise, e.g. Main CS or B2B Sales.' },
+  phoneLabel2: { id: 'Nomor WhatsApp', en: 'WhatsApp number' },
+  phoneHint: { id: 'Format internasional tanpa + atau spasi, mis. 628123456789.', en: 'International format without + or spaces, e.g. 628123456789.' },
+  creating: { id: 'Membuat akun…', en: 'Creating account…' },
+  next: { id: 'Buat & hubungkan', en: 'Create & connect' },
+  connectIntro: { id: 'Pilih cara menghubungkan akun WhatsApp ini:', en: 'Choose how to connect this WhatsApp account:' },
+  optionQr: { id: 'Scan kode QR', en: 'Scan QR code' },
+  optionQrDesc: { id: 'Buka WhatsApp → kode QR → arahkan kamera ke layar ini.', en: 'Open WhatsApp → QR code → point your camera at this screen.' },
+  optionCode: { id: 'Kode pairing (tanpa kamera)', en: 'Pairing code (no camera)' },
+  optionCodeDesc: { id: 'Masukkan kode 8 digit di WhatsApp → Pengaturan → Perangkat Tertaut.', en: 'Enter an 8-digit code in WhatsApp → Settings → Linked Devices.' },
+  waitingQr: { id: 'Menunggu kode QR dari WhatsApp…', en: 'Waiting for QR code from WhatsApp…' },
+  connectedSuccess: { id: 'Akun berhasil terhubung!', en: 'Account connected successfully!' },
+  connectedClose: { id: 'Selesai', en: 'Done' },
+  back: { id: 'Kembali', en: 'Back' },
   restartConfirmTitle: { id: 'Restart koneksi akun?', en: 'Restart account connection?' },
   restartConfirmBody: {
     id: 'Sesi WhatsApp "{name}" akan diputus lalu disambungkan ulang. Pesan masuk/keluar tertunda beberapa saat. Lanjutkan?',
@@ -325,6 +346,18 @@ export default function AccountsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [requestingCode, setRequestingCode] = useState<Record<string, boolean>>({});
+
+  // Add-account modal
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addStep, setAddStep] = useState<'details' | 'connect'>('details');
+  const [addName, setAddName] = useState('');
+  const [addPhone, setAddPhone] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
+  const [addCreating, setAddCreating] = useState(false);
+  const [addedAccountId, setAddedAccountId] = useState<string | null>(null);
+  const [addConnectMethod, setAddConnectMethod] = useState<'qr' | 'code' | null>(null);
+  const [addRequestingCode, setAddRequestingCode] = useState(false);
+  const [addConnected, setAddConnected] = useState(false);
   // The QR grants full control of a WhatsApp number — only admins+ may scan.
   const canScan = hasRole('admin');
   const canEditHours = hasRole('supervisor');
@@ -365,7 +398,13 @@ export default function AccountsPage() {
       setPairingCode((prev) => ({ ...prev, [accountId]: code }));
       setPairingMode((prev) => ({ ...prev, [accountId]: 'code' }));
     });
-    socket.on('wa:status', () => load());
+    socket.on('wa:status', ({ accountId: sid, status }: { accountId: string; status: string }) => {
+      load();
+      // If the account just connected while the add-modal is open, celebrate.
+      if (status === 'connected') {
+        setAddedAccountId((prev) => { if (prev === sid) setAddConnected(true); return prev; });
+      }
+    });
     return () => {
       socket.off('wa:qr');
       socket.off('wa:pairing-code');
@@ -373,6 +412,7 @@ export default function AccountsPage() {
     };
   }, [load]);
 
+  // Legacy: kept for compat but no longer called from inline form.
   async function addAccount(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -386,6 +426,57 @@ export default function AccountsPage() {
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('addFailed'));
+    }
+  }
+
+  function openAddModal() {
+    setAddModalOpen(true);
+    setAddStep('details');
+    setAddName('');
+    setAddPhone('');
+    setAddError(null);
+    setAddCreating(false);
+    setAddedAccountId(null);
+    setAddConnectMethod(null);
+    setAddConnected(false);
+  }
+
+  function closeAddModal() {
+    setAddModalOpen(false);
+    load(); // refresh list in case account was partially created
+  }
+
+  async function handleAddCreate() {
+    if (!addName.trim() || !addPhone.trim()) return;
+    setAddCreating(true);
+    setAddError(null);
+    try {
+      const account = await api<{ id: string }>('/wa/accounts', {
+        method: 'POST',
+        body: JSON.stringify({ accountName: addName.trim(), phoneNumber: addPhone.trim() }),
+      });
+      setAddedAccountId(account.id);
+      setAddStep('connect');
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : t('addFailed'));
+    } finally {
+      setAddCreating(false);
+    }
+  }
+
+  async function handleAddRequestPairingCode() {
+    if (!addedAccountId) return;
+    setAddRequestingCode(true);
+    setAddError(null);
+    try {
+      const { code } = await api<{ code: string }>(`/wa/accounts/${addedAccountId}/request-pairing-code`, { method: 'POST' });
+      setPairingCode((prev) => ({ ...prev, [addedAccountId]: code }));
+      setPairingMode((prev) => ({ ...prev, [addedAccountId]: 'code' }));
+      setAddConnectMethod('code');
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : t('pairingCodeFailed'));
+    } finally {
+      setAddRequestingCode(false);
     }
   }
 
@@ -447,19 +538,14 @@ export default function AccountsPage() {
 
   return (
     <AppLayout>
-      <PageHeader title={t('title')} subtitle={t('subtitle')} />
+      <PageHeader title={t('title')} subtitle={t('subtitle')}>
+        <Button size="sm" onClick={openAddModal} disabled={!canScan}>
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          {t('addAccount')}
+        </Button>
+      </PageHeader>
 
       <div className="scrollbar-thin mx-auto w-full max-w-3xl flex-1 overflow-y-auto p-5">
-        <Card className="mb-5 p-4">
-          <form onSubmit={addAccount} className="flex flex-wrap gap-2">
-            <input aria-label={t('accountNameLabel')} placeholder={t('accountNamePlaceholder')} value={name} onChange={(e) => setName(e.target.value)} className={`flex-1 ${inputClass}`} required />
-            <input aria-label={t('phoneLabel')} placeholder={t('phonePlaceholder')} value={phone} onChange={(e) => setPhone(e.target.value)} className={`flex-1 ${inputClass}`} required />
-            <Button type="submit" size="md">
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              {t('addAccount')}
-            </Button>
-          </form>
-        </Card>
 
         {accounts.length > 1 && (
           <div className="mb-3 flex items-center gap-2">
@@ -752,6 +838,194 @@ export default function AccountsPage() {
         }
       >
         {null}
+      </Modal>
+
+      {/* ── Add Account Modal ─────────────────────────────────────────── */}
+      <Modal
+        open={addModalOpen}
+        onClose={closeAddModal}
+        title={t('addModalTitle')}
+        description={addStep === 'details' ? t('addModalDesc') : undefined}
+        size="sm"
+        footer={
+          addStep === 'details' ? (
+            <>
+              <Button variant="outline" size="sm" onClick={closeAddModal}>{t('cancel')}</Button>
+              <Button
+                size="sm"
+                disabled={addCreating || !addName.trim() || !addPhone.trim()}
+                onClick={handleAddCreate}
+              >
+                {addCreating ? t('creating') : t('next')}
+              </Button>
+            </>
+          ) : addConnected ? (
+            <Button size="sm" onClick={closeAddModal} className="w-full">
+              <CheckCircle className="h-4 w-4" aria-hidden="true" />
+              {t('connectedClose')}
+            </Button>
+          ) : (
+            addConnectMethod === null ? (
+              <Button variant="outline" size="sm" onClick={closeAddModal}>{t('cancel')}</Button>
+            ) : (
+              <Button variant="ghost" size="sm" onClick={() => { setAddConnectMethod(null); }}>
+                {t('back')}
+              </Button>
+            )
+          )
+        }
+      >
+        {addStep === 'details' ? (
+          /* ── Step 1: name + phone ── */
+          <div className="space-y-4">
+            {addError && (
+              <p className="rounded border border-danger-200 bg-danger-50 px-3 py-2 text-[13px] text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">
+                {addError}
+              </p>
+            )}
+            <div>
+              <label className="mb-1 block text-[13px] font-medium text-gray-700 dark:text-gray-200">
+                {t('nameLabel')} <span className="text-danger-500">*</span>
+              </label>
+              <input
+                autoFocus
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && addName.trim()) document.getElementById('add-phone-input')?.focus(); }}
+                placeholder={t('accountNamePlaceholder')}
+                className={`w-full ${inputClass}`}
+              />
+              <p className="mt-1 text-[11px] text-gray-400">{t('nameHint')}</p>
+            </div>
+            <div>
+              <label className="mb-1 block text-[13px] font-medium text-gray-700 dark:text-gray-200">
+                {t('phoneLabel2')} <span className="text-danger-500">*</span>
+              </label>
+              <input
+                id="add-phone-input"
+                type="tel"
+                value={addPhone}
+                onChange={(e) => setAddPhone(e.target.value.replace(/[^\d]/g, ''))}
+                onKeyDown={(e) => { if (e.key === 'Enter' && addName.trim() && addPhone.trim()) handleAddCreate(); }}
+                placeholder={t('phonePlaceholder')}
+                className={`w-full ${inputClass}`}
+              />
+              <p className="mt-1 text-[11px] text-gray-400">{t('phoneHint')}</p>
+            </div>
+          </div>
+        ) : (
+          /* ── Step 2: connect ── */
+          <div>
+            {addError && (
+              <p className="mb-3 rounded border border-danger-200 bg-danger-50 px-3 py-2 text-[13px] text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">
+                {addError}
+              </p>
+            )}
+
+            {addConnected ? (
+              /* Success state */
+              <div className="flex flex-col items-center gap-3 py-4 text-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-channel-50 dark:bg-channel-900/20">
+                  <CheckCircle className="h-8 w-8 text-channel-600" aria-hidden="true" weight="fill" />
+                </span>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('connectedSuccess')}</p>
+                <p className="text-[12px] text-gray-500">{addName}</p>
+              </div>
+            ) : addConnectMethod === null ? (
+              /* Method picker */
+              <div className="space-y-3">
+                <p className="mb-4 text-[13px] text-gray-500 dark:text-gray-400">{t('connectIntro')}</p>
+
+                {/* QR option */}
+                <button
+                  type="button"
+                  onClick={() => setAddConnectMethod('qr')}
+                  className="flex w-full items-start gap-3 rounded-xl border-2 border-gray-200 p-4 text-left transition-colors hover:border-hermes-400 hover:bg-hermes-50 dark:border-gray-700 dark:hover:border-hermes-500 dark:hover:bg-hermes-900/20"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-hermes-100 text-hermes-700 dark:bg-hermes-900/40">
+                    <QrCode className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('optionQr')}</p>
+                    <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{t('optionQrDesc')}</p>
+                  </div>
+                </button>
+
+                {/* Pairing code option */}
+                <button
+                  type="button"
+                  onClick={handleAddRequestPairingCode}
+                  disabled={addRequestingCode}
+                  className="flex w-full items-start gap-3 rounded-xl border-2 border-gray-200 p-4 text-left transition-colors hover:border-hermes-400 hover:bg-hermes-50 disabled:cursor-wait disabled:opacity-60 dark:border-gray-700 dark:hover:border-hermes-500 dark:hover:bg-hermes-900/20"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-gray-800">
+                    <DeviceMobile className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('optionCode')}</p>
+                    <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{t('optionCodeDesc')}</p>
+                    {addRequestingCode && (
+                      <p className="mt-1 text-[11px] font-medium text-hermes-600">{t('requestingPairingCode')}</p>
+                    )}
+                  </div>
+                </button>
+              </div>
+            ) : addConnectMethod === 'code' && addedAccountId && pairingCode[addedAccountId] ? (
+              /* Show pairing code */
+              <div className="rounded-xl border border-hermes-200 bg-hermes-50 p-4 dark:border-hermes-700/40 dark:bg-hermes-900/20">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-hermes-700 dark:text-hermes-400">
+                  {t('pairingCodeTitle')}
+                </p>
+                <ol className="mb-4 space-y-1.5 text-[12px] text-gray-600 dark:text-gray-300">
+                  <li>{t('pairingCodeStep1')}</li>
+                  <li>{t('pairingCodeStep2')}</li>
+                  <li>{t('pairingCodeStep3')}</li>
+                </ol>
+                <p className="mb-3 select-all text-center text-[40px] font-mono font-bold tracking-[0.3em] text-gray-900 dark:text-gray-100">
+                  {pairingCode[addedAccountId].length === 8
+                    ? `${pairingCode[addedAccountId].slice(0, 4)}-${pairingCode[addedAccountId].slice(4)}`
+                    : pairingCode[addedAccountId]}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!addedAccountId) return;
+                    navigator.clipboard.writeText(pairingCode[addedAccountId]);
+                    setCopiedAccountId(addedAccountId);
+                    setTimeout(() => setCopiedAccountId(null), 2000);
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-hermes-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-hermes-700"
+                >
+                  {addedAccountId && copiedAccountId === addedAccountId
+                    ? <><CheckCircle className="h-4 w-4" />{t('codeCopied')}</>
+                    : <><QrCode className="h-4 w-4" />{t('copyCode')}</>}
+                </button>
+              </div>
+            ) : addConnectMethod === 'qr' && addedAccountId ? (
+              /* Show QR */
+              <div className="flex flex-col items-center gap-3">
+                {qr[addedAccountId] ? (
+                  <>
+                    <img
+                      src={qr[addedAccountId]}
+                      alt="WhatsApp QR code"
+                      className="h-56 w-56 rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700"
+                    />
+                    {qrReceivedAt[addedAccountId] && (
+                      <QrFreshness receivedAt={qrReceivedAt[addedAccountId]} t={t} />
+                    )}
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-gray-300 px-8 py-10 dark:border-gray-700">
+                    <QrCode className="h-10 w-10 text-gray-300" aria-hidden="true" />
+                    <p className="text-center text-[13px] text-gray-500">{t('waitingQr')}</p>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-hermes-400 border-t-transparent" aria-hidden="true" />
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+        )}
       </Modal>
     </AppLayout>
   );
