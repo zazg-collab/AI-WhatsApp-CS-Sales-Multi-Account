@@ -4,10 +4,20 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import type { ConvDetail } from '../inbox.types';
 
+interface BotSuggestion {
+  botId: string;
+  botName: string;
+  personaName: string | null;
+  reason: string;
+}
+
 interface BotSelectorProps {
   conversation: ConvDetail;
   bots: Array<{ id: string; botName: string; persona?: { name: string } | null }>;
   onSetBot?: (botId: string | null) => Promise<void>;
+  onSuggestBot?: () => Promise<void>;
+  /** Latest AI suggestion result (owned by the page). */
+  suggestion?: BotSuggestion | null;
   loading?: boolean;
 }
 
@@ -15,23 +25,28 @@ export function BotSelector({
   conversation,
   bots,
   onSetBot,
+  onSuggestBot,
+  suggestion,
   loading = false,
 }: BotSelectorProps) {
-  const [showSuggest, setShowSuggest] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
   const currentBot = conversation.bot;
 
   const handleSuggestBot = async () => {
     setSuggesting(true);
+    setDismissed(false);
     try {
-      // TODO: Call /conversations/{id}/suggest-bot endpoint
-      await new Promise((r) => setTimeout(r, 1000));
-      setShowSuggest(false);
+      await onSuggestBot?.();
     } finally {
       setSuggesting(false);
     }
   };
+
+  // Only show a suggestion that points to a different bot than the current one.
+  const showSuggestion =
+    !!suggestion && !dismissed && suggestion.botId !== currentBot?.id;
 
   return (
     <div className="border-b border-gray-200 p-4 dark:border-gray-800">
@@ -69,6 +84,35 @@ export function BotSelector({
           ))}
         </select>
       </div>
+
+      {/* AI suggestion result */}
+      {showSuggestion && suggestion && (
+        <div className="mb-3 rounded-lg border border-hermes-200 bg-hermes-50 p-2.5 dark:border-hermes-900/30 dark:bg-hermes-900/20">
+          <p className="text-xs font-medium text-hermes-700 dark:text-hermes-300">
+            💡 Suggested: {suggestion.botName}
+            {suggestion.personaName ? ` (${suggestion.personaName})` : ''}
+          </p>
+          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{suggestion.reason}</p>
+          <div className="mt-2 flex gap-2">
+            <Button
+              size="sm"
+              className="flex-1 text-xs"
+              disabled={loading}
+              onClick={() => onSetBot?.(suggestion.botId)}
+            >
+              Apply
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="flex-1 text-xs"
+              onClick={() => setDismissed(true)}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Suggest button */}
       <Button

@@ -40,8 +40,8 @@ const dict: Dict = {
   },
   importHeading: { id: 'Impor knowledge', en: 'Import knowledge' },
   importHint: {
-    id: 'Unggah PDF, Word, Excel, CSV, TXT, Markdown, HTML, atau tarik dari halaman web / file URL publik. Konten diekstrak menjadi item aktif, dipecah otomatis bila terlalu panjang.',
-    en: 'Upload PDF, Word, Excel, CSV, TXT, Markdown, HTML, or pull from a web page / public file URL. The content is extracted into active items, split automatically when too long.',
+    id: 'Unggah PDF, Word (.docx), Excel, CSV, TXT, Markdown, HTML, atau tarik dari halaman web / file URL publik. Konten diekstrak menjadi item aktif, dipecah otomatis bila terlalu panjang.',
+    en: 'Upload PDF, Word (.docx), Excel, CSV, TXT, Markdown, HTML, or pull from a web page / public file URL. The content is extracted into active items, split automatically when too long.',
   },
   processing: { id: 'Memproses…', en: 'Processing…' },
   uploadFile: { id: 'Unggah file', en: 'Upload file' },

@@ -67,7 +67,7 @@ export interface ConvDetail {
   groupSubject?: string | null;
   groupParticipants?: Array<{ jid: string; admin?: string | null }> | null;
   customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[]; notes: string | null; avatarUrl?: string | null };
-  whatsappAccount: { id: string; accountName: string; phoneNumber: string };
+  whatsappAccount: WaAccount;
   bot: { id: string; botName: string; persona?: { id: string; name: string } | null } | null;
   assignedAdmin?: AdminUser | null;
   labels?: string[];

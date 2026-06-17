@@ -1,8 +1,16 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import {
+  ArrowBendUpLeft,
+  PencilSimple,
+  Trash,
+  Star,
+  Smiley,
+} from '@phosphor-icons/react';
 import { useT, type Dict } from '@/lib/i18n';
 import { cn } from '@/lib/cn';
+import { Popover } from '@/components/ui/Popover';
 import { MediaContent } from './MediaContent';
 import { StatusTick } from './StatusTick';
 import type { Message } from '../inbox.types';
@@ -11,7 +19,15 @@ const dict: Dict = {
   edited: { id: '(disunting)', en: '(edited)' },
   deletedMessage: { id: '[Pesan dihapus]', en: '[Message deleted]' },
   quotedMessage: { id: 'Membalas:', en: 'Replying to:' },
+  reply: { id: 'Balas', en: 'Reply' },
+  react: { id: 'Beri reaksi', en: 'React' },
+  star: { id: 'Bintangi', en: 'Star' },
+  unstar: { id: 'Hapus bintang', en: 'Unstar' },
+  edit: { id: 'Edit', en: 'Edit' },
+  retract: { id: 'Tarik pesan', en: 'Retract' },
 };
+
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
 interface ChatThreadMessageProps {
   message: Message;
@@ -44,6 +60,11 @@ export function ChatThreadMessage({
 
   const isDeleted = m.deletedAt !== null && m.deletedAt !== undefined;
   const isEdited = m.editedAt && m.editedAt !== m.createdAt;
+  const canModify = !isCustomer && !isDeleted; // can edit/retract own (admin/ai) messages
+  const showActions = hoveredId === m.id && !isDeleted;
+
+  const actionBtn =
+    'flex h-7 w-7 items-center justify-center rounded-full bg-white text-gray-500 shadow-sm ring-1 ring-gray-200 transition-colors hover:bg-gray-100 hover:text-gray-800 dark:bg-gray-800 dark:text-gray-400 dark:ring-gray-700 dark:hover:bg-gray-700 dark:hover:text-gray-100';
 
   return (
     <div
@@ -55,10 +76,84 @@ export function ChatThreadMessage({
       onMouseEnter={() => onHoverEnter(m.id)}
       onMouseLeave={onHoverExit}
     >
-      {/* Actions menu (hover) */}
-      {hoveredId === m.id && !isCustomer && (
-        <div className={cn('absolute top-0.5 flex items-center gap-1', isCustomer ? 'right-0' : 'left-0')}>
-          {/* Action buttons would go here — kept minimal for this component */}
+      {/* Actions toolbar (hover) */}
+      {showActions && (
+        <div
+          className={cn(
+            'absolute -top-3 z-10 flex items-center gap-1',
+            isCustomer ? 'left-2' : 'right-2',
+          )}
+        >
+          <div className="relative">
+            <button
+              type="button"
+              className={actionBtn}
+              onClick={() => setShowReactions((v) => !v)}
+              aria-label={t('react')}
+              title={t('react')}
+            >
+              <Smiley className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <Popover
+              open={showReactions}
+              onClose={() => setShowReactions(false)}
+              align={isCustomer ? 'left' : 'right'}
+              side="top"
+            >
+              <div className="flex gap-1 p-1.5">
+                {REACTION_EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => {
+                      onReact?.(emoji);
+                      setShowReactions(false);
+                    }}
+                    className="rounded-full px-1.5 py-0.5 text-lg transition-transform hover:scale-125"
+                    aria-label={emoji}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </Popover>
+          </div>
+
+          {onReply && (
+            <button type="button" className={actionBtn} onClick={onReply} aria-label={t('reply')} title={t('reply')}>
+              <ArrowBendUpLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+
+          {onStar && (
+            <button
+              type="button"
+              className={actionBtn}
+              onClick={() => onStar(!m.isStarred)}
+              aria-label={m.isStarred ? t('unstar') : t('star')}
+              title={m.isStarred ? t('unstar') : t('star')}
+            >
+              <Star className={cn('h-4 w-4', m.isStarred && 'fill-amber-400 text-amber-400')} aria-hidden="true" />
+            </button>
+          )}
+
+          {canModify && onEdit && (
+            <button type="button" className={actionBtn} onClick={onEdit} aria-label={t('edit')} title={t('edit')}>
+              <PencilSimple className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+
+          {canModify && onDelete && (
+            <button
+              type="button"
+              className={cn(actionBtn, 'hover:text-danger-600')}
+              onClick={onDelete}
+              aria-label={t('retract')}
+              title={t('retract')}
+            >
+              <Trash className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
         </div>
       )}
 

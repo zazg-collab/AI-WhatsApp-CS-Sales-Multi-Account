@@ -13,7 +13,6 @@ import {
   CaretDown,
   CaretRight,
   SpinnerGap,
-  type Icon,
 } from '@phosphor-icons/react';
 import { api, hasRole } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';

@@ -3,9 +3,13 @@ import { AiMode, ConversationStatus } from '@hermes/database';
 jest.mock('../wa/wa.service', () => ({ WaService: class {} }));
 
 import { ConversationsController } from './conversations.controller';
+import { ConversationMessagesController } from './conversation-messages.controller';
+import { ConversationChatOpsController } from './conversation-chat-ops.controller';
 
 describe('ConversationsController', () => {
   let controller: ConversationsController;
+  let messages: ConversationMessagesController;
+  let chatOps: ConversationChatOpsController;
   let svc: any;
 
   beforeEach(() => {
@@ -20,7 +24,10 @@ describe('ConversationsController', () => {
       update: jest.fn().mockResolvedValue({}),
       sendMedia: jest.fn().mockResolvedValue({}),
     };
+    // All three controllers share the same ConversationsService.
     controller = new ConversationsController(svc);
+    messages = new ConversationMessagesController(svc);
+    chatOps = new ConversationChatOpsController(svc);
   });
 
   const USER = { id: 'u1', role: 'owner' } as any;
@@ -79,17 +86,17 @@ describe('ConversationsController', () => {
   });
 
   it('send + sendLegacy delegate', () => {
-    controller.send('c1', { text: 'hi' } as any, { id: 'u1' } as any);
-    controller.sendLegacy('c1', { text: 'yo' } as any, { id: 'u1' } as any);
+    messages.send('c1', { text: 'hi' } as any, { id: 'u1' } as any);
+    messages.sendLegacy('c1', { text: 'yo' } as any, { id: 'u1' } as any);
     expect(svc.send).toHaveBeenCalledTimes(2);
   });
 
   it('takeover/returnToAi/setAiMode/update/sendMedia delegate', () => {
-    controller.takeover('c1', { id: 'u1' } as any);
-    controller.returnToAi('c1', { id: 'u1' } as any);
+    chatOps.takeover('c1', { id: 'u1' } as any);
+    chatOps.returnToAi('c1', { id: 'u1' } as any);
     controller.setAiMode('c1', { aiMode: AiMode.ai_off } as any);
     controller.update('c1', { aiMode: AiMode.ai_on });
-    controller.sendMedia('c1', { mediaType: 'image', url: 'u' } as any, { id: 'u1' } as any);
+    messages.sendMedia('c1', { mediaType: 'image', url: 'u' } as any, { id: 'u1' } as any);
     expect(svc.takeover).toHaveBeenCalled();
     expect(svc.returnToAi).toHaveBeenCalled();
     expect(svc.setAiMode).toHaveBeenCalled();
@@ -99,7 +106,7 @@ describe('ConversationsController', () => {
 
   it('start delegates with the current user', () => {
     svc.startConversation = jest.fn().mockResolvedValue({ id: 'c1' });
-    controller.start({ accountId: 'a1', phoneNumber: '0812345678', name: 'Budi' } as any, { id: 'u1' } as any);
+    chatOps.start({ accountId: 'a1', phoneNumber: '0812345678', name: 'Budi' } as any, { id: 'u1' } as any);
     expect(svc.startConversation).toHaveBeenCalledWith('a1', '0812345678', 'Budi', 'u1');
   });
 

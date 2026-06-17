@@ -37,3 +37,6 @@ data/
 .npm-cache/
 .claude/
 nul
+
+# agent scratch
+.claude_*

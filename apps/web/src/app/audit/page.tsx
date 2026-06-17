@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   CaretLeft,
   CaretRight,
@@ -32,7 +32,7 @@ const dict: Dict = {
   sampaiTanggal: { id: 'Sampai tanggal', en: 'To date' },
   showDestructive: { id: 'Aksi berisiko saja', en: 'High-risk only' },
   cobaLagi: { id: 'Coba lagi', en: 'Try again' },
-  errLoad: { id: 'Gagal memuat audit log — periksa koneksi lalu coba lagi.', en: 'Failed to load the audit log — check your connection and try again.' },
+  errLoad: { id: 'Gagal memuat audit log — periksa koneksi lalu coba lagi.', en: 'Failed to load audit log — check your connection and try again.' },
   colWaktu: { id: 'Waktu', en: 'Time' },
   colPengguna: { id: 'Pengguna', en: 'User' },
   colAksi: { id: 'Aksi / Risiko', en: 'Action / Risk' },
@@ -231,13 +231,19 @@ export default function AuditPage() {
   params.set('limit', String(PAGE_SIZE));
   params.set('offset', String(page * PAGE_SIZE));
 
-  const { data, loading, error } = useApiQuery<{ data: AuditEntry[]; total: number }>(
+  const { data, loading, error, refetch } = useApiQuery<{ data: AuditEntry[]; total: number }>(
     `/audit-logs?${params}`,
     [page, entity, action, from, to],
   );
 
   const entries = data ? (highRiskOnly ? data.data.filter((e) => classifyRisk(e.action) === 'high') : data.data) : [];
   const total = data?.total ?? 0;
+
+  // Reset to the first page when filters change, so we don't request an
+  // out-of-range offset against a freshly-filtered result set.
+  useEffect(() => {
+    setPage(0);
+  }, [entity, action, from, to]);
 
   function handlePageChange(p: number) {
     setPage(p);
@@ -295,9 +301,10 @@ export default function AuditPage() {
           <Card className="mb-4 flex items-start gap-2 border-danger-200 bg-danger-50 p-3 dark:border-danger-700/40 dark:bg-danger-900/20">
             <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" aria-hidden="true" />
             <div>
-              <p className="text-[13px] font-medium text-danger-700 dark:text-danger-400">{error}</p>
+              <p className="text-[13px] font-medium text-danger-700 dark:text-danger-400">{t('errLoad')}</p>
+              <p className="text-[12px] text-danger-600/80 dark:text-danger-400/80">{error}</p>
               <button
-                onClick={() => load(page)}
+                onClick={() => refetch()}
                 className="mt-1 text-[13px] font-semibold text-danger-700 underline dark:text-danger-400"
               >
                 {t('cobaLagi')}

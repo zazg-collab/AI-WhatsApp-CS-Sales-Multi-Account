@@ -20,7 +20,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Field, TextareaField } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { SessionStatusBadge, getSessionLabel, isSessionBroken } from '@/components/ui/SessionStatusBadge';
+import { SessionStatusBadge, getSessionLabel } from '@/components/ui/SessionStatusBadge';
 import { useT, type Dict, useLang } from '@/lib/i18n';
 
 const dict: Dict = {
@@ -329,8 +329,6 @@ export default function AccountsPage() {
   const t = useT(dict);
   const { lang } = useLang();
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [qr, setQr] = useState<Record<string, string>>({});
   const [qrReceivedAt, setQrReceivedAt] = useState<Record<string, number>>({});
   const [pairingCode, setPairingCode] = useState<Record<string, string>>({});
@@ -413,22 +411,6 @@ export default function AccountsPage() {
   }, [load]);
 
   // Legacy: kept for compat but no longer called from inline form.
-  async function addAccount(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    try {
-      await api('/wa/accounts', {
-        method: 'POST',
-        body: JSON.stringify({ accountName: name, phoneNumber: phone }),
-      });
-      setName('');
-      setPhone('');
-      load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('addFailed'));
-    }
-  }
-
   function openAddModal() {
     setAddModalOpen(true);
     setAddStep('details');
@@ -601,7 +583,6 @@ export default function AccountsPage() {
         ) : (
           <ul className="space-y-3">
             {visibleAccounts.map((a) => {
-              const disconnected = isSessionBroken(a.sessionStatus);
               return (
                 <li key={a.id}>
                   <Card className="p-4">

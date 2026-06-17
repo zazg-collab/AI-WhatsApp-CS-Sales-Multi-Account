@@ -212,6 +212,12 @@ export default function CustomersPage() {
     return () => clearTimeout(handle);
   }, [search]);
 
+  // Reset to the first page whenever the active filters change, so we never
+  // query e.g. page 3 of a freshly-filtered (and shorter) result set.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, stageFilter, tagFilter]);
+
   useEffect(() => {
     loadCustomers();
   }, [loadCustomers]);

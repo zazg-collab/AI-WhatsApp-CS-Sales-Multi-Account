@@ -2,48 +2,34 @@ import {
   BadRequestException,
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   Patch,
-  Post,
   Query,
   Res,
-  UploadedFile,
   UseGuards,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiConsumes } from '@nestjs/swagger';
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import { ConversationsService } from './conversations.service';
-import { SendMessageDto } from './dto/send-message.dto';
-import { ApproveDraftDto } from './dto/approve-draft.dto';
 import { AiModeDto } from './dto/ai-mode.dto';
 import { SetBotDto } from './dto/set-bot.dto';
 import { ConversationStatusDto } from './dto/conversation-status.dto';
 import { AssignConversationDto } from './dto/assign-conversation.dto';
 import { LabelsDto } from './dto/labels.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
-import { SendMediaDto } from './dto/send-media.dto';
-import { StartConversationDto } from './dto/start-conversation.dto';
-import { ReactionDto, EditMessageDto, ValidateNumberDto } from './dto/message-actions.dto';
-import {
-  DisappearingMessagesDto,
-  ForwardMessageDto,
-  MuteChatDto,
-  SendContactDto,
-  SendLocationDto,
-} from './dto/wa-actions.dto';
-import { SendPollDto } from './dto/send-poll.dto';
 import { AiMode, ConversationStatus } from '@hermes/database';
 import { csvRow } from '../../common/csv.util';
 
-// PRD 14.3 — Conversations.
+// PRD 14.3 — Conversations: reads, CSV export, and conversation-level state
+// (workflow status, AI mode, bot, assignment, labels). Message-scoped actions
+// live in ConversationMessagesController; chat operations + lifecycle live in
+// ConversationChatOpsController. The greedy single-segment `@Get(':id')` and
+// `@Patch(':id')` routes are kept here, after their specific siblings, so route
+// matching order is preserved.
 @ApiTags('conversations')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -76,55 +62,6 @@ export class ConversationsController {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="conversations.csv"');
     res.send(header + rows);
-  }
-
-  @ApiOperation({ summary: 'Start/open a chat with any phone number (WhatsApp-desktop style)' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post('start')
-  start(@Body() dto: StartConversationDto, @CurrentUser() user: AuthUser) {
-    return this.conversations.startConversation(dto.accountId, dto.phoneNumber, dto.name, user.id);
-  }
-
-  @ApiOperation({ summary: 'Check if a phone number is registered on WhatsApp' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post('validate-number')
-  validateNumber(@Body() dto: ValidateNumberDto) {
-    return this.conversations.validateNumber(dto.accountId, dto.phoneNumber);
-  }
-
-  @ApiOperation({ summary: 'React to a message with an emoji (empty clears)' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/messages/:messageId/react')
-  react(
-    @Param('id') id: string,
-    @Param('messageId') messageId: string,
-    @Body() dto: ReactionDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.reactToMessage(id, messageId, dto.emoji, user.id);
-  }
-
-  @ApiOperation({ summary: 'Edit a message you sent' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Patch(':id/messages/:messageId')
-  editMessage(
-    @Param('id') id: string,
-    @Param('messageId') messageId: string,
-    @Body() dto: EditMessageDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.editMessage(id, messageId, dto.text, user.id);
-  }
-
-  @ApiOperation({ summary: 'Delete a message for everyone (revoke)' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Delete(':id/messages/:messageId')
-  deleteMessage(
-    @Param('id') id: string,
-    @Param('messageId') messageId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.deleteMessage(id, messageId, user.id);
   }
 
   @ApiOperation({ summary: 'Total number of conversations with unread messages' })
@@ -207,190 +144,6 @@ export class ConversationsController {
   }
 
   @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/messages')
-  send(
-    @Param('id') id: string,
-    @Body() dto: SendMessageDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.send(id, user.id, dto.text, dto.quotedMessageId);
-  }
-
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/send')
-  sendLegacy(
-    @Param('id') id: string,
-    @Body() dto: SendMessageDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.send(id, user.id, dto.text);
-  }
-
-  @ApiOperation({ summary: 'Approve & send a supervised AI draft' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/messages/:messageId/approve')
-  approveDraft(
-    @Param('id') id: string,
-    @Param('messageId') messageId: string,
-    @Body() dto: ApproveDraftDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.approveDraft(id, messageId, user.id, dto.text);
-  }
-
-  @ApiOperation({ summary: 'Block/discard a supervised AI draft' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/messages/:messageId/block')
-  blockDraft(
-    @Param('id') id: string,
-    @Param('messageId') messageId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.blockDraft(id, messageId, user.id);
-  }
-
-  @ApiOperation({ summary: 'Mark customer messages as read (WhatsApp blue ticks)' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/read')
-  markRead(@Param('id') id: string) {
-    return this.conversations.markRead(id);
-  }
-
-  @ApiOperation({ summary: 'Send a WhatsApp location message' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/location')
-  sendLocation(
-    @Param('id') id: string,
-    @Body() dto: SendLocationDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.sendLocation(id, user.id, dto.latitude, dto.longitude, dto.name);
-  }
-
-  @ApiOperation({ summary: 'Send a WhatsApp poll' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/poll')
-  sendPoll(
-    @Param('id') id: string,
-    @Body() dto: SendPollDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.sendPoll(id, user.id, dto.question, dto.options, dto.selectableCount ?? 1);
-  }
-
-  @ApiOperation({ summary: 'Send WhatsApp contact cards' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/contacts')
-  sendContacts(
-    @Param('id') id: string,
-    @Body() dto: SendContactDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.sendContacts(id, user.id, dto.contacts);
-  }
-
-  @ApiOperation({ summary: 'Forward a stored message to another WhatsApp phone number' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/messages/:messageId/forward')
-  forwardMessage(
-    @Param('id') id: string,
-    @Param('messageId') messageId: string,
-    @Body() dto: ForwardMessageDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.forwardMessage(id, messageId, dto.toPhone, user.id);
-  }
-
-  @ApiOperation({ summary: 'Block a WhatsApp contact' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/block-contact')
-  blockContact(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.setContactBlocked(id, true, user.id);
-  }
-
-  @ApiOperation({ summary: 'Unblock a WhatsApp contact' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/unblock-contact')
-  unblockContact(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.setContactBlocked(id, false, user.id);
-  }
-
-  @ApiOperation({ summary: 'Mute or unmute a WhatsApp chat' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/mute')
-  muteChat(
-    @Param('id') id: string,
-    @Body() dto: MuteChatDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.setChatMuted(id, dto.mute !== false, user.id);
-  }
-
-  @ApiOperation({ summary: 'Archive or unarchive a WhatsApp chat' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/archive')
-  archiveChat(
-    @Param('id') id: string,
-    @Body() dto: { archive?: boolean },
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.setChatArchived(id, dto.archive !== false, user.id);
-  }
-
-  @ApiOperation({ summary: 'Pin or unpin a WhatsApp chat' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/pin')
-  pinChat(
-    @Param('id') id: string,
-    @Body() dto: { pin?: boolean },
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.setChatPinned(id, dto.pin !== false, user.id);
-  }
-
-  @ApiOperation({ summary: 'Star or unstar a WhatsApp message' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/messages/:messageId/star')
-  starMessage(
-    @Param('id') id: string,
-    @Param('messageId') messageId: string,
-    @Body() dto: { star?: boolean },
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.setMessageStarred(id, messageId, dto.star !== false, user.id);
-  }
-
-  @ApiOperation({ summary: 'Enable/disable disappearing messages for a WhatsApp chat' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/disappearing-messages')
-  disappearingMessages(
-    @Param('id') id: string,
-    @Body() dto: DisappearingMessagesDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.setDisappearingMessages(id, dto.enable, user.id, dto.duration);
-  }
-
-  @ApiOperation({ summary: 'Send admin typing presence to WhatsApp' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/typing')
-  typing(@Param('id') id: string, @Body() dto: { typing?: boolean }) {
-    return this.conversations.sendTyping(id, dto.typing !== false);
-  }
-
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/takeover')
-  takeover(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.takeover(id, user.id);
-  }
-
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/return-to-ai')
-  returnToAi(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.returnToAi(id, user.id);
-  }
-
-  @Roles('admin', 'supervisor', 'owner')
   @Patch(':id/ai-mode')
   setAiMode(@Param('id') id: string, @Body() dto: AiModeDto) {
     return this.conversations.setAiMode(id, dto.aiMode);
@@ -440,36 +193,5 @@ export class ConversationsController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateConversationDto) {
     return this.conversations.update(id, dto);
-  }
-
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/media')
-  sendMedia(
-    @Param('id') id: string,
-    @Body() dto: SendMediaDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.conversations.sendMedia(id, user.id, dto.mediaType, dto.url, dto.caption);
-  }
-
-  @ApiOperation({ summary: 'Upload & send a media file from the admin device' })
-  @ApiConsumes('multipart/form-data')
-  @Roles('admin', 'supervisor', 'owner')
-  @Post(':id/media/upload')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      // A10: actually honour WA_MEDIA_MAX_BYTES (decorators can't use
-      // ConfigService, so read the env directly; default 25MB).
-      limits: { fileSize: Number(process.env.WA_MEDIA_MAX_BYTES) || 25 * 1024 * 1024 },
-    }),
-  )
-  uploadMedia(
-    @Param('id') id: string,
-    @UploadedFile() file: { buffer: Buffer; mimetype: string; originalname?: string } | undefined,
-    @Body('caption') caption: string | undefined,
-    @CurrentUser() user: AuthUser,
-  ) {
-    if (!file?.buffer?.length) throw new BadRequestException('No file uploaded');
-    return this.conversations.sendUploadedMedia(id, user.id, file, caption);
   }
 }

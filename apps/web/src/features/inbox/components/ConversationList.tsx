@@ -38,6 +38,9 @@ interface ConversationListProps {
   error?: string | null;
   filter?: 'all' | 'attention' | 'sla' | 'unassigned';
   onFilterChange?: (filter: 'all' | 'attention' | 'sla' | 'unassigned') => void;
+  /** Controlled search box — the page debounces this into a server-side query. */
+  searchValue?: string;
+  onSearchChange?: (q: string) => void;
 }
 
 const filters = [
@@ -58,9 +61,10 @@ export function ConversationList({
   error,
   filter = 'all',
   onFilterChange,
+  searchValue = '',
+  onSearchChange,
 }: ConversationListProps) {
   const t = useT(dict);
-  const [search, setSearch] = useState('');
   const [startAccountId, setStartAccountId] = useState('');
   const [startPhone, setStartPhone] = useState('');
   const [startName, setStartName] = useState('');
@@ -95,21 +99,10 @@ export function ConversationList({
     }
   }, [onStartChat, startAccountId, startPhone, startName]);
 
-  // Filter conversations by search + filter
+  // Search is server-side (page debounces `searchValue` into the query). Here we
+  // only apply the client-side chip filter to the already-matched results.
   const visible = conversations.filter((c) => {
-    const q = search.toLowerCase();
-    const matchesSearch =
-      !q ||
-      c.customer.name?.toLowerCase().includes(q) ||
-      c.customer.phoneNumber.includes(q) ||
-      c.groupSubject?.toLowerCase().includes(q);
-
-    if (!matchesSearch) return false;
-
-    // Apply status filters
-    if (filter === 'attention') {
-      return c.status === 'open' || c.takeoverStatus === 'waiting_admin';
-    }
+    if (filter === 'attention') return c.takeoverStatus === 'waiting_admin' || c.aiMode === 'ai_paused';
     if (filter === 'sla') return !!c.slaBreachedAt;
     if (filter === 'unassigned') return !c.assignedAdmin;
     return true; // 'all'
@@ -129,8 +122,8 @@ export function ConversationList({
           {/* Search icon would go here */}
           <input
             type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchValue}
+            onChange={(e) => onSearchChange?.(e.target.value)}
             placeholder={t('searchPlaceholder')}
             aria-label={t('searchPlaceholder')}
             className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"

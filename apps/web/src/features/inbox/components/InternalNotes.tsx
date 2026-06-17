@@ -19,6 +19,8 @@ export function InternalNotes({
   const [draftNotes, setDraftNotes] = useState(conversation.customer.notes || '');
   const [saving, setSaving] = useState(false);
 
+  const busy = saving || loading;
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -54,7 +56,7 @@ export function InternalNotes({
           <textarea
             value={draftNotes}
             onChange={(e) => setDraftNotes(e.target.value)}
-            disabled={saving}
+            disabled={busy}
             rows={4}
             className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
             placeholder="Add internal notes..."
@@ -62,7 +64,7 @@ export function InternalNotes({
           <div className="flex gap-2">
             <Button
               size="sm"
-              disabled={saving}
+              disabled={busy}
               onClick={handleSave}
               className="flex-1"
             >
@@ -71,7 +73,7 @@ export function InternalNotes({
             <Button
               variant="ghost"
               size="sm"
-              disabled={saving}
+              disabled={busy}
               onClick={() => {
                 setEditing(false);
                 setDraftNotes(conversation.customer.notes || '');

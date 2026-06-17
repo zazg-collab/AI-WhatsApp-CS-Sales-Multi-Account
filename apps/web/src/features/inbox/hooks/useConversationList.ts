@@ -33,23 +33,26 @@ export function useConversationList() {
 
   useEffect(() => {
     const socket = getSocket();
-    if (!socket) return undefined;
-    const handleNewMessage = (data: any) => {
-      setList((prev) =>
-        prev.map((conv) =>
-          conv.id === data.conversationId
-            ? {
-                ...conv,
-                lastMessage: data.message?.content ?? null,
-                lastMessageAt: new Date().toISOString(),
-                unreadCount: (conv.unreadCount ?? 0) + 1,
-              }
-            : conv,
-        ),
-      );
-    };
-    socket.on('message:new', handleNewMessage);
-    return () => socket.off('message:new', handleNewMessage);
+    if (socket) {
+      const handleNewMessage = (data: any) => {
+        setList((prev) =>
+          prev.map((conv) =>
+            conv.id === data.conversationId
+              ? {
+                  ...conv,
+                  lastMessage: data.message?.content ?? null,
+                  lastMessageAt: new Date().toISOString(),
+                  unreadCount: (conv.unreadCount ?? 0) + 1,
+                }
+              : conv,
+          ),
+        );
+      };
+      socket.on('message:new', handleNewMessage);
+      return () => {
+        socket.off('message:new', handleNewMessage);
+      };
+    }
   }, []);
 
   return {

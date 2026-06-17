@@ -205,8 +205,12 @@ export default function CampaignsPage() {
 
   const canManage = role === 'owner' || role === 'supervisor' || role === 'admin';
   const canApprove = role === 'owner' || role === 'supervisor';
+  // Create-form account (gates Preview / Create draft).
   const selectedAccount = accounts.find(a => a.id === whatsappAccountId);
   const isSelectedAccountConnected = selectedAccount?.sessionStatus === 'connected';
+  // The open campaign's OWN account — this is what gates sending, not the form's.
+  const detailAccount = detail ? accounts.find(a => a.id === detail.whatsappAccount?.id) : undefined;
+  const isDetailAccountConnected = detailAccount?.sessionStatus === 'connected';
 
   const selectedCampaign = useMemo(
     () => campaigns.find((campaign) => campaign.id === selectedId) ?? null,
@@ -529,19 +533,19 @@ export default function CampaignsPage() {
                 </pre>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {canManage && ['draft', 'pending_approval'].includes(detail.status) && (
-                    <Button variant="review" size="sm" onClick={() => runAction('submit')} disabled={submitting || !isSelectedAccountConnected}>
+                    <Button variant="review" size="sm" onClick={() => runAction('submit')} disabled={submitting}>
                       <PaperPlaneTilt className="h-4 w-4" aria-hidden="true" />
                       {t('submitApproval')}
                     </Button>
                   )}
                   {canApprove && detail.status === 'pending_approval' && (
-                    <Button size="sm" onClick={() => runAction('approve')} disabled={submitting || !isSelectedAccountConnected}>
+                    <Button size="sm" onClick={() => runAction('approve')} disabled={submitting}>
                       <CheckCircle className="h-4 w-4" aria-hidden="true" />
                       {t('approve')}
                     </Button>
                   )}
                   {canApprove && ['approved', 'paused', 'scheduled'].includes(detail.status) && (
-                    <Button size="sm" onClick={() => runAction('start')} disabled={submitting || !isSelectedAccountConnected}>
+                    <Button size="sm" onClick={() => runAction('start')} disabled={submitting || !isDetailAccountConnected} title={!isDetailAccountConnected ? 'Campaign account is disconnected' : undefined}>
                       <PaperPlaneTilt className="h-4 w-4" aria-hidden="true" />
                       {t('startQueue')}
                     </Button>

@@ -241,6 +241,7 @@ function BotModal({
   accounts,
   onClose,
   onSaved,
+  onChanged,
 }: {
   bot: Bot | null;
   personas: Persona[];
@@ -248,6 +249,8 @@ function BotModal({
   accounts: WaAccount[];
   onClose: () => void;
   onSaved: () => void;
+  /** Refresh parent data without closing the modal (used after assigning an account). */
+  onChanged?: () => void;
 }) {
   const t = useT(dict);
   const [form, setForm] = useState<BotFormData>({
@@ -263,6 +266,8 @@ function BotModal({
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [showActivate, setShowActivate] = useState(false);
   const [localPersonas, setLocalPersonas] = useState(personas);
+  // Track assigned accounts locally so the badges update without closing the modal.
+  const [assignedIds, setAssignedIds] = useState<string[]>(() => bot?.accounts.map((a) => a.id) ?? []);
 
   // Flipping a bot to ai_on means it autonomously messages real customers.
   // Require an explicit confirmation when turning that on (new bot, or a bot
@@ -308,7 +313,10 @@ function BotModal({
     if (!bot) return;
     try {
       await api(`/bots/${bot.id}/assign/${accountId}`, { method: 'POST' });
-      onSaved();
+      // Reflect the assignment immediately and refresh the parent list, but keep
+      // the modal open so multiple accounts can be assigned in one session.
+      setAssignedIds((prev) => (prev.includes(accountId) ? prev : [...prev, accountId]));
+      onChanged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errAssignAccount'));
     }
@@ -396,7 +404,7 @@ function BotModal({
             <h3 className="mb-2 text-xs font-semibold text-gray-500">{t('assignToAccounts')}</h3>
             <div className="space-y-1.5">
               {accounts.map((a) => {
-                const assigned = bot.accounts.some((ba) => ba.id === a.id);
+                const assigned = assignedIds.includes(a.id);
                 const autonomousButOffline = form.defaultAiMode === 'ai_on' && a.sessionStatus !== 'connected';
                 return (
                   <div key={a.id} className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800">
@@ -610,6 +618,7 @@ export default function BotsPage() {
               setEditBot(undefined);
               load();
             }}
+            onChanged={load}
           />
         )}
 

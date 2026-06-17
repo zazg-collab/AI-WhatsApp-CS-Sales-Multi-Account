@@ -1,6 +1,5 @@
 'use client';
 
-import { type Icon as PhosphorIcon } from '@phosphor-icons/react';
 import type { ConvDetail } from '../inbox.types';
 
 function clockTime(iso: string): string {

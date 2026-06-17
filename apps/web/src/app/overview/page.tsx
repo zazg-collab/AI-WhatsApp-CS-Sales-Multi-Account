@@ -28,6 +28,8 @@ const dict: Dict = {
   fullAnalytics: { id: 'Analytics lengkap', en: 'Full analytics' },
   errTitle: { id: 'Gagal memuat overview', en: 'Failed to load overview' },
   retry: { id: 'Coba lagi', en: 'Try again' },
+  partialTitle: { id: 'Sebagian data gagal dimuat', en: 'Some data failed to load' },
+  partialDetail: { id: 'Bagian berikut tidak dapat dimuat: {sections}. Data lain tetap ditampilkan.', en: 'These sections could not load: {sections}. Other data is still shown.' },
   attnRequired: { id: 'Perlu tindakan', en: 'Needs attention' },
   needDecision: { id: 'Percakapan butuh keputusan', en: 'Conversations needing a decision' },
   openInbox: { id: 'Buka inbox', en: 'Open inbox' },
@@ -277,6 +279,17 @@ export default function OverviewPage() {
           </Card>
         ) : (
           <>
+        {/* Non-blocking partial-failure notice: some sections loaded, others didn't. */}
+        {Object.keys(sectionErrors).length > 0 && (
+          <Card className="border-review-200 bg-review-50 p-3 dark:border-review-700/40 dark:bg-review-900/20">
+            <p className="text-[13px] font-semibold text-review-700 dark:text-review-400">
+              {t('partialTitle')}
+            </p>
+            <p className="mt-0.5 text-[12px] text-review-700/90 dark:text-review-400/90">
+              {t('partialDetail', { sections: Object.keys(sectionErrors).join(', ') })}
+            </p>
+          </Card>
+        )}
         {/* Attention queues */}
         <section aria-labelledby="queues-h">
           <h2 id="queues-h" className="mb-3 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-400">
