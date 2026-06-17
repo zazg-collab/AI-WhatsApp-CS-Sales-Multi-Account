@@ -294,12 +294,12 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="lg:col-span-1">
                 <Panel title={t('leadFunnel')}>
-                  {leadFunnel.length === 0 ? (
+                  {(leadFunnel?.length ?? 0) === 0 ? (
                     <Empty />
                   ) : (
                     <div className="space-y-3">
-                      {leadFunnel.map((item) => {
-                        const total = leadFunnel.reduce((s, i) => s + i.count, 0);
+                      {leadFunnel?.map((item) => {
+                        const total = leadFunnel?.reduce((s, i) => s + i.count, 0) ?? 0;
                         const pct = total > 0 ? Math.round((item.count / total) * 100) : 0;
                         return (
                           <Bar
@@ -348,11 +348,11 @@ export default function AnalyticsPage() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="lg:col-span-1">
                 <Panel title={t('aiModeDistribution')}>
-                  {aiModeBreakdown.length === 0 ? (
+                  {(aiModeBreakdown?.length ?? 0) === 0 ? (
                     <Empty />
                   ) : (
                     <div className="space-y-3">
-                      {aiModeBreakdown.map((item) => (
+                      {aiModeBreakdown?.map((item) => (
                         <Bar
                           key={item.mode}
                           label={MODE_LABEL_KEY[item.mode] ? t(MODE_LABEL_KEY[item.mode]) : item.mode}
