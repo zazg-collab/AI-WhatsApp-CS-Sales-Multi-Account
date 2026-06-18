@@ -4,6 +4,9 @@ import { CampaignStatus, CampaignRecipientStatus } from '@hermes/database';
 jest.mock('../wa/wa.service', () => ({ WaService: class {} }));
 
 import { CampaignsService } from './campaigns.service';
+import { CampaignCrudService } from './campaign-crud.service';
+import { CampaignQueueService } from './campaign-queue.service';
+import { CampaignSendService } from './campaign-send.service';
 
 describe('CampaignsService', () => {
   let service: CampaignsService;
@@ -45,7 +48,10 @@ describe('CampaignsService', () => {
     events = { emit: jest.fn(), emitToAccount: jest.fn() };
     queue = { add: jest.fn().mockResolvedValue({}), getJob: jest.fn() };
     const config = { get: jest.fn().mockReturnValue(undefined) };
-    service = new CampaignsService(prisma, audit, wa, storage, events, queue, config as any);
+    const crud = new CampaignCrudService(prisma, audit, queue, config as any);
+    const queueSvc = new CampaignQueueService(crud, audit);
+    const sendSvc = new CampaignSendService(crud, wa, storage, events, audit);
+    service = new CampaignsService(crud, queueSvc, sendSvc);
   });
 
   describe('list', () => {
@@ -138,7 +144,10 @@ describe('CampaignsService', () => {
     });
     it('enforces the env-configured daily send cap (M8)', async () => {
       const config = { get: (k: string) => (k === 'CAMPAIGN_MAX_DAILY_SENDS' ? '2' : undefined) };
-      const capped = new CampaignsService(prisma, audit, wa, storage, events, queue, config as any);
+      const cappedCrud = new CampaignCrudService(prisma, audit, queue, config as any);
+      const cappedQueue = new CampaignQueueService(cappedCrud, audit);
+      const cappedSend = new CampaignSendService(cappedCrud, wa, storage, events, audit);
+      const capped = new CampaignsService(cappedCrud, cappedQueue, cappedSend);
       prisma.campaign.findUnique.mockResolvedValue({
         id: 'cmp1', status: CampaignStatus.approved, whatsappAccountId: 'a1',
       });

@@ -6,6 +6,9 @@ import { MediaModule } from '../media/media.module';
 import { CampaignsController } from './campaigns.controller';
 import { CampaignsProcessor } from './campaigns.processor';
 import { CampaignsService } from './campaigns.service';
+import { CampaignCrudService } from './campaign-crud.service';
+import { CampaignQueueService } from './campaign-queue.service';
+import { CampaignSendService } from './campaign-send.service';
 
 @Module({
   imports: [
@@ -15,7 +18,7 @@ import { CampaignsService } from './campaigns.service';
     MediaModule,
   ],
   controllers: [CampaignsController],
-  providers: [CampaignsService, CampaignsProcessor],
+  providers: [CampaignsService, CampaignCrudService, CampaignQueueService, CampaignSendService, CampaignsProcessor],
   exports: [CampaignsService],
 })
 export class CampaignsModule {}
