@@ -118,7 +118,9 @@ const dict: Dict = {
   waDegraded: { id: 'Sebagian akun WhatsApp terputus', en: 'Some WhatsApp accounts disconnected' },
   waDown: { id: 'Semua akun WhatsApp terputus', en: 'All WhatsApp accounts disconnected' },
   waNone: { id: 'Belum ada akun WhatsApp', en: 'No WhatsApp accounts yet' },
-  appOffline: { id: 'Aplikasi offline', en: 'App offline' },
+  appOffline: { id: 'Realtime terputus', en: 'Realtime offline' },
+  apiOffline: { id: 'API mati', en: 'API offline' },
+  apiChecking: { id: 'Cek koneksi…', en: 'Checking…' },
 };
 
 export function Sidebar() {
@@ -129,6 +131,8 @@ export function Sidebar() {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
+  // Backend REST API reachability (null = checking on first paint).
+  const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   // WhatsApp account health: how many Baileys sessions are connected vs total.
   const [waHealth, setWaHealth] = useState<{ connected: number; total: number } | null>(null);
 
@@ -153,13 +157,25 @@ export function Sidebar() {
         })
         .catch(() => {});
     };
+    // Backend reachability — single source of truth for "is the API up?",
+    // replacing the per-page header badge.
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+    const checkApi = () => {
+      if (typeof fetch !== 'function') { setApiOnline(false); return; }
+      fetch(`${apiUrl}/health`)
+        .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+        .then((res: { status?: string }) => setApiOnline(res.status === 'ok'))
+        .catch(() => setApiOnline(false));
+    };
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
     refreshUnread();
     refreshWaHealth();
-    // Poll WA health periodically so the rail reflects reconnects/drops.
+    checkApi();
+    // Poll WA health + API reachability so the rail reflects reconnects/drops.
     const waTimer = setInterval(refreshWaHealth, 30_000);
+    const apiTimer = setInterval(checkApi, 30_000);
 
     const socket = getSocket();
     if (socket) {
@@ -172,6 +188,7 @@ export function Sidebar() {
     return () => {
       if (timer) clearTimeout(timer);
       clearInterval(waTimer);
+      clearInterval(apiTimer);
       if (socket) {
         socket.off('message:new', refreshUnread);
         socket.off('conversation:updated', refreshUnread);
@@ -293,27 +310,37 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Connection health: WhatsApp account status (the operational pulse),
-          plus an app-offline override when the socket itself drops. */}
+      {/* Single system-health row — the one place for connectivity status.
+          Priority: API down (nothing works) > realtime socket down > WhatsApp
+          account health. Replaces the old per-page "API online/offline" badge. */}
       {(() => {
-        const offline = !isOnline;
         const connected = waHealth?.connected ?? 0;
         const total = waHealth?.total ?? 0;
-        const tone = offline || (total > 0 && connected === 0)
-          ? 'down'
-          : total === 0
-            ? 'none'
-            : connected < total
-              ? 'degraded'
-              : 'ok';
+        let tone: 'ok' | 'degraded' | 'down' | 'none' | 'checking';
+        let labelKey: string;
+        let text: string;
+        if (apiOnline === false) {
+          tone = 'down'; labelKey = 'apiOffline'; text = t('apiOffline');
+        } else if (apiOnline === null) {
+          tone = 'checking'; labelKey = 'apiChecking'; text = t('apiChecking');
+        } else if (!isOnline) {
+          tone = 'degraded'; labelKey = 'appOffline'; text = t('appOffline');
+        } else if (total === 0) {
+          tone = 'none'; labelKey = 'waNone'; text = t('waNone');
+        } else if (connected === 0) {
+          tone = 'down'; labelKey = 'waDown'; text = `WA ${connected}/${total}`;
+        } else if (connected < total) {
+          tone = 'degraded'; labelKey = 'waDegraded'; text = `WA ${connected}/${total}`;
+        } else {
+          tone = 'ok'; labelKey = 'waConnected'; text = `WA ${connected}/${total}`;
+        }
         const dot = {
           ok: 'bg-emerald-500',
           degraded: 'bg-amber-500 animate-pulse',
           down: 'bg-danger-500 animate-pulse',
           none: 'bg-gray-500',
+          checking: 'bg-gray-500 animate-pulse',
         }[tone];
-        const labelKey = offline ? 'appOffline' : tone === 'down' ? 'waDown' : tone === 'degraded' ? 'waDegraded' : tone === 'none' ? 'waNone' : 'waConnected';
-        const text = offline ? t('appOffline') : total > 0 ? `WA ${connected}/${total}` : t('waNone');
         return (
           <Link
             href="/accounts"
