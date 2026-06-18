@@ -112,9 +112,9 @@ export function IntelligencePanel({
       )}
       <aside
         className={cn(
-          'flex-col border-l border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900',
+          'flex flex-col min-h-0 border-l border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900',
           // desktop xl+: fills the wrapper div (width controlled by parent for resizing)
-          'xl:static xl:z-auto xl:flex xl:w-full xl:shadow-none',
+          'xl:static xl:z-auto xl:w-full xl:shadow-none',
           // below xl: slide-over drawer toggled by `open`
           'fixed inset-y-0 right-0 z-40 w-80 max-w-[85vw] shadow-xl',
           open ? 'flex' : 'hidden xl:flex',
