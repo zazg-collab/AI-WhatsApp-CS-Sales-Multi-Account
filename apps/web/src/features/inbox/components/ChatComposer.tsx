@@ -145,8 +145,8 @@ export function ChatComposer({
         </div>
       )}
 
-      {/* Text input */}
-      <div className="flex gap-2">
+      {/* Text input + actions (compact single-row layout) */}
+      <div className="flex items-end gap-2">
         <textarea
           ref={textareaRef}
           value={composerValue}
@@ -157,7 +157,7 @@ export function ChatComposer({
               ? 'Edit sent message'
               : quoteMessage
                 ? 'Reply with quoted message'
-                : 'Write a reply, or edit the AI draft above'
+                : 'Write a reply...'
           }
           disabled={disabled || loading}
           rows={3}
@@ -165,20 +165,8 @@ export function ChatComposer({
           aria-label="Message input"
         />
 
-        <div className="flex flex-col gap-2">
-          {/* Send button */}
-          <Button
-            size="sm"
-            disabled={!composerValue.trim() || sending || disabled}
-            onClick={handleSend}
-            className="h-full"
-            aria-label="Send message"
-          >
-            <PaperPlaneTilt className="h-4 w-4" />
-            <span className="hidden sm:inline">Send</span>
-          </Button>
-
-          {/* Quick replies */}
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Quick replies popover */}
           {quickReplies.length > 0 && onApplyQuickReply && (
             <div className="relative">
               <Button
@@ -188,6 +176,7 @@ export function ChatComposer({
                 onClick={() => toggle('quick')}
                 aria-label="Quick replies"
                 title="Quick replies"
+                className="p-2"
               >
                 <Lightning className="h-4 w-4" aria-hidden="true" />
               </Button>
@@ -211,7 +200,7 @@ export function ChatComposer({
             </div>
           )}
 
-          {/* Media menu */}
+          {/* Media menu popover */}
           <div className="relative">
             <Button
               variant="ghost"
@@ -219,6 +208,7 @@ export function ChatComposer({
               disabled={disabled || loading}
               onClick={() => toggle('media')}
               aria-label="Attach media"
+              className="p-2"
             >
               <Paperclip className="h-4 w-4" />
             </Button>
@@ -269,6 +259,17 @@ export function ChatComposer({
               </div>
             </Popover>
           </div>
+
+          {/* Send button */}
+          <Button
+            size="sm"
+            disabled={!composerValue.trim() || sending || disabled}
+            onClick={handleSend}
+            aria-label="Send message"
+            className="p-2 shrink-0"
+          >
+            <PaperPlaneTilt className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
