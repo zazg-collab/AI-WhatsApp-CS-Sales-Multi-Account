@@ -55,9 +55,11 @@ export default function CustomersPage() {
           </div>
         </section>
 
-        {/* Bulk action bar */}
+        {/* Bulk action bar. On mobile it only appears once contacts are
+            selected, so the list stays the primary content; desktop always
+            shows it (dimmed when nothing is selected). */}
         {canBulkEdit && (
-          <section className={`border-b border-gray-200 px-5 py-3 transition-colors dark:border-gray-800 ${selectedCount > 0 ? 'bg-gray-50 dark:bg-gray-950' : 'bg-gray-50/50 dark:bg-gray-950/50'}`}>
+          <section className={`border-b border-gray-200 px-5 py-3 transition-colors dark:border-gray-800 ${selectedCount > 0 ? 'bg-gray-50 dark:bg-gray-950' : 'hidden bg-gray-50/50 md:block dark:bg-gray-950/50'}`}>
             <div className="mb-2 text-xs text-gray-500 dark:text-gray-400">
               <span className={`font-semibold ${selectedCount > 0 ? 'text-hermes-600' : 'text-gray-400'}`}>{selectedCount}</span> {t('selectedCount')}
               <span className="ml-2 text-gray-400">{t('bulkLimit')}</span>

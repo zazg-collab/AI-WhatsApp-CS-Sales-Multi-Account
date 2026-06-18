@@ -30,6 +30,11 @@ const dict: Dict = {
   apiKeySet: { id: 'Tersimpan — kosongkan untuk tidak mengubah', en: 'Stored — leave blank to keep unchanged' },
   apiKeyEmpty: { id: 'Belum diatur', en: 'Not set' },
   model: { id: 'Model default', en: 'Default model' },
+  hermesModel: { id: 'Model supervisor Hermes', en: 'Hermes supervisor model' },
+  hermesModelHint: {
+    id: 'Dipakai Hermes untuk review/ask/insight. Kosongkan untuk pakai model default. Disarankan model yang lebih kuat dari bot CS.',
+    en: 'Used by Hermes for review/ask/insight. Leave empty to reuse the default model. A stronger model than the CS bot is recommended.',
+  },
   loadModels: { id: 'Muat daftar model', en: 'Load model list' },
   temperature: { id: 'Temperature (0–2)', en: 'Temperature (0–2)' },
   timeout: { id: 'Timeout (ms)', en: 'Timeout (ms)' },
@@ -67,7 +72,7 @@ const dict: Dict = {
 type Tab = 'ai' | 'wa' | 'notif' | 'hermes' | 'campaign';
 
 interface SettingsShape {
-  ai: { baseUrl: string; model: string; temperature: number; timeoutMs: number; apiKeySet: boolean };
+  ai: { baseUrl: string; model: string; hermesModel: string; temperature: number; timeoutMs: number; apiKeySet: boolean };
   wa: { humanDelayMinMs: number; humanDelayMaxMs: number; typingPerCharMs: number; typingMinMs: number; typingMaxMs: number };
   notifications: { hermesNotifyTarget: string };
   sla: { responseMinutes: number };
@@ -140,6 +145,7 @@ export default function SettingsPage() {
         payload.ai = {
           baseUrl: data.ai.baseUrl,
           model: data.ai.model,
+          hermesModel: data.ai.hermesModel ?? '',
           temperature: Number(data.ai.temperature),
           timeoutMs: Number(data.ai.timeoutMs),
           ...(apiKeyInput.trim() ? { apiKey: apiKeyInput.trim() } : {}),
@@ -263,6 +269,13 @@ export default function SettingsPage() {
                     </Button>
                   </div>
                   {modelsMsg && <p className="mt-1 text-xs text-gray-400">{modelsMsg}</p>}
+                </Field>
+                <Field label={t('hermesModel')}>
+                  <input className={fieldCls} disabled={!canEdit} list="ai-models"
+                    value={data.ai.hermesModel ?? ''}
+                    placeholder={data.ai.model}
+                    onChange={(e) => patch('ai', 'hermesModel', e.target.value)} />
+                  <p className="mt-1 text-xs text-gray-400">{t('hermesModelHint')}</p>
                 </Field>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Field label={t('temperature')}>

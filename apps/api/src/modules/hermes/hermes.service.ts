@@ -148,7 +148,7 @@ export class HermesService {
           content: `Draft jawaban AI yang akan dikirim:\n"""${draftText}"""\n\nNilai draft ini. Balas HANYA JSON.`,
         },
       ],
-      { temperature: 0, json: true, maxTokens: 350 },
+      { temperature: 0, json: true, maxTokens: 350, model: await this.provider.hermesModel() },
     );
 
     return this.parse(raw);
@@ -336,7 +336,7 @@ Beri jawaban ringkas, actionable, dalam Bahasa Indonesia. Jika relevan, sebutkan
         { role: 'system', content: `${system}\n\nDATA:\n${context}` },
         { role: 'user', content: question },
       ],
-      { temperature: 0.3, maxTokens: 600 },
+      { temperature: 0.3, maxTokens: 600, model: await this.provider.hermesModel() },
     );
     return { answer, via: 'model' };
   }
@@ -411,7 +411,7 @@ Beri jawaban ringkas, actionable, dalam Bahasa Indonesia. Jika relevan, sebutkan
           { role: 'system', content: `${system}\n\nDATA:\n${context}` },
           { role: 'user', content: question },
         ],
-        { temperature: 0.3, maxTokens: 600 },
+        { temperature: 0.3, maxTokens: 600, model: await this.provider.hermesModel() },
       ));
 
     return { bot: bot.botName, metrics, insight };

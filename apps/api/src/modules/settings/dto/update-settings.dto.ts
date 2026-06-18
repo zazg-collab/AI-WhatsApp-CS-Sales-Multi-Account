@@ -19,6 +19,10 @@ class AiSettingsDto {
   @IsOptional() @IsString()
   model?: string;
 
+  // Hermes supervisor model. Empty string = fall back to `model`.
+  @IsOptional() @IsString()
+  hermesModel?: string;
+
   @IsOptional() @IsNumber() @Min(0) @Max(2)
   temperature?: number;
 

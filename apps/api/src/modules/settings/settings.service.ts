@@ -39,6 +39,7 @@ export class SettingsService {
         baseUrl: (this.config.get<string>('AI_BASE_URL') ?? 'https://api.openai.com/v1').replace(/\/$/, ''),
         apiKey: this.config.get<string>('AI_API_KEY') ?? '',
         model: this.config.get<string>('AI_MODEL') ?? 'gpt-4o-mini',
+        hermesModel: this.config.get<string>('HERMES_MODEL') ?? '',
         temperature: this.num(this.config.get('AI_TEMPERATURE'), 0.6),
         timeoutMs: this.num(this.config.get('AI_TIMEOUT_MS'), 30_000),
       },

@@ -25,7 +25,7 @@ describe('HermesService', () => {
       bot: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn() },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
-    provider = { chat: jest.fn() };
+    provider = { chat: jest.fn(), hermesModel: jest.fn().mockResolvedValue('hermes-model') };
     prompts = { buildForConversation: jest.fn().mockResolvedValue([]) };
     events = { emit: jest.fn(), emitToAccount: jest.fn() };
     notifications = { send: jest.fn() };

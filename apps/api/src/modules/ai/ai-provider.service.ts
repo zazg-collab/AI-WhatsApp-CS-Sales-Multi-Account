@@ -40,6 +40,12 @@ export class AiProviderService {
     return (await this.settings.ai()).model;
   }
 
+  /** Model for the Hermes supervisor; falls back to the CS bot model. */
+  async hermesModel(): Promise<string> {
+    const ai = await this.settings.ai();
+    return ai.hermesModel || ai.model;
+  }
+
   private headers(apiKey: string): Record<string, string> {
     const h: Record<string, string> = { 'Content-Type': 'application/json' };
     if (apiKey) h.Authorization = `Bearer ${apiKey}`;

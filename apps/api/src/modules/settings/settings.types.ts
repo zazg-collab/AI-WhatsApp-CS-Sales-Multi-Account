@@ -3,7 +3,11 @@
 export interface AiSettings {
   baseUrl: string;
   apiKey: string;
+  /** Model used by the customer-facing CS chatbots. */
   model: string;
+  /** Model used by the Hermes supervisor (review/ask/insight). Empty string
+   *  falls back to `model`. Set a stronger model here for better judgement. */
+  hermesModel: string;
   temperature: number;
   timeoutMs: number;
 }
