@@ -333,6 +333,16 @@ Local audit skills live under `.agents/skills/` (registered in `skills-lock.json
   operation is backed by real backend APIs, DTO validation, auth/roles,
   persistence, realtime events, and tests rather than stubs, mocks, TODOs, fake
   data, or frontend-only state.
+- **`workflow-uiux-optimization-audit`** — workflow practicality skill (distinct
+  from visual-design and contract audits). It audits the *sequence and effort* of
+  a task and finds simpler paths: manual entry of data the system already knows
+  (auto-fill candidates), form-before-action ordering that should be action-first,
+  manual lookups that could be smart defaults/suggestions, redundant/premature
+  steps, and invisible save/progress state. The reference win is account-add:
+  scan first → name + number auto-fill from device metadata instead of typing them
+  up front. Optimizations must be wired to real reachable data and always keep an
+  editable, clearly-labeled override; destructive/outbound confirms stay (the
+  improvement there is showing impact, not removing the gate).
 
 Claude Code install mirrors live under `.claude/skills/`. Use:
 - `/hermes-uiux-audit` for a full no-edit audit report.
@@ -340,3 +350,7 @@ Claude Code install mirrors live under `.claude/skills/`. Use:
 - `/hermes-contract-audit` for a no-edit frontend/backend contract audit.
 - `/hermes-contract-implement` when the user explicitly wants P0/P1 contract
   fixes applied.
+- `/workflow-uiux-audit` for a no-edit workflow-friction audit (before/after step
+  counts + prioritized practical optimizations).
+- `/workflow-uiux-implement` when the user explicitly wants P0/P1 workflow
+  optimizations applied (action-first flows, auto-fill, smart defaults, feedback).

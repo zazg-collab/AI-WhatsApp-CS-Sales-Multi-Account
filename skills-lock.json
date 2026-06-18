@@ -49,6 +49,12 @@
       "skillPath": ".agents/skills/hermes-fullstack-contract-audit/SKILL.md",
       "computedHash": "df236ead6ea43c9f788aa44319a6a15547ed3782f605caa6ce785eb4c6b528e1"
     },
+    "workflow-uiux-optimization-audit": {
+      "source": "local",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/workflow-uiux-optimization-audit/SKILL.md",
+      "computedHash": "be97cd7e9eae37d732194d90aa8dee734fe7b5942dc41ff3a7c6481cfb8b23cc"
+    },
     "hermes-salesops-enterprise-uiux": {
       "source": "local",
       "sourceType": "local",

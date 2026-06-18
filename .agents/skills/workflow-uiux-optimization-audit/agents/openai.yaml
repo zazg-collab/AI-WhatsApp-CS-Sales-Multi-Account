@@ -1,0 +1,4 @@
+interface:
+  display_name: "Workflow UI/UX Optimization Audit"
+  short_description: "Find faster, simpler UI workflows"
+  default_prompt: "Use $workflow-uiux-optimization-audit to audit this UI flow and suggest practical workflow optimizations."
