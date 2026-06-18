@@ -158,8 +158,23 @@ export function ConversationList({
         </div>
       </div>
 
-      {/* Filter pills */}
-      <div className="scrollbar-thin flex gap-1 overflow-x-auto border-b border-gray-100 px-2 py-2 dark:border-gray-800">
+      {/* Filter: dropdown on mobile, pills on desktop */}
+      {/* Mobile dropdown (sm and below) */}
+      <select
+        value={filter}
+        onChange={(e) => onFilterChange?.(e.target.value as any)}
+        aria-label="Filter conversations"
+        className="md:hidden h-9 w-full border-b border-gray-100 bg-gray-50 px-3 text-xs text-gray-700 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-200"
+      >
+        {filters.map((f) => (
+          <option key={f.key} value={f.key}>
+            {t(f.label)}
+          </option>
+        ))}
+      </select>
+
+      {/* Desktop pills (md and up) */}
+      <div className="hidden md:flex scrollbar-thin gap-1 overflow-x-auto border-b border-gray-100 px-2 py-2 dark:border-gray-800">
         {filters.map((f) => (
           <button
             key={f.key}
