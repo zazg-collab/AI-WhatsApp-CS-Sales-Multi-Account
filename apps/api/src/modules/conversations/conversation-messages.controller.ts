@@ -15,7 +15,7 @@ import { ApiConsumes, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagg
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
-import { ConversationsService } from './conversations.service';
+import { ConversationMessagingService } from './conversation-messaging.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ApproveDraftDto } from './dto/approve-draft.dto';
 import { SendMediaDto } from './dto/send-media.dto';
@@ -34,7 +34,7 @@ import { SendPollDto } from './dto/send-poll.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('conversations')
 export class ConversationMessagesController {
-  constructor(private readonly conversations: ConversationsService) {}
+  constructor(private readonly conversations: ConversationMessagingService) {}
 
   @ApiOperation({ summary: 'React to a message with an emoji (empty clears)' })
   @Roles('admin', 'supervisor', 'owner')

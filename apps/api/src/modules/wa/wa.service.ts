@@ -144,14 +144,20 @@ export class WaService implements OnModuleInit {
       auth: state,
       logger: pino({ level: 'silent' }) as never,
       printQRInTerminal: false,
-      // Request WhatsApp history chunks so the app mirrors chats sent/read on the phone.
-      // macOS/desktop browser identity is required by Baileys for full history sync.
       syncFullHistory: this.syncFullHistory,
       browser: Browsers.macOS('Desktop'),
     });
 
     this.sessions.set(accountId, { sock });
+    this.registerBaileysEvents(accountId, sock, saveCreds);
+  }
 
+  /** Register all Baileys socket event handlers for one account session. */
+  private registerBaileysEvents(
+    accountId: string,
+    sock: WASocket,
+    saveCreds: () => Promise<void>,
+  ): void {
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', async (update) => {

@@ -9,7 +9,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
-import { ConversationsService } from './conversations.service';
+import { ConversationChatOpsService } from './conversation-chat-ops.service';
 import { StartConversationDto } from './dto/start-conversation.dto';
 import { ValidateNumberDto } from './dto/message-actions.dto';
 import { DisappearingMessagesDto, MuteChatDto } from './dto/wa-actions.dto';
@@ -26,7 +26,7 @@ import { DisappearingMessagesDto, MuteChatDto } from './dto/wa-actions.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('conversations')
 export class ConversationChatOpsController {
-  constructor(private readonly conversations: ConversationsService) {}
+  constructor(private readonly conversations: ConversationChatOpsService) {}
 
   @ApiOperation({ summary: 'Start/open a chat with any phone number (WhatsApp-desktop style)' })
   @Roles('admin', 'supervisor', 'owner')
