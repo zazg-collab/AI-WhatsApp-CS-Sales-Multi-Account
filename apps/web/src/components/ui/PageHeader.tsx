@@ -11,7 +11,7 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <header className="z-10 flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-gray-200 bg-white px-5 dark:border-gray-800 dark:bg-gray-900">
+    <header className="z-10 flex min-h-16 shrink-0 flex-col items-stretch gap-3 border-b border-gray-200 bg-white px-5 py-3 dark:border-gray-800 dark:bg-gray-900 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:py-0">
       <div className="min-w-0">
         <div className="mb-1 flex items-center gap-2">
           <BackendStatus />
@@ -23,7 +23,9 @@ export function PageHeader({
           <p className="truncate text-[12px] text-gray-500 dark:text-gray-400">{subtitle}</p>
         )}
       </div>
-      {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+      {children && (
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">{children}</div>
+      )}
     </header>
   );
 }
