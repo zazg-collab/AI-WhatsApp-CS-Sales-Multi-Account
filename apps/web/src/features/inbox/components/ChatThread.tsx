@@ -115,7 +115,7 @@ export function ChatThread({
   }
 
   return (
-    <div className="flex flex-1 flex-col min-w-0">
+    <div className="flex flex-1 flex-col min-h-0 min-w-0 bg-white dark:bg-gray-900">
       <ChatThreadHeader
         conversation={conversation}
         onBack={onBack}
