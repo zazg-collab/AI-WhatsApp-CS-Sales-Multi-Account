@@ -27,6 +27,11 @@ const dict: Dict = {
   syncable: { id: 'Sumber yang bisa di-sync ulang', en: 'Syncable sources' },
   addSource: { id: 'Tambah sumber', en: 'Add source' },
   sourceError: { id: 'Gagal menambah sumber', en: 'Failed to add source' },
+  testPreview: { id: 'Tes & pratinjau', en: 'Test & preview' },
+  testing: { id: 'Menguji…', en: 'Testing…' },
+  previewError: { id: 'Gagal menguji koneksi sumber', en: 'Failed to test the source connection' },
+  previewOk: { id: 'Koneksi OK — {total} baris terbaca. Pratinjau 10 pertama:', en: 'Connection OK — {total} rows parsed. Preview of first 10:' },
+  detectedColumns: { id: 'Kolom terdeteksi', en: 'Detected columns' },
   syncSuccess: { id: '{n} produk disinkronkan dari Google Sheet.', en: '{n} products synced from Google Sheet.' },
   syncError: { id: 'Gagal sync', en: 'Sync failed' },
   search: { id: 'Cari produk / SKU / kategori', en: 'Search product / SKU / category' },
@@ -78,6 +83,13 @@ interface Source {
   lastResult: string | null;
 }
 
+type ProductCol = 'sku' | 'name' | 'category' | 'price' | 'stock' | 'unit' | 'description';
+interface SourcePreview {
+  totalParsed: number;
+  detectedColumns: ProductCol[];
+  sample: Array<Partial<Record<ProductCol, string | number>>>;
+}
+
 export default function ProductsPage() {
   const t = useT(dict);
   const canManage = hasRole('admin');
@@ -90,6 +102,8 @@ export default function ProductsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [preview, setPreview] = useState<SourcePreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [srcType, setSrcType] = useState<'gsheet_csv' | 'gsheet_api' | 'postgres'>('gsheet_csv');
   const [srcName, setSrcName] = useState('');
@@ -155,23 +169,40 @@ export default function ProductsPage() {
     }
   }
 
-  async function addSource() {
-    if (!srcName.trim()) return;
-    let payload: Record<string, string>;
+  // Build the source payload from the form, or null if required fields missing.
+  function buildSourcePayload(): Record<string, string> | null {
+    if (!srcName.trim()) return null;
     if (srcType === 'gsheet_csv') {
-      if (!srcUrl.trim()) return;
-      payload = { type: 'gsheet_csv', name: srcName.trim(), url: srcUrl.trim() };
-    } else if (srcType === 'postgres') {
-      if (!srcConn.trim() || !srcQuery.trim()) return;
-      payload = { type: 'postgres', name: srcName.trim(), connectionString: srcConn.trim(), query: srcQuery.trim() };
-    } else {
-      if (!srcSheetId.trim() || !srcEmail.trim() || !srcKey.trim()) return;
-      payload = { type: 'gsheet_api', name: srcName.trim(), spreadsheetId: srcSheetId.trim(), range: srcRange.trim() || 'A:Z', clientEmail: srcEmail.trim(), privateKey: srcKey };
+      if (!srcUrl.trim()) return null;
+      return { type: 'gsheet_csv', name: srcName.trim(), url: srcUrl.trim() };
     }
+    if (srcType === 'postgres') {
+      if (!srcConn.trim() || !srcQuery.trim()) return null;
+      return { type: 'postgres', name: srcName.trim(), connectionString: srcConn.trim(), query: srcQuery.trim() };
+    }
+    if (!srcSheetId.trim() || !srcEmail.trim() || !srcKey.trim()) return null;
+    return { type: 'gsheet_api', name: srcName.trim(), spreadsheetId: srcSheetId.trim(), range: srcRange.trim() || 'A:Z', clientEmail: srcEmail.trim(), privateKey: srcKey };
+  }
+
+  async function previewSource() {
+    const payload = buildSourcePayload();
+    if (!payload) return;
+    setPreviewing(true); setError(null); setPreview(null);
+    try {
+      setPreview(await api<SourcePreview>('/products/sources/preview', { method: 'POST', body: JSON.stringify(payload) }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('previewError'));
+    } finally { setPreviewing(false); }
+  }
+
+  async function addSource() {
+    const payload = buildSourcePayload();
+    if (!payload) return;
     setBusy(true); setError(null);
     try {
       await api('/products/sources', { method: 'POST', body: JSON.stringify(payload) });
       setSrcName(''); setSrcUrl(''); setSrcConn(''); setSrcQuery(''); setSrcSheetId(''); setSrcRange(''); setSrcEmail(''); setSrcKey('');
+      setPreview(null);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : t('sourceError'));
@@ -270,7 +301,40 @@ export default function ProductsPage() {
                       <p className="text-[11px] text-gray-400">{t('gsheetApiNote')}</p>
                     </>
                   )}
-                  <div><Button size="sm" onClick={addSource} disabled={busy || !srcName.trim()}><Plus className="h-4 w-4" aria-hidden="true" /> {t('addSource')}</Button></div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={previewSource} disabled={previewing || busy || !srcName.trim()}>
+                      <MagnifyingGlass className="h-4 w-4" aria-hidden="true" /> {previewing ? t('testing') : t('testPreview')}
+                    </Button>
+                    <Button size="sm" onClick={addSource} disabled={busy || !srcName.trim()}><Plus className="h-4 w-4" aria-hidden="true" /> {t('addSource')}</Button>
+                  </div>
+                  {preview && (
+                    <div className="rounded-lg border border-channel-200 bg-channel-50 p-3 dark:border-channel-900/30 dark:bg-channel-900/20">
+                      <p className="mb-1 text-[12px] font-semibold text-channel-700 dark:text-channel-300">
+                        {t('previewOk', { total: preview.totalParsed })}
+                      </p>
+                      <p className="mb-2 text-[11px] text-gray-500 dark:text-gray-400">
+                        {t('detectedColumns')}: {preview.detectedColumns.join(', ') || '—'}
+                      </p>
+                      {preview.sample.length > 0 && (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-[11px]">
+                            <thead>
+                              <tr className="text-left text-gray-400">
+                                {preview.detectedColumns.map((c) => <th key={c} className="px-1.5 py-0.5 font-medium">{c}</th>)}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {preview.sample.map((row, i) => (
+                                <tr key={i} className="border-t border-channel-100 dark:border-channel-900/30">
+                                  {preview.detectedColumns.map((c) => <td key={c} className="px-1.5 py-0.5 text-gray-700 dark:text-gray-300">{String(row[c] ?? '')}</td>)}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {sources.length > 0 && (
                   <ul className="mt-2 space-y-1">
@@ -301,33 +365,63 @@ export default function ProductsPage() {
             {debouncedSearch ? t('noProductsMatching', { search: debouncedSearch }) : t('noProducts')}
           </div>
         ) : (
-          <div className="scrollbar-thin overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800">
-            <table className="w-full min-w-[28rem] text-[13px]">
-              <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                <tr><th className="px-3 py-2">{t('colProduct')}</th><th className="px-3 py-2">{t('colSku')}</th><th className="px-3 py-2 text-right">{t('colPrice')}</th><th className="px-3 py-2 text-right">{t('colStock')}</th></tr>
-              </thead>
-              <tbody>
-                {products.map((p) => (
-                  <tr key={p.id} className="border-t border-gray-100 dark:border-gray-800">
-                    <td className="px-3 py-2"><span className="font-medium text-gray-900 dark:text-gray-100">{p.name}</span>{p.category && <span className="ml-1 text-gray-400">· {p.category}</span>}</td>
-                    <td className="px-3 py-2 tabular-nums text-gray-500">{p.sku}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-200">{p.price != null ? `Rp${p.price.toLocaleString('id-ID')}` : '—'}</td>
-                    <td className="px-3 py-2 text-right">
-                      {p.stock <= 0 ? (
-                        <Badge tone="danger">{t('outOfStockBadge')}</Badge>
-                      ) : p.stock <= LOW_STOCK ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[12px] font-medium tabular-nums text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" title={t('lowStockTitle')}>
-                          <Warning className="h-3 w-3" aria-hidden="true" />{p.stock}{p.unit ? ` ${p.unit}` : ''}
-                        </span>
-                      ) : (
-                        <span className="tabular-nums font-medium text-gray-900 dark:text-gray-100">{p.stock}{p.unit ? ` ${p.unit}` : ''}</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Desktop / tablet: data table */}
+            <div className="scrollbar-thin hidden overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800 sm:block">
+              <table className="w-full min-w-[28rem] text-[13px]">
+                <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                  <tr><th className="px-3 py-2">{t('colProduct')}</th><th className="px-3 py-2">{t('colSku')}</th><th className="px-3 py-2 text-right">{t('colPrice')}</th><th className="px-3 py-2 text-right">{t('colStock')}</th></tr>
+                </thead>
+                <tbody>
+                  {products.map((p) => (
+                    <tr key={p.id} className="border-t border-gray-100 dark:border-gray-800">
+                      <td className="px-3 py-2"><span className="font-medium text-gray-900 dark:text-gray-100">{p.name}</span>{p.category && <span className="ml-1 text-gray-400">· {p.category}</span>}</td>
+                      <td className="px-3 py-2 tabular-nums text-gray-500">{p.sku}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-200">{p.price != null ? `Rp${p.price.toLocaleString('id-ID')}` : '-'}</td>
+                      <td className="px-3 py-2 text-right">
+                        {p.stock <= 0 ? (
+                          <Badge tone="danger">{t('outOfStockBadge')}</Badge>
+                        ) : p.stock <= LOW_STOCK ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[12px] font-medium tabular-nums text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" title={t('lowStockTitle')}>
+                            <Warning className="h-3 w-3" aria-hidden="true" />{p.stock}{p.unit ? ` ${p.unit}` : ''}
+                          </span>
+                        ) : (
+                          <span className="tabular-nums font-medium text-gray-900 dark:text-gray-100">{p.stock}{p.unit ? ` ${p.unit}` : ''}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile: card list */}
+            <div className="space-y-2 sm:hidden">
+              {products.map((p) => (
+                <div key={p.id} className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-gray-900 dark:text-gray-100">{p.name}</div>
+                      {p.category && <div className="text-xs text-gray-400">{p.category}</div>}
+                    </div>
+                    {p.stock <= 0 ? (
+                      <Badge tone="danger">{t('outOfStockBadge')}</Badge>
+                    ) : p.stock <= LOW_STOCK ? (
+                      <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[12px] font-medium tabular-nums text-amber-700 dark:bg-amber-900/30 dark:text-amber-300" title={t('lowStockTitle')}>
+                        <Warning className="h-3 w-3" aria-hidden="true" />{p.stock}{p.unit ? ` ${p.unit}` : ''}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 tabular-nums font-medium text-gray-900 dark:text-gray-100">{p.stock}{p.unit ? ` ${p.unit}` : ''}</span>
+                    )}
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                    <span className="tabular-nums">{p.sku}</span>
+                    <span className="tabular-nums text-gray-700 dark:text-gray-200">{p.price != null ? `Rp${p.price.toLocaleString('id-ID')}` : '-'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

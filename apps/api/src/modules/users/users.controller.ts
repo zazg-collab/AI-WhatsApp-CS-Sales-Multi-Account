@@ -41,6 +41,13 @@ export class UsersController {
     });
   }
 
+  @ApiOperation({ summary: 'Active admins ranked by open-conversation load (for least-busy assignment)' })
+  @Roles('viewer')
+  @Get('workload')
+  workload() {
+    return this.users.workload();
+  }
+
   @ApiOperation({ summary: 'Create a new user (owner only)' })
   @Roles('owner')
   @Post()

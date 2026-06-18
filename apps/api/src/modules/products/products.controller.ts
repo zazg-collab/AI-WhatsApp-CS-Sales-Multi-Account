@@ -88,6 +88,13 @@ export class ProductsController {
     return this.products.createSource(dto);
   }
 
+  @ApiOperation({ summary: 'Test a source connection (dry-run): return sample rows + detected columns without saving' })
+  @Roles('supervisor', 'owner')
+  @Post('sources/preview')
+  previewSource(@Body() dto: CreateSourceDto) {
+    return this.products.previewSource(dto);
+  }
+
   @ApiOperation({ summary: 'Re-sync a product source now' })
   @Roles('admin', 'supervisor', 'owner')
   @Post('sources/:id/sync')

@@ -74,7 +74,12 @@ export default function CustomersPage() {
               <select value={assignedAdminId} onChange={(e) => setAssignedAdminId(e.target.value)} aria-label={t('assignAdminAria')} className={inputClass}>
                 <option value="">{t('assignAdmin')}</option>
                 <option value="unassigned">{t('noAdmin')}</option>
-                {admins.map((a) => <option key={a.id} value={a.id}>{a.name || a.email}</option>)}
+                {admins.map((a, i) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name || a.email}
+                    {a.openCount != null ? ` · ${a.openCount} ${t('openConvs')}${i === 0 && a.openCount === admins[0].openCount ? ` — ${t('leastBusy')}` : ''}` : ''}
+                  </option>
+                ))}
               </select>
               <input value={bulkNote} onChange={(e) => setBulkNote(e.target.value)} placeholder={t('bulkNotePlaceholder')} aria-label={t('bulkNoteAria')} className={inputClass} />
               <Button size="md" onClick={applyBulkAction} disabled={submitting || selectedCount === 0}>
@@ -105,58 +110,93 @@ export default function CustomersPage() {
               </Button>
             </Card>
           ) : (
-            <Card className="overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
-                    <th className="w-10 px-4 py-3">
-                      <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={t('selectAllAria')} className="accent-hermes-600" />
-                    </th>
-                    <th className="px-4 py-3 font-medium">{t('colCustomer')}</th>
-                    <th className="px-4 py-3 font-medium">{t('colStage')}</th>
-                    <th className="px-4 py-3 font-medium">{t('colTag')}</th>
-                    <th className="px-4 py-3 font-medium">{t('colAdmin')}</th>
-                    <th className="px-4 py-3 font-medium">{t('colLastContact')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {customers.map((customer) => (
-                    <tr key={customer.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40">
-                      <td className="px-4 py-3">
-                        <input type="checkbox" checked={selectedSet.has(customer.id)} onChange={() => toggleCustomer(customer.id)} aria-label={t('selectRow', { name: customer.name || customer.phoneNumber })} className="accent-hermes-600" />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          <Avatar name={customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-8 w-8 text-[11px] font-semibold" />
-                          <div className="min-w-0">
-                            <div className="truncate font-medium text-gray-900 dark:text-gray-100">{customer.name || t('noName')}</div>
-                            <div className="text-xs text-gray-400">{formatPhone(customer.phoneNumber, t('hiddenNumber'))}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge tone={stageTone[customer.leadStage]}>{t(stageLabelKey[customer.leadStage])}</Badge>
-                        <span className="ml-2 text-xs tabular-nums text-gray-400">{t('score', { n: customer.leadScore })}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex max-w-sm flex-wrap gap-1">
-                          {customer.tags.length === 0 ? (
-                            <span className="text-xs text-gray-400">{t('noTag')}</span>
-                          ) : (
-                            customer.tags.map((tag) => <Badge key={tag} tone="neutral">{tag}</Badge>)
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
-                        {customer.assignedAdmin?.name || customer.assignedAdmin?.email || <span className="text-gray-400">{t('unassigned')}</span>}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
-                        {customer.lastMessageAt ? new Date(customer.lastMessageAt).toLocaleString('id-ID') : '—'}
-                      </td>
+            <Card className="overflow-hidden p-0">
+              {/* Desktop / tablet: data table */}
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
+                      <th className="w-10 px-4 py-3">
+                        <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={t('selectAllAria')} className="accent-hermes-600" />
+                      </th>
+                      <th className="px-4 py-3 font-medium">{t('colCustomer')}</th>
+                      <th className="px-4 py-3 font-medium">{t('colStage')}</th>
+                      <th className="px-4 py-3 font-medium">{t('colTag')}</th>
+                      <th className="px-4 py-3 font-medium">{t('colAdmin')}</th>
+                      <th className="px-4 py-3 font-medium">{t('colLastContact')}</th>
                     </tr>
+                  </thead>
+                  <tbody>
+                    {customers.map((customer) => (
+                      <tr key={customer.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40">
+                        <td className="px-4 py-3">
+                          <input type="checkbox" checked={selectedSet.has(customer.id)} onChange={() => toggleCustomer(customer.id)} aria-label={t('selectRow', { name: customer.name || customer.phoneNumber })} className="accent-hermes-600" />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar name={customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-8 w-8 text-[11px] font-semibold" />
+                            <div className="min-w-0">
+                              <div className="truncate font-medium text-gray-900 dark:text-gray-100">{customer.name || t('noName')}</div>
+                              <div className="text-xs text-gray-400">{formatPhone(customer.phoneNumber, t('hiddenNumber'))}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge tone={stageTone[customer.leadStage]}>{t(stageLabelKey[customer.leadStage])}</Badge>
+                          <span className="ml-2 text-xs tabular-nums text-gray-400">{t('score', { n: customer.leadScore })}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex max-w-sm flex-wrap gap-1">
+                            {customer.tags.length === 0 ? (
+                              <span className="text-xs text-gray-400">{t('noTag')}</span>
+                            ) : (
+                              customer.tags.map((tag) => <Badge key={tag} tone="neutral">{tag}</Badge>)
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                          {customer.assignedAdmin?.name || customer.assignedAdmin?.email || <span className="text-gray-400">{t('unassigned')}</span>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
+                          {customer.lastMessageAt ? new Date(customer.lastMessageAt).toLocaleString('id-ID') : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: card list */}
+              <div className="md:hidden">
+                <label className="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5 text-[13px] font-medium text-gray-600 dark:border-gray-800 dark:text-gray-300">
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={t('selectAllAria')} className="accent-hermes-600" />
+                  {t('colCustomer')}
+                </label>
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {customers.map((customer) => (
+                    <label key={customer.id} className="flex items-start gap-3 px-4 py-3 active:bg-gray-50 dark:active:bg-gray-800/40">
+                      <input type="checkbox" checked={selectedSet.has(customer.id)} onChange={() => toggleCustomer(customer.id)} aria-label={t('selectRow', { name: customer.name || customer.phoneNumber })} className="mt-1 accent-hermes-600" />
+                      <Avatar name={customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-9 w-9 shrink-0 text-[11px] font-semibold" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate font-medium text-gray-900 dark:text-gray-100">{customer.name || t('noName')}</span>
+                          <Badge tone={stageTone[customer.leadStage]}>{t(stageLabelKey[customer.leadStage])}</Badge>
+                        </div>
+                        <div className="text-xs text-gray-400">{formatPhone(customer.phoneNumber, t('hiddenNumber'))} · {t('score', { n: customer.leadScore })}</div>
+                        {customer.tags.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {customer.tags.map((tag) => <Badge key={tag} tone="neutral">{tag}</Badge>)}
+                          </div>
+                        )}
+                        <div className="mt-1.5 flex items-center justify-between gap-2 text-xs text-gray-500 dark:text-gray-400">
+                          <span className="truncate">{customer.assignedAdmin?.name || customer.assignedAdmin?.email || t('unassigned')}</span>
+                          <span className="shrink-0">{customer.lastMessageAt ? new Date(customer.lastMessageAt).toLocaleDateString('id-ID') : '-'}</span>
+                        </div>
+                      </div>
+                    </label>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              </div>
             </Card>
           )}
 

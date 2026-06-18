@@ -222,6 +222,47 @@ export class ProductsService implements OnModuleInit {
     return { ok: true };
   }
 
+  /**
+   * Dry-run a source connection WITHOUT saving it or upserting products:
+   * fetch a sample, return the first rows + which columns were detected, so the
+   * user can verify the connection/mapping before committing the source.
+   */
+  async previewSource(dto: {
+    type: string;
+    url?: string;
+    connectionString?: string;
+    query?: string;
+    spreadsheetId?: string;
+    range?: string;
+    clientEmail?: string;
+    privateKey?: string;
+  }) {
+    let rows: ProductRow[];
+    if (dto.type === 'gsheet_csv') {
+      if (!dto.url) throw new BadRequestException('url wajib untuk gsheet_csv');
+      assertSafeMediaUrl(dto.url);
+      rows = await this.fetchSheetRows({ url: dto.url });
+    } else if (dto.type === 'postgres') {
+      if (!dto.connectionString || !dto.query) throw new BadRequestException('connectionString & query wajib untuk postgres');
+      try { assertReadOnlySelect(dto.query); } catch (err) { throw new BadRequestException(err instanceof Error ? err.message : 'Query tidak valid'); }
+      rows = await this.fetchPostgresRows({ connectionString: dto.connectionString, query: dto.query });
+    } else if (dto.type === 'gsheet_api') {
+      if (!dto.spreadsheetId || !dto.clientEmail || !dto.privateKey) throw new BadRequestException('spreadsheetId, clientEmail, privateKey wajib untuk gsheet_api');
+      rows = await this.fetchGsheetApiRows({ spreadsheetId: dto.spreadsheetId, range: dto.range || 'A:Z', clientEmail: dto.clientEmail, privateKey: dto.privateKey });
+    } else {
+      throw new BadRequestException('Tipe sumber tidak didukung (gsheet_csv | gsheet_api | postgres).');
+    }
+
+    // Which ProductRow fields were actually populated across the sample.
+    const fields: (keyof ProductRow)[] = ['sku', 'name', 'category', 'price', 'stock', 'unit', 'description'];
+    const detectedColumns = fields.filter((f) => rows.some((r) => r[f] != null && r[f] !== ''));
+    return {
+      totalParsed: rows.length,
+      detectedColumns,
+      sample: rows.slice(0, 10),
+    };
+  }
+
   /** Re-sync a configured source (Google Sheet CSV or external Postgres). */
   async syncSource(id: string, userId?: string) {
     const source = await this.prisma.productSource.findUnique({ where: { id } });

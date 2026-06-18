@@ -28,6 +28,8 @@ export interface User {
   name: string;
   email: string;
   role: Role;
+  /** Current open-conversation load (present when loaded from /users/workload). */
+  openCount?: number;
 }
 
 export const stages: { value: LeadStage; labelKey: string }[] = [
@@ -120,8 +122,10 @@ export function useCustomers() {
 
   useEffect(() => {
     if (!canLoadAdmins) return;
-    api<{ users: User[] }>('/users?limit=100')
-      .then((data) => setAdmins(data.users.filter((u) => u.role !== 'viewer')))
+    // Ranked by open-conversation load (ascending) so the least-busy admin is
+    // surfaced first for assignment.
+    api<User[]>('/users/workload')
+      .then((users) => setAdmins(users))
       .catch(() => setAdmins([]));
   }, [canLoadAdmins]);
 

@@ -54,6 +54,27 @@ export class UsersService {
   }
 
   /**
+   * Active admins (owner/supervisor/admin) ranked by current open-conversation
+   * load (ascending), so the UI can default/suggest the least-busy admin for
+   * assignment. Open = status open|pending and assigned to that admin.
+   */
+  async workload() {
+    const admins = await this.prisma.user.findMany({
+      where: { deletedAt: null, status: 'active', role: { in: [Role.owner, Role.supervisor, Role.admin] } },
+      select: { id: true, name: true, email: true, role: true },
+    });
+    const grouped = await this.prisma.conversation.groupBy({
+      by: ['assignedAdminId'],
+      where: { assignedAdminId: { in: admins.map((a) => a.id) }, status: { in: ['open', 'pending'] } },
+      _count: { id: true },
+    });
+    const counts = new Map(grouped.map((g) => [g.assignedAdminId, g._count.id]));
+    return admins
+      .map((a) => ({ ...a, openCount: counts.get(a.id) ?? 0 }))
+      .sort((a, b) => a.openCount - b.openCount);
+  }
+
+  /**
    * Create a new user with hashed password.
    */
   async create(dto: CreateUserDto, creatorId: string) {

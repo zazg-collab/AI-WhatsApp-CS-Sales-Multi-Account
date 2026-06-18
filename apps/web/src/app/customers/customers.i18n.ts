@@ -30,6 +30,8 @@ export const dict: Dict = {
   assignAdminAria: { id: 'Tetapkan admin penanggung jawab', en: 'Assign the responsible admin' },
   assignAdmin: { id: 'Tetapkan admin…', en: 'Assign admin…' },
   noAdmin: { id: 'Tanpa admin', en: 'No admin' },
+  openConvs: { id: 'chat aktif', en: 'open' },
+  leastBusy: { id: 'paling longgar', en: 'least busy' },
   bulkNotePlaceholder: { id: 'Catatan internal (opsional)', en: 'Internal note (optional)' },
   bulkNoteAria: { id: 'Catatan internal untuk aksi massal', en: 'Internal note for the bulk action' },
   applying: { id: 'Menerapkan…', en: 'Applying…' },
