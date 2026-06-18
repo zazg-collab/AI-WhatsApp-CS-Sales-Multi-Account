@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Plus, PencilSimple, Trash, ArrowsSplit, X } from '@phosphor-icons/react';
 import { api } from '@/lib/api';
 import { SessionStatusBadge } from '@/components/ui/SessionStatusBadge';
@@ -11,157 +11,12 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Field, TextareaField, SelectField } from '@/components/ui/Field';
-import { useT, type Dict } from '@/lib/i18n';
+import { useT } from '@/lib/i18n';
+import { useBots, statusTone, type Bot, type Persona, type KnowledgeBase, type WaAccount } from './useBots';
+import { dict } from './bots.i18n';
 
-// ── i18n ───────────────────────────────────────────────────────────────────────
+// ── Shared helpers ─────────────────────────────────────────────────────────────
 
-const dict: Dict = {
-  // FormError fallbacks
-  errCreatePersona: { id: 'Gagal membuat persona', en: 'Failed to create persona' },
-  errSaveBot: { id: 'Gagal menyimpan bot', en: 'Failed to save bot' },
-  errAssignAccount: { id: 'Gagal menugaskan akun', en: 'Failed to assign account' },
-  errLoadData: { id: 'Gagal memuat data', en: 'Failed to load data' },
-  errDeleteBot: { id: 'Gagal menghapus bot', en: 'Failed to delete bot' },
-
-  // PersonaModal
-  personaTitle: { id: 'Persona baru', en: 'New persona' },
-  personaDesc: { id: 'Tentukan kepribadian bot yang dipakai untuk menjawab pelanggan.', en: 'Define the bot personality used to answer customers.' },
-  cancel: { id: 'Batal', en: 'Cancel' },
-  saving: { id: 'Menyimpan…', en: 'Saving…' },
-  createPersona: { id: 'Buat persona', en: 'Create persona' },
-  personaNameLabel: { id: 'Nama persona', en: 'Persona name' },
-  personaNamePlaceholder: { id: 'mis. Sales Bot Ceria', en: 'e.g. Cheerful Sales Bot' },
-  soulMdLabel: { id: 'Soul.md (kepribadian)', en: 'Soul.md (personality)' },
-  soulMdPlaceholder: { id: 'Kamu adalah asisten sales yang ramah…', en: 'You are a friendly sales assistant…' },
-  toneLabel: { id: 'Tone', en: 'Tone' },
-  tonePlaceholder: { id: 'ramah, formal…', en: 'friendly, formal…' },
-  styleLabel: { id: 'Gaya', en: 'Style' },
-  stylePlaceholder: { id: 'ringkas, detail…', en: 'concise, detailed…' },
-  rulesLabel: { id: 'Aturan', en: 'Rules' },
-  rulesPlaceholder: { id: 'Jangan sebut harga tanpa persetujuan admin…', en: 'Do not quote prices without admin approval…' },
-
-  // BotModal
-  editBotTitle: { id: 'Edit bot: {name}', en: 'Edit bot: {name}' },
-  newBotTitle: { id: 'Bot baru', en: 'New bot' },
-  botDesc: { id: 'Otak chatbot: persona, knowledge base, dan mode AI default.', en: 'Chatbot brain: persona, knowledge base, and default AI mode.' },
-  saveBot: { id: 'Simpan bot', en: 'Save bot' },
-  botNameLabel: { id: 'Nama bot', en: 'Bot name' },
-  botNamePlaceholder: { id: 'mis. Hermes Sales Bot', en: 'e.g. Hermes Sales Bot' },
-  personaLabel: { id: 'Persona', en: 'Persona' },
-  choosePersona: { id: 'Pilih persona…', en: 'Choose persona…' },
-  createNewPersona: { id: 'Buat persona baru', en: 'Create new persona' },
-  kbLabel: { id: 'Knowledge base', en: 'Knowledge base' },
-  chooseKb: { id: 'Pilih knowledge base…', en: 'Choose knowledge base…' },
-  defaultAiModeLabel: { id: 'Mode AI default', en: 'Default AI mode' },
-  aiModeOn: { id: 'AI ON', en: 'AI ON' },
-  aiModeOff: { id: 'AI OFF', en: 'AI OFF' },
-  aiModeDraft: { id: 'Draft', en: 'Draft' },
-  aiModeSupervised: { id: 'Supervised', en: 'Supervised' },
-
-  // Automation risk framing
-  aiModeHelpOn: { id: '⚠ Bot membalas pelanggan OTOMATIS tanpa persetujuan admin. Pastikan persona & knowledge sudah benar sebelum mengaktifkan.', en: '⚠ Bot replies to customers AUTOMATICALLY without admin approval. Make sure the persona & knowledge are correct before enabling.' },
-  aiModeHelpOff: { id: 'Bot tidak membalas. Semua balasan dikirim manual oleh admin.', en: 'Bot does not reply. All replies are sent manually by an admin.' },
-  aiModeHelpDraft: { id: 'Bot menyiapkan draf balasan; admin meninjau lalu mengirim.', en: 'Bot prepares a draft reply; an admin reviews then sends.' },
-  aiModeHelpSupervised: { id: 'Hermes meninjau setiap balasan sebelum dikirim ke pelanggan.', en: 'Hermes reviews every reply before it is sent to the customer.' },
-  activateTitle: { id: 'Aktifkan balasan otomatis?', en: 'Enable automatic replies?' },
-  activateBody: { id: 'Bot "{name}" akan membalas pelanggan secara otomatis tanpa persetujuan admin. Lanjutkan?', en: 'Bot "{name}" will reply to customers automatically without admin approval. Continue?' },
-  activateConfirm: { id: 'Ya, aktifkan otomatis', en: 'Yes, enable automatic' },
-  assignDisconnectedWarn: { id: 'Akun belum terhubung — bot otomatis tidak bisa mengirim sampai akun tersambung.', en: 'Account not connected — an automatic bot cannot send until the account reconnects.' },
-  languageLabel: { id: 'Bahasa', en: 'Language' },
-  languageId: { id: 'Indonesia', en: 'Indonesian' },
-  languageEn: { id: 'English', en: 'English' },
-  statusLabel: { id: 'Status', en: 'Status' },
-  statusDraft: { id: 'Draft', en: 'Draft' },
-  statusActive: { id: 'Aktif', en: 'Active' },
-  statusInactive: { id: 'Nonaktif', en: 'Inactive' },
-  assignToAccounts: { id: 'Tugaskan ke akun WhatsApp', en: 'Assign to WhatsApp accounts' },
-  assigned: { id: 'Ditugaskan', en: 'Assigned' },
-  assign: { id: 'Tugaskan', en: 'Assign' },
-  noWaAccounts: { id: 'Belum ada akun WhatsApp.', en: 'No WhatsApp accounts yet.' },
-
-  // BotCard
-  noPersona: { id: 'Tanpa persona', en: 'No persona' },
-  noKb: { id: 'Tanpa KB', en: 'No KB' },
-  edit: { id: 'Edit', en: 'Edit' },
-  delete: { id: 'Hapus', en: 'Delete' },
-  defaultMode: { id: 'Mode default', en: 'Default mode' },
-  waAccounts: { id: 'Akun WhatsApp', en: 'WhatsApp accounts' },
-  noAssignedAccounts: { id: 'Belum ada akun yang ditugaskan.', en: 'No accounts assigned yet.' },
-
-  // Main page
-  pageTitle: { id: 'Automation Mode', en: 'Automation Mode' },
-  pageSubtitle: { id: 'Atur otak chatbot (persona, knowledge, mode AI) dan tugaskan ke akun WhatsApp', en: 'Manage chatbot brains (persona, knowledge, AI mode) and assign them to WhatsApp accounts' },
-  newBotBtn: { id: 'Bot baru', en: 'New bot' },
-  closeNotif: { id: 'Tutup notifikasi', en: 'Close notification' },
-  noBots: { id: 'Belum ada bot', en: 'No bots yet' },
-  noBotsHint: { id: 'Buat bot pertama untuk mulai melayani pelanggan otomatis.', en: 'Create your first bot to start serving customers automatically.' },
-  deleteBotTitle: { id: 'Hapus bot', en: 'Delete bot' },
-  deleteBotBtn: { id: 'Hapus bot', en: 'Delete bot' },
-  deleteBotConfirmPre: { id: 'Hapus bot ', en: 'Delete bot ' },
-  deleteBotConfirmPost: { id: '? Tindakan ini tidak bisa dibatalkan.', en: '? This action cannot be undone.' },
-};
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-interface Persona {
-  id: string;
-  name: string;
-  soulMd: string;
-  tone: string | null;
-  style: string | null;
-  rules: string | null;
-}
-
-interface KnowledgeBase {
-  id: string;
-  name: string;
-}
-
-interface WaAccount {
-  id: string;
-  accountName: string;
-  phoneNumber: string;
-  sessionStatus: string;
-}
-
-interface Bot {
-  id: string;
-  botName: string;
-  defaultAiMode: string;
-  language: string;
-  status: string;
-  persona: Persona | null;
-  knowledgeBase: { id: string; name: string } | null;
-  accounts: WaAccount[];
-}
-
-interface BotFormData {
-  botName: string;
-  personaId: string;
-  knowledgeBaseId: string;
-  defaultAiMode: string;
-  language: string;
-  status: string;
-}
-
-interface PersonaFormData {
-  name: string;
-  soulMd: string;
-  tone: string;
-  style: string;
-  rules: string;
-}
-
-// ── Shared bits ──────────────────────────────────────────────────────────────────
-
-type BadgeTone = 'success' | 'review' | 'neutral';
-const statusTone: Record<string, BadgeTone> = {
-  active: 'success',
-  inactive: 'neutral',
-  draft: 'review',
-};
-
-// Connection dot — delegates to the shared SessionStatusBadge component.
 function sessionDot(status: string) {
   return <SessionStatusBadge status={status} variant="dot" />;
 }
@@ -178,7 +33,7 @@ function FormError({ message }: { message: string }) {
 
 function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Persona) => void }) {
   const t = useT(dict);
-  const [form, setForm] = useState<PersonaFormData>({ name: '', soulMd: '', tone: '', style: '', rules: '' });
+  const [form, setForm] = useState({ name: '', soulMd: '', tone: '', style: '', rules: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -189,13 +44,7 @@ function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     try {
       const created = await api<Persona>('/bots/personas', {
         method: 'POST',
-        body: JSON.stringify({
-          name: form.name,
-          soulMd: form.soulMd,
-          tone: form.tone || undefined,
-          style: form.style || undefined,
-          rules: form.rules || undefined,
-        }),
+        body: JSON.stringify({ name: form.name, soulMd: form.soulMd, tone: form.tone || undefined, style: form.style || undefined, rules: form.rules || undefined }),
       });
       onCreated(created);
     } catch (err) {
@@ -206,11 +55,7 @@ function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   }
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title={t('personaTitle')}
-      description={t('personaDesc')}
+    <Modal open onClose={onClose} title={t('personaTitle')} description={t('personaDesc')}
       footer={
         <>
           <Button type="button" variant="ghost" onClick={onClose}>{t('cancel')}</Button>
@@ -234,26 +79,17 @@ function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
 
 // ── BotModal ───────────────────────────────────────────────────────────────────
 
-function BotModal({
-  bot,
-  personas,
-  knowledgeBases,
-  accounts,
-  onClose,
-  onSaved,
-  onChanged,
-}: {
+function BotModal({ bot, personas, knowledgeBases, accounts, onClose, onSaved, onChanged }: {
   bot: Bot | null;
   personas: Persona[];
   knowledgeBases: KnowledgeBase[];
   accounts: WaAccount[];
   onClose: () => void;
   onSaved: () => void;
-  /** Refresh parent data without closing the modal (used after assigning an account). */
   onChanged?: () => void;
 }) {
   const t = useT(dict);
-  const [form, setForm] = useState<BotFormData>({
+  const [form, setForm] = useState({
     botName: bot?.botName ?? '',
     personaId: bot?.persona?.id ?? '',
     knowledgeBaseId: bot?.knowledgeBase?.id ?? '',
@@ -266,20 +102,13 @@ function BotModal({
   const [showPersonaModal, setShowPersonaModal] = useState(false);
   const [showActivate, setShowActivate] = useState(false);
   const [localPersonas, setLocalPersonas] = useState(personas);
-  // Track assigned accounts locally so the badges update without closing the modal.
   const [assignedIds, setAssignedIds] = useState<string[]>(() => bot?.accounts.map((a) => a.id) ?? []);
 
-  // Flipping a bot to ai_on means it autonomously messages real customers.
-  // Require an explicit confirmation when turning that on (new bot, or a bot
-  // that wasn't already ai_on).
   const needsActivationConfirm = form.defaultAiMode === 'ai_on' && (!bot || bot.defaultAiMode !== 'ai_on');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (needsActivationConfirm) {
-      setShowActivate(true);
-      return;
-    }
+    if (needsActivationConfirm) { setShowActivate(true); return; }
     doSave();
   }
 
@@ -288,19 +117,9 @@ function BotModal({
     setLoading(true);
     setError(null);
     try {
-      const payload = {
-        botName: form.botName,
-        personaId: form.personaId || undefined,
-        knowledgeBaseId: form.knowledgeBaseId || undefined,
-        defaultAiMode: form.defaultAiMode,
-        language: form.language,
-        status: form.status,
-      };
-      if (bot) {
-        await api(`/bots/${bot.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-      } else {
-        await api('/bots', { method: 'POST', body: JSON.stringify(payload) });
-      }
+      const payload = { botName: form.botName, personaId: form.personaId || undefined, knowledgeBaseId: form.knowledgeBaseId || undefined, defaultAiMode: form.defaultAiMode, language: form.language, status: form.status };
+      if (bot) await api(`/bots/${bot.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      else await api('/bots', { method: 'POST', body: JSON.stringify(payload) });
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errSaveBot'));
@@ -313,8 +132,6 @@ function BotModal({
     if (!bot) return;
     try {
       await api(`/bots/${bot.id}/assign/${accountId}`, { method: 'POST' });
-      // Reflect the assignment immediately and refresh the parent list, but keep
-      // the modal open so multiple accounts can be assigned in one session.
       setAssignedIds((prev) => (prev.includes(accountId) ? prev : [...prev, accountId]));
       onChanged?.();
     } catch (err) {
@@ -330,18 +147,13 @@ function BotModal({
   ];
 
   const aiModeHelp: Record<string, string> = {
-    ai_on: t('aiModeHelpOn'),
-    ai_off: t('aiModeHelpOff'),
-    ai_draft: t('aiModeHelpDraft'),
-    ai_supervised: t('aiModeHelpSupervised'),
+    ai_on: t('aiModeHelpOn'), ai_off: t('aiModeHelpOff'),
+    ai_draft: t('aiModeHelpDraft'), ai_supervised: t('aiModeHelpSupervised'),
   };
 
   return (
     <>
-      <Modal
-        open
-        onClose={onClose}
-        size="lg"
+      <Modal open onClose={onClose} size="lg"
         title={bot ? t('editBotTitle', { name: bot.botName }) : t('newBotTitle')}
         description={t('botDesc')}
         footer={
@@ -353,32 +165,22 @@ function BotModal({
       >
         <form id="bot-form" onSubmit={handleSubmit} className="space-y-3">
           <Field label={t('botNameLabel')} required value={form.botName} onChange={(e) => setForm({ ...form, botName: e.target.value })} placeholder={t('botNamePlaceholder')} />
-
           <div>
             <SelectField label={t('personaLabel')} value={form.personaId} onChange={(e) => setForm({ ...form, personaId: e.target.value })}>
               <option value="">{t('choosePersona')}</option>
-              {localPersonas.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
+              {localPersonas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </SelectField>
             <button type="button" onClick={() => setShowPersonaModal(true)} className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-hermes-700 hover:text-hermes-800">
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              {t('createNewPersona')}
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />{t('createNewPersona')}
             </button>
           </div>
-
           <SelectField label={t('kbLabel')} value={form.knowledgeBaseId} onChange={(e) => setForm({ ...form, knowledgeBaseId: e.target.value })}>
             <option value="">{t('chooseKb')}</option>
-            {knowledgeBases.map((kb) => (
-              <option key={kb.id} value={kb.id}>{kb.name}</option>
-            ))}
+            {knowledgeBases.map((kb) => <option key={kb.id} value={kb.id}>{kb.name}</option>)}
           </SelectField>
-
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <SelectField label={t('defaultAiModeLabel')} value={form.defaultAiMode} onChange={(e) => setForm({ ...form, defaultAiMode: e.target.value })}>
-              {aiModes.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
+              {aiModes.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
             </SelectField>
             <SelectField label={t('languageLabel')} value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })}>
               <option value="id">{t('languageId')}</option>
@@ -390,15 +192,12 @@ function BotModal({
               <option value="inactive">{t('statusInactive')}</option>
             </SelectField>
           </div>
-
           <p className={`rounded-md px-3 py-2 text-xs ${form.defaultAiMode === 'ai_on' ? 'bg-danger-50 text-danger-700 dark:bg-danger-900/20 dark:text-danger-400' : 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
             {aiModeHelp[form.defaultAiMode]}
           </p>
-
           {error && <FormError message={error} />}
         </form>
 
-        {/* Assign accounts — only when editing */}
         {bot && (
           <div className="mt-4 border-t border-gray-100 pt-4 dark:border-gray-800">
             <h3 className="mb-2 text-xs font-semibold text-gray-500">{t('assignToAccounts')}</h3>
@@ -414,15 +213,9 @@ function BotModal({
                         <span className="text-sm text-gray-800 dark:text-gray-200">{a.accountName}</span>
                         <span className="text-xs text-gray-400">{a.phoneNumber}</span>
                       </div>
-                      {assigned ? (
-                        <Badge tone="success">{t('assigned')}</Badge>
-                      ) : (
-                        <Button size="sm" onClick={() => handleAssign(a.id)}>{t('assign')}</Button>
-                      )}
+                      {assigned ? <Badge tone="success">{t('assigned')}</Badge> : <Button size="sm" onClick={() => handleAssign(a.id)}>{t('assign')}</Button>}
                     </div>
-                    {autonomousButOffline && (
-                      <p className="mt-1.5 text-[11px] text-review-600 dark:text-review-400">{t('assignDisconnectedWarn')}</p>
-                    )}
+                    {autonomousButOffline && <p className="mt-1.5 text-[11px] text-review-600 dark:text-review-400">{t('assignDisconnectedWarn')}</p>}
                   </div>
                 );
               })}
@@ -444,30 +237,22 @@ function BotModal({
       )}
 
       {showActivate && (
-        <Modal
-          open
-          size="sm"
-          title={t('activateTitle')}
-          onClose={() => setShowActivate(false)}
+        <Modal open size="sm" title={t('activateTitle')} onClose={() => setShowActivate(false)}
           footer={
             <>
               <Button variant="outline" onClick={() => setShowActivate(false)}>{t('cancel')}</Button>
-              <Button variant="danger" onClick={doSave} disabled={loading}>
-                {loading ? t('saving') : t('activateConfirm')}
-              </Button>
+              <Button variant="danger" onClick={doSave} disabled={loading}>{loading ? t('saving') : t('activateConfirm')}</Button>
             </>
           }
         >
-          <p className="text-sm text-gray-600 dark:text-gray-300">
-            {t('activateBody', { name: form.botName })}
-          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-300">{t('activateBody', { name: form.botName })}</p>
         </Modal>
       )}
     </>
   );
 }
 
-// ── Bot Card ───────────────────────────────────────────────────────────────────
+// ── BotCard ────────────────────────────────────────────────────────────────────
 
 function BotCard({ bot, onEdit, onDelete }: { bot: Bot; onEdit: () => void; onDelete: () => void }) {
   const t = useT(dict);
@@ -486,30 +271,22 @@ function BotCard({ bot, onEdit, onDelete }: { bot: Bot; onEdit: () => void; onDe
           </div>
         </div>
         <div className="flex shrink-0 gap-1.5">
-          <Button variant="outline" size="sm" onClick={onEdit}>
-            <PencilSimple className="h-4 w-4" aria-hidden="true" />
-            {t('edit')}
-          </Button>
+          <Button variant="outline" size="sm" onClick={onEdit}><PencilSimple className="h-4 w-4" aria-hidden="true" />{t('edit')}</Button>
           <Button variant="ghost" size="sm" onClick={onDelete} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10">
-            <Trash className="h-4 w-4" aria-hidden="true" />
-            {t('delete')}
+            <Trash className="h-4 w-4" aria-hidden="true" />{t('delete')}
           </Button>
         </div>
       </div>
-
       <div className="mb-2 flex items-center gap-1.5 text-xs text-gray-500">
-        {t('defaultMode')}
-        <Badge tone="hermes">{bot.defaultAiMode}</Badge>
+        {t('defaultMode')}<Badge tone="hermes">{bot.defaultAiMode}</Badge>
       </div>
-
       {bot.accounts.length > 0 ? (
         <div>
           <p className="mb-1 text-xs text-gray-400">{t('waAccounts')}</p>
           <div className="flex flex-wrap gap-1">
             {bot.accounts.map((a) => (
               <span key={a.id} className="flex items-center gap-1 rounded-md bg-gray-50 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                {sessionDot(a.sessionStatus)}
-                {a.accountName}
+                {sessionDot(a.sessionStatus)}{a.accountName}
               </span>
             ))}
           </div>
@@ -524,54 +301,13 @@ function BotCard({ bot, onEdit, onDelete }: { bot: Bot; onEdit: () => void; onDe
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function BotsPage() {
-  const t = useT(dict);
-  const [bots, setBots] = useState<Bot[]>([]);
-  const [personas, setPersonas] = useState<Persona[]>([]);
-  const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
-  const [accounts, setAccounts] = useState<WaAccount[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [editBot, setEditBot] = useState<Bot | null | undefined>(undefined); // undefined = closed, null = new
-  const [confirmDelete, setConfirmDelete] = useState<Bot | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [botsData, personasData, kbsData, accountsData] = await Promise.all([
-        api<Bot[]>('/bots'),
-        api<Persona[]>('/bots/personas/list'),
-        api<{ items: KnowledgeBase[] }>('/knowledge-bases'),
-        api<WaAccount[]>('/wa/accounts'),
-      ]);
-      setBots(botsData);
-      setPersonas(personasData);
-      setKbs(kbsData.items ?? (kbsData as unknown as KnowledgeBase[]));
-      setAccounts(accountsData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('errLoadData'));
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function handleDelete(bot: Bot) {
-    try {
-      await api(`/bots/${bot.id}`, { method: 'DELETE' });
-      setConfirmDelete(null);
-      load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('errDeleteBot'));
-    }
-  }
+  const { t, bots, personas, kbs, accounts, loading, error, setError, editBot, setEditBot, confirmDelete, setConfirmDelete, load, handleDelete } = useBots();
 
   return (
     <AppLayout>
       <PageHeader title={t('pageTitle')} subtitle={t('pageSubtitle')}>
         <Button size="sm" onClick={() => setEditBot(null)}>
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          {t('newBotBtn')}
+          <Plus className="h-4 w-4" aria-hidden="true" />{t('newBotBtn')}
         </Button>
       </PageHeader>
 
@@ -579,9 +315,7 @@ export default function BotsPage() {
         {error && (
           <div className="mb-4 flex items-center justify-between rounded-lg border border-danger-100 bg-danger-50 px-3 py-2 text-sm text-danger-700 dark:border-danger-700/40 dark:bg-danger-700/10 dark:text-danger-500">
             {error}
-            <button onClick={() => setError(null)} aria-label={t('closeNotif')}>
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
+            <button onClick={() => setError(null)} aria-label={t('closeNotif')}><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
           </div>
         )}
 
@@ -595,8 +329,7 @@ export default function BotsPage() {
             <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('noBots')}</p>
             <p className="mt-1 text-[13px] text-gray-400">{t('noBotsHint')}</p>
             <Button size="sm" className="mt-4" onClick={() => setEditBot(null)}>
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              {t('newBotBtn')}
+              <Plus className="h-4 w-4" aria-hidden="true" />{t('newBotBtn')}
             </Button>
           </Card>
         ) : (
@@ -614,26 +347,18 @@ export default function BotsPage() {
             knowledgeBases={kbs}
             accounts={accounts}
             onClose={() => setEditBot(undefined)}
-            onSaved={() => {
-              setEditBot(undefined);
-              load();
-            }}
+            onSaved={() => { setEditBot(undefined); load(); }}
             onChanged={load}
           />
         )}
 
         {confirmDelete && (
-          <Modal
-            open
-            size="sm"
-            title={t('deleteBotTitle')}
-            onClose={() => setConfirmDelete(null)}
+          <Modal open size="sm" title={t('deleteBotTitle')} onClose={() => setConfirmDelete(null)}
             footer={
               <>
                 <Button variant="ghost" onClick={() => setConfirmDelete(null)}>{t('cancel')}</Button>
                 <Button variant="danger" onClick={() => handleDelete(confirmDelete)}>
-                  <Trash className="h-4 w-4" aria-hidden="true" />
-                  {t('deleteBotBtn')}
+                  <Trash className="h-4 w-4" aria-hidden="true" />{t('deleteBotBtn')}
                 </Button>
               </>
             }
