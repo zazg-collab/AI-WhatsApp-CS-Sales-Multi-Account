@@ -102,4 +102,21 @@ export class KnowledgeController {
   ) {
     return this.knowledge.ingestUrl(id, dto.url, user.id);
   }
+
+  @ApiOperation({ summary: 'Dry-run parse of a file (no persistence) to pre-fill the add-item form' })
+  @ApiConsumes('multipart/form-data')
+  @Roles('owner', 'supervisor', 'admin')
+  @Post('knowledge/parse/upload')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 15 * 1024 * 1024 } }))
+  parseFile(@UploadedFile() file: { buffer: Buffer; originalname?: string; mimetype?: string } | undefined) {
+    if (!file?.buffer?.length) throw new BadRequestException('No file uploaded');
+    return this.knowledge.parseFile(file);
+  }
+
+  @ApiOperation({ summary: 'Dry-run parse of a URL (no persistence) to pre-fill the add-item form' })
+  @Roles('owner', 'supervisor', 'admin')
+  @Post('knowledge/parse-url')
+  parseUrl(@Body() dto: IngestUrlDto) {
+    return this.knowledge.parseUrl(dto.url);
+  }
 }

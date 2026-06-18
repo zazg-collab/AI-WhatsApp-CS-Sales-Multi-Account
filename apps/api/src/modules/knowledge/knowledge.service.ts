@@ -17,6 +17,8 @@ import { logAudit } from '../../common/audit.util';
 
 const URL_FETCH_TIMEOUT_MS = 15_000;
 const URL_MAX_BYTES = 5 * 1024 * 1024;
+/** Cap on the content preview returned by the dry-run parse endpoints. */
+const PREVIEW_MAX_CHARS = 12_000;
 
 @Injectable()
 export class KnowledgeService {
@@ -116,10 +118,11 @@ export class KnowledgeService {
    * Ingest a public web page: fetch it (SSRF-guarded, size/time capped),
    * strip it to readable text, and store as active knowledge items.
    */
-  async ingestUrl(baseId: string, url: string, userId: string) {
-    const base = await this.prisma.knowledgeBase.findUnique({ where: { id: baseId } });
-    if (!base) throw new NotFoundException('Knowledge base not found');
-
+  /**
+   * Fetch a public URL (SSRF-guarded, size/time capped) and extract readable
+   * text. Shared by ingestUrl (commit) and parseUrl (dry-run preview).
+   */
+  private async fetchAndExtractUrl(url: string): Promise<{ sourceTitle: string; text: string; kind: string }> {
     // Same SSRF rules as media fetching: https/http only, no private ranges.
     assertSafeMediaUrl(url);
 
@@ -146,22 +149,19 @@ export class KnowledgeService {
     const parsedUrl = new URL(url);
     const urlName = decodeURIComponent(parsedUrl.pathname.split('/').filter(Boolean).pop() ?? parsedUrl.hostname);
 
-    let sourceTitle: string;
-    let text: string;
-    let kind: string;
-
     if (contentType.toLowerCase().includes('html') || /\.html?$/i.test(parsedUrl.pathname) || !urlName.includes('.')) {
       const html = raw.toString('utf8');
-      text = htmlToText(html);
-      kind = 'website';
-      sourceTitle = htmlTitle(html) ?? parsedUrl.hostname;
-    } else {
-      const extracted = await extractFromFile(raw, urlName, contentType);
-      text = extracted.text;
-      kind = extracted.kind;
-      sourceTitle = urlName;
+      return { text: htmlToText(html), kind: 'website', sourceTitle: htmlTitle(html) ?? parsedUrl.hostname };
     }
+    const extracted = await extractFromFile(raw, urlName, contentType);
+    return { text: extracted.text, kind: extracted.kind, sourceTitle: urlName };
+  }
 
+  async ingestUrl(baseId: string, url: string, userId: string) {
+    const base = await this.prisma.knowledgeBase.findUnique({ where: { id: baseId } });
+    if (!base) throw new NotFoundException('Knowledge base not found');
+
+    const { sourceTitle, text, kind } = await this.fetchAndExtractUrl(url);
     if (!text) throw new BadRequestException('Tidak ada teks terbaca dari sumber ini');
 
     const items = await this.createChunkedItems(baseId, sourceTitle, text, kind, url);
@@ -173,6 +173,43 @@ export class KnowledgeService {
       newValue: { url, kind, items: items.length, chars: text.length },
     });
     return { source: url, kind, chars: text.length, items };
+  }
+
+  /**
+   * Dry-run parse of an uploaded file — extracts text WITHOUT persisting so the
+   * UI can pre-fill the add-item form (title from filename, content preview)
+   * for the user to review/trim before saving (action-first).
+   */
+  async parseFile(file: { buffer: Buffer; originalname?: string; mimetype?: string }) {
+    const filename = file.originalname ?? 'dokumen';
+    const { text, kind } = await extractFromFile(file.buffer, filename, file.mimetype);
+    if (!text) {
+      throw new BadRequestException(
+        'Tidak ada teks yang bisa diekstrak dari file ini (mungkin hasil scan/gambar)',
+      );
+    }
+    const title = filename.replace(/\.[^.]+$/, '').trim() || filename;
+    return {
+      title,
+      content: text.slice(0, PREVIEW_MAX_CHARS),
+      kind,
+      chars: text.length,
+      truncated: text.length > PREVIEW_MAX_CHARS,
+    };
+  }
+
+  /** Dry-run parse of a public URL — same contract as parseFile. */
+  async parseUrl(url: string) {
+    const { sourceTitle, text, kind } = await this.fetchAndExtractUrl(url);
+    if (!text) throw new BadRequestException('Tidak ada teks terbaca dari sumber ini');
+    return {
+      title: sourceTitle,
+      content: text.slice(0, PREVIEW_MAX_CHARS),
+      kind,
+      chars: text.length,
+      truncated: text.length > PREVIEW_MAX_CHARS,
+      source: url,
+    };
   }
 
   /** Store extracted text as one or more active knowledge items. */

@@ -26,6 +26,7 @@ export default function KnowledgePage() {
   const [ingesting, setIngesting] = useState(false);
   const [ingestMsg, setIngestMsg] = useState<string | null>(null);
   const [ingestOk, setIngestOk] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingBases, setLoadingBases] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
@@ -55,31 +56,50 @@ export default function KnowledgePage() {
 
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
-    if (!selected) return;
-    await api(`/knowledge-bases/${selected}/items`, { method: 'POST', body: JSON.stringify({ ...item, status: 'active' }) });
-    setItem({ title: '', content: '', productName: '' }); loadBase(selected);
+    if (!item.title.trim() || !item.content.trim()) return;
+    let baseId = selected;
+    // First save with no base selected auto-creates one (named after the item).
+    if (!baseId) {
+      const base = await api<Base>('/knowledge-bases', {
+        method: 'POST',
+        body: JSON.stringify({ name: item.title.trim().slice(0, 60) || t('defaultBaseName') }),
+      });
+      baseId = base.id;
+    }
+    await api(`/knowledge-bases/${baseId}/items`, { method: 'POST', body: JSON.stringify({ ...item, status: 'active' }) });
+    setItem({ title: '', content: '', productName: '' });
+    setPrefilled(false);
+    await loadBases();
+    loadBase(baseId);
   }
 
+  // File/URL are now action-first: parse (no persistence) and pre-fill the form
+  // so the user reviews/trims before saving, instead of silently creating items.
   async function handleFileUpload(file: File) {
-    if (!selected || ingesting) return;
+    if (ingesting) return;
     setIngesting(true); setIngestMsg(null);
     const form = new FormData(); form.append('file', file);
     try {
-      const r = await uploadFile<{ items: unknown[]; chars: number }>(`/knowledge-bases/${selected}/items/upload`, form);
-      setIngestOk(true); setIngestMsg(t('importFileOk', { name: file.name, count: r.items.length, chars: r.chars }));
-      loadBase(selected); loadBases();
+      const r = await uploadFile<{ title: string; content: string; kind: string; chars: number; truncated: boolean }>('/knowledge/parse/upload', form);
+      setItem({ title: r.title, content: r.content, productName: '' });
+      setPrefilled(true);
+      setIngestOk(true);
+      setIngestMsg(r.truncated ? t('parsedTruncated', { chars: r.chars }) : t('parsedOk', { chars: r.chars }));
     } catch (e) { setIngestOk(false); setIngestMsg(e instanceof Error ? e.message : t('importFileError')); }
     finally { setIngesting(false); if (fileRef.current) fileRef.current.value = ''; }
   }
 
   async function handleUrlIngest(e: React.FormEvent) {
     e.preventDefault();
-    if (!selected || !ingestUrl.trim() || ingesting) return;
+    if (!ingestUrl.trim() || ingesting) return;
     setIngesting(true); setIngestMsg(null);
     try {
-      const r = await api<{ items: unknown[]; chars: number; source: string }>(`/knowledge-bases/${selected}/items/from-url`, { method: 'POST', body: JSON.stringify({ url: ingestUrl.trim() }) });
-      setIngestOk(true); setIngestMsg(t('importUrlOk', { source: r.source, count: r.items.length, chars: r.chars }));
-      setIngestUrl(''); loadBase(selected); loadBases();
+      const r = await api<{ title: string; content: string; kind: string; chars: number; truncated: boolean }>('/knowledge/parse-url', { method: 'POST', body: JSON.stringify({ url: ingestUrl.trim() }) });
+      setItem({ title: r.title, content: r.content, productName: '' });
+      setPrefilled(true);
+      setIngestUrl('');
+      setIngestOk(true);
+      setIngestMsg(r.truncated ? t('parsedTruncated', { chars: r.chars }) : t('parsedOk', { chars: r.chars }));
     } catch (e) { setIngestOk(false); setIngestMsg(e instanceof Error ? e.message : t('importUrlError')); }
     finally { setIngesting(false); }
   }
@@ -125,68 +145,64 @@ export default function KnowledgePage() {
         </aside>
 
         <section className="min-w-0 flex-1 space-y-5">
-          {selected ? (
-            <>
-              <Card className="p-4">
-                <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  <UploadSimple className="h-4 w-4 text-gray-400" aria-hidden="true" />{t('importHeading')}
-                </h2>
-                <p className="mb-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t('importHint')}</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-hermes-600 px-3.5 text-sm font-medium text-white hover:bg-hermes-700 ${ingesting ? 'opacity-50' : ''}`}>
-                    <UploadSimple className="h-4 w-4" aria-hidden="true" />
-                    {ingesting ? t('processing') : t('uploadFile')}
-                    <input ref={fileRef} type="file" aria-label={t('uploadFileAria')} className="hidden" accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md,.html,.htm,.json" disabled={ingesting} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }} />
-                  </label>
-                  <form onSubmit={handleUrlIngest} className="flex flex-1 items-end gap-2">
-                    <div className="min-w-48 flex-1"><Field label={t('importFromUrl')} aria-label={t('urlSourceAria')} type="url" value={ingestUrl} onChange={(e) => setIngestUrl(e.target.value)} placeholder={t('urlPlaceholder')} /></div>
-                    <Button type="submit" variant="outline" size="md" disabled={!ingestUrl.trim() || ingesting}><Link className="h-4 w-4" aria-hidden="true" />{t('pullUrl')}</Button>
-                  </form>
-                </div>
-                {ingestMsg && <p className={`mt-2 text-xs ${ingestOk ? 'text-channel-700' : 'text-danger-600'}`}>{ingestMsg}</p>}
-              </Card>
+          <Card className="p-4">
+            <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <UploadSimple className="h-4 w-4 text-gray-400" aria-hidden="true" />{t('importHeading')}
+            </h2>
+            <p className="mb-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t('importHintPrefill')}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-hermes-600 px-3.5 text-sm font-medium text-white hover:bg-hermes-700 ${ingesting ? 'opacity-50' : ''}`}>
+                <UploadSimple className="h-4 w-4" aria-hidden="true" />
+                {ingesting ? t('processing') : t('uploadFile')}
+                <input ref={fileRef} type="file" aria-label={t('uploadFileAria')} className="hidden" accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md,.html,.htm,.json" disabled={ingesting} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }} />
+              </label>
+              <form onSubmit={handleUrlIngest} className="flex flex-1 items-end gap-2">
+                <div className="min-w-48 flex-1"><Field label={t('importFromUrl')} aria-label={t('urlSourceAria')} type="url" value={ingestUrl} onChange={(e) => setIngestUrl(e.target.value)} placeholder={t('urlPlaceholder')} /></div>
+                <Button type="submit" variant="outline" size="md" disabled={!ingestUrl.trim() || ingesting}><Link className="h-4 w-4" aria-hidden="true" />{t('pullUrl')}</Button>
+              </form>
+            </div>
+            {ingestMsg && <p className={`mt-2 text-xs ${ingestOk ? 'text-channel-700' : 'text-danger-600'}`}>{ingestMsg}</p>}
+          </Card>
 
-              <Card className="p-4">
-                <h2 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">{t('addItemHeading')}</h2>
-                <form onSubmit={addItem} className="space-y-2">
-                  <Field label={t('titleLabel')} placeholder={t('titlePlaceholder')} value={item.title} onChange={(e) => setItem({ ...item, title: e.target.value })} required />
-                  <Field label={t('productNameLabel')} hint={t('productNameHint')} placeholder={t('productNamePlaceholder')} value={item.productName} onChange={(e) => setItem({ ...item, productName: e.target.value })} />
-                  <TextareaField label={t('contentLabel')} placeholder={t('contentPlaceholder')} value={item.content} onChange={(e) => setItem({ ...item, content: e.target.value })} rows={4} required />
-                  <Button type="submit" size="sm"><Plus className="h-4 w-4" aria-hidden="true" />{t('addItem')}</Button>
-                </form>
-              </Card>
+          <Card className="p-4">
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {t('addItemHeading')}
+              {prefilled && <Badge tone="hermes">{t('autoParsed')}</Badge>}
+            </h2>
+            {!selected && <p className="mb-2 text-[11px] text-gray-400">{t('willAutoCreateBase')}</p>}
+            <form onSubmit={addItem} className="space-y-2">
+              <Field label={t('titleLabel')} placeholder={t('titlePlaceholder')} value={item.title} onChange={(e) => setItem({ ...item, title: e.target.value })} required />
+              <Field label={t('productNameLabel')} hint={t('productNameHint')} placeholder={t('productNamePlaceholder')} value={item.productName} onChange={(e) => setItem({ ...item, productName: e.target.value })} />
+              <TextareaField label={t('contentLabel')} placeholder={t('contentPlaceholder')} value={item.content} onChange={(e) => setItem({ ...item, content: e.target.value })} rows={prefilled ? 8 : 4} required />
+              <Button type="submit" size="sm"><Plus className="h-4 w-4" aria-hidden="true" />{t('addItem')}</Button>
+            </form>
+          </Card>
 
-              {loadingItems ? (
-                <div className="space-y-2">{[1,2,3].map((n) => <div key={n} className="h-20 rounded animate-shimmer" />)}</div>
-              ) : items.length === 0 ? (
-                <Card className="flex flex-col items-center justify-center py-12 text-center">
-                  <Books className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('emptyItemsTitle')}</p>
-                  <p className="mt-1 text-[13px] text-gray-400">{t('emptyItemsHint')}</p>
-                </Card>
-              ) : (
-                <ul className="space-y-2">
-                  {items.map((it) => (
-                    <li key={it.id}>
-                      <Card className="p-4">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-medium text-gray-900 dark:text-gray-100">{it.title}</p>
-                          <Badge tone={it.status === 'active' ? 'success' : 'neutral'}>{it.status === 'active' ? t('statusActive') : it.status}</Badge>
-                        </div>
-                        {it.productName && <p className="text-xs text-gray-400">{it.productName}</p>}
-                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{it.content}</p>
-                      </Card>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
-          ) : (
-            <Card className="flex flex-col items-center justify-center py-16 text-center">
-              <Books className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('pickBaseTitle')}</p>
-              <p className="mt-1 text-[13px] text-gray-400">{t('pickBaseHint')}</p>
-            </Card>
+          {selected && (
+            loadingItems ? (
+              <div className="space-y-2">{[1,2,3].map((n) => <div key={n} className="h-20 rounded animate-shimmer" />)}</div>
+            ) : items.length === 0 ? (
+              <Card className="flex flex-col items-center justify-center py-12 text-center">
+                <Books className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('emptyItemsTitle')}</p>
+                <p className="mt-1 text-[13px] text-gray-400">{t('emptyItemsHint')}</p>
+              </Card>
+            ) : (
+              <ul className="space-y-2">
+                {items.map((it) => (
+                  <li key={it.id}>
+                    <Card className="p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium text-gray-900 dark:text-gray-100">{it.title}</p>
+                        <Badge tone={it.status === 'active' ? 'success' : 'neutral'}>{it.status === 'active' ? t('statusActive') : it.status}</Badge>
+                      </div>
+                      {it.productName && <p className="text-xs text-gray-400">{it.productName}</p>}
+                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{it.content}</p>
+                    </Card>
+                  </li>
+                ))}
+              </ul>
+            )
           )}
         </section>
       </div>
