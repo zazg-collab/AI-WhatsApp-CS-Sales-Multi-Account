@@ -465,6 +465,16 @@ export class WaService implements OnModuleInit {
     return this.store.has(accountId);
   }
 
+  async getMetadata(accountId: string): Promise<{ phoneNumber: string | null; suggestedName: string | null }> {
+    const session = this.store.get(accountId);
+    if (!session?.sock?.user) {
+      return { phoneNumber: null, suggestedName: null };
+    }
+    const phone = jidToPhone(session.sock.user.id);
+    const suggestedName = session.sock.user.name ?? null;
+    return { phoneNumber: phone, suggestedName };
+  }
+
   async logAiModeChange(conversationId: string, oldMode: string, newMode: string) {
     await logAudit(this.prisma, {
       action: 'ai_mode_change',

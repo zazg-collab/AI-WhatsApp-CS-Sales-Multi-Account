@@ -71,6 +71,14 @@ export class WaController {
     return { qr: this.wa.getQr(id), connected: this.wa.isConnected(id) };
   }
 
+  @ApiOperation({ summary: 'Get auto-populated metadata (phone, name) after successful scan' })
+  @Roles('viewer')
+  @Get(':id/metadata')
+  async metadata(@Param('id') id: string) {
+    const { phoneNumber, suggestedName } = await this.wa.getMetadata(id);
+    return { phoneNumber, suggestedName };
+  }
+
   @ApiOperation({ summary: 'Get live connection health for an account' })
   // Without an explicit @Roles, the default-deny RolesGuard 403'd this for
   // everyone — the endpoint was dead since it shipped.
