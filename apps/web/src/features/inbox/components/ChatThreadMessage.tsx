@@ -160,7 +160,7 @@ export function ChatThreadMessage({
       {/* Message bubble */}
       <div
         className={cn(
-          'relative max-w-xs rounded-lg px-3 py-2 text-sm break-words lg:max-w-md 2xl:max-w-xl',
+          'relative max-w-[80%] min-w-0 rounded-lg px-3 py-2 text-sm break-words lg:max-w-md 2xl:max-w-xl',
           isCustomer
             ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
             : 'bg-hermes-50 text-gray-900 dark:bg-hermes-900/30 dark:text-gray-100',

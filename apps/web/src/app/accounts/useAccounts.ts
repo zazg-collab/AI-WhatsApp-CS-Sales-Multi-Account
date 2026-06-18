@@ -17,6 +17,7 @@ export interface Account {
   businessDays?: number[];
   businessTimezone?: string | null;
   awayMessage?: string | null;
+  _count?: { conversations: number };
 }
 
 const STATUS_PRIORITY: Record<string, number> = {
@@ -43,7 +44,7 @@ export function useAccounts() {
   const [health, setHealth] = useState<Record<string, { liveSocket: boolean; reconnectAttempts: number }>>({});
   const [restarting, setRestarting] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<{ id: string; accountName: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; accountName: string; conversationCount: number } | null>(null);
   const [confirmRestart, setConfirmRestart] = useState<{ id: string; accountName: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');

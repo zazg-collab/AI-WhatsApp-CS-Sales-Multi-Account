@@ -118,6 +118,7 @@ export const dict: Dict = {
     en: 'Delete WhatsApp account "{name}"? All session data will be removed. This cannot be undone.',
   },
   deleteConfirmTitle: { id: 'Hapus akun WhatsApp?', en: 'Delete WhatsApp account?' },
+  deleteImpact: { id: '{count} percakapan akun ini akan ikut terputus dan tidak lagi menerima pesan.', en: '{count} conversations on this account will be disconnected and stop receiving messages.' },
   cancel: { id: 'Batal', en: 'Cancel' },
   deleting: { id: 'Menghapus…', en: 'Deleting…' },
   healthLive: { id: 'Socket aktif', en: 'Live socket' },

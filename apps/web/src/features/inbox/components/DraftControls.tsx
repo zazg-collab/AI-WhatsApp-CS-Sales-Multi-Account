@@ -62,25 +62,25 @@ export function DraftControls({
           size="sm"
           disabled={approving || blocking}
           onClick={onApprove}
-          className="flex-1"
+          className="flex-1 whitespace-nowrap"
         >
-          {approving ? '⏳' : '✓'} Approve & send
+          {approving ? '⏳' : '✓'} Approve
         </Button>
         <Button
           variant="ghost"
           size="sm"
           disabled={approving || blocking}
           onClick={onEdit}
-          className="flex-1"
+          className="flex-1 whitespace-nowrap"
         >
-          ✎ Edit draft
+          ✎ Edit
         </Button>
         <Button
           variant="danger"
           size="sm"
           disabled={approving || blocking}
           onClick={onBlock}
-          className="flex-1"
+          className="flex-1 whitespace-nowrap"
         >
           {blocking ? '⏳' : '✕'} Block
         </Button>

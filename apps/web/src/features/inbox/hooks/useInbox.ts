@@ -217,8 +217,8 @@ export function useInbox(initialConversationId: string | null) {
           new Notification('Customer', {
             body: message.content ? message.content.substring(0, 100) : '[Media message]',
             tag: conversationId,
-            icon: '/icon.png',
-            badge: '/badge.png',
+            icon: '/favicon.svg',
+            badge: '/favicon.svg',
           });
           playNotificationSound();
         } catch { /* ignore */ }
@@ -468,6 +468,25 @@ export function useInbox(initialConversationId: string | null) {
     setActiveId(opened.id);
   });
 
+  // Search the account's synced WhatsApp contact book so the user can pick a
+  // contact instead of typing a number from memory.
+  const searchContacts = useCallback(async (accountId: string, query: string) => {
+    if (!accountId) return [];
+    const params = new URLSearchParams({ limit: '8' });
+    if (query.trim()) params.set('search', query.trim());
+    try {
+      const r = await api<{ items: Array<{ phoneNumber: string; name: string | null; notify: string | null; verifiedName: string | null; customer: { name: string | null } | null }> }>(
+        `/wa/accounts/${accountId}/contacts?${params}`,
+      );
+      return r.items.map((c) => ({
+        phoneNumber: c.phoneNumber,
+        name: c.customer?.name || c.name || c.verifiedName || c.notify || '',
+      }));
+    } catch {
+      return [];
+    }
+  }, []);
+
   const assignAdmin = (adminId: string | null) =>
     act(() => api(`/conversations/${activeId}/assign`, { method: 'PATCH', body: JSON.stringify({ adminId }) }));
 
@@ -523,6 +542,6 @@ export function useInbox(initialConversationId: string | null) {
     sendLocation, sendPoll, sendContactCard,
     setContactBlocked, setChatMuted, setChatArchived, setChatPinned,
     setMessageStarred, setDisappearing, saveLabels,
-    validateNumber, startConversation, assignAdmin, updateNotes, handleMediaFile,
+    validateNumber, startConversation, searchContacts, assignAdmin, updateNotes, handleMediaFile,
   };
 }

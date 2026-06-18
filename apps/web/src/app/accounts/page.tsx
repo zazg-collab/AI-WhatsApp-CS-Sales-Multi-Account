@@ -266,7 +266,7 @@ export default function AccountsPage() {
                       {restarting === a.id ? t('restarting') : t('restart')}
                     </Button>
                     {canDelete && (
-                      <Button type="button" variant="outline" size="sm" className="border-danger-200 text-danger-600 hover:bg-danger-50 dark:border-danger-800 dark:text-danger-400" onClick={() => setConfirmDelete({ id: a.id, accountName: a.accountName })} disabled={deleting === a.id}>
+                      <Button type="button" variant="outline" size="sm" className="border-danger-200 text-danger-600 hover:bg-danger-50 dark:border-danger-800 dark:text-danger-400" onClick={() => setConfirmDelete({ id: a.id, accountName: a.accountName, conversationCount: a._count?.conversations ?? 0 })} disabled={deleting === a.id}>
                         <Trash className="h-3.5 w-3.5" aria-hidden="true" />
                         {deleting === a.id ? t('deleting') : t('delete')}
                       </Button>
@@ -359,7 +359,14 @@ export default function AccountsPage() {
             </Button>
           </>
         }
-      >{null}</Modal>
+      >
+        {confirmDelete && confirmDelete.conversationCount > 0 ? (
+          <p className="flex items-start gap-2 rounded-lg bg-danger-50 px-3 py-2 text-[13px] text-danger-700 dark:bg-danger-900/20 dark:text-danger-300">
+            <Trash className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            {t('deleteImpact', { count: String(confirmDelete.conversationCount) })}
+          </p>
+        ) : null}
+      </Modal>
 
       {/* Restart confirmation */}
       <Modal

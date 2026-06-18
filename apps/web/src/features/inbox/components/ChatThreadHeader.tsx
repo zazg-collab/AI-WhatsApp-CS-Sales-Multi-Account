@@ -1,10 +1,11 @@
 'use client';
 
-import { DotsThreeVertical } from '@phosphor-icons/react';
+import { DotsThreeVertical, ArrowLeft, Info } from '@phosphor-icons/react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Popover, useSinglePopover } from '@/components/ui/Popover';
 import { cn } from '@/lib/cn';
+import { contactDisplayName, formatPhone } from '@/lib/contact';
 import type { ConvDetail } from '../inbox.types';
 
 export interface ConversationActions {
@@ -40,9 +41,9 @@ export function ChatThreadHeader({
   const accountConnected = conversation.whatsappAccount?.sessionStatus === 'connected';
   const accountName = conversation.whatsappAccount?.accountName;
   const title = conversation.isGroup
-    ? conversation.groupSubject || customer.name || customer.phoneNumber
-    : customer.name || customer.phoneNumber;
-  const subtitle = conversation.isGroup ? 'Group' : customer.phoneNumber;
+    ? conversation.groupSubject || contactDisplayName(customer.name, customer.phoneNumber)
+    : contactDisplayName(customer.name, customer.phoneNumber);
+  const subtitle = conversation.isGroup ? 'Group' : formatPhone(customer.phoneNumber, 'Nomor tersembunyi');
 
   return (
     <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:px-5">
@@ -52,10 +53,10 @@ export function ChatThreadHeader({
             variant="ghost"
             size="sm"
             onClick={onBack}
-            className="md:hidden"
+            className="sm:hidden"
             aria-label="Back to list"
           >
-            ←
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           </Button>
         )}
 
@@ -156,7 +157,7 @@ export function ChatThreadHeader({
             aria-label="Show conversation details"
             className="xl:hidden"
           >
-            ℹ️
+            <Info className="h-5 w-5" aria-hidden="true" />
           </Button>
         )}
       </div>

@@ -38,6 +38,8 @@ export class WaController {
   list() {
     return this.prisma.whatsappAccount.findMany({
       orderBy: { createdAt: 'desc' },
+      // Conversation count powers the delete-impact warning in the UI.
+      include: { _count: { select: { conversations: true } } },
     });
   }
 

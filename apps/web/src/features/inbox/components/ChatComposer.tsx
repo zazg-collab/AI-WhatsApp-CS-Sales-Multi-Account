@@ -5,6 +5,9 @@ import {
   PaperPlaneTilt,
   Paperclip,
   MapPin,
+  Lightning,
+  ChartBar,
+  UserCircle,
 } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/Button';
 import { Popover, useSinglePopover } from '@/components/ui/Popover';
@@ -186,7 +189,7 @@ export function ChatComposer({
                 aria-label="Quick replies"
                 title="Quick replies"
               >
-                ⚡
+                <Lightning className="h-4 w-4" aria-hidden="true" />
               </Button>
               <Popover open={isOpen('quick')} onClose={() => close()} align="right" side="top">
                 <div className="max-h-64 w-60 space-y-0.5 overflow-y-auto p-1.5">
@@ -228,9 +231,10 @@ export function ChatComposer({
                     close();
                   }}
                   disabled={disabled}
-                  className="w-full rounded px-2 py-1 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                  className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-700"
                 >
-                  📎 Attach media
+                  <Paperclip className="h-4 w-4" aria-hidden="true" />
+                  Attach media
                 </button>
                 {onSendLocation && (
                   <button
@@ -246,18 +250,20 @@ export function ChatComposer({
                   <button
                     onClick={() => openMediaForm('poll')}
                     disabled={disabled}
-                    className="w-full rounded px-2 py-1 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-700"
                   >
-                    📋 Send poll
+                    <ChartBar className="h-4 w-4" aria-hidden="true" />
+                    Send poll
                   </button>
                 )}
                 {onSendContacts && (
                   <button
                     onClick={() => openMediaForm('contacts')}
                     disabled={disabled}
-                    className="w-full rounded px-2 py-1 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-700"
                   >
-                    👥 Send contact
+                    <UserCircle className="h-4 w-4" aria-hidden="true" />
+                    Send contact
                   </button>
                 )}
               </div>
