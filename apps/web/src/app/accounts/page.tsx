@@ -16,6 +16,7 @@ import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
 import { Field, TextareaField } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { SessionStatusBadge, getSessionLabel } from '@/components/ui/SessionStatusBadge';
@@ -151,16 +152,26 @@ export default function AccountsPage() {
     statusFilter, setStatusFilter, requestingCode,
     addModalOpen, addStep,
     addName, setAddName, addPhone, setAddPhone,
+    addCodePhone, setAddCodePhone,
     addError, addCreating, addedAccountId,
-    addConnectMethod, setAddConnectMethod,
-    addRequestingCode, addConnected,
+    addConnectMethod,
+    addConnected, addAutoDetected, addSaving,
     canScan, canEditHours, canDelete,
     load, openAddModal, closeAddModal,
-    handleAddCreate, handleAddRequestPairingCode,
+    startQrFlow, chooseCodeMethod, submitCodePhone, confirmAndSave,
     restartAccount, requestPairingCode, deleteAccount, copyPairingCode,
     setPairingMode,
     t,
   } = useAccounts();
+
+  // Step indicator: QR path is method→scan→confirm (3); code path inserts a
+  // phone step (4).
+  const addTotalSteps = addConnectMethod === 'code' ? 4 : 3;
+  const addCurrentStep =
+    addStep === 'method' ? 1
+    : addStep === 'phone' ? 2
+    : addStep === 'scan' ? (addConnectMethod === 'code' ? 3 : 2)
+    : (addConnectMethod === 'code' ? 4 : 3);
 
   return (
     <AppLayout>
@@ -367,79 +378,72 @@ export default function AccountsPage() {
         }
       >{null}</Modal>
 
-      {/* Add account modal */}
+      {/* Add account modal — scan-first: name + number auto-fill from the device */}
       <Modal
         open={addModalOpen}
         onClose={closeAddModal}
         title={t('addModalTitle')}
-        description={addStep === 'details' ? t('addModalDesc') : undefined}
+        description={
+          addStep === 'method' ? t('chooseMethodDesc')
+          : addStep === 'phone' ? t('codePhoneDesc')
+          : addStep === 'confirm' ? t('confirmDesc')
+          : undefined
+        }
         size="sm"
+        step={addCurrentStep}
+        totalSteps={addTotalSteps}
+        stepLabel={t('stepCounter')}
         footer={
-          addStep === 'details' ? (
+          addStep === 'method' ? (
+            <Button variant="outline" size="sm" onClick={closeAddModal}>{t('cancel')}</Button>
+          ) : addStep === 'phone' ? (
             <>
-              <Button variant="outline" size="sm" onClick={closeAddModal}>{t('cancel')}</Button>
-              <Button size="sm" disabled={addCreating || !addName.trim() || !addPhone.trim()} onClick={handleAddCreate}>
-                {addCreating ? t('creating') : t('next')}
+              <Button variant="ghost" size="sm" onClick={openAddModal}>{t('back')}</Button>
+              <Button size="sm" disabled={addCreating || !addCodePhone.replace(/\D/g, '')} onClick={submitCodePhone}>
+                {addCreating ? t('requestingPairingCode') : t('requestCode')}
               </Button>
             </>
-          ) : addConnected ? (
-            <Button size="sm" onClick={closeAddModal} className="w-full">
-              <CheckCircle className="h-4 w-4" aria-hidden="true" />
-              {t('connectedClose')}
-            </Button>
-          ) : addConnectMethod === null ? (
+          ) : addStep === 'scan' ? (
             <Button variant="outline" size="sm" onClick={closeAddModal}>{t('cancel')}</Button>
           ) : (
-            <Button variant="ghost" size="sm" onClick={() => setAddConnectMethod(null)}>{t('back')}</Button>
+            <>
+              <Button variant="outline" size="sm" onClick={closeAddModal}>{t('cancel')}</Button>
+              <Button size="sm" disabled={addSaving || !addName.trim() || !addPhone.trim()} onClick={confirmAndSave}>
+                {addSaving ? t('savingAccount') : t('saveAccount')}
+              </Button>
+            </>
           )
         }
       >
-        {addStep === 'details' ? (
-          <div className="space-y-4">
-            {addError && <p className="rounded border border-danger-200 bg-danger-50 px-3 py-2 text-[13px] text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">{addError}</p>}
-            <div>
-              <label className="mb-1 block text-[13px] font-medium text-gray-700 dark:text-gray-200">{t('nameLabel')} <span className="text-danger-500">*</span></label>
-              <input autoFocus value={addName} onChange={(e) => setAddName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && addName.trim()) document.getElementById('add-phone-input')?.focus(); }} placeholder={t('accountNamePlaceholder')} className={`w-full ${inputClass}`} />
-              <p className="mt-1 text-[11px] text-gray-400">{t('nameHint')}</p>
-            </div>
-            <div>
-              <label className="mb-1 block text-[13px] font-medium text-gray-700 dark:text-gray-200">{t('phoneLabel2')} <span className="text-danger-500">*</span></label>
-              <input id="add-phone-input" type="tel" value={addPhone} onChange={(e) => setAddPhone(e.target.value.replace(/[^\d]/g, ''))} onKeyDown={(e) => { if (e.key === 'Enter' && addName.trim() && addPhone.trim()) handleAddCreate(); }} placeholder={t('phonePlaceholder')} className={`w-full ${inputClass}`} />
-              <p className="mt-1 text-[11px] text-gray-400">{t('phoneHint')}</p>
-            </div>
+        {addError && <p className="mb-3 rounded border border-danger-200 bg-danger-50 px-3 py-2 text-[13px] text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">{addError}</p>}
+
+        {addStep === 'method' ? (
+          <div className="space-y-3">
+            <button type="button" disabled={addCreating} onClick={startQrFlow} className="flex w-full items-start gap-3 rounded-xl border-2 border-gray-200 p-4 text-left transition-colors hover:border-hermes-400 hover:bg-hermes-50 disabled:cursor-wait disabled:opacity-60 dark:border-gray-700 dark:hover:border-hermes-500 dark:hover:bg-hermes-900/20">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-hermes-100 text-hermes-700 dark:bg-hermes-900/40"><QrCode className="h-5 w-5" aria-hidden="true" /></span>
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('optionQr')}</p>
+                <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{t('optionQrDesc')}</p>
+              </div>
+            </button>
+            <button type="button" onClick={chooseCodeMethod} className="flex w-full items-start gap-3 rounded-xl border-2 border-gray-200 p-4 text-left transition-colors hover:border-hermes-400 hover:bg-hermes-50 dark:border-gray-700 dark:hover:border-hermes-500 dark:hover:bg-hermes-900/20">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-gray-800"><DeviceMobile className="h-5 w-5" aria-hidden="true" /></span>
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('optionCode')}</p>
+                <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{t('optionCodeDesc')}</p>
+              </div>
+            </button>
           </div>
-        ) : (
+        ) : addStep === 'phone' ? (
           <div>
-            {addError && <p className="mb-3 rounded border border-danger-200 bg-danger-50 px-3 py-2 text-[13px] text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-400">{addError}</p>}
-            {addConnected ? (
-              <div className="flex flex-col items-center gap-3 py-4 text-center">
-                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-channel-50 dark:bg-channel-900/20">
-                  <CheckCircle className="h-8 w-8 text-channel-600" aria-hidden="true" weight="fill" />
-                </span>
-                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('connectedSuccess')}</p>
-                <p className="text-[12px] text-gray-500">{addName}</p>
-              </div>
-            ) : addConnectMethod === null ? (
-              <div className="space-y-3">
-                <p className="mb-4 text-[13px] text-gray-500 dark:text-gray-400">{t('connectIntro')}</p>
-                <button type="button" onClick={() => setAddConnectMethod('qr')} className="flex w-full items-start gap-3 rounded-xl border-2 border-gray-200 p-4 text-left transition-colors hover:border-hermes-400 hover:bg-hermes-50 dark:border-gray-700 dark:hover:border-hermes-500 dark:hover:bg-hermes-900/20">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-hermes-100 text-hermes-700 dark:bg-hermes-900/40"><QrCode className="h-5 w-5" aria-hidden="true" /></span>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('optionQr')}</p>
-                    <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{t('optionQrDesc')}</p>
-                  </div>
-                </button>
-                <button type="button" onClick={handleAddRequestPairingCode} disabled={addRequestingCode} className="flex w-full items-start gap-3 rounded-xl border-2 border-gray-200 p-4 text-left transition-colors hover:border-hermes-400 hover:bg-hermes-50 disabled:cursor-wait disabled:opacity-60 dark:border-gray-700 dark:hover:border-hermes-500 dark:hover:bg-hermes-900/20">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-gray-800"><DeviceMobile className="h-5 w-5" aria-hidden="true" /></span>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('optionCode')}</p>
-                    <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{t('optionCodeDesc')}</p>
-                    {addRequestingCode && <p className="mt-1 text-[11px] font-medium text-hermes-600">{t('requestingPairingCode')}</p>}
-                  </div>
-                </button>
-              </div>
-            ) : addConnectMethod === 'code' && addedAccountId && pairingCode[addedAccountId] ? (
-              <div className="rounded-xl border border-hermes-200 bg-hermes-50 p-4 dark:border-hermes-700/40 dark:bg-hermes-900/20">
+            <label className="mb-1 block text-[13px] font-medium text-gray-700 dark:text-gray-200">{t('codePhoneTitle')} <span className="text-danger-500">*</span></label>
+            <input autoFocus type="tel" value={addCodePhone} onChange={(e) => setAddCodePhone(e.target.value.replace(/[^\d]/g, ''))} onKeyDown={(e) => { if (e.key === 'Enter' && addCodePhone.replace(/\D/g, '')) submitCodePhone(); }} placeholder={t('phonePlaceholder')} className={`w-full ${inputClass}`} />
+            <p className="mt-1 text-[11px] text-gray-400">{t('phoneHint')}</p>
+          </div>
+        ) : addStep === 'scan' ? (
+          <div className="flex flex-col items-center gap-3">
+            {addConnectMethod === 'code' && addedAccountId && pairingCode[addedAccountId] ? (
+              <div className="w-full rounded-xl border border-hermes-200 bg-hermes-50 p-4 dark:border-hermes-700/40 dark:bg-hermes-900/20">
                 <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-hermes-700 dark:text-hermes-400">{t('pairingCodeTitle')}</p>
                 <ol className="mb-4 space-y-1.5 text-[12px] text-gray-600 dark:text-gray-300">
                   <li>{t('pairingCodeStep1')}</li>
@@ -453,22 +457,47 @@ export default function AccountsPage() {
                   {copiedAccountId === addedAccountId ? <><CheckCircle className="h-4 w-4" />{t('codeCopied')}</> : <><QrCode className="h-4 w-4" />{t('copyCode')}</>}
                 </button>
               </div>
-            ) : addConnectMethod === 'qr' && addedAccountId ? (
-              <div className="flex flex-col items-center gap-3">
-                {qr[addedAccountId] ? (
-                  <>
-                    <img src={qr[addedAccountId]} alt="WhatsApp QR code" className="h-56 w-56 rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700" />
-                    {qrReceivedAt[addedAccountId] && <QrFreshness receivedAt={qrReceivedAt[addedAccountId]} t={t} />}
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-gray-300 px-8 py-10 dark:border-gray-700">
-                    <QrCode className="h-10 w-10 text-gray-300" aria-hidden="true" />
-                    <p className="text-center text-[13px] text-gray-500">{t('waitingQr')}</p>
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-hermes-400 border-t-transparent" aria-hidden="true" />
-                  </div>
-                )}
+            ) : addConnectMethod === 'qr' && addedAccountId && qr[addedAccountId] ? (
+              <>
+                <img src={qr[addedAccountId]} alt="WhatsApp QR code" className="h-56 w-56 rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700" />
+                {qrReceivedAt[addedAccountId] && <QrFreshness receivedAt={qrReceivedAt[addedAccountId]} t={t} />}
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-gray-300 px-8 py-10 dark:border-gray-700">
+                <QrCode className="h-10 w-10 text-gray-300" aria-hidden="true" />
+                <p className="text-center text-[13px] text-gray-500">{t('waitingQr')}</p>
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-hermes-400 border-t-transparent" aria-hidden="true" />
               </div>
-            ) : null}
+            )}
+            <div className="mt-1 flex items-center gap-2 text-[12px] text-hermes-600 dark:text-hermes-400">
+              <div className="h-3 w-3 animate-spin rounded-full border-2 border-hermes-400 border-t-transparent" aria-hidden="true" />
+              <span>{t('detectingDevice')}</span>
+            </div>
+            <p className="text-center text-[11px] text-gray-400">{t('detectingDeviceHint')}</p>
+          </div>
+        ) : (
+          /* confirm — auto-detected name + number, editable */
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 rounded-lg bg-channel-50 px-3 py-2 dark:bg-channel-900/20">
+              <CheckCircle className="h-4 w-4 shrink-0 text-channel-600" aria-hidden="true" weight="fill" />
+              <p className="text-[12px] font-medium text-channel-700 dark:text-channel-300">{t('connectedSuccess')}</p>
+            </div>
+            <div>
+              <div className="mb-1 flex items-center gap-2">
+                <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-200">{t('nameLabel')} <span className="text-danger-500">*</span></label>
+                {addAutoDetected && <Badge tone="hermes">{t('autoDetected')}</Badge>}
+              </div>
+              <input autoFocus value={addName} onChange={(e) => setAddName(e.target.value)} placeholder={t('accountNamePlaceholder')} className={`w-full ${inputClass}`} />
+              <p className="mt-1 text-[11px] text-gray-400">{t('nameHint')}</p>
+            </div>
+            <div>
+              <div className="mb-1 flex items-center gap-2">
+                <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-200">{t('phoneLabel2')} <span className="text-danger-500">*</span></label>
+                {addAutoDetected && <Badge tone="hermes">{t('autoDetected')}</Badge>}
+              </div>
+              <input type="tel" value={addPhone} onChange={(e) => setAddPhone(e.target.value.replace(/[^\d]/g, ''))} placeholder={t('phonePlaceholder')} className={`w-full ${inputClass}`} />
+              <p className="mt-1 text-[11px] text-gray-400">{t('phoneHint')}</p>
+            </div>
           </div>
         )}
       </Modal>

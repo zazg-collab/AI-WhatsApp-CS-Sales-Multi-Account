@@ -13,6 +13,12 @@ export interface ModalProps {
   footer?: React.ReactNode;
   /** Max width of the dialog panel. */
   size?: 'sm' | 'md' | 'lg';
+  /** Current step (1-based) for multi-step flows — renders a "Step X of Y" + dots. */
+  step?: number;
+  /** Total steps for multi-step flows. Required for the step indicator to show. */
+  totalSteps?: number;
+  /** Localised "Step {current} of {total}" label; falls back to English. */
+  stepLabel?: string;
 }
 
 const sizes: Record<NonNullable<ModalProps['size']>, string> = {
@@ -35,6 +41,9 @@ export function Modal({
   children,
   footer,
   size = 'md',
+  step,
+  totalSteps,
+  stepLabel,
 }: ModalProps) {
   const panelRef = React.useRef<HTMLDivElement>(null);
   const titleId = React.useId();
@@ -97,6 +106,24 @@ export function Modal({
               <p id={descId} className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">
                 {description}
               </p>
+            )}
+            {step != null && totalSteps != null && totalSteps > 1 && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="flex gap-1" aria-hidden="true">
+                  {Array.from({ length: totalSteps }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={cn(
+                        'h-1.5 rounded-full transition-all',
+                        i + 1 === step ? 'w-5 bg-hermes-600' : i + 1 < step ? 'w-1.5 bg-hermes-400' : 'w-1.5 bg-gray-200 dark:bg-gray-700',
+                      )}
+                    />
+                  ))}
+                </span>
+                <span className="text-[11px] font-medium text-gray-400">
+                  {(stepLabel ?? 'Step {current} of {total}').replace('{current}', String(step)).replace('{total}', String(totalSteps))}
+                </span>
+              </div>
             )}
           </div>
           <button

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { api, hasRole } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { useT } from '@/lib/i18n';
@@ -49,9 +49,9 @@ export function useAccounts() {
   const [statusFilter, setStatusFilter] = useState('');
   const [requestingCode, setRequestingCode] = useState<Record<string, boolean>>({});
 
-  // Add-account modal
+  // Add-account modal (scan-first flow)
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [addStep, setAddStep] = useState<'details' | 'connect'>('details');
+  const [addStep, setAddStep] = useState<'method' | 'phone' | 'scan' | 'confirm'>('method');
   const [addName, setAddName] = useState('');
   const [addPhone, setAddPhone] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
@@ -60,10 +60,45 @@ export function useAccounts() {
   const [addConnectMethod, setAddConnectMethod] = useState<'qr' | 'code' | null>(null);
   const [addRequestingCode, setAddRequestingCode] = useState(false);
   const [addConnected, setAddConnected] = useState(false);
+  // Phone entered up front for the pairing-code path (QR path needs nothing).
+  const [addCodePhone, setAddCodePhone] = useState('');
+  // True once name/phone were auto-filled from device metadata (for the badge).
+  const [addAutoDetected, setAddAutoDetected] = useState(false);
+  const [addSaving, setAddSaving] = useState(false);
 
   const canScan = hasRole('admin');
   const canEditHours = hasRole('supervisor');
   const canDelete = hasRole('supervisor');
+
+  // Mirror addedAccountId into a ref so the socket handler reads the current
+  // value without re-subscribing on every change.
+  const addedAccountIdRef = useRef<string | null>(null);
+  useEffect(() => { addedAccountIdRef.current = addedAccountId; }, [addedAccountId]);
+
+  // Once the new account's device connects, pull its name + number from the
+  // live socket (sock.user) and pre-fill the confirm step. Retries briefly
+  // because sock.user can lag the 'open' event.
+  const fetchMetadataAndConfirm = useCallback(async (accountId: string) => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const meta = await api<{ phoneNumber: string | null; suggestedName: string | null }>(
+          `/wa/accounts/${accountId}/metadata`,
+        );
+        if (meta.phoneNumber || meta.suggestedName) {
+          if (meta.suggestedName) setAddName(meta.suggestedName);
+          if (meta.phoneNumber) setAddPhone(meta.phoneNumber);
+          setAddAutoDetected(true);
+          setAddConnected(true);
+          setAddStep('confirm');
+          return;
+        }
+      } catch { /* retry */ }
+      await new Promise((r) => setTimeout(r, 800));
+    }
+    // Connected but metadata unavailable — still let the user fill/confirm.
+    setAddConnected(true);
+    setAddStep('confirm');
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,8 +136,8 @@ export function useAccounts() {
     };
     const onStatus = ({ accountId: sid, status }: { accountId: string; status: string }) => {
       load();
-      if (status === 'connected') {
-        setAddedAccountId((prev) => { if (prev === sid) setAddConnected(true); return prev; });
+      if (status === 'connected' && addedAccountIdRef.current === sid) {
+        fetchMetadataAndConfirm(sid);
       }
     };
     socket.on('wa:qr', onQr);
@@ -113,18 +148,21 @@ export function useAccounts() {
       socket.off('wa:pairing-code', onPairingCode);
       socket.off('wa:status', onStatus);
     };
-  }, [load]);
+  }, [load, fetchMetadataAndConfirm]);
 
   const openAddModal = () => {
     setAddModalOpen(true);
-    setAddStep('details');
+    setAddStep('method');
     setAddName('');
     setAddPhone('');
+    setAddCodePhone('');
     setAddError(null);
     setAddCreating(false);
     setAddedAccountId(null);
     setAddConnectMethod(null);
     setAddConnected(false);
+    setAddAutoDetected(false);
+    setAddSaving(false);
   };
 
   const closeAddModal = useCallback(() => {
@@ -132,37 +170,71 @@ export function useAccounts() {
     load();
   }, [load]);
 
-  const handleAddCreate = async () => {
-    if (!addName.trim() || !addPhone.trim()) return;
+  // QR path — fully scan-first: create with placeholder name/number (the
+  // device will report the real ones), then show the QR and wait for connect.
+  const startQrFlow = async () => {
+    setAddConnectMethod('qr');
     setAddCreating(true);
     setAddError(null);
     try {
-      const account = await api<{ id: string }>('/wa/accounts', {
-        method: 'POST',
-        body: JSON.stringify({ accountName: addName.trim(), phoneNumber: addPhone.trim() }),
-      });
+      const account = await api<{ id: string }>('/wa/accounts', { method: 'POST', body: JSON.stringify({}) });
       setAddedAccountId(account.id);
-      setAddStep('connect');
+      setAddStep('scan');
     } catch (err) {
       setAddError(err instanceof Error ? err.message : t('addFailed'));
+      setAddConnectMethod(null);
     } finally {
       setAddCreating(false);
     }
   };
 
-  const handleAddRequestPairingCode = async () => {
-    if (!addedAccountId) return;
-    setAddRequestingCode(true);
+  // Code path — Baileys needs the target number to generate a pairing code,
+  // so collect the phone first; the account *name* still auto-fills on connect.
+  const chooseCodeMethod = () => {
+    setAddConnectMethod('code');
+    setAddError(null);
+    setAddStep('phone');
+  };
+
+  const submitCodePhone = async () => {
+    const digits = addCodePhone.replace(/\D/g, '');
+    if (!digits) return;
+    setAddCreating(true);
     setAddError(null);
     try {
-      const { code } = await api<{ code: string }>(`/wa/accounts/${addedAccountId}/request-pairing-code`, { method: 'POST' });
-      setPairingCode((prev) => ({ ...prev, [addedAccountId]: code }));
-      setPairingMode((prev) => ({ ...prev, [addedAccountId]: 'code' }));
-      setAddConnectMethod('code');
+      const account = await api<{ id: string }>('/wa/accounts', {
+        method: 'POST',
+        body: JSON.stringify({ phoneNumber: digits }),
+      });
+      setAddedAccountId(account.id);
+      setAddPhone(digits);
+      const { code } = await api<{ code: string }>(`/wa/accounts/${account.id}/request-pairing-code`, { method: 'POST' });
+      setPairingCode((prev) => ({ ...prev, [account.id]: code }));
+      setPairingMode((prev) => ({ ...prev, [account.id]: 'code' }));
+      setAddStep('scan');
     } catch (e) {
       setAddError(e instanceof Error ? e.message : t('pairingCodeFailed'));
     } finally {
-      setAddRequestingCode(false);
+      setAddCreating(false);
+    }
+  };
+
+  // Persist the (auto-detected, possibly edited) name + number and finish.
+  const confirmAndSave = async () => {
+    if (!addedAccountId || !addName.trim() || !addPhone.trim()) return;
+    setAddSaving(true);
+    setAddError(null);
+    try {
+      await api(`/wa/accounts/${addedAccountId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ accountName: addName.trim(), phoneNumber: addPhone.trim() }),
+      });
+      setAddModalOpen(false);
+      load();
+    } catch (err) {
+      setAddError(err instanceof Error ? err.message : t('addFailed'));
+    } finally {
+      setAddSaving(false);
     }
   };
 
@@ -227,14 +299,16 @@ export function useAccounts() {
     // add-modal state
     addModalOpen, addStep, setAddStep,
     addName, setAddName, addPhone, setAddPhone,
+    addCodePhone, setAddCodePhone,
     addError, addCreating, addedAccountId,
     addConnectMethod, setAddConnectMethod,
     addRequestingCode, addConnected,
+    addAutoDetected, addSaving,
     // role flags
     canScan, canEditHours, canDelete,
     // actions
     load, openAddModal, closeAddModal,
-    handleAddCreate, handleAddRequestPairingCode,
+    startQrFlow, chooseCodeMethod, submitCodePhone, confirmAndSave,
     restartAccount, requestPairingCode, deleteAccount, copyPairingCode,
     setPairingMode,
     t,

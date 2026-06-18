@@ -69,6 +69,8 @@ export function useCampaigns() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
+  const [liveCount, setLiveCount] = useState<number | null>(null);
+  const [counting, setCounting] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ action: 'approve' | 'start' | 'cancel'; message: string } | null>(null);
   const [assetOptions, setAssetOptions] = useState<Array<{ id: string; title: string; kind: string; purpose: string }>>([]);
 
@@ -111,7 +113,12 @@ export function useCampaigns() {
       ]);
       setCampaigns(campaignData);
       setAccounts(accountData);
-      if (!whatsappAccountId && accountData[0]) setWhatsappAccountId(accountData[0].id);
+      // Default to the (single) connected account — it's the obvious sender.
+      // Fall back to the first account only if none are connected.
+      if (!whatsappAccountId && accountData.length) {
+        const connected = accountData.find((a) => a.sessionStatus === 'connected');
+        setWhatsappAccountId((connected ?? accountData[0]).id);
+      }
     } catch (err) {
       showError(err instanceof Error ? err.message : t('toastLoadCampaigns'));
     } finally {
@@ -139,6 +146,28 @@ export function useCampaigns() {
     if (selectedId) loadDetail(selectedId);
     else setDetail(null);
   }, [selectedId, loadDetail]);
+
+  // Live eligible-recipient count: debounced auto-preview as the account or
+  // filters change, so the user sees "≈ N recipients" without a manual click.
+  useEffect(() => {
+    if (!whatsappAccountId) { setLiveCount(null); return; }
+    let cancelled = false;
+    setCounting(true);
+    const handle = setTimeout(async () => {
+      try {
+        const r = await api<PreviewResult>('/campaigns/preview', {
+          method: 'POST',
+          body: JSON.stringify({ whatsappAccountId, targetFilter }),
+        });
+        if (!cancelled) setLiveCount(r.eligibleCount);
+      } catch {
+        if (!cancelled) setLiveCount(null);
+      } finally {
+        if (!cancelled) setCounting(false);
+      }
+    }, 500);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [whatsappAccountId, targetFilter]);
 
   async function handlePreview() {
     if (!whatsappAccountId) { showError(t('toastSelectAccount')); return; }
@@ -221,6 +250,7 @@ export function useCampaigns() {
     t, campaigns, accounts, selectedId, setSelectedId, detail,
     role, toast, setToast,
     loading, submitting, preview,
+    liveCount, counting,
     name, setName,
     messageTemplate, setMessageTemplate,
     whatsappAccountId, setWhatsappAccountId,

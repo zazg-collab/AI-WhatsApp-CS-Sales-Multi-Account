@@ -18,6 +18,7 @@ export default function CampaignsPage() {
     t, campaigns, accounts, selectedId, setSelectedId, detail,
     toast, setToast,
     loading, submitting, preview,
+    liveCount, counting,
     name, setName,
     messageTemplate, setMessageTemplate,
     whatsappAccountId, setWhatsappAccountId,
@@ -93,6 +94,15 @@ export default function CampaignsPage() {
                 <Field label={t('rateLabel')} hint={t('rateHint')} type="number" min={1} max={30} value={rateLimitPerMinute} onChange={(e) => setRateLimitPerMinute(Number(e.target.value))} />
                 <Field label={t('scheduleLabel')} hint={t('scheduleHint')} type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
               </div>
+              {whatsappAccountId && (
+                <div className="flex items-center gap-1.5 text-[12px] text-gray-500 dark:text-gray-400" aria-live="polite">
+                  {counting ? (
+                    <><div className="h-3 w-3 animate-spin rounded-full border-2 border-hermes-400 border-t-transparent" aria-hidden="true" /><span>{t('countingRecipients')}</span></>
+                  ) : liveCount != null ? (
+                    <span>≈ <span className="font-semibold text-hermes-600">{liveCount}</span> {t('eligibleRecipients')}</span>
+                  ) : null}
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button variant="outline" size="md" className="flex-1" onClick={handlePreview} disabled={submitting || !isSelectedAccountConnected}>
                   <Eye className="h-4 w-4" aria-hidden="true" />{t('preview')}

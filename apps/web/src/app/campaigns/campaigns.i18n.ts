@@ -33,6 +33,7 @@ export const dict: Dict = {
   preview: { id: 'Pratinjau', en: 'Preview' },
   createDraft: { id: 'Buat draf', en: 'Create draft' },
   eligibleRecipients: { id: 'penerima memenuhi syarat', en: 'eligible recipients' },
+  countingRecipients: { id: 'Menghitung penerima…', en: 'Counting recipients…' },
   skipped: { id: 'Dilewati:', en: 'Skipped:' },
   none: { id: 'tidak ada', en: 'none' },
   noCampaigns: { id: 'Belum ada campaign.', en: 'No campaigns yet.' },

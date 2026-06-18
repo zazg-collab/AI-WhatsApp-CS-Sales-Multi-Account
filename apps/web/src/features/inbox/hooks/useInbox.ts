@@ -400,14 +400,26 @@ export function useInbox(initialConversationId: string | null) {
   const sendAsset = (assetId: string) => act(() => api(`/assets/${assetId}/send`, { method: 'POST', body: JSON.stringify({ conversationId: activeId }) }));
   const dismissAsset = (assetId: string) => setDismissedAssets((prev) => new Set(prev).add(assetId));
 
-  const suggestBot = async () => {
-    if (!activeId) return;
+  const suggestBot = useCallback(async () => {
+    const id = activeIdRef.current;
+    if (!id) return;
     setBotSuggestion(null);
     try {
-      const s = await api<{ botId: string; botName: string; personaName: string | null; reason: string } | null>(`/learning/conversations/${activeId}/suggest-bot`);
+      const s = await api<{ botId: string; botName: string; personaName: string | null; reason: string } | null>(`/learning/conversations/${id}/suggest-bot`);
       setBotSuggestion(s);
     } catch { setBotSuggestion(null); }
-  };
+  }, []);
+
+  // Proactively fetch a bot-fit suggestion once per conversation when it opens
+  // (the backend returns null when there's nothing to suggest, so this is cheap
+  // in the common case and avoids the user having to click "suggest").
+  const autoSuggestedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    setBotSuggestion(null);
+    if (!activeId || autoSuggestedRef.current.has(activeId)) return;
+    autoSuggestedRef.current.add(activeId);
+    suggestBot();
+  }, [activeId, suggestBot]);
 
   const sendLocation = (raw: string) => act(async () => {
     const [latRaw, lngRaw, ...nameParts] = raw.split(',').map((p) => p.trim());
