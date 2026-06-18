@@ -23,6 +23,7 @@ export const dict: Dict = {
   slaHint: { id: 'SLA respons admin', en: 'Admin response SLA' },
   aiConfidence: { id: 'Keyakinan AI', en: 'AI confidence' },
   riskHint: { id: 'Risiko {n}%', en: 'Risk {n}%' },
+  noReviews: { id: 'Belum ada review Hermes', en: 'No Hermes reviews yet' },
   messageVolume: { id: 'Volume pesan', en: 'Message volume' },
   noMessages: { id: 'Belum ada pesan pada rentang ini.', en: 'No messages in this range yet.' },
   aiQuality: { id: 'Kualitas AI', en: 'AI quality' },

@@ -107,7 +107,11 @@ export default function MonitoringPage() {
               <MetricCard label={t('customers')} value={data.totals.customers} />
               <MetricCard label={t('avgResponse')} value={formatDuration(data.response.avgSeconds, t)} hint={t('samples', { n: data.response.sampleSize })} />
               <MetricCard label={t('responseP95')} value={formatDuration(data.response.p95Seconds, t)} hint={t('slaHint')} />
-              <MetricCard label={t('aiConfidence')} value={`${data.aiQuality.avgConfidence}%`} hint={t('riskHint', { n: data.aiQuality.avgRisk })} />
+              <MetricCard
+                label={t('aiConfidence')}
+                value={data.aiQuality.reviewCount > 0 ? `${data.aiQuality.avgConfidence}%` : '—'}
+                hint={data.aiQuality.reviewCount > 0 ? t('riskHint', { n: data.aiQuality.avgRisk }) : t('noReviews')}
+              />
             </section>
 
             <section className="grid gap-4 xl:grid-cols-2">
@@ -196,30 +200,51 @@ export default function MonitoringPage() {
             {Array.isArray(workload?.admins) && (
               <Panel title={t('adminWorkload', { n: workload!.rangeDays })}>
                 {workload!.admins.length === 0 ? <p className="text-sm text-gray-400">{t('noAdmins')}</p> : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
-                          <th className="py-2 pr-3 font-medium">{t('colAdmin')}</th>
-                          <th className="py-2 pr-3 text-right font-medium">{t('colAssigned')}</th>
-                          <th className="py-2 pr-3 text-right font-medium">{t('colResolved')}</th>
-                          <th className="py-2 pr-3 text-right font-medium">{t('colMessagesSent')}</th>
-                          <th className="py-2 text-right font-medium">{t('colAvgReply')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {workload!.admins.map((a) => (
-                          <tr key={a.id} className="border-b border-gray-50 last:border-0 dark:border-gray-800/60">
-                            <td className="py-2 pr-3"><span className="text-gray-800 dark:text-gray-200">{a.name}</span><span className="ml-2 text-xs text-gray-400">{a.role}</span></td>
-                            <td className="py-2 pr-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{a.assigned}</td>
-                            <td className="py-2 pr-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{a.resolved}</td>
-                            <td className="py-2 pr-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{a.messagesSent}</td>
-                            <td className="py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{a.responseSamples > 0 ? formatDuration(a.avgResponseSeconds, t) : '—'}</td>
+                  <>
+                    {/* Desktop / tablet: data table */}
+                    <div className="hidden overflow-x-auto sm:block">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
+                            <th className="py-2 pr-3 font-medium">{t('colAdmin')}</th>
+                            <th className="py-2 pr-3 text-right font-medium">{t('colAssigned')}</th>
+                            <th className="py-2 pr-3 text-right font-medium">{t('colResolved')}</th>
+                            <th className="py-2 pr-3 text-right font-medium">{t('colMessagesSent')}</th>
+                            <th className="py-2 text-right font-medium">{t('colAvgReply')}</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {workload!.admins.map((a) => (
+                            <tr key={a.id} className="border-b border-gray-50 last:border-0 dark:border-gray-800/60">
+                              <td className="py-2 pr-3"><span className="text-gray-800 dark:text-gray-200">{a.name}</span><span className="ml-2 text-xs text-gray-400">{a.role}</span></td>
+                              <td className="py-2 pr-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{a.assigned}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{a.resolved}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums text-gray-600 dark:text-gray-300">{a.messagesSent}</td>
+                              <td className="py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{a.responseSamples > 0 ? formatDuration(a.avgResponseSeconds, t) : '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile: card list */}
+                    <div className="space-y-2 sm:hidden">
+                      {workload!.admins.map((a) => (
+                        <div key={a.id} className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-gray-800 dark:text-gray-200">{a.name}</span>
+                            <span className="text-xs text-gray-400">{a.role}</span>
+                          </div>
+                          <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[12px] text-gray-600 dark:text-gray-300">
+                            <span className="flex justify-between"><span className="text-gray-400">{t('colAssigned')}</span><span className="tabular-nums">{a.assigned}</span></span>
+                            <span className="flex justify-between"><span className="text-gray-400">{t('colResolved')}</span><span className="tabular-nums">{a.resolved}</span></span>
+                            <span className="flex justify-between"><span className="text-gray-400">{t('colMessagesSent')}</span><span className="tabular-nums">{a.messagesSent}</span></span>
+                            <span className="flex justify-between"><span className="text-gray-400">{t('colAvgReply')}</span><span className="tabular-nums">{a.responseSamples > 0 ? formatDuration(a.avgResponseSeconds, t) : '-'}</span></span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </Panel>
             )}

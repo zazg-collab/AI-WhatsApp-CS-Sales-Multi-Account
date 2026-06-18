@@ -320,19 +320,26 @@ export class DashboardService {
 
     const acc: Record<string, { total: number; count: number }> = {};
     for (const conversation of conversations) {
-      const messages = conversation.messages;
-      for (let i = 0; i < messages.length; i++) {
-        const message = messages[i];
-        if (message.senderType !== SenderType.customer) continue;
-        const response = messages.slice(i + 1).find((candidate) => (
-          candidate.senderType === SenderType.admin || candidate.senderType === SenderType.ai
-        ));
+      // Measure first-response time per customer burst: a run of consecutive
+      // customer messages counts once, from the first message to the reply.
+      let askedAt: Date | null = null;
+      for (const message of conversation.messages) {
+        if (message.senderType === SenderType.customer) {
+          if (!askedAt) askedAt = message.createdAt; // first of the burst
+          continue;
+        }
+        if (!askedAt) continue; // reply with no pending customer question
         // Only attribute when an admin (not the AI) answered first.
-        if (!response || response.senderType !== SenderType.admin || !response.senderId) continue;
-        const seconds = Math.max(0, (response.createdAt.getTime() - message.createdAt.getTime()) / 1000);
-        const entry = (acc[response.senderId] ??= { total: 0, count: 0 });
-        entry.total += seconds;
-        entry.count += 1;
+        if (message.senderType === SenderType.admin && message.senderId) {
+          const seconds = Math.max(0, (message.createdAt.getTime() - askedAt.getTime()) / 1000);
+          const entry = (acc[message.senderId] ??= { total: 0, count: 0 });
+          entry.total += seconds;
+          entry.count += 1;
+        }
+        // Any agent reply (admin or ai) closes the burst; system/hermes ignored.
+        if (message.senderType === SenderType.admin || message.senderType === SenderType.ai) {
+          askedAt = null;
+        }
       }
     }
 
@@ -385,15 +392,21 @@ export class DashboardService {
 
     const responseSeconds: number[] = [];
     for (const conversation of conversations) {
-      const messages = conversation.messages;
-      for (let i = 0; i < messages.length; i++) {
-        const message = messages[i];
-        if (message.senderType !== SenderType.customer) continue;
-        const response = messages.slice(i + 1).find((candidate) => (
-          candidate.senderType === SenderType.admin || candidate.senderType === SenderType.ai
-        ));
-        if (!response) continue;
-        responseSeconds.push(Math.max(0, (response.createdAt.getTime() - message.createdAt.getTime()) / 1000));
+      // First-response time per customer burst: consecutive customer messages
+      // count once (from the first), so chatty customers don't inflate the avg.
+      let askedAt: Date | null = null;
+      for (const message of conversation.messages) {
+        if (message.senderType === SenderType.customer) {
+          if (!askedAt) askedAt = message.createdAt;
+          continue;
+        }
+        if (message.senderType === SenderType.admin || message.senderType === SenderType.ai) {
+          if (askedAt) {
+            responseSeconds.push(Math.max(0, (message.createdAt.getTime() - askedAt.getTime()) / 1000));
+            askedAt = null;
+          }
+        }
+        // system/hermes messages don't close a pending customer question
       }
     }
 

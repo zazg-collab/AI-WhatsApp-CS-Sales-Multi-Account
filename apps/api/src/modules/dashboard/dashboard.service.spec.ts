@@ -71,4 +71,45 @@ describe('DashboardService', () => {
       expect(r[0]).toHaveProperty('date');
     });
   });
+
+  describe('getResponseTime', () => {
+    it('counts one first-response time per customer burst', async () => {
+      const base = Date.now();
+      prisma.conversation.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          messages: [
+            { senderType: 'customer', senderId: null, createdAt: new Date(base) },
+            { senderType: 'customer', senderId: null, createdAt: new Date(base + 60_000) },
+            { senderType: 'customer', senderId: null, createdAt: new Date(base + 120_000) },
+            { senderType: 'admin', senderId: 'a1', createdAt: new Date(base + 180_000) },
+          ],
+        },
+      ]);
+      const r = await service.getResponseTime(7);
+      // 3 consecutive customer messages + 1 reply = 1 sample, timed from the
+      // first customer message (180s), not 3 inflated samples.
+      expect(r.sampleSize).toBe(1);
+      expect(r.avgSeconds).toBe(180);
+      expect(r.p95Seconds).toBe(180);
+    });
+
+    it('measures each burst separately across a back-and-forth', async () => {
+      const base = Date.now();
+      prisma.conversation.findMany.mockResolvedValue([
+        {
+          id: 'c1',
+          messages: [
+            { senderType: 'customer', senderId: null, createdAt: new Date(base) },
+            { senderType: 'ai', senderId: null, createdAt: new Date(base + 10_000) },
+            { senderType: 'customer', senderId: null, createdAt: new Date(base + 20_000) },
+            { senderType: 'admin', senderId: 'a1', createdAt: new Date(base + 50_000) },
+          ],
+        },
+      ]);
+      const r = await service.getResponseTime(7);
+      expect(r.sampleSize).toBe(2); // 10s then 30s
+      expect(r.avgSeconds).toBe(20);
+    });
+  });
 });
