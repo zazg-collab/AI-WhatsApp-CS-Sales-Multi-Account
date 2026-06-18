@@ -34,7 +34,9 @@ export default function CustomersPage() {
         <Badge tone="neutral">{t('loadedCount', { n: customers.length })}</Badge>
       </PageHeader>
 
-      <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Mobile: whole column scrolls (filters + bulk bar + list together).
+          md+: fixed filters/bulk header with an inner-scrolling list. */}
+      <div className="flex flex-1 flex-col overflow-y-auto md:overflow-hidden">
         {/* Filters */}
         <section className="border-b border-gray-200 bg-white px-5 py-3 dark:border-gray-800 dark:bg-gray-900">
           <div className="grid gap-2 lg:grid-cols-[1fr_180px_180px_auto]">
@@ -95,7 +97,7 @@ export default function CustomersPage() {
           </div>
         )}
 
-        <div className="scrollbar-thin flex-1 overflow-auto p-5">
+        <div className="scrollbar-thin p-5 md:flex-1 md:overflow-auto">
           {loading ? (
             <div className="space-y-2">
               {[1, 2, 3, 4, 5].map((n) => <div key={n} className="h-14 rounded-lg animate-shimmer" />)}
