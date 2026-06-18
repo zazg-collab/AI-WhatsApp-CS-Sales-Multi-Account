@@ -72,11 +72,14 @@ function canView(userRole: string | null, requiredRole?: string): boolean {
 }
 
 // Grouped to keep operational surfaces above configuration ones.
+// Accounts (Baileys/WhatsApp connection) lives in the top group — it is the
+// most-used operational surface and must never sit below the scroll fold.
 const sections: NavSection[] = [
   {
     items: [
       { href: '/overview', label: 'Overview', icon: SquaresFour },
       { href: '/inbox', label: 'Inbox', icon: Tray },
+      { href: '/accounts', label: 'Accounts', icon: DeviceMobile },
       { href: '/customers', label: 'Contacts', icon: AddressBook },
       { href: '/wa-contacts', label: 'WA Contacts', icon: BookOpen },
       { href: '/hermes', label: 'Hermes Review', icon: ShieldStar },
@@ -97,7 +100,6 @@ const sections: NavSection[] = [
   {
     heading: 'Operations',
     items: [
-      { href: '/accounts', label: 'Accounts', icon: DeviceMobile },
       { href: '/bots', label: 'Automation Mode', icon: ArrowsSplit },
       { href: '/templates', label: 'Templates', icon: FileText },
       { href: '/audit', label: 'Audit Log', icon: ClockCounterClockwise, requiredRole: 'supervisor' },
@@ -112,6 +114,11 @@ const dict: Dict = {
   Growth: { id: 'Pertumbuhan', en: 'Growth' },
   Operations: { id: 'Operasional', en: 'Operations' },
   signOut: { id: 'Keluar', en: 'Sign out' },
+  waConnected: { id: 'WhatsApp terhubung', en: 'WhatsApp connected' },
+  waDegraded: { id: 'Sebagian akun WhatsApp terputus', en: 'Some WhatsApp accounts disconnected' },
+  waDown: { id: 'Semua akun WhatsApp terputus', en: 'All WhatsApp accounts disconnected' },
+  waNone: { id: 'Belum ada akun WhatsApp', en: 'No WhatsApp accounts yet' },
+  appOffline: { id: 'Aplikasi offline', en: 'App offline' },
 };
 
 export function Sidebar() {
@@ -122,32 +129,66 @@ export function Sidebar() {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
+  // WhatsApp account health: how many Baileys sessions are connected vs total.
+  const [waHealth, setWaHealth] = useState<{ connected: number; total: number } | null>(null);
 
   useEffect(() => {
     if (!getToken()) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const refresh = () => {
+    const refreshUnread = () => {
       if (timer) return;
       timer = setTimeout(() => {
         timer = null;
         api<{ count: number }>('/conversations/unread-count').then((r) => setUnread(r?.count ?? 0)).catch(() => {});
       }, 500);
     };
-    api<{ count: number }>('/conversations/unread-count').then((r) => setUnread(r?.count ?? 0)).catch(() => {});
+    const refreshWaHealth = () => {
+      api<Array<{ sessionStatus?: string }>>('/wa/accounts')
+        .then((accts) => {
+          const list = accts ?? [];
+          setWaHealth({
+            connected: list.filter((a) => a.sessionStatus === 'connected').length,
+            total: list.length,
+          });
+        })
+        .catch(() => {});
+    };
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    refreshUnread();
+    refreshWaHealth();
+    // Poll WA health periodically so the rail reflects reconnects/drops.
+    const waTimer = setInterval(refreshWaHealth, 30_000);
+
     const socket = getSocket();
-    if (!socket) return;
-    socket.on('message:new', refresh);
-    socket.on('conversation:updated', refresh);
-    socket.on('connect', () => setIsOnline(true));
-    socket.on('disconnect', () => setIsOnline(false));
+    if (socket) {
+      socket.on('message:new', refreshUnread);
+      socket.on('conversation:updated', refreshUnread);
+      socket.on('wa:status', refreshWaHealth);
+      socket.on('connect', handleOnline);
+      socket.on('disconnect', handleOffline);
+    }
     return () => {
       if (timer) clearTimeout(timer);
-      socket.off('message:new', refresh);
-      socket.off('conversation:updated', refresh);
-      socket.off('connect', () => setIsOnline(true));
-      socket.off('disconnect', () => setIsOnline(false));
+      clearInterval(waTimer);
+      if (socket) {
+        socket.off('message:new', refreshUnread);
+        socket.off('conversation:updated', refreshUnread);
+        socket.off('wa:status', refreshWaHealth);
+        socket.off('connect', handleOnline);
+        socket.off('disconnect', handleOffline);
+      }
     };
   }, [pathname]);
+
+  // Escape closes the mobile drawer.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
 
   function handleLogout() {
     clearToken();
@@ -193,7 +234,7 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="scrollbar-thin flex flex-1 flex-col gap-5 overflow-y-auto px-2 py-4 lg:px-2.5">
+      <nav className="scrollbar-thin flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3 lg:px-2.5">
         {sections.map((section, i) => {
           const visible = section.items.filter((it) => canView(userRole, it.requiredRole));
           if (visible.length === 0) return null;
@@ -252,31 +293,52 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Offline indicator */}
-      {!isOnline && (
-        <div className="border-t border-gray-800 bg-danger-50 px-2 py-2 dark:bg-danger-900/20 lg:px-3">
-          <div className="flex items-center gap-2 rounded px-2 py-1.5 text-[11px] font-medium text-danger-700 dark:text-danger-300">
-            <span className="h-2 w-2 rounded-full bg-danger-600 animate-pulse"></span>
-            <span className="hidden lg:inline">Offline</span>
-          </div>
-        </div>
-      )}
+      {/* Connection health: WhatsApp account status (the operational pulse),
+          plus an app-offline override when the socket itself drops. */}
+      {(() => {
+        const offline = !isOnline;
+        const connected = waHealth?.connected ?? 0;
+        const total = waHealth?.total ?? 0;
+        const tone = offline || (total > 0 && connected === 0)
+          ? 'down'
+          : total === 0
+            ? 'none'
+            : connected < total
+              ? 'degraded'
+              : 'ok';
+        const dot = {
+          ok: 'bg-emerald-500',
+          degraded: 'bg-amber-500 animate-pulse',
+          down: 'bg-danger-500 animate-pulse',
+          none: 'bg-gray-500',
+        }[tone];
+        const labelKey = offline ? 'appOffline' : tone === 'down' ? 'waDown' : tone === 'degraded' ? 'waDegraded' : tone === 'none' ? 'waNone' : 'waConnected';
+        const text = offline ? t('appOffline') : total > 0 ? `WA ${connected}/${total}` : t('waNone');
+        return (
+          <Link
+            href="/accounts"
+            onClick={() => setOpen(false)}
+            title={t(labelKey)}
+            className="flex items-center gap-2 border-t border-gray-800 px-3 py-2 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50 lg:px-4"
+          >
+            <span className={cn('h-2 w-2 shrink-0 rounded-full', dot)} aria-hidden="true" />
+            <span className={cn('truncate', labelCls)}>{text}</span>
+          </Link>
+        );
+      })()}
 
-      {/* Footer */}
-      <div className="border-t border-gray-800 px-2 py-2 lg:px-3">
-        <div className="mb-1">
-          <LanguageToggle />
-        </div>
-        <div className="mb-1">
-          <ThemeToggle />
-        </div>
+      {/* Footer — single compact action row (language · theme · sign out) */}
+      <div className="flex items-center gap-1 border-t border-gray-800 px-2 py-2 lg:px-3">
+        <LanguageToggle compact />
+        <ThemeToggle compact />
         <button
           onClick={handleLogout}
-          title="Sign out"
-          className="flex w-full items-center justify-center gap-2.5 rounded-md px-2 py-2 text-[13px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50 lg:justify-start lg:px-2.5"
+          title={t('signOut')}
+          aria-label={t('signOut')}
+          className="ml-auto flex h-9 items-center justify-center gap-2 rounded-md px-2 text-[13px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-danger-300"
         >
           <SignOut className="h-[18px] w-[18px] shrink-0" weight="regular" aria-hidden="true" />
-          <span className="hidden lg:block">{t('signOut')}</span>
+          <span className={cn('hidden', open ? 'inline' : 'lg:inline')}>{t('signOut')}</span>
         </button>
       </div>
     </aside>

@@ -14,7 +14,7 @@ const dict: Dict = {
 };
 
 /** Light/dark switcher. Light is the default; the choice persists per browser. */
-export function ThemeToggle() {
+export function ThemeToggle({ compact = false }: { compact?: boolean } = {}) {
   const t = useT(dict);
   const [dark, setDark] = useState(false);
 
@@ -34,6 +34,23 @@ export function ThemeToggle() {
   }
 
   const label = dark ? t('toLight') : t('toDark');
+
+  if (compact) {
+    return (
+      <button
+        onClick={toggle}
+        title={label}
+        aria-label={label}
+        className="flex h-9 w-9 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50"
+      >
+        {dark ? (
+          <Sun className="h-[17px] w-[17px]" aria-hidden="true" />
+        ) : (
+          <Moon className="h-[17px] w-[17px]" aria-hidden="true" />
+        )}
+      </button>
+    );
+  }
 
   return (
     <button
