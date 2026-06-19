@@ -24,7 +24,7 @@ interface IntelligencePanelProps {
   bots?: Array<{ id: string; botName: string; persona?: { name: string } | null }>;
   onApproveDraft?: () => Promise<void>;
   onBlockDraft?: () => Promise<void>;
-  onTakeover?: () => Promise<void>;
+  onReturnToAi?: () => Promise<void>;
   onSetAiMode?: (mode: string) => Promise<void>;
   onSetStatus?: (status: string) => Promise<void>;
   onSetBot?: (botId: string | null) => Promise<void>;
@@ -70,7 +70,7 @@ export function IntelligencePanel({
   bots = [],
   onApproveDraft,
   onBlockDraft,
-  onTakeover,
+  onReturnToAi,
   onSetAiMode,
   onSetStatus,
   onSetBot,
@@ -170,7 +170,7 @@ export function IntelligencePanel({
 
         <TakeoverCard
           conversation={conversation}
-          onRelease={onTakeover}
+          onRelease={onReturnToAi}
           loading={loadingControls}
         />
 

@@ -39,7 +39,7 @@ function InboxInner() {
     botSuggestion, listError, sendError,
     t,
     sendMessage, applyQuickReply, scheduleFollowUp, cancelFollowUp,
-    takeOver, returnToAi, escalate, approveDraft, editDraft,
+    returnToAi, escalate, approveDraft, editDraft,
     quoteReply, editSentMessage, deleteMessage, confirmDeleteMessage,
     blockDraftWithConfirm, confirmBlockDraft,
     reactToMessage, markRead, setAiMode, setBot, setWorkflowStatus,
@@ -170,7 +170,7 @@ function InboxInner() {
             loadingControls={busy}
             onApproveDraft={async () => { if (draftMessage) approveDraft(draftMessage.id); }}
             onBlockDraft={async () => { if (draftMessage) blockDraftWithConfirm(draftMessage.id); }}
-            onTakeover={async () => takeOver()}
+            onReturnToAi={async () => returnToAi()}
             onSetAiMode={async (mode) => setAiMode(mode)}
             onSetStatus={async (status) => setWorkflowStatus(status)}
             onSetBot={async (botId) => setBot(botId || '')}
