@@ -121,18 +121,14 @@ export function ChatThread({
     nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   };
 
+  // Only blank the pane when there is no conversation to show. When one is
+  // already open, keep the timeline mounted during busy actions (approve,
+  // return-to-ai, etc.) so its scroll position is preserved — unmounting it
+  // here would reset scroll to the top (oldest messages) after every action.
   if (!conversation) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
-        <p className="text-sm">Select a conversation to view messages</p>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center text-center text-gray-400">
-        <p className="text-sm">Loading conversation...</p>
+        <p className="text-sm">{loading ? 'Loading conversation...' : 'Select a conversation to view messages'}</p>
       </div>
     );
   }

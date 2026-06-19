@@ -51,7 +51,7 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
 const integrations = [
   { slug: 'whatsapp', name: 'WhatsApp' },
   { slug: 'telegram', name: 'Telegram' },
-  { slug: 'openai', name: 'OpenAI-compatible' },
+  { slug: 'ollama', name: 'OpenAI-compatible (Ollama, vLLM, …)' },
   { slug: 'postgresql', name: 'PostgreSQL' },
   { slug: 'redis', name: 'Redis' },
   { slug: 'docker', name: 'Docker' },
@@ -70,6 +70,7 @@ function IntegrationLogo({ slug, name }: { slug: string; name: string }) {
         width={28}
         height={28}
         loading="lazy"
+        onError={(e) => { e.currentTarget.style.display = 'none'; }}
         className="h-7 w-auto dark:hidden"
       />
       <img
@@ -79,6 +80,7 @@ function IntegrationLogo({ slug, name }: { slug: string; name: string }) {
         width={28}
         height={28}
         loading="lazy"
+        onError={(e) => { e.currentTarget.style.display = 'none'; }}
         className="hidden h-7 w-auto dark:block"
       />
     </span>
