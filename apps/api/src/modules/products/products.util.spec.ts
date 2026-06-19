@@ -4,7 +4,43 @@ import {
   assertReadOnlySelect,
   maskConnString,
   pgSslOption,
+  tokenizeForMatch,
+  scoreProductMatch,
 } from './products.util';
+
+describe('tokenizeForMatch', () => {
+  it('splits digit/letter boundaries and drops stopwords', () => {
+    const t = tokenizeForMatch('berapa harga klem ukuran 8 kak?');
+    expect(t.has('klem')).toBe(true);
+    expect(t.has('8')).toBe(true);
+    // fillers removed
+    expect(t.has('berapa')).toBe(false);
+    expect(t.has('harga')).toBe(false);
+    expect(t.has('ukuran')).toBe(false);
+    expect(t.has('kak')).toBe(false);
+  });
+  it('treats "8mm" and "8 mm" the same', () => {
+    expect(tokenizeForMatch('8mm')).toEqual(tokenizeForMatch('8 mm'));
+  });
+});
+
+describe('scoreProductMatch', () => {
+  const klem = { name: 'Klem Pipa 8mm', category: 'Pipa', sku: 'KLM-8', description: 'klem besi' };
+  const klem18 = { name: 'Klem Pipa 18mm', category: 'Pipa', sku: 'KLM-18' };
+
+  it('matches "klem ukuran 8" to the 8mm product, not the 18mm one', () => {
+    const q = tokenizeForMatch('klem ukuran 8');
+    expect(scoreProductMatch(klem, q)).toBeGreaterThan(scoreProductMatch(klem18, q));
+  });
+  it('a size number matches as a whole token (8 ≠ 18)', () => {
+    const q = tokenizeForMatch('8');
+    expect(scoreProductMatch(klem18, q)).toBe(0);
+    expect(scoreProductMatch(klem, q)).toBeGreaterThan(0);
+  });
+  it('returns 0 for an unrelated query', () => {
+    expect(scoreProductMatch(klem, tokenizeForMatch('sepeda gunung'))).toBe(0);
+  });
+});
 
 describe('parseProductCsv', () => {
   it('parses headers (EN/ID aliases) and rows', () => {

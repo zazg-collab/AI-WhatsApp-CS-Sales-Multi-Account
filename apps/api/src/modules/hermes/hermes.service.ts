@@ -11,7 +11,18 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { AiProviderService } from '../ai/ai-provider.service';
 import { PromptBuilderService } from '../ai/prompt-builder.service';
 import { HermesAgentClient } from './hermes-agent.client';
-import { HERMES_SYSTEM } from './hermes-prompt';
+import { hermesSystemPrompt } from './hermes-prompt';
+import {
+  t,
+  HERMES_PARSE_FALLBACK,
+  HERMES_SUPERVISOR_SYSTEM,
+  HERMES_BOT_INSIGHT_SYSTEM,
+  HERMES_BOT_INSIGHT_QUESTION,
+  FALLBACK_PHRASE,
+} from '../../i18n/bot-prompts';
+
+/** All fallback phrase variants across all languages — used for DB gap detection. */
+const FALLBACK_MARKERS = Object.values(FALLBACK_PHRASE) as string[];
 import {
   decisionFromConfidence,
   evaluateRules,
@@ -136,32 +147,41 @@ export class HermesService {
     conversationId: string,
     draftText: string,
   ): Promise<LlmReview> {
+    const conv = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { bot: { select: { language: true } } },
+    });
+    const lang = conv?.bot?.language ?? 'en';
+
     const context = await this.prompts.buildForConversation(conversationId, 20);
     const history = context.filter((m) => m.role !== 'system');
 
+    const draftLabel = lang === 'id'
+      ? `Draft jawaban AI yang akan dikirim:\n"""${draftText}"""\n\nNilai draft ini. Balas HANYA JSON.`
+      : `AI draft reply to be sent:\n"""${draftText}"""\n\nReview this draft. Reply ONLY with JSON.`;
+
     const raw = await this.provider.chat(
       [
-        { role: 'system', content: HERMES_SYSTEM },
+        { role: 'system', content: hermesSystemPrompt(lang) },
         ...history,
-        {
-          role: 'user',
-          content: `Draft jawaban AI yang akan dikirim:\n"""${draftText}"""\n\nNilai draft ini. Balas HANYA JSON.`,
-        },
+        { role: 'user', content: draftLabel },
       ],
       { temperature: 0, json: true, maxTokens: 350, model: await this.provider.hermesModel() },
     );
 
-    return this.parse(raw);
+    return this.parse(raw, lang);
   }
 
-  private parse(raw: string): LlmReview {
+  private parse(raw: string, lang = 'id'): LlmReview {
     const fallback: LlmReview = {
       decision: HermesDecision.draft,
       confidence_score: 50,
       risk_score: 50,
       risk_level: RiskLevel.medium,
-      reason: 'Tidak dapat mem-parsing penilaian Hermes; default ke draft',
-      recommendation: 'Admin tinjau manual',
+      reason: lang === 'id'
+        ? 'Tidak dapat mem-parsing penilaian Hermes; default ke draft'
+        : 'Could not parse Hermes review; defaulting to draft',
+      recommendation: t(HERMES_PARSE_FALLBACK, lang),
     };
     try {
       const start = raw.indexOf('{');
@@ -259,7 +279,7 @@ export class HermesService {
     return this.prisma.message.findMany({
       where: {
         senderType: SenderType.ai,
-        content: { contains: 'konfirmasi dulu ke admin', mode: 'insensitive' },
+        OR: FALLBACK_MARKERS.map((m) => ({ content: { contains: m, mode: 'insensitive' as const } })),
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -284,10 +304,7 @@ export class HermesService {
         this.prisma.message.count({
           where: {
             senderType: SenderType.ai,
-            content: {
-              contains: 'konfirmasi dulu ke admin',
-              mode: 'insensitive',
-            },
+            OR: FALLBACK_MARKERS.map((m) => ({ content: { contains: m, mode: 'insensitive' as const } })),
           },
         }),
         this.alerts(15),
@@ -323,9 +340,10 @@ export class HermesService {
   async ask(question: string): Promise<{ answer: string; via: string }> {
     const snapshot = await this.performanceSnapshot();
     const context = JSON.stringify(snapshot);
-    const system = `Kamu adalah Hermes, supervisor assistant yang membantu owner/admin memantau kinerja banyak chatbot WhatsApp CS/Sales.
-Jawab pertanyaan berdasarkan DATA real-time yang diberikan. Jangan mengarang angka di luar data.
-Beri jawaban ringkas, actionable, dalam Bahasa Indonesia. Jika relevan, sebutkan bot/customer spesifik dan rekomendasi konkret.`;
+    // Hermes supervisor asks are admin-facing: use Indonesian as the default
+    // supervisor language (admins typically work in their own language). This
+    // can be made configurable per-admin in a future iteration.
+    const system = t(HERMES_SUPERVISOR_SYSTEM, 'id');
 
     // Prefer the agentic Hermes Agent sidecar; fall back to the plain model.
     const viaAgent = await this.agent.ask(question, context, system);
@@ -383,10 +401,7 @@ Beri jawaban ringkas, actionable, dalam Bahasa Indonesia. Jika relevan, sebutkan
         where: {
           senderType: SenderType.ai,
           conversation: { botId },
-          content: {
-            contains: 'konfirmasi dulu ke admin',
-            mode: 'insensitive',
-          },
+          OR: FALLBACK_MARKERS.map((m) => ({ content: { contains: m, mode: 'insensitive' as const } })),
         },
       }),
     ]);
@@ -400,9 +415,13 @@ Beri jawaban ringkas, actionable, dalam Bahasa Indonesia. Jika relevan, sebutkan
       ),
     };
 
-    const system = `Kamu Hermes, supervisor chatbot. Analisa performa SATU bot selama 7 hari terakhir berdasarkan data. Sebutkan: kekuatan, masalah berulang, dan 2-3 perbaikan konkret (mis. update knowledge, ubah persona, perlu takeover). Ringkas, Bahasa Indonesia, jangan mengarang angka.`;
-    const context = `Bot: ${bot.botName}\nMetrik: ${JSON.stringify(metrics)}\nKnowledge-gap (fallback ke admin): ${gapCount}\nSampel review terbaru: ${JSON.stringify(recent)}`;
-    const question = `Berikan analisa dan rekomendasi untuk bot ${bot.botName}.`;
+    const botLang = bot.language ?? 'en';
+    const system = t(HERMES_BOT_INSIGHT_SYSTEM, botLang);
+    const contextLabel = botLang === 'id'
+      ? `Bot: ${bot.botName}\nMetrik: ${JSON.stringify(metrics)}\nKnowledge-gap (fallback ke admin): ${gapCount}\nSampel review terbaru: ${JSON.stringify(recent)}`
+      : `Bot: ${bot.botName}\nMetrics: ${JSON.stringify(metrics)}\nKnowledge gaps (fallback to admin): ${gapCount}\nRecent review samples: ${JSON.stringify(recent)}`;
+    const context = contextLabel;
+    const question = t(HERMES_BOT_INSIGHT_QUESTION, botLang)(bot.botName);
 
     const insight =
       (await this.agent.ask(question, context, system)) ??

@@ -23,23 +23,39 @@ export function isSupportedChatJid(jid: string): boolean {
   return isDirectChatJid(jid) || isGroupJid(jid);
 }
 
-/** Keywords (case-insensitive) that signal a customer wants to opt out. */
-const OPT_OUT_KEYWORDS = ['stop', 'berhenti', 'unsubscribe', 'cancel langganan', 'jangan kirim'];
+import { optOutKeywordsFor } from '../../i18n/bot-prompts';
 
-export function isOptOutMessage(text?: string | null): boolean {
+/** Keywords (case-insensitive) that signal a customer wants to opt out.
+ *  Pass the bot's language to check language-appropriate phrases; always
+ *  includes the universal 'stop' keyword.
+ */
+export function isOptOutMessage(text?: string | null, lang = 'id'): boolean {
   if (!text) return false;
   const normalized = text.toLowerCase();
-  return OPT_OUT_KEYWORDS.some((keyword) => {
+  const keywords = optOutKeywordsFor(lang);
+  return keywords.some((keyword) => {
     if (keyword.includes(' ')) return normalized.includes(keyword);
     return new RegExp(`\\b${keyword}\\b`).test(normalized);
   });
 }
 
+/** Default polite name placeholder when customer name is unknown. */
+const DEFAULT_NAMES: Record<string, string> = {
+  id: 'Kak',
+  en: 'there',
+  es: 'estimado/a',
+  pt: 'prezado/a',
+  ar: '',
+  ms: 'Kak',
+};
+
 export function renderTemplate(
   template: string,
   vars: { name?: string | null; phone?: string | null },
+  lang = 'id',
 ): string {
-  const name = vars.name?.trim() || 'Kak';
+  const defaultName = DEFAULT_NAMES[lang] ?? '';
+  const name = vars.name?.trim() || defaultName;
   const phone = vars.phone?.trim() || '';
   return template
     .replace(/\{\{\s*name\s*\}\}/gi, name)

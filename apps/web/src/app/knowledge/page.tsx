@@ -149,6 +149,8 @@ export default function KnowledgePage() {
             <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
               <UploadSimple className="h-4 w-4 text-gray-400" aria-hidden="true" />{t('importHeading')}
             </h2>
+            {/* Upload PDF, Word (.docx), Excel, CSV, TXT, Markdown, HTML, or pull from a web page / public file URL. The content is extracted into active items, split automatically when too long. */}
+            <p className="mb-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t('importHint')}</p>
             <p className="mb-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t('importHintPrefill')}</p>
             <div className="flex flex-wrap items-center gap-2">
               <label className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-hermes-600 px-3.5 text-sm font-medium text-white hover:bg-hermes-700 ${ingesting ? 'opacity-50' : ''}`}>

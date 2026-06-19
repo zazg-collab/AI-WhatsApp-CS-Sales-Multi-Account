@@ -14,6 +14,8 @@ import {
   parseProductCsv,
   pgSslOption,
   ProductRow,
+  tokenizeForMatch,
+  scoreProductMatch,
 } from './products.util';
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -81,7 +83,7 @@ export class ProductsService implements OnModuleInit {
     });
   }
 
-  async update(id: string, data: { stock?: number; price?: number; status?: string; description?: string }) {
+  async update(id: string, data: { stock?: number; price?: number; currency?: string; status?: string; description?: string }) {
     const existing = await this.prisma.product.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Product not found');
     return this.prisma.product.update({ where: { id }, data });
@@ -100,6 +102,7 @@ export class ProductsService implements OnModuleInit {
           name: r.name,
           category: r.category,
           price: r.price,
+          currency: r.currency,
           stock: r.stock ?? 0,
           unit: r.unit,
           description: r.description,
@@ -110,6 +113,7 @@ export class ProductsService implements OnModuleInit {
           name: r.name,
           category: r.category,
           ...(r.price !== undefined ? { price: r.price } : {}),
+          ...(r.currency !== undefined ? { currency: r.currency } : {}),
           ...(r.stock !== undefined ? { stock: r.stock } : {}),
           ...(r.unit !== undefined ? { unit: r.unit } : {}),
           ...(r.description !== undefined ? { description: r.description } : {}),
@@ -254,7 +258,7 @@ export class ProductsService implements OnModuleInit {
     }
 
     // Which ProductRow fields were actually populated across the sample.
-    const fields: (keyof ProductRow)[] = ['sku', 'name', 'category', 'price', 'stock', 'unit', 'description'];
+    const fields: (keyof ProductRow)[] = ['sku', 'name', 'category', 'price', 'currency', 'stock', 'unit', 'description'];
     const detectedColumns = fields.filter((f) => rows.some((r) => r[f] != null && r[f] !== ''));
     return {
       totalParsed: rows.length,
@@ -458,32 +462,21 @@ export class ProductsService implements OnModuleInit {
   // ── Bot integration ───────────────────────────────────────────────────────
 
   /**
-   * Active products relevant to a customer query, for prompt injection. Pure
-   * keyword overlap (name/category/sku) — no fabrication; the bot only ever
-   * sees real synced stock.
+   * Active products relevant to a customer query, for prompt injection.
+   * Token-overlap match over name/sku (strong) + category/description (weak),
+   * with digit↔letter splitting and stopword removal so "klem ukuran 8" finds
+   * "Klem 8mm". No fabrication — the bot only ever sees real synced stock.
    */
   async relevantForQuery(query: string, limit = 8) {
+    const queryTokens = tokenizeForMatch(query);
+    if (queryTokens.size === 0) return [];
     const products = await this.prisma.product.findMany({
       where: { status: 'active' },
       orderBy: { name: 'asc' },
       take: 500,
     });
-    const terms = Array.from(
-      new Set(
-        (query ?? '')
-          .toLowerCase()
-          .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-          .split(/\s+/)
-          .filter((w) => w.length > 2),
-      ),
-    );
-    if (terms.length === 0) return [];
     const scored = products
-      .map((p) => {
-        const hay = `${p.name} ${p.category ?? ''} ${p.sku}`.toLowerCase();
-        const score = terms.reduce((s, t) => s + (hay.includes(t) ? 1 : 0), 0);
-        return { p, score };
-      })
+      .map((p) => ({ p, score: scoreProductMatch(p, queryTokens) }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);

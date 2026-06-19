@@ -15,6 +15,7 @@ describe('ConversationsService', () => {
   let events: any;
   let storage: any;
   let config: any;
+  let learningMiner: any;
 
   beforeEach(() => {
     prisma = {
@@ -69,7 +70,8 @@ describe('ConversationsService', () => {
     events = { emit: jest.fn(), emitToAccount: jest.fn() };
     storage = { save: jest.fn().mockResolvedValue({ key: 'k.png', url: '/media/k.png' }), read: jest.fn() };
     config = { get: jest.fn((k: string) => (k === 'CSAT_ENABLED' ? 'true' : undefined)) };
-    service = new ConversationsService(prisma, wa, events, config);
+    learningMiner = { mineConversation: jest.fn().mockResolvedValue({ knowledge: 0, customerMemory: 0, skipped: 0 }) };
+    service = new ConversationsService(prisma, wa, events, learningMiner, config);
     messaging = new ConversationMessagingService(prisma, wa, events, storage);
     chatOps = new ConversationChatOpsService(prisma, wa, events);
   });

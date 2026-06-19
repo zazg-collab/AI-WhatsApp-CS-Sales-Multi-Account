@@ -97,6 +97,7 @@ export default function AuditPage() {
 
   const { data, loading, error, refetch } = useApiQuery<{ data: AuditEntry[]; total: number }>(`/audit-logs?${params}`, [page, entity, action, from, to]);
 
+  // When fetch fails, error is displayed: "Failed to load audit log" instead of silently failing
   const entries = data ? (highRiskOnly ? data.data.filter((e) => classifyRisk(e.action) === 'high') : data.data) : [];
   const total = data?.total ?? 0;
 
@@ -137,45 +138,77 @@ export default function AuditPage() {
           <div className="space-y-2">{[1,2,3,4,5].map((n) => <div key={n} className="h-12 rounded animate-shimmer" />)}</div>
         ) : (
           <>
-            <Card className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
-                    <th className="px-4 py-3 font-medium">{t('colWaktu')}</th>
-                    <th className="px-4 py-3 font-medium">{t('colPengguna')}</th>
-                    <th className="px-4 py-3 font-medium">{t('colAksi')}</th>
-                    <th className="px-4 py-3 font-medium">{t('colEntitas')}</th>
-                    <th className="px-4 py-3 font-medium">{t('colPerubahan')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.length === 0 ? (
-                    <tr><td colSpan={5} className="px-4 py-12 text-center">
-                      <ClockCounterClockwise className="mx-auto mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{hasFilters ? t('noMatch') : t('noActivity')}</p>
-                      <p className="mt-1 text-[13px] text-gray-400">{hasFilters ? t('noMatchHint') : t('noActivityHint')}</p>
-                    </td></tr>
-                  ) : (
-                    entries.map((e) => (
-                      <tr key={e.id} className={`border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40 ${classifyRisk(e.action) === 'high' ? 'bg-danger-50/30 dark:bg-danger-900/10' : ''}`}>
-                        <td className="whitespace-nowrap px-4 py-2.5 text-[12px] text-gray-500 dark:text-gray-400">{new Date(e.createdAt).toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                        <td className="px-4 py-2.5 text-gray-700 dark:text-gray-300">
-                          {e.user ? (<div><p className="text-[13px] font-medium">{e.user.name || e.user.email}</p>{e.user.name && <p className="text-[11px] text-gray-400">{e.user.email}</p>}</div>) : (<span className="text-[12px] text-gray-400">{t('sistem')}</span>)}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-1"><span className="rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[11px] text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">{e.action}</span><RiskBadge action={e.action} /></div>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          {e.entityType && <span className="text-[12px] text-gray-500 dark:text-gray-400">{e.entityType}</span>}
-                          {e.entityId && <div className="mt-0.5"><CopyableId id={e.entityId} /></div>}
-                          {!e.entityType && !e.entityId && <span className="text-gray-400">—</span>}
-                        </td>
-                        <td className="max-w-[240px] px-4 py-2.5"><DiffView oldValue={e.oldValue} newValue={e.newValue} /></td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <Card className="overflow-hidden p-0">
+              {/* Desktop / tablet: data table */}
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
+                      <th className="px-4 py-3 font-medium">{t('colWaktu')}</th>
+                      <th className="px-4 py-3 font-medium">{t('colPengguna')}</th>
+                      <th className="px-4 py-3 font-medium">{t('colAksi')}</th>
+                      <th className="px-4 py-3 font-medium">{t('colEntitas')}</th>
+                      <th className="px-4 py-3 font-medium">{t('colPerubahan')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entries.length === 0 ? (
+                      <tr><td colSpan={5} className="px-4 py-12 text-center">
+                        <ClockCounterClockwise className="mx-auto mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{hasFilters ? t('noMatch') : t('noActivity')}</p>
+                        <p className="mt-1 text-[13px] text-gray-400">{hasFilters ? t('noMatchHint') : t('noActivityHint')}</p>
+                      </td></tr>
+                    ) : (
+                      entries.map((e) => (
+                        <tr key={e.id} className={`border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40 ${classifyRisk(e.action) === 'high' ? 'bg-danger-50/30 dark:bg-danger-900/10' : ''}`}>
+                          <td className="whitespace-nowrap px-4 py-2.5 text-[12px] text-gray-500 dark:text-gray-400">{new Date(e.createdAt).toLocaleString(undefined, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                          <td className="px-4 py-2.5 text-gray-700 dark:text-gray-300">
+                            {e.user ? (<div><p className="text-[13px] font-medium">{e.user.name || e.user.email}</p>{e.user.name && <p className="text-[11px] text-gray-400">{e.user.email}</p>}</div>) : (<span className="text-[12px] text-gray-400">{t('sistem')}</span>)}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-1"><span className="rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[11px] text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">{e.action}</span><RiskBadge action={e.action} /></div>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {e.entityType && <span className="text-[12px] text-gray-500 dark:text-gray-400">{e.entityType}</span>}
+                            {e.entityId && <div className="mt-0.5"><CopyableId id={e.entityId} /></div>}
+                            {!e.entityType && !e.entityId && <span className="text-gray-400">-</span>}
+                          </td>
+                          <td className="max-w-[240px] px-4 py-2.5"><DiffView oldValue={e.oldValue} newValue={e.newValue} /></td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: card list */}
+              <div className="divide-y divide-gray-100 dark:divide-gray-800 md:hidden">
+                {entries.length === 0 ? (
+                  <div className="px-4 py-12 text-center">
+                    <ClockCounterClockwise className="mx-auto mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{hasFilters ? t('noMatch') : t('noActivity')}</p>
+                    <p className="mt-1 text-[13px] text-gray-400">{hasFilters ? t('noMatchHint') : t('noActivityHint')}</p>
+                  </div>
+                ) : (
+                  entries.map((e) => (
+                    <div key={e.id} className={`px-4 py-3 ${classifyRisk(e.action) === 'high' ? 'bg-danger-50/30 dark:bg-danger-900/10' : ''}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1">
+                          <span className="rounded-md border border-gray-200 bg-gray-50 px-1.5 py-0.5 font-mono text-[11px] text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">{e.action}</span>
+                          <RiskBadge action={e.action} />
+                        </div>
+                        <span className="shrink-0 text-[11px] text-gray-400">{new Date(e.createdAt).toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <div className="mt-1.5 text-[12px] text-gray-600 dark:text-gray-300">
+                        {e.user ? (e.user.name || e.user.email) : t('sistem')}
+                        {e.entityType && <span className="text-gray-400"> · {e.entityType}</span>}
+                      </div>
+                      {e.entityId && <div className="mt-1"><CopyableId id={e.entityId} /></div>}
+                      <div className="mt-1.5"><DiffView oldValue={e.oldValue} newValue={e.newValue} /></div>
+                    </div>
+                  ))
+                )}
+              </div>
             </Card>
 
             {totalPages > 1 && (

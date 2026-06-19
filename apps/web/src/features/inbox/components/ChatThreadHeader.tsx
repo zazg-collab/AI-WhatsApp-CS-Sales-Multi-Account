@@ -108,6 +108,9 @@ export function ChatThreadHeader({
                 {actions.onMarkRead && (
                   <MenuItem label="Mark as read" onClick={() => { actions.onMarkRead?.(); close(); }} />
                 )}
+                {onShowDetails && (
+                  <MenuItem label="ℹ️ Lihat detail" onClick={() => { onShowDetails?.(); close(); }} />
+                )}
                 {conversation.takeoverStatus === 'admin_takeover' && actions.onReturnToAi && (
                   <MenuItem label="↩️ Return to AI" onClick={() => { actions.onReturnToAi?.(); close(); }} />
                 )}
@@ -155,7 +158,7 @@ export function ChatThreadHeader({
             size="sm"
             onClick={onShowDetails}
             aria-label="Show conversation details"
-            className="xl:hidden"
+            title="Lihat detail"
           >
             <Info className="h-5 w-5" aria-hidden="true" />
           </Button>

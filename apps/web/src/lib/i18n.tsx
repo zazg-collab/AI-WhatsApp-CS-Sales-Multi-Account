@@ -13,7 +13,7 @@ export interface Phrase {
 export type Dict = Record<string, Phrase>;
 
 const STORAGE_KEY = 'hermes_lang';
-export const DEFAULT_LANG: Lang = 'id';
+export const DEFAULT_LANG: Lang = 'en';
 
 interface LangContextValue {
   lang: Lang;

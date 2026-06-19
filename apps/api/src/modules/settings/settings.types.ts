@@ -10,6 +10,11 @@ export interface AiSettings {
   hermesModel: string;
   temperature: number;
   timeoutMs: number;
+  /** Embedding model for semantic knowledge retrieval (OpenAI-compatible
+   *  `/embeddings`). Empty string disables RAG → keyword retrieval is used. */
+  embedModel: string;
+  /** Embedding vector dimension. Must match the DB `vector(N)` column. */
+  embedDim: number;
 }
 
 export interface WaSettings {

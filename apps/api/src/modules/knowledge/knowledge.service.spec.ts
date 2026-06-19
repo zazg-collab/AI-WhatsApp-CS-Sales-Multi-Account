@@ -4,6 +4,7 @@ import { KnowledgeService } from './knowledge.service';
 describe('KnowledgeService', () => {
   let service: KnowledgeService;
   let prisma: any;
+  let knowledgeIndex: any;
 
   beforeEach(() => {
     prisma = {
@@ -18,7 +19,14 @@ describe('KnowledgeService', () => {
         update: jest.fn().mockResolvedValue({ id: 'ki1' }),
       },
     };
-    service = new KnowledgeService(prisma);
+    // RAG disabled in unit tests → indexItem is a no-op; assert it's invoked
+    // on writes without standing up the embedding provider.
+    knowledgeIndex = {
+      indexItem: jest.fn().mockResolvedValue(undefined),
+      reindexBase: jest.fn().mockResolvedValue(0),
+      enabled: jest.fn().mockResolvedValue(false),
+    };
+    service = new KnowledgeService(prisma, knowledgeIndex);
   });
 
   it('listBases includes item counts', async () => {

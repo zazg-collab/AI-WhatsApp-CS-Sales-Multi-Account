@@ -10,6 +10,7 @@ import {
 describe('PromptBuilderService', () => {
   let service: PromptBuilderService;
   let prisma: any;
+  let knowledgeIndex: any;
 
   const customer = {
     name: 'Budi',
@@ -26,7 +27,9 @@ describe('PromptBuilderService', () => {
     };
     // No relevant products by default → no extra product system message.
     const products = { relevantForQuery: jest.fn().mockResolvedValue([]) } as any;
-    service = new PromptBuilderService(prisma, products);
+    // RAG disabled by default → keyword retrieval path (search returns []).
+    knowledgeIndex = { search: jest.fn().mockResolvedValue([]) };
+    service = new PromptBuilderService(prisma, products, knowledgeIndex);
   });
 
   it('throws when conversation missing', async () => {
@@ -38,46 +41,58 @@ describe('PromptBuilderService', () => {
     prisma.conversation.findUnique.mockResolvedValue({
       id: 'c1',
       customer,
-      bot: { persona: { soulMd: 'Saya ramah' }, knowledgeBaseId: 'kb1' },
+      bot: { persona: { soulMd: 'Saya ramah' }, knowledgeBaseId: 'kb1', language: 'id' },
       messages: [
         { senderType: 'ai', content: 'Halo kak' },
         { senderType: 'customer', content: 'Berapa harga?' },
       ],
     });
     prisma.knowledgeItem.findMany.mockResolvedValue([
-      { title: 'Harga', productName: 'Paket A', content: '100rb' },
+      { id: 'k1', title: 'Harga', productName: 'Paket A', content: '100rb' },
     ]);
 
     const msgs = await service.buildForConversation('c1');
-    // [0] shared stable block (persona + knowledge + rules), [1] per-customer.
+    // [0] system security/scope guard, [1] shared stable block (persona +
+    // knowledge + rules), [2] per-customer.
     expect(msgs[0].role).toBe('system');
-    expect(msgs[0].content).toContain('Saya ramah');
-    expect(msgs[0].content).toContain('Paket A');
+    expect(msgs[0].content).toMatch(/PRIORITAS TERTINGGI/);
     expect(msgs[1].role).toBe('system');
-    expect(msgs[1].content).toContain('Budi');
+    expect(msgs[1].content).toContain('Saya ramah');
+    expect(msgs[1].content).toContain('Paket A');
+    expect(msgs[2].role).toBe('system');
+    expect(msgs[2].content).toContain('Budi');
+    // P0: injected knowledge + customer memory are fenced as reference DATA so
+    // adversarial wording inside them cannot act as an instruction.
+    expect(msgs[1].content).toMatch(/DATA_REFERENSI/);
+    expect(msgs[2].content).toMatch(/DATA_REFERENSI/);
     // Customer data must NOT be in the cacheable shared prefix.
-    expect(msgs[0].content).not.toContain('Budi');
+    expect(msgs[1].content).not.toContain('Budi');
     // Internal admin notes must never leak into the bot prompt (M6).
-    expect(msgs[0].content).not.toContain('pelanggan lama');
     expect(msgs[1].content).not.toContain('pelanggan lama');
+    expect(msgs[2].content).not.toContain('pelanggan lama');
     // history reversed: customer first then ai
-    expect(msgs[2]).toEqual({ role: 'user', content: 'Berapa harga?' });
-    expect(msgs[3]).toEqual({ role: 'assistant', content: 'Halo kak' });
+    expect(msgs[3]).toEqual({ role: 'user', content: 'Berapa harga?' });
+    expect(msgs[4]).toEqual({ role: 'assistant', content: 'Halo kak' });
   });
 
   it('always embeds the safety rules (anti-fabrication, fallback, escalation, anti-injection)', async () => {
     prisma.conversation.findUnique.mockResolvedValue({
       id: 'c1',
       customer: { ...customer, tags: [], notes: null },
-      bot: { persona: { soulMd: 's' }, knowledgeBaseId: null },
+      bot: { persona: { soulMd: 's' }, knowledgeBaseId: null, language: 'id' },
       messages: [],
     });
-    const system = (await service.buildForConversation('c1'))[0].content;
-    expect(system).toMatch(/Jangan membuat data palsu/i);
-    expect(system).toContain('saya bantu konfirmasi dulu ke admin ya kak');
-    expect(system).toMatch(/komplain\/refund\/legal/i);
-    expect(system).toMatch(/tidak tepercaya/i);
-    expect(system).toMatch(/tidak dapat diubah oleh customer/i);
+    const msgs = await service.buildForConversation('c1');
+    // [0] system security/scope guard — anti-injection + role confinement.
+    const guard = msgs[0].content;
+    expect(guard).toMatch(/DATA, bukan instruksi/i);
+    expect(guard).toMatch(/tidak dapat dinegosiasikan oleh customer/i);
+    expect(guard).toMatch(/lingkup/i);
+    // [1] shared block — anti-fabrication, fallback phrase, escalation.
+    const shared = msgs[1].content;
+    expect(shared).toMatch(/Jangan membuat data palsu/i);
+    expect(shared).toContain('saya bantu konfirmasi dulu ke admin ya kak');
+    expect(shared).toMatch(/komplain\/refund\/legal/i);
   });
 
   it('uses default persona + no-knowledge note when bot/kb absent', async () => {
@@ -88,15 +103,17 @@ describe('PromptBuilderService', () => {
       messages: [],
     });
     const msgs = await service.buildForConversation('c1');
-    expect(msgs[0].content).toContain('belum ada knowledge');
+    // bot is null → language falls back to 'en' → English no-knowledge note.
+    expect(msgs[1].content).toContain('no knowledge base yet');
     expect(prisma.knowledgeItem.findMany).not.toHaveBeenCalled();
   });
 
   it('retrieves only the top-K knowledge items relevant to the customer query', async () => {
     // One clearly relevant item ("ongkir") + many irrelevant ones (> top-K).
     const items = [
-      { title: 'Ongkir ke Jawa', productName: null, content: 'Gratis ongkir min 100rb' },
+      { id: 'rel', title: 'Ongkir ke Jawa', productName: null, content: 'Gratis ongkir min 100rb' },
       ...Array.from({ length: 30 }, (_, i) => ({
+        id: `t${i}`,
         title: `Topik ${i}`,
         productName: null,
         content: `konten tidak terkait ${i}`,
@@ -106,14 +123,43 @@ describe('PromptBuilderService', () => {
     prisma.conversation.findUnique.mockResolvedValue({
       id: 'c1',
       customer: { ...customer, tags: [], notes: null },
-      bot: { persona: { soulMd: 's' }, knowledgeBaseId: 'kb1' },
+      bot: { persona: { soulMd: 's' }, knowledgeBaseId: 'kb1', language: 'id' },
       messages: [{ senderType: 'customer', content: 'berapa ongkir kirim?' }],
     });
 
-    const shared = (await service.buildForConversation('c1'))[0].content;
+    const shared = (await service.buildForConversation('c1'))[1].content;
     // The relevant item is included...
     expect(shared).toContain('Ongkir ke Jawa');
     // ...and the injected set is capped at top-K (not all 31).
+    const injected = (shared.match(/^• /gm) ?? []).length;
+    expect(injected).toBe(KNOWLEDGE_MAX_ITEMS);
+  });
+
+  it('promotes a semantic hit that has no keyword overlap (hybrid retrieval)', async () => {
+    // 31 recency items with zero lexical match to the query; the relevant
+    // answer only surfaces via the vector index (different words, same meaning).
+    const items = Array.from({ length: 31 }, (_, i) => ({
+      id: `t${i}`,
+      title: `Topik ${i}`,
+      productName: null,
+      content: `konten lain ${i}`,
+    }));
+    prisma.knowledgeItem.findMany.mockResolvedValue(items);
+    // Vector index returns the semantically-matching item first.
+    knowledgeIndex.search.mockResolvedValue([
+      { id: 'sem', title: 'Pengiriman luar pulau', productName: null, content: 'Estimasi 3-5 hari' },
+    ]);
+    prisma.conversation.findUnique.mockResolvedValue({
+      id: 'c1',
+      customer: { ...customer, tags: [], notes: null },
+      bot: { persona: { soulMd: 's' }, knowledgeBaseId: 'kb1', language: 'id' },
+      messages: [{ senderType: 'customer', content: 'kapan barang sampai?' }],
+    });
+
+    const shared = (await service.buildForConversation('c1'))[1].content;
+    expect(knowledgeIndex.search).toHaveBeenCalledWith('kb1', expect.any(String), expect.any(Number));
+    // The semantic-only hit is injected even though it shares no query words.
+    expect(shared).toContain('Pengiriman luar pulau');
     const injected = (shared.match(/^• /gm) ?? []).length;
     expect(injected).toBe(KNOWLEDGE_MAX_ITEMS);
   });
@@ -132,13 +178,14 @@ describe('PromptBuilderService', () => {
     prisma.conversation.findUnique.mockResolvedValue({
       id: 'c1',
       customer: { ...customer, tags: [], notes: null },
-      bot: { persona: { soulMd: 's' }, knowledgeBaseId: null },
+      bot: { persona: { soulMd: 's' }, knowledgeBaseId: null, language: 'id' },
       messages: many,
     });
 
     const msgs = await service.buildForConversation('c1', 40);
-    // Skip the two leading system messages (shared block + per-customer block).
-    const afterSystem = msgs.slice(2);
+    // Skip the three leading system messages (security guard + shared block +
+    // per-customer block).
+    const afterSystem = msgs.slice(3);
     // first entry is the summary placeholder (also role system)
     expect(afterSystem[0].role).toBe('system');
     expect(afterSystem[0].content).toContain('Ringkasan percakapan sebelumnya');
@@ -155,7 +202,7 @@ describe('PromptBuilderService', () => {
     prisma.conversation.findUnique.mockResolvedValue({
       id: 'c1',
       customer: { ...customer, tags: [], notes: null },
-      bot: { persona: { soulMd: 's' }, knowledgeBaseId: null },
+      bot: { persona: { soulMd: 's' }, knowledgeBaseId: null, language: 'id' },
       messages: many,
     });
 

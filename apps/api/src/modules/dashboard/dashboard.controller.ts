@@ -3,13 +3,17 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { DashboardService } from './dashboard.service';
+import { ClosingAnalyticsService } from './closing-analytics.service';
 
 @ApiTags('dashboard')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('dashboard')
 export class DashboardController {
-  constructor(private readonly dashboardService: DashboardService) {}
+  constructor(
+    private readonly dashboardService: DashboardService,
+    private readonly closingAnalytics: ClosingAnalyticsService,
+  ) {}
 
   @ApiOperation({ summary: 'Get dashboard summary stats' })
   @Get('summary')
@@ -65,5 +69,23 @@ export class DashboardController {
   @Get('admin-workload')
   getAdminWorkload(@Query('days') days = '7') {
     return this.dashboardService.getAdminWorkload(parseInt(days, 10));
+  }
+
+  @ApiOperation({ summary: 'Get funnel conversion rates (stage population + resolved rate)' })
+  @Get('closing/funnel')
+  getFunnelConversion(@Query('days') days = '30') {
+    return this.closingAnalytics.getFunnelConversion(parseInt(days, 10));
+  }
+
+  @ApiOperation({ summary: 'Get revenue/close attribution per bot' })
+  @Get('closing/bot-attribution')
+  getBotAttribution(@Query('days') days = '30') {
+    return this.closingAnalytics.getBotAttribution(parseInt(days, 10));
+  }
+
+  @ApiOperation({ summary: 'Get win/loss breakdown for resolved conversations' })
+  @Get('closing/win-loss')
+  getWinLoss(@Query('days') days = '30') {
+    return this.closingAnalytics.getWinLoss(parseInt(days, 10));
   }
 }

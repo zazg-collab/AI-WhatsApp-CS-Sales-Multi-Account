@@ -11,8 +11,14 @@ describe('AiService', () => {
 
   beforeEach(() => {
     prisma = {
-      conversation: { findUnique: jest.fn() },
-      customer: { update: jest.fn() },
+      conversation: {
+        findUnique: jest.fn().mockResolvedValue({ customerId: 'cust1', bot: { language: 'id' } }),
+      },
+      customer: {
+        findUnique: jest.fn().mockResolvedValue({ leadStage: 'cold' }),
+        update: jest.fn(),
+      },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
     provider = {
       chat: jest.fn(),
@@ -84,11 +90,12 @@ describe('AiService', () => {
 
   describe('leadScore', () => {
     beforeEach(() => {
-      prisma.conversation.findUnique.mockResolvedValue({ customerId: 'cust1' });
+      prisma.conversation.findUnique.mockResolvedValue({ customerId: 'cust1', bot: { language: 'id' } });
       prisma.customer.update.mockResolvedValue({ name: 'Budi', phoneNumber: '628' });
     });
 
     it('throws when conversation missing', async () => {
+      // null for both botLang call and the leadScore getConversation call
       prisma.conversation.findUnique.mockResolvedValue(null);
       await expect(service.leadScore('c1')).rejects.toThrow('Conversation not found');
     });

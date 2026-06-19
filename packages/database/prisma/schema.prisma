@@ -223,7 +223,7 @@ model Bot {
   knowledgeBaseId String?   @map("knowledge_base_id")
   marketingFlowId String?   @map("marketing_flow_id")
   defaultAiMode   AiMode    @default(ai_draft) @map("default_ai_mode")
-  language        String    @default("id")
+  language        String    @default("en")
   status          BotStatus @default(draft)
   /// Last time AI Learning mined this bot's history. Lets a re-run skip the
   /// transcript miners when no new messages have arrived since.
@@ -287,6 +287,13 @@ model KnowledgeItem {
   status          KnowledgeStatus @default(draft)
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
+  // Semantic-retrieval (pgvector). Written by the embedding pipeline, read via
+  // raw SQL (`embedding <=> $query`). Unsupported → never selected by the
+  // generated client; the column type/dimension lives in the migration.
+  embedding       Unsupported("vector")?
+  embeddingModel  String?         @map("embedding_model")
+  // Hash of title+content at embed time; lets re-index skip unchanged items.
+  contentHash     String?         @map("content_hash")
 
   knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
 
@@ -305,6 +312,7 @@ model Customer {
   leadStage       LeadStage @default(cold) @map("lead_stage")
   tags            String[]  @default([])
   notes           String?
+  aiMemory        String?   @map("ai_memory")
   optedOut        Boolean   @default(false) @map("opted_out")
   optedOutAt      DateTime? @map("opted_out_at")
   avatarUrl       String?   @map("avatar_url")
@@ -367,6 +375,8 @@ model Conversation {
   csatScore         Int?           @map("csat_score")
   csatRequestedAt   DateTime?      @map("csat_requested_at")
   csatRespondedAt   DateTime?      @map("csat_responded_at")
+  /// When Hermes auto-learn last mined this conversation (idempotency guard).
+  learnedAt         DateTime?      @map("learned_at")
   assignedAdminId   String?        @map("assigned_admin_id")
   lastMessage       String?        @map("last_message")
   lastMessageAt     DateTime?      @map("last_message_at")
@@ -587,6 +597,8 @@ model LearningProposal {
   id               String    @id @default(uuid())
   botId            String?   @map("bot_id")
   customerId       String?   @map("customer_id")
+  /// Conversation this proposal was mined from (Hermes auto-learn on resolve).
+  conversationId   String?   @map("conversation_id")
   type             String
   status           String    @default("pending")
   title            String
@@ -659,6 +671,8 @@ model Product {
   name         String
   category     String?
   price        Int?
+  /// ISO 4217 currency code (e.g. "IDR", "USD", "EUR"). Null = unset/unknown.
+  currency     String?
   stock        Int       @default(0)
   unit         String?
   description  String?

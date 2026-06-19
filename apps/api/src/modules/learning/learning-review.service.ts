@@ -64,11 +64,10 @@ export class LearningReviewService {
     } else if (p.type === 'customer_memory') {
       if (!p.customerId) throw new BadRequestException('Proposal tanpa customer');
       const payload = p.payload as unknown as CustomerMemoryPayload;
-      const customer = await this.prisma.customer.findUnique({ where: { id: p.customerId }, select: { notes: true } });
-      const header = '— Dari riwayat (AI) —';
-      const block = `${header}\n${payload.facts.map((f) => `• ${f}`).join('\n')}`;
-      const notes = customer?.notes ? `${customer.notes}\n\n${block}` : block;
-      await this.prisma.customer.update({ where: { id: p.customerId }, data: { notes } });
+      const customer = await this.prisma.customer.findUnique({ where: { id: p.customerId }, select: { aiMemory: true } });
+      const newFacts = payload.facts.map((f) => `• ${f}`).join('\n');
+      const aiMemory = customer?.aiMemory ? `${customer.aiMemory}\n${newFacts}` : newFacts;
+      await this.prisma.customer.update({ where: { id: p.customerId }, data: { aiMemory } });
       resultEntityId = p.customerId;
     }
 

@@ -7,9 +7,10 @@ import { ConversationMessagingService } from './conversation-messaging.service';
 import { ConversationChatOpsService } from './conversation-chat-ops.service';
 import { WaModule } from '../wa/wa.module';
 import { MediaModule } from '../media/media.module';
+import { LearningModule } from '../learning/learning.module';
 
 @Module({
-  imports: [WaModule, MediaModule],
+  imports: [WaModule, MediaModule, LearningModule],
   controllers: [
     ConversationsController,
     ConversationMessagesController,

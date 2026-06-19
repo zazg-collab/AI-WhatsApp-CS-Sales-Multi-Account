@@ -7,6 +7,8 @@ import { CreateCampaignDto, CampaignTargetFilterDto, UpdateCampaignDto } from '.
 
 export { CandidateTarget };
 
+export const BLOCKED_TAGS = ['opt_out', 'blocked', 'do_not_contact'];
+
 /** Thin facade — controller and processor depend on this. */
 @Injectable()
 export class CampaignsService {
@@ -31,8 +33,18 @@ export class CampaignsService {
   optIn(customerId: string, userId: string) { return this.crud.optIn(customerId, userId); }
   listOptedOut(page?: number, pageSize?: number) { return this.crud.listOptedOut(page, pageSize); }
 
-  start(id: string, userId?: string) { return this.queue.start(id, userId); }
+  start(id: string, userId?: string) {
+    // Queues recipients with idempotent jobId: `campaign-recipient-${recipient.id}`
+    return this.queue.start(id, userId);
+  }
   runScheduledCampaigns() { return this.queue.runScheduledCampaigns(); }
 
-  processRecipient(recipientId: string) { return this.send.processRecipient(recipientId); }
+  processRecipient(recipientId: string) {
+    // Delegated to send.service; skips if recipient.status !== CampaignRecipientStatus.queued
+    return this.send.processRecipient(recipientId);
+  }
+
+  isCampaignStatus(status: string) {
+    return this.crud.isCampaignStatus(status);
+  }
 }

@@ -9,7 +9,24 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
-import { useT, type Dict } from '@/lib/i18n';
+import { useT, useLang, type Dict } from '@/lib/i18n';
+
+const PRICE_LOCALE: Record<string, string> = { id: 'id-ID', en: 'en-US', es: 'es-ES', pt: 'pt-BR', ar: 'ar-SA', ms: 'ms-MY' };
+/**
+ * Format a product price.
+ * - If the product has a stored currency code (e.g. "USD"), use Intl currency format.
+ * - Otherwise fall back to the UI language locale (Indonesian-style Rp prefix for IDR).
+ */
+function formatPrice(price: number, lang: string, currency?: string | null): string {
+  if (currency) {
+    try {
+      return price.toLocaleString('en-US', { style: 'currency', currency, maximumFractionDigits: 0 });
+    } catch { /* unknown ISO code — fall through */ }
+  }
+  const locale = PRICE_LOCALE[lang] ?? 'en-US';
+  if (lang === 'id') return `Rp${price.toLocaleString(locale)}`;
+  return price.toLocaleString(locale);
+}
 
 const dict: Dict = {
   title: { id: 'Produk & Stok', en: 'Products & Stock' },
@@ -60,6 +77,11 @@ const dict: Dict = {
   lowStockTitle: { id: 'Stok menipis', en: 'Low stock' },
   cancel: { id: 'Batal', en: 'Cancel' },
   deleteSource: { id: 'Hapus sumber', en: 'Delete source' },
+  timeJustNow: { id: 'baru saja', en: 'just now' },
+  timeMinutes: { id: '{m} mnt lalu', en: '{m}m ago' },
+  timeHours: { id: '{h} jam lalu', en: '{h}h ago' },
+  timeDays: { id: '{d} hr lalu', en: '{d}d ago' },
+  pricePrefix: { id: 'Rp', en: '' },
 };
 
 interface Product {
@@ -68,6 +90,7 @@ interface Product {
   name: string;
   category: string | null;
   price: number | null;
+  currency: string | null;
   stock: number;
   unit: string | null;
   status: string;
@@ -92,6 +115,7 @@ interface SourcePreview {
 
 export default function ProductsPage() {
   const t = useT(dict);
+  const { lang } = useLang();
   const canManage = hasRole('admin');
   const canConfigure = hasRole('supervisor');
   const [products, setProducts] = useState<Product[]>([]);
@@ -146,11 +170,11 @@ export default function ProductsPage() {
     if (!iso) return '—';
     const diff = Date.now() - new Date(iso).getTime();
     const m = Math.round(diff / 60000);
-    if (m < 1) return 'baru saja';
-    if (m < 60) return `${m} mnt lalu`;
+    if (m < 1) return t('timeJustNow');
+    if (m < 60) return t('timeMinutes', { m: String(m) });
     const h = Math.round(m / 60);
-    if (h < 24) return `${h} jam lalu`;
-    return `${Math.round(h / 24)} hr lalu`;
+    if (h < 24) return t('timeHours', { h: String(h) });
+    return t('timeDays', { d: String(Math.round(h / 24)) });
   }
 
   async function uploadCsv(file: File) {
@@ -377,7 +401,7 @@ export default function ProductsPage() {
                     <tr key={p.id} className="border-t border-gray-100 dark:border-gray-800">
                       <td className="px-3 py-2"><span className="font-medium text-gray-900 dark:text-gray-100">{p.name}</span>{p.category && <span className="ml-1 text-gray-400">· {p.category}</span>}</td>
                       <td className="px-3 py-2 tabular-nums text-gray-500">{p.sku}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-200">{p.price != null ? `Rp${p.price.toLocaleString('id-ID')}` : '-'}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-700 dark:text-gray-200">{p.price != null ? formatPrice(p.price, lang, p.currency) : '-'}</td>
                       <td className="px-3 py-2 text-right">
                         {p.stock <= 0 ? (
                           <Badge tone="danger">{t('outOfStockBadge')}</Badge>
@@ -416,7 +440,7 @@ export default function ProductsPage() {
                   </div>
                   <div className="mt-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                     <span className="tabular-nums">{p.sku}</span>
-                    <span className="tabular-nums text-gray-700 dark:text-gray-200">{p.price != null ? `Rp${p.price.toLocaleString('id-ID')}` : '-'}</span>
+                    <span className="tabular-nums text-gray-700 dark:text-gray-200">{p.price != null ? formatPrice(p.price, lang, p.currency) : '-'}</span>
                   </div>
                 </div>
               ))}

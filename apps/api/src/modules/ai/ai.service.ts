@@ -8,6 +8,17 @@ import {
 } from './ai-provider.service';
 import { PromptBuilderService } from './prompt-builder.service';
 import { AiCacheService } from './ai-cache.service';
+import {
+  t,
+  LEAD_SCORE_SYSTEM,
+  LEAD_SCORE_USER,
+  SENTIMENT_SYSTEM,
+  SENTIMENT_USER_PREFIX,
+  SENTIMENT_USER_SUFFIX,
+  SENTIMENT_NO_MESSAGES,
+  SUMMARIZE_SYSTEM,
+  SUMMARIZE_USER,
+} from '../../i18n/bot-prompts';
 
 export interface GeneratedReply {
   text: string;
@@ -102,12 +113,24 @@ export class AiService {
     return { text, model: resolvedModel };
   }
 
+  /** Resolve bot language for a conversation (defaults to 'id'). */
+  private async botLang(conversationId: string): Promise<string> {
+    const row = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { bot: { select: { language: true } } },
+    });
+    return row?.bot?.language ?? 'en';
+  }
+
   /**
    * Analyze customer sentiment from the most recent customer messages.
    * Returns a structured result; never throws on parse failure.
    */
   async analyzeSentiment(conversationId: string): Promise<SentimentResult> {
-    const history = await this.prompts.buildForConversation(conversationId, 30);
+    const [lang, history] = await Promise.all([
+      this.botLang(conversationId),
+      this.prompts.buildForConversation(conversationId, 30),
+    ]);
     const customerLines = history
       .filter((m) => m.role === 'user')
       .slice(-10)
@@ -115,18 +138,13 @@ export class AiService {
       .join('\n');
 
     const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: `Kamu menilai sentimen customer dari pesan WhatsApp mereka.
-Balas HANYA JSON: {"sentiment": "positive|neutral|negative|frustrated", "score": number, "reason": string}.
-score 0-100 (semakin tinggi semakin positif). reason singkat Bahasa Indonesia.`,
-      },
+      { role: 'system', content: t(SENTIMENT_SYSTEM, lang) },
       {
         role: 'user',
         content:
-          'Pesan terakhir customer:\n' +
-          (customerLines || '(tidak ada pesan customer)') +
-          '\nNilai sentimennya sebagai JSON.',
+          t(SENTIMENT_USER_PREFIX, lang) +
+          (customerLines || t(SENTIMENT_NO_MESSAGES, lang)) +
+          t(SENTIMENT_USER_SUFFIX, lang),
       },
     ];
 
@@ -159,18 +177,14 @@ score 0-100 (semakin tinggi semakin positif). reason singkat Bahasa Indonesia.`,
   }
 
   async summarizeChat(conversationId: string): Promise<string> {
-    const history = await this.prompts.buildForConversation(
-      conversationId,
-      60,
-    );
+    const [lang, history] = await Promise.all([
+      this.botLang(conversationId),
+      this.prompts.buildForConversation(conversationId, 60),
+    ]);
     const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content:
-          'Ringkas percakapan customer service berikut dalam 2-4 kalimat Bahasa Indonesia. Sebutkan kebutuhan customer, produk yang diminati, keberatan, dan langkah berikutnya.',
-      },
+      { role: 'system', content: t(SUMMARIZE_SYSTEM, lang) },
       ...history.filter((m) => m.role !== 'system'),
-      { role: 'user', content: 'Buat ringkasan singkat percakapan di atas.' },
+      { role: 'user', content: t(SUMMARIZE_USER, lang) },
     ];
     return this.provider.chat(messages, { temperature: 0.3, maxTokens: 250 });
   }
@@ -188,20 +202,14 @@ score 0-100 (semakin tinggi semakin positif). reason singkat Bahasa Indonesia.`,
       throw new Error('Conversation not found');
     }
 
-    const history = await this.prompts.buildForConversation(
-      conversationId,
-      40,
-    );
+    const [lang, history] = await Promise.all([
+      this.botLang(conversationId),
+      this.prompts.buildForConversation(conversationId, 40),
+    ]);
     const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: `Kamu menilai prospek (lead) penjualan dari percakapan WhatsApp.
-Skor 0-100 berdasar sinyal: tanya harga/stok/lokasi/cara bayar/DP/promo, kirim data diri, minta survey/invoice, respon cepat, chat berulang.
-Balas HANYA JSON: {"score": number, "stage": "cold|warm|hot|very_hot", "reasons": string[]}.
-Acuan stage: 0-30 cold, 31-60 warm, 61-80 hot, 81-100 very_hot.`,
-      },
+      { role: 'system', content: t(LEAD_SCORE_SYSTEM, lang) },
       ...history.filter((m) => m.role !== 'system'),
-      { role: 'user', content: 'Nilai lead percakapan di atas sebagai JSON.' },
+      { role: 'user', content: t(LEAD_SCORE_USER, lang) },
     ];
 
     const raw = await this.provider.chat(messages, {
@@ -212,10 +220,29 @@ Acuan stage: 0-30 cold, 31-60 warm, 61-80 hot, 81-100 very_hot.`,
 
     const result = this.parseLeadScore(raw);
 
+    const before = await this.prisma.customer.findUnique({
+      where: { id: conversation.customerId },
+      select: { leadStage: true },
+    });
+
     const customer = await this.prisma.customer.update({
       where: { id: conversation.customerId },
       data: { leadScore: result.score, leadStage: result.stage },
     });
+
+    // Persist a stage-change event so closing analytics can compute funnel
+    // velocity. Fire-and-forget — never blocks the scoring response.
+    if (before && before.leadStage !== result.stage) {
+      void this.prisma.auditLog.create({
+        data: {
+          action: 'ai_lead_stage_changed',
+          entityType: 'Customer',
+          entityId: conversation.customerId,
+          oldValue: { stage: before.leadStage, conversationId },
+          newValue: { stage: result.stage, score: result.score, conversationId, reasons: result.reasons },
+        },
+      });
+    }
 
     if (
       result.stage === LeadStage.hot ||

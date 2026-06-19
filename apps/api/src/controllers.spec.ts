@@ -54,8 +54,12 @@ describe('DashboardController', () => {
   const svc: any = {
     getSummary: fn(), getLeadFunnel: fn(), getMessageVolume: fn(), getAiModeBreakdown: fn(),
     getPerformanceOverview: fn(), getResponseTime: fn(), getAiQuality: fn(), getCampaignPerformance: fn(),
+    getAdminWorkload: fn(),
   };
-  const c = new DashboardController(svc);
+  const closingSvc: any = {
+    getFunnelConversion: fn(), getBotAttribution: fn(), getWinLoss: fn(),
+  };
+  const c = new DashboardController(svc, closingSvc);
   it('delegates with parsed days', () => {
     c.getSummary(); c.getLeadFunnel(); c.getMessageVolume('5'); c.getAiModeBreakdown();
     c.getPerformance('10'); c.getResponseTime('3'); c.getAiQuality('7'); c.getCampaignPerformance('14');

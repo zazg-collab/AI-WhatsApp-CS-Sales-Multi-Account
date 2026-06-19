@@ -9,6 +9,6 @@ import { LearningReviewService } from './learning-review.service';
   imports: [AiModule],
   controllers: [LearningController],
   providers: [LearningService, LearningMinerService, LearningReviewService],
-  exports: [LearningService],
+  exports: [LearningService, LearningMinerService],
 })
 export class LearningModule {}

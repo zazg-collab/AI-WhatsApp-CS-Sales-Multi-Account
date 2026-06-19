@@ -11,8 +11,14 @@ import {
   PersonaPayload,
 } from './learning.types';
 import { parseJsonArray, parseJsonObject } from './learning.util';
-
-const FALLBACK_MARKER = 'konfirmasi dulu ke admin';
+import {
+  t,
+  FALLBACK_PHRASE,
+  MINE_CUSTOMER_MEMORY_SYSTEM,
+  MINE_KNOWLEDGE_SYSTEM,
+  MINE_PERSONA_SYSTEM,
+  MINE_PLAYBOOK_SYSTEM,
+} from '../../i18n/bot-prompts';
 const TRANSCRIPT_CHAR_BUDGET = 14_000;
 const PER_MESSAGE_CHAR_CAP = 320;
 const MAX_MESSAGES = 600;
@@ -45,6 +51,11 @@ export class LearningMinerService {
     return this.jsonStrict ? strict : lenient;
   }
 
+  /** The marker phrase used to detect knowledge gaps — language-specific. */
+  private fallbackMarker(lang: string): string {
+    return t(FALLBACK_PHRASE, lang);
+  }
+
   async mineAll(botId: string): Promise<MineResult> {
     const bot = await this.botOrThrow(botId);
     const result: MineResult = { botId, knowledge: 0, persona: 0, customerMemory: 0, playbook: 0, skippedDuplicates: 0 };
@@ -74,19 +85,29 @@ export class LearningMinerService {
   }
 
   async mineKnowledge(botId: string): Promise<{ created: number; skipped: number }> {
+    const bot = await this.botOrThrow(botId);
+    const lang = bot.language ?? 'en';
     const transcript = await this.gatherTranscripts(botId, { preferFallback: true });
+    return this.proposeKnowledge(botId, lang, transcript, 'Ditambang dari pasangan tanya-jawab di riwayat chat.');
+  }
+
+  /**
+   * Run the knowledge-mining LLM pass over a transcript and persist non-duplicate
+   * items as pending proposals. Shared by the bot-wide miner and the
+   * per-conversation auto-learn. Dedups against active KB titles AND existing
+   * pending knowledge proposals so repeated runs don't pile up the same item.
+   */
+  private async proposeKnowledge(
+    botId: string,
+    lang: string,
+    transcript: Transcript,
+    sourceSummary: string,
+    conversationId?: string,
+  ): Promise<{ created: number; skipped: number }> {
     if (!transcript.text) return { created: 0, skipped: 0 };
 
     const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: `Kamu menambang FAQ dari riwayat chat customer service WhatsApp.
-Tugas: temukan pertanyaan pelanggan yang BERULANG beserta jawaban ASLI dari admin (baris berawalan "A:").
-Prioritaskan pertanyaan yang muncul setelah bot menjawab "${FALLBACK_MARKER}" — itu pengetahuan yang belum dimiliki bot.
-Aturan keras: JANGAN mengarang. Hanya gunakan informasi yang benar-benar ada di transkrip.
-Balas HANYA JSON array: [{"title": string, "content": string, "category": string, "confidence": number}].
-title = pertanyaan ringkas. content = jawaban faktual berdasarkan balasan admin. confidence 0-100. Maksimal 12 item, lewati yang ragu.`,
-      },
+      { role: 'system', content: t(MINE_KNOWLEDGE_SYSTEM, lang)(this.fallbackMarker(lang)) },
       { role: 'user', content: transcript.text },
     ];
 
@@ -95,6 +116,9 @@ title = pertanyaan ringkas. content = jawaban faktual berdasarkan balasan admin.
     if (items.length === 0) return { created: 0, skipped: 0 };
 
     const existing = await this.existingKnowledgeTitles(botId);
+    const pending = await this.prisma.learningProposal.findMany({ where: { botId, type: 'knowledge', status: 'pending' }, select: { title: true } });
+    pending.forEach((p) => existing.push(this.normalizeTitle(p.title)));
+
     let created = 0, skipped = 0;
     for (const it of items) {
       const title = String(it.title ?? '').trim();
@@ -103,7 +127,7 @@ title = pertanyaan ringkas. content = jawaban faktual berdasarkan balasan admin.
       if (this.isDuplicateTitle(title, existing)) { skipped++; continue; }
       const payload: KnowledgePayload = { content, category: it.category ? String(it.category) : 'mined' };
       await this.prisma.learningProposal.create({
-        data: { botId, type: 'knowledge', title, payload: payload as object, sourceMessageIds: transcript.messageIds, sourceSummary: 'Ditambang dari pasangan tanya-jawab di riwayat chat.', confidence: this.clampConfidence(it.confidence) },
+        data: { botId, conversationId, type: 'knowledge', title, payload: payload as object, sourceMessageIds: transcript.messageIds, sourceSummary, confidence: this.clampConfidence(it.confidence) },
       });
       existing.push(this.normalizeTitle(title));
       created++;
@@ -111,20 +135,76 @@ title = pertanyaan ringkas. content = jawaban faktual berdasarkan balasan admin.
     return { created, skipped };
   }
 
+  /**
+   * Hermes auto-learn (P1): mine a SINGLE resolved conversation for knowledge
+   * gaps and durable customer facts, persisting them as pending proposals for
+   * admin review. Idempotent via `conversation.learnedAt`. Gated by the caller
+   * (AI_AUTOLEARN); fire-and-forget — never blocks the resolve action.
+   */
+  async mineConversation(conversationId: string): Promise<{ knowledge: number; customerMemory: number; skipped: number }> {
+    const zero = { knowledge: 0, customerMemory: 0, skipped: 0 };
+    const convo = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { id: true, learnedAt: true, customerId: true, bot: { select: { id: true, language: true } } },
+    });
+    if (!convo || !convo.bot || convo.learnedAt) return zero;
+
+    const botId = convo.bot.id;
+    const lang = convo.bot.language ?? 'en';
+
+    const msgs = await this.prisma.message.findMany({
+      where: { conversationId, content: { not: '' } },
+      orderBy: { createdAt: 'asc' },
+      take: MAX_MESSAGES,
+      select: { id: true, content: true, senderType: true },
+    });
+    const transcript = this.formatMessages(msgs);
+
+    // Too little substance to learn anything — mark done and move on.
+    if (transcript.text.length < 120) {
+      await this.markLearned(conversationId);
+      return zero;
+    }
+
+    const knowledge = await this.proposeKnowledge(
+      botId, lang, transcript,
+      'Hermes auto-learn: knowledge gap dari percakapan yang diselesaikan.',
+      conversationId,
+    ).catch((e) => { this.logger.warn(`mineConversation knowledge failed: ${e}`); return { created: 0, skipped: 0 }; });
+
+    let customerMemory = 0;
+    if (convo.customerId) {
+      customerMemory = await this.proposeConversationCustomerMemory(botId, convo.customerId, lang, transcript, conversationId)
+        .catch((e) => { this.logger.warn(`mineConversation memory failed: ${e}`); return 0; });
+    }
+
+    await this.markLearned(conversationId);
+    await logAudit(this.prisma, { action: 'learning_mine_conversation', entityType: 'conversation', entityId: conversationId, newValue: { botId, knowledge: knowledge.created, customerMemory } });
+    return { knowledge: knowledge.created, customerMemory, skipped: knowledge.skipped };
+  }
+
+  /** Customer-memory pass scoped to one conversation; skips if a pending
+   *  proposal already exists for this customer to avoid pile-up. */
+  private async proposeConversationCustomerMemory(botId: string, customerId: string, lang: string, transcript: Transcript, conversationId: string): Promise<number> {
+    const pending = await this.prisma.learningProposal.count({ where: { botId, customerId, type: 'customer_memory', status: 'pending' } });
+    if (pending > 0) return 0;
+    const cust = await this.prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true, phoneNumber: true } });
+    if (!cust) return 0;
+    return this.mineCustomerBatch(botId, [{ ...cust, text: transcript.text }], { conversationId, sourceMessageIds: transcript.messageIds });
+  }
+
+  private async markLearned(conversationId: string): Promise<void> {
+    await this.prisma.conversation.update({ where: { id: conversationId }, data: { learnedAt: new Date() } }).catch(() => undefined);
+  }
+
   async minePersona(botId: string): Promise<number> {
     const bot = await this.botOrThrow(botId);
+    const lang = bot.language ?? 'en';
     const transcript = await this.gatherTranscripts(botId, { adminOnly: true });
     if (!transcript.text) return 0;
 
     const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: `Kamu menganalisa gaya komunikasi admin dari balasan WhatsApp mereka (baris "A:").
-Buat persona bot yang MENIRU gaya itu: sapaan, nada, panjang kalimat, emoji, istilah khas.
-Jangan mengarang fakta produk; fokus pada GAYA bahasa saja.
-Balas HANYA JSON: {"name": string, "soulMd": string, "tone": string, "style": string, "rules": string, "forbiddenWords": string[]}.
-soulMd = deskripsi persona dalam Bahasa Indonesia (3-6 kalimat). forbiddenWords = kata/frasa yang admin TIDAK pernah pakai.`,
-      },
+      { role: 'system', content: t(MINE_PERSONA_SYSTEM, lang) },
       { role: 'user', content: transcript.text },
     ];
 
@@ -148,18 +228,13 @@ soulMd = deskripsi persona dalam Bahasa Indonesia (3-6 kalimat). forbiddenWords 
   }
 
   async minePlaybook(botId: string): Promise<number> {
+    const bot = await this.botOrThrow(botId);
+    const lang = bot.language ?? 'en';
     const transcript = await this.gatherTranscripts(botId, {});
     if (!transcript.text) return 0;
 
     const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: `Kamu menyusun "playbook" penjualan dari riwayat chat.
-Identifikasi keberatan pelanggan yang sering muncul (harga, stok, ragu, "nanti dulu") dan bagaimana admin (baris "A:") meresponsnya hingga berhasil.
-Hanya berdasar transkrip nyata, jangan mengarang.
-Balas HANYA JSON array: [{"title": string, "content": string, "confidence": number}].
-title = nama keberatan/situasi. content = teknik/respon yang dipakai admin. Maksimal 8 item.`,
-      },
+      { role: 'system', content: t(MINE_PLAYBOOK_SYSTEM, lang) },
       { role: 'user', content: transcript.text },
     ];
 
@@ -221,15 +296,17 @@ title = nama keberatan/situasi. content = teknik/respon yang dipakai admin. Maks
     return created;
   }
 
-  private async mineCustomerBatch(botId: string, batch: Array<{ id: string; name: string | null; phoneNumber: string; text: string }>): Promise<number> {
-    const block = batch.map((c, idx) => `=== PELANGGAN #${idx} ===\n${c.text}`).join('\n\n');
+  private async mineCustomerBatch(
+    botId: string,
+    batch: Array<{ id: string; name: string | null; phoneNumber: string; text: string }>,
+    opts: { conversationId?: string; sourceMessageIds?: string[] } = {},
+  ): Promise<number> {
+    const bot = await this.botOrThrow(botId);
+    const lang = bot.language ?? 'en';
+    const customerLabel = lang === 'id' ? 'PELANGGAN' : 'CUSTOMER';
+    const block = batch.map((c, idx) => `=== ${customerLabel} #${idx} ===\n${c.text}`).join('\n\n');
     const messages: ChatMessage[] = [
-      {
-        role: 'system',
-        content: `Ekstrak FAKTA DURABEL tiap pelanggan dari chat-nya (preferensi, produk diminati, kendala, lokasi, anggaran).
-JANGAN campur fakta antar pelanggan — pakai index "#N" yang diberikan. Hanya fakta yang eksplisit disebut. Jangan mengarang.
-Balas HANYA JSON: {"results":[{"index":number,"facts":string[]}]}. Lewati pelanggan tanpa fakta jelas. Maksimal 6 fakta/pelanggan.`,
-      },
+      { role: 'system', content: t(MINE_CUSTOMER_MEMORY_SYSTEM, lang) },
       { role: 'user', content: block },
     ];
     const raw = await this.provider.chat(messages, { model: this.miningModel, temperature: 0, json: true, maxTokens: this.maxTokens(2000, 1000) });
@@ -244,7 +321,7 @@ Balas HANYA JSON: {"results":[{"index":number,"facts":string[]}]}. Lewati pelang
       if (!cust || facts.length === 0) continue;
       const payload: CustomerMemoryPayload = { facts };
       await this.prisma.learningProposal.create({
-        data: { botId, customerId: cust.id, type: 'customer_memory', title: cust.name || cust.phoneNumber, payload: payload as object, sourceSummary: 'Fakta pelanggan dari riwayat chat.', confidence: 65 },
+        data: { botId, customerId: cust.id, conversationId: opts.conversationId, type: 'customer_memory', title: cust.name || cust.phoneNumber, payload: payload as object, sourceMessageIds: opts.sourceMessageIds ?? [], sourceSummary: 'Fakta pelanggan dari riwayat chat.', confidence: 65 },
       });
       created++;
     }
@@ -317,9 +394,11 @@ Balas HANYA JSON: {"botId": string, "reason": string}. reason singkat Bahasa Ind
     });
     if (messages.length === 0) return { text: '', messageIds: [] };
 
+    const lang = bot.language ?? 'en';
     let ordered = messages.reverse();
     if (opts.preferFallback) {
-      const flagged = new Set(ordered.filter((m) => (m.content ?? '').toLowerCase().includes(FALLBACK_MARKER)).map((m) => m.conversationId));
+      const marker = this.fallbackMarker(lang).toLowerCase();
+      const flagged = new Set(ordered.filter((m) => (m.content ?? '').toLowerCase().includes(marker)).map((m) => m.conversationId));
       if (flagged.size > 0) {
         const inFlagged = ordered.filter((m) => flagged.has(m.conversationId));
         const rest = ordered.filter((m) => !flagged.has(m.conversationId));

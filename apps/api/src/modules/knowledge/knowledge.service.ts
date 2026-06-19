@@ -14,6 +14,7 @@ import {
 } from './document-extract.util';
 import { assertSafeMediaUrl } from '../../common/media-url.util';
 import { logAudit } from '../../common/audit.util';
+import { KnowledgeIndexService } from '../ai/knowledge-index.service';
 
 const URL_FETCH_TIMEOUT_MS = 15_000;
 const URL_MAX_BYTES = 5 * 1024 * 1024;
@@ -22,7 +23,19 @@ const PREVIEW_MAX_CHARS = 12_000;
 
 @Injectable()
 export class KnowledgeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly knowledgeIndex: KnowledgeIndexService,
+  ) {}
+
+  /**
+   * Fire-and-forget embedding refresh for an item. Never awaited by the CRUD
+   * path so a slow/failing embedding provider can't block knowledge edits;
+   * KnowledgeIndexService swallows its own errors.
+   */
+  private indexInBackground(id: string): void {
+    void this.knowledgeIndex.indexItem(id);
+  }
 
   listBases() {
     return this.prisma.knowledgeBase.findMany({
@@ -46,6 +59,21 @@ export class KnowledgeService {
     return base;
   }
 
+  /**
+   * Rebuild embeddings for every active item in a base. Awaited (unlike the
+   * per-item background indexing) so the admin gets a count back. No-op when
+   * embeddings are disabled.
+   */
+  async reindex(id: string) {
+    const base = await this.prisma.knowledgeBase.findUnique({ where: { id } });
+    if (!base) throw new NotFoundException('Knowledge base not found');
+    if (!(await this.knowledgeIndex.enabled())) {
+      return { enabled: false, reindexed: 0 };
+    }
+    const reindexed = await this.knowledgeIndex.reindexBase(id);
+    return { enabled: true, reindexed };
+  }
+
   updateBase(id: string, dto: UpdateKnowledgeBaseDto, userId: string) {
     return this.prisma.knowledgeBase.update({
       where: { id },
@@ -56,8 +84,8 @@ export class KnowledgeService {
     });
   }
 
-  addItem(baseId: string, dto: CreateKnowledgeItemDto) {
-    return this.prisma.knowledgeItem.create({
+  async addItem(baseId: string, dto: CreateKnowledgeItemDto) {
+    const item = await this.prisma.knowledgeItem.create({
       data: {
         knowledgeBaseId: baseId,
         title: dto.title,
@@ -69,10 +97,12 @@ export class KnowledgeService {
         status: dto.status,
       },
     });
+    this.indexInBackground(item.id);
+    return item;
   }
 
-  updateItem(id: string, dto: UpdateKnowledgeItemDto) {
-    return this.prisma.knowledgeItem.update({
+  async updateItem(id: string, dto: UpdateKnowledgeItemDto) {
+    const item = await this.prisma.knowledgeItem.update({
       where: { id },
       data: {
         ...dto,
@@ -80,6 +110,9 @@ export class KnowledgeService {
         validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
       },
     });
+    // Content may have changed → re-embed (indexItem skips if hash unchanged).
+    this.indexInBackground(item.id);
+    return item;
   }
 
   /**
@@ -225,17 +258,17 @@ export class KnowledgeService {
     for (let i = 0; i < chunks.length; i++) {
       const suffix = chunks.length > 1 ? ` (bagian ${i + 1}/${chunks.length})` : '';
       const header = sourceUrl ? `Sumber: ${sourceUrl}\n\n` : '';
-      items.push(
-        await this.prisma.knowledgeItem.create({
-          data: {
-            knowledgeBaseId: baseId,
-            title: `${sourceName}${suffix}`,
-            content: `${header}${chunks[i]}`,
-            category: kind,
-            status: 'active',
-          },
-        }),
-      );
+      const created = await this.prisma.knowledgeItem.create({
+        data: {
+          knowledgeBaseId: baseId,
+          title: `${sourceName}${suffix}`,
+          content: `${header}${chunks[i]}`,
+          category: kind,
+          status: 'active',
+        },
+      });
+      this.indexInBackground(created.id);
+      items.push(created);
     }
     return items;
   }

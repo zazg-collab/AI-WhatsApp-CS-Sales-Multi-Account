@@ -202,7 +202,8 @@ export default function WhatsappContactsPage() {
                     {loading ? t('loading') : `${data.items.length} ${t('showing')}`}
                   </span>
                 </CardHeader>
-                <div className="overflow-x-auto">
+                {/* Desktop / tablet: data table */}
+                <div className="hidden overflow-x-auto md:block">
                   <table className="min-w-full divide-y divide-gray-100 text-sm dark:divide-gray-800">
                     <thead className="bg-gray-50 text-left text-xs font-semibold uppercase text-gray-500 dark:bg-gray-900 dark:text-gray-400">
                       <tr>
@@ -271,7 +272,7 @@ export default function WhatsappContactsPage() {
                               )}
                             </td>
                             <td className="px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
-                              {contact.status ?? '—'}
+                              {contact.status ?? '-'}
                             </td>
                             <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
                               {new Date(contact.lastSyncedAt).toLocaleString('id-ID')}
@@ -281,6 +282,44 @@ export default function WhatsappContactsPage() {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile: card list */}
+                <div className="divide-y divide-gray-100 dark:divide-gray-800 md:hidden">
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <div key={`m-skeleton-${i}`} className="px-4 py-3"><div className="h-14 rounded animate-shimmer" /></div>
+                    ))
+                  ) : data.items.length === 0 ? (
+                    <div className="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">{t('noContacts')}</div>
+                  ) : (
+                    data.items.map((contact) => (
+                      <div key={contact.id} className="flex items-start gap-3 px-4 py-3">
+                        <Avatar name={displayName(contact)} phone={contact.phoneNumber ?? contact.jid} avatarUrl={contact.avatarUrl} className="h-9 w-9 shrink-0 text-[12px] font-semibold" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium text-gray-950 dark:text-gray-50">{displayName(contact)}</div>
+                          <div className="truncate font-mono text-xs text-gray-500 dark:text-gray-400">
+                            {contact.phoneNumber && !isLid(contact.phoneNumber)
+                              ? contact.phoneNumber
+                              : <span className="font-sans text-gray-400">{formatPhone(contact.phoneNumber, 'Nomor tersembunyi (privasi WA)')}</span>}
+                          </div>
+                          {contact.customer ? (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                              <Badge tone="hermes">{contact.customer.leadStage ?? t('noCrmName')}</Badge>
+                              {contact.customer.tags.slice(0, 2).map((tag) => (
+                                <Badge key={tag} tone="neutral">{tag}</Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-1.5 text-xs text-gray-400">{t('notLinked')}</div>
+                          )}
+                          <div className="mt-1.5 text-[11px] text-gray-400">
+                            {t('colSync')}: {new Date(contact.lastSyncedAt).toLocaleDateString('id-ID')}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 {data.total > data.limit && (

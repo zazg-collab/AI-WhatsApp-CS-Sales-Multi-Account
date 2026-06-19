@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AiMode, MessageStatus, MessageType, SenderType, Prisma } from '@hermes/database';
+import { AiMode, MessageStatus, MessageType, SenderType, TakeoverStatus, Prisma } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { AutoAssignService } from './auto-assign.service';
@@ -274,6 +274,44 @@ export class MessageIngestService {
         entityId: conversation.id,
         newValue: { messageId: message.id, externalId: msg.externalId || null },
       });
+
+      // Implicit human takeover: this fromMe message survived the idempotency
+      // check, so it is NOT an echo of an AI/dashboard send (those are stored
+      // with their externalId first and deduped above) — a human typed it
+      // directly on the phone. While a human handles the chat the bot must stay
+      // silent, so pause AI like a dashboard takeover. Skipped for history
+      // backfills and chats already under takeover / not AI-driven.
+      const automated =
+        conversation.aiMode === AiMode.ai_on ||
+        conversation.aiMode === AiMode.ai_draft ||
+        conversation.aiMode === AiMode.ai_supervised;
+      if (
+        !msg.suppressAutomation &&
+        !groupChat &&
+        automated &&
+        conversation.takeoverStatus !== TakeoverStatus.admin_takeover
+      ) {
+        await this.prisma.conversation.update({
+          where: { id: conversation.id },
+          data: {
+            takeoverStatus: TakeoverStatus.admin_takeover,
+            previousAiMode: conversation.aiMode,
+            aiMode: AiMode.ai_off,
+          },
+        });
+        await logAudit(this.prisma, {
+          userId: account.assignedAdminId ?? undefined,
+          action: 'auto_takeover_phone_reply',
+          entityType: 'conversation',
+          entityId: conversation.id,
+          newValue: { previousAiMode: conversation.aiMode },
+        });
+        this.events.emitToAccount(account.id, 'conversation:updated', {
+          conversationId: conversation.id,
+          aiMode: AiMode.ai_off,
+          takeoverStatus: TakeoverStatus.admin_takeover,
+        });
+      }
     }
 
     return {

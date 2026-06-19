@@ -5,8 +5,8 @@ import './globals.css';
 import { Providers } from '@/components/Providers';
 
 export const metadata: Metadata = {
-  title: 'Hermes — Sales & CS Control Desk',
-  description: 'Pusat operasi AI yang tersupervisi dan terlacak untuk banyak akun WhatsApp.',
+  title: 'Hermes · Supervised WhatsApp Sales & CS',
+  description: 'Run every WhatsApp Sales and CS account from one dashboard. AI replies automatically, Hermes reviews every risky message before it sends, and your team takes over anytime.',
 };
 
 export default function RootLayout({
@@ -15,13 +15,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id" className={`${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
       <head>
-        {/* Apply the saved theme before first paint to avoid a flash. Light is default. */}
+        {/* Apply the saved theme + language before first paint to avoid a flash. English/light are the defaults. */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{if(localStorage.getItem('hermes_theme')==='dark')document.documentElement.classList.add('dark');var l=localStorage.getItem('hermes_lang');if(l==='en'||l==='id')document.documentElement.lang=l}catch(e){}",
+              "try{if(localStorage.getItem('hermes_theme')==='dark')document.documentElement.classList.add('dark');var l=localStorage.getItem('hermes_lang');document.documentElement.lang=(l==='id'||l==='en')?l:'en'}catch(e){}",
           }}
         />
       </head>

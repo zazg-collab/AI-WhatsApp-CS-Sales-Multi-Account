@@ -209,7 +209,7 @@ export function Sidebar() {
 
   function handleLogout() {
     clearToken();
-    router.push('/');
+    router.push('/login');
   }
 
   // On mobile the rail is icon-only; tapping the toggle expands it to a labelled

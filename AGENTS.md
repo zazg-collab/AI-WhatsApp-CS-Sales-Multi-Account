@@ -26,6 +26,9 @@ The PRD is the source of truth for product scope. Status:
 - **Iteration 16 (WhatsApp stability + anti-ban)** ✅ — exponential-backoff reconnect with retry cap + alerts, typing-delay + per-account send throttle, periodic session health check, and a per-account health endpoint.
 - **Iteration 17 (AI quality)** ✅ — bounded context window with token-budget trimming, customer sentiment analysis, conservative response cache with hit/miss stats, and sentiment/cache-stats endpoints.
 - **Iteration 18 (Advanced campaigns)** ✅ — scheduled auto-start, opt-out/blacklist (keyword auto-detect + manual opt-in/out + target exclusion), campaign duplication, and {{name}}/{{phone}} personalization tokens.
+- **Iteration 19 (Embeddings/RAG)** ✅ — pgvector extension, per-item embedding with content-hash skip, hybrid semantic+keyword retrieval, fire-and-forget indexing on write, kb:reindex script.
+- **Iteration 20 (Closing analytics)** ✅ — funnel conversion, bot attribution, win/loss analysis; stage-change audit trail in audit_logs; closing analytics UI panel on analytics page.
+- **Iteration 21 (Internationalization Phase 1)** ✅ — central `apps/api/src/i18n/bot-prompts.ts` language dict (id/en/es/pt/ar/ms); all AI prompts (reply, sentiment, summarize, lead-score, Hermes supervisor, bot insight, learning miner) language-keyed from `bot.language`; opt-out keywords per language; `renderTemplate` default name per language; currency/number locale from bot language; products page time/price format i18n; FALLBACK_PHRASE dict replaces hardcoded Indonesian string in all gap-detection queries.
 - **All PRD section-14 endpoints are now implemented** (no more 501 stubs).
 
 ## Hermes Supervisor
@@ -320,6 +323,11 @@ Local audit skills live under `.agents/skills/` (registered in `skills-lock.json
   audit skill for WhatsApp/Baileys account health, QR/reconnect/session states,
   chat/inbox, right intelligence panels, analytics, settings, responsive
   behavior, overlays/dropdowns, and anti-AI-slop SalesOps presentation.
+- **`workflow-uiux-optimization-audit`** — practical workflow optimization
+  audit skill for reducing manual steps, redundant fields, excessive clicks,
+  and avoidable waiting. Use it to find auto-fill, metadata detection, smart
+  defaults, inline actions, bulk operations, and safer confirm/edit flows such
+  as QR scan account setup that pre-fills name/phone from WhatsApp metadata.
 - **`hermes-fullstack-contract-audit`** — Hermes-specific frontend/backend
   contract audit skill. Use it to verify that every frontend feature, button,
   chart, setting, AI/Hermes control, campaign workflow, and Baileys/WhatsApp

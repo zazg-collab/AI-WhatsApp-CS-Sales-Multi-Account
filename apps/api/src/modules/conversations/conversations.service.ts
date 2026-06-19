@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   AiMode,
   ConversationStatus,
+  MessageStatus,
   Prisma,
   SenderType,
   TakeoverStatus,
@@ -10,11 +11,15 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { WaService } from '../wa/wa.service';
+import { LearningMinerService } from '../learning/learning-miner.service';
 import { logAudit } from '../../common/audit.util';
 import { allowedAccountIds, accountFilter, type ScopedUser } from '../../common/account-scope.util';
 
 const DEFAULT_CSAT_MESSAGE =
   'Terima kasih sudah menghubungi kami 🙏 Boleh bantu beri nilai layanan kami? Balas angka 1–5 (1 = kurang, 5 = sangat puas).';
+
+// Manual sends are persisted with status: MessageStatus.pending before gateway delivery (see conversation-messaging.service).
+// Failed sends are audited as message_send_failed and can be retried without data loss.
 
 interface ListFilters {
   accountId?: string;
@@ -33,15 +38,20 @@ interface ListFilters {
 export class ConversationsService {
   private readonly csatEnabled: boolean;
   private readonly csatMessage: string;
+  private readonly autoLearnEnabled: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly wa: WaService,
     private readonly events: EventsGateway,
+    private readonly learningMiner: LearningMinerService,
     config: ConfigService,
   ) {
     this.csatEnabled = String(config.get('CSAT_ENABLED') ?? '').toLowerCase() === 'true';
     this.csatMessage = config.get<string>('CSAT_MESSAGE') || DEFAULT_CSAT_MESSAGE;
+    // Opt-in: Hermes mines a conversation for KB/customer-memory proposals when
+    // it is resolved. All proposals stay pending (human-reviewed). Default off.
+    this.autoLearnEnabled = String(config.get('AI_AUTOLEARN') ?? '').toLowerCase() === 'true';
   }
 
   async list(filters: ListFilters) {
@@ -217,6 +227,15 @@ export class ConversationsService {
         customer: { select: { phoneNumber: true } },
       },
     });
+
+    // Hermes auto-learn (P1): on first resolve, mine this conversation for KB /
+    // customer-memory proposals. Fire-and-forget — never blocks the resolve;
+    // idempotent via conversation.learnedAt; opt-in via AI_AUTOLEARN.
+    if (justResolved && this.autoLearnEnabled) {
+      this.learningMiner
+        .mineConversation(id)
+        .catch(() => undefined);
+    }
 
     if (justResolved && this.csatEnabled) {
       this.wa

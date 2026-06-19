@@ -53,6 +53,13 @@ export class KnowledgeController {
     return this.knowledge.getBase(id);
   }
 
+  @ApiOperation({ summary: 'Rebuild semantic embeddings for a knowledge base' })
+  @Roles('owner', 'supervisor')
+  @Post('knowledge-bases/:id/reindex')
+  reindex(@Param('id') id: string) {
+    return this.knowledge.reindex(id);
+  }
+
   @ApiOperation({ summary: 'Update a knowledge base' })
   @Roles('owner', 'supervisor')
   @Patch('knowledge-bases/:id')

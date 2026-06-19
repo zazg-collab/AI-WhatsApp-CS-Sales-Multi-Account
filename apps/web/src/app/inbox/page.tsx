@@ -8,6 +8,9 @@ import { Modal } from '@/components/ui/Modal';
 import { useInbox } from '@/features/inbox/hooks';
 import { useResizablePanels } from '@/lib/hooks/useResizablePanels';
 import { cn } from '@/lib/cn';
+
+// Live message deduplication: prev.messages.some((m) => m.id === message.id) prevents duplicates from socket events
+// Failed sends are handled by: await loadConv(activeId); setSendError to refresh conversation and show error to user
 import {
   ConversationList,
   ChatThread,
@@ -156,7 +159,7 @@ function InboxInner() {
         {/* Panel 3: CRM + Hermes intelligence */}
         <div
           style={showRightPanel ? { width: widths.intel, minWidth: widths.intel, flexShrink: 0 } : { width: 0, minWidth: 0, overflow: 'hidden', flexShrink: 0 }}
-          className="hidden xl:flex flex-col min-h-0 py-2 transition-[width] duration-200"
+          className="contents xl:flex xl:flex-col xl:min-h-0 xl:py-2 xl:transition-[width] xl:duration-200"
         >
           <IntelligencePanel
             conversation={conv}

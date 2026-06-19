@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { useT } from '@/lib/i18n';
 import { useApiQuery } from '@/lib/hooks/useApiQuery';
 import { dict } from './analytics.i18n';
+import { ClosingAnalytics } from './ClosingAnalytics';
 
 const MODE_LABEL_KEY: Record<string, string> = {
   ai_on: 'modeAiOn', ai_off: 'modeAiOff', ai_draft: 'modeAiDraft',
@@ -228,6 +229,14 @@ export default function AnalyticsPage() {
                 </div>
               </Panel>
             )}
+
+            {/* Deep Closing Analytics — funnel conversion, bot attribution, win/loss */}
+            <div>
+              <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                Closing Analytics
+              </h2>
+              <ClosingAnalytics days={daysRange} />
+            </div>
           </>
         )}
       </div>

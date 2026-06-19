@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Matches, Min } from 'class-validator';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
@@ -23,6 +23,7 @@ import { ProductsService } from './products.service';
 class UpdateProductDto {
   @IsOptional() @IsInt() @Min(0) stock?: number;
   @IsOptional() @IsInt() @Min(0) price?: number;
+  @IsOptional() @IsString() @Matches(/^[A-Z]{3}$/) currency?: string;
   @IsOptional() @IsIn(['active', 'inactive']) status?: string;
   @IsOptional() @IsString() description?: string;
 }

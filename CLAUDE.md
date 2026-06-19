@@ -27,6 +27,8 @@ The PRD is the source of truth for product scope. Status:
 - **Iteration 17 (AI quality)** ✅ — bounded context window with token-budget trimming, customer sentiment analysis, conservative response cache with hit/miss stats, and sentiment/cache-stats endpoints.
 - **Iteration 18 (Advanced campaigns)** ✅ — scheduled auto-start, opt-out/blacklist (keyword auto-detect + manual opt-in/out + target exclusion), campaign duplication, and {{name}}/{{phone}} personalization tokens.
 - **All PRD section-14 endpoints are now implemented** (no more 501 stubs).
+- **RAG / Semantic retrieval** ✅ — pgvector embeddings on knowledge items; hybrid keyword+vector rerank in PromptBuilder; `AI_EMBED_MODEL` env activates; `npm run kb:reindex` for backfill.
+- **Deep closing analytics** ✅ — `ClosingAnalyticsService` (modules/dashboard): funnel conversion rates, bot/persona attribution (hot leads, resolution rate, CSAT), win/loss breakdown with daily trend. Stage transitions logged to audit_log by AiService. Frontend: `ClosingAnalytics` component in analytics page.
 
 ## Hermes Supervisor
 
@@ -116,6 +118,15 @@ this is pure config — no code change. The local Nous subscription proxy
 - `AiProviderService` — low-level HTTP (`chat`, `listModels`) via native fetch.
 - `PromptBuilderService` — assembles the PRD §15.1 system prompt (Soul.md +
   active knowledge items + customer memory) followed by mapped chat history.
+  Knowledge retrieval is **hybrid**: when `AI_EMBED_MODEL` is set, top-K items
+  are chosen by combining semantic similarity (pgvector) with keyword overlap;
+  otherwise it falls back to keyword-only scoring (no behaviour change).
+- `EmbeddingService` / `KnowledgeIndexService` (`modules/ai`) — RAG layer.
+  `EmbeddingService` calls the OpenAI-compatible `/embeddings` endpoint;
+  `KnowledgeIndexService` writes item vectors (best-effort, on KB create/update,
+  hash-skipped) and runs cosine top-K search. Both no-op when `AI_EMBED_MODEL`
+  is empty. Backfill existing items with `npm run kb:reindex`; pgvector schema
+  ships in migration `20_knowledge_embeddings` (requires the `vector` extension).
 - `AiService` — `generateReply`, `summarizeChat`, `leadScore` (persists score
   + stage to the customer). Lead-score parsing tolerates fenced/prose JSON.
 - Auto-reply lives in `WaService.maybeAutoReply`: fires only when conversation

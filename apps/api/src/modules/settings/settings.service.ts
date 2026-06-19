@@ -42,6 +42,8 @@ export class SettingsService {
         hermesModel: this.config.get<string>('HERMES_MODEL') ?? '',
         temperature: this.num(this.config.get('AI_TEMPERATURE'), 0.6),
         timeoutMs: this.num(this.config.get('AI_TIMEOUT_MS'), 30_000),
+        embedModel: this.config.get<string>('AI_EMBED_MODEL') ?? '',
+        embedDim: this.num(this.config.get('AI_EMBED_DIM'), 1536),
       },
       wa: {
         humanDelayMinMs: this.num(this.config.get('WA_HUMAN_DELAY_MIN_MS'), 600),

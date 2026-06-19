@@ -146,44 +146,80 @@ export default function UsersPage() {
             {authUser?.role === 'owner' && <Button size="sm" className="mt-4" onClick={() => setShowCreateModal(true)}><Plus className="h-4 w-4" aria-hidden="true" />{t('createUserBtnTop')}</Button>}
           </Card>
         ) : (
-          <Card className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
-                  <th className="px-4 py-3 font-medium">{t('emailLabel')}</th>
-                  <th className="px-4 py-3 font-medium">{t('thNama')}</th>
-                  <th className="px-4 py-3 font-medium">{t('roleLabel')}</th>
-                  <th className="px-4 py-3 font-medium">{t('thStatus')}</th>
-                  <th className="px-4 py-3 font-medium">{t('thDibuat')}</th>
-                  <th className="px-4 py-3 text-right font-medium">{t('thAksi')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => {
-                  const ownerCount = users.filter((u) => u.role === 'owner').length;
-                  const isSelf = authUser?.id === user.id;
-                  const isLastOwner = user.role === 'owner' && ownerCount <= 1;
-                  const deleteBlockedReason = isSelf ? t('cantDeleteSelf') : isLastOwner ? t('cantDeleteLastOwner') : null;
-                  return (
-                    <tr key={user.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40">
-                      <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{user.email}</td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{user.name}</td>
-                      <td className="px-4 py-3"><Badge tone={roleTone[user.role] ?? 'neutral'}>{user.role}</Badge></td>
-                      <td className="px-4 py-3"><Badge tone={user.status === 'active' ? 'success' : 'danger'}>{user.status}</Badge></td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{new Date(user.createdAt).toLocaleDateString()}</td>
-                      <td className="px-4 py-3 text-right">
-                        {authUser?.role === 'owner' && (
-                          <div className="flex justify-end gap-1.5">
-                            <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}><PencilSimple className="h-4 w-4" aria-hidden="true" />{t('edit')}</Button>
-                            <Button variant="ghost" size="sm" onClick={() => setDeletingUser(user)} disabled={!!deleteBlockedReason} title={deleteBlockedReason ?? undefined} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10"><Trash className="h-4 w-4" aria-hidden="true" />{t('delete')}</Button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <Card className="overflow-hidden p-0">
+            {/* Desktop / tablet: data table */}
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
+                    <th className="px-4 py-3 font-medium">{t('emailLabel')}</th>
+                    <th className="px-4 py-3 font-medium">{t('thNama')}</th>
+                    <th className="px-4 py-3 font-medium">{t('roleLabel')}</th>
+                    <th className="px-4 py-3 font-medium">{t('thStatus')}</th>
+                    <th className="px-4 py-3 font-medium">{t('thDibuat')}</th>
+                    <th className="px-4 py-3 text-right font-medium">{t('thAksi')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => {
+                    const ownerCount = users.filter((u) => u.role === 'owner').length;
+                    const isSelf = authUser?.id === user.id;
+                    const isLastOwner = user.role === 'owner' && ownerCount <= 1;
+                    const deleteBlockedReason = isSelf ? t('cantDeleteSelf') : isLastOwner ? t('cantDeleteLastOwner') : null;
+                    return (
+                      <tr key={user.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40">
+                        <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{user.email}</td>
+                        <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{user.name}</td>
+                        <td className="px-4 py-3"><Badge tone={roleTone[user.role] ?? 'neutral'}>{user.role}</Badge></td>
+                        <td className="px-4 py-3"><Badge tone={user.status === 'active' ? 'success' : 'danger'}>{user.status}</Badge></td>
+                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{new Date(user.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-3 text-right">
+                          {authUser?.role === 'owner' && (
+                            <div className="flex justify-end gap-1.5">
+                              <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}><PencilSimple className="h-4 w-4" aria-hidden="true" />{t('edit')}</Button>
+                              <Button variant="ghost" size="sm" onClick={() => setDeletingUser(user)} disabled={!!deleteBlockedReason} title={deleteBlockedReason ?? undefined} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10"><Trash className="h-4 w-4" aria-hidden="true" />{t('delete')}</Button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile: card list */}
+            <div className="divide-y divide-gray-100 dark:divide-gray-800 md:hidden">
+              {users.map((user) => {
+                const ownerCount = users.filter((u) => u.role === 'owner').length;
+                const isSelf = authUser?.id === user.id;
+                const isLastOwner = user.role === 'owner' && ownerCount <= 1;
+                const deleteBlockedReason = isSelf ? t('cantDeleteSelf') : isLastOwner ? t('cantDeleteLastOwner') : null;
+                return (
+                  <div key={user.id} className="px-4 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-gray-900 dark:text-gray-100">{user.name}</div>
+                        <div className="truncate text-xs text-gray-500 dark:text-gray-400">{user.email}</div>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <Badge tone={roleTone[user.role] ?? 'neutral'}>{user.role}</Badge>
+                        <Badge tone={user.status === 'active' ? 'success' : 'danger'}>{user.status}</Badge>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-gray-400">{t('thDibuat')}: {new Date(user.createdAt).toLocaleDateString()}</span>
+                      {authUser?.role === 'owner' && (
+                        <div className="flex gap-1.5">
+                          <Button variant="outline" size="sm" onClick={() => setEditingUser(user)}><PencilSimple className="h-4 w-4" aria-hidden="true" />{t('edit')}</Button>
+                          <Button variant="ghost" size="sm" onClick={() => setDeletingUser(user)} disabled={!!deleteBlockedReason} title={deleteBlockedReason ?? undefined} className="text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-700/10"><Trash className="h-4 w-4" aria-hidden="true" /></Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </Card>
         )}
       </div>

@@ -39,7 +39,7 @@ export class BotsService {
         personaId: dto.personaId,
         knowledgeBaseId: dto.knowledgeBaseId,
         defaultAiMode: dto.defaultAiMode,
-        language: dto.language ?? 'id',
+        language: dto.language ?? 'en',
         status: dto.status ?? 'draft',
       },
       include: { persona: true, knowledgeBase: { select: { id: true, name: true } } },

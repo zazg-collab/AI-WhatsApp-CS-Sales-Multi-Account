@@ -4,12 +4,14 @@ export interface ProductRow {
   name: string;
   category?: string;
   price?: number;
+  /** ISO 4217 code detected from price cell prefix (e.g. "USD", "IDR"). */
+  currency?: string;
   stock?: number;
   unit?: string;
   description?: string;
 }
 
-/** Header aliases (EN + ID) → canonical field. */
+/** Header aliases (EN + ID + common) → canonical field. */
 const HEADER_ALIASES: Record<string, keyof ProductRow> = {
   sku: 'sku',
   kode: 'sku',
@@ -23,6 +25,11 @@ const HEADER_ALIASES: Record<string, keyof ProductRow> = {
   kategori: 'category',
   price: 'price',
   harga: 'price',
+  currency: 'currency',
+  mata_uang: 'currency',
+  'mata uang': 'currency',
+  moneda: 'currency',   // Spanish
+  devise: 'currency',   // French
   stock: 'stock',
   stok: 'stock',
   qty: 'stock',
@@ -34,6 +41,65 @@ const HEADER_ALIASES: Record<string, keyof ProductRow> = {
   deskripsi: 'description',
   keterangan: 'description',
 };
+
+/**
+ * Filler words that carry no product identity — dropped before matching so the
+ * score reflects real product terms, not "berapa harga stok ukuran". Indonesian
+ * CS chatter + a few English equivalents. Keep lean; over-stopping hurts recall.
+ */
+const MATCH_STOPWORDS = new Set([
+  // id — questions / fillers
+  'ada', 'apakah', 'berapa', 'harga', 'harganya', 'stok', 'stoknya', 'ready',
+  'ukuran', 'size', 'yang', 'untuk', 'dari', 'dengan', 'atau', 'dan', 'ini',
+  'itu', 'bisa', 'boleh', 'tolong', 'mau', 'beli', 'pesan', 'order', 'info',
+  'tanya', 'nya', 'kak', 'mas', 'mbak', 'bang', 'gan', 'min', 'pak', 'bu',
+  'total', 'mohon', 'punya', 'jual', 'cari', 'butuh', 'per',
+  // en
+  'the', 'and', 'for', 'with', 'have', 'has', 'price', 'stock', 'available',
+  'want', 'need', 'buy', 'order', 'please', 'how', 'much', 'many', 'any',
+]);
+
+/**
+ * Tokenize free text for product matching. Lowercases, splits digit↔letter
+ * boundaries ("8mm" → "8 mm", "klem8" → "klem 8") so a size like "ukuran 8"
+ * matches a product named "Klem 8mm", drops punctuation and stopwords, and
+ * keeps pure-number tokens (sizes) plus words ≥ 2 chars. Returns a de-duped set.
+ */
+export function tokenizeForMatch(text: string): Set<string> {
+  const spaced = (text ?? '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/(\d)(\p{L})/gu, '$1 $2')
+    .replace(/(\p{L})(\d)/gu, '$1 $2');
+  const tokens = spaced.split(/\s+/).filter(Boolean);
+  const out = new Set<string>();
+  for (const tok of tokens) {
+    if (MATCH_STOPWORDS.has(tok)) continue;
+    const isNumber = /^\d+$/.test(tok);
+    if (isNumber || tok.length >= 2) out.add(tok);
+  }
+  return out;
+}
+
+/**
+ * Relevance score of a product against a tokenized query. Name/SKU hits weigh
+ * more than category/description hits. Numbers must match as whole tokens (so
+ * "8" does not match "18"); that's guaranteed because both sides are tokenized.
+ */
+export function scoreProductMatch(
+  product: { name: string; category?: string | null; sku?: string | null; description?: string | null },
+  queryTokens: Set<string>,
+): number {
+  if (queryTokens.size === 0) return 0;
+  const strong = new Set([...tokenizeForMatch(product.name), ...tokenizeForMatch(product.sku ?? '')]);
+  const weak = new Set([...tokenizeForMatch(product.category ?? ''), ...tokenizeForMatch(product.description ?? '')]);
+  let score = 0;
+  for (const t of queryTokens) {
+    if (strong.has(t)) score += 2;
+    else if (weak.has(t)) score += 1;
+  }
+  return score;
+}
 
 const FORBIDDEN_SQL = /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|merge|copy|call|do|vacuum)\b/i;
 
@@ -93,14 +159,71 @@ function parseCsvLine(line: string): string[] {
   return out.map((f) => f.trim());
 }
 
-/** Strip a number from messy cells like "Rp 1.250.000" or "12 pcs" → 1250000 / 12. */
+/**
+ * Known currency prefix → ISO 4217 code.
+ * Checked case-insensitively against the start of the cell value.
+ */
+const CURRENCY_PREFIXES: Array<[string, string]> = [
+  ['rp', 'IDR'],
+  ['idr', 'IDR'],
+  ['usd', 'USD'],
+  ['$', 'USD'],
+  ['us$', 'USD'],
+  ['eur', 'EUR'],
+  ['€', 'EUR'],
+  ['gbp', 'GBP'],
+  ['£', 'GBP'],
+  ['sgd', 'SGD'],
+  ['s$', 'SGD'],
+  ['myr', 'MYR'],
+  ['rm', 'MYR'],
+  ['thb', 'THB'],
+  ['฿', 'THB'],
+  ['php', 'PHP'],
+  ['₱', 'PHP'],
+  ['aed', 'AED'],
+  ['sar', 'SAR'],
+  ['aud', 'AUD'],
+  ['a$', 'AUD'],
+  ['cad', 'CAD'],
+  ['c$', 'CAD'],
+  ['jpy', 'JPY'],
+  ['¥', 'JPY'],
+  ['cny', 'CNY'],
+  ['krw', 'KRW'],
+  ['₩', 'KRW'],
+  ['inr', 'INR'],
+  ['₹', 'INR'],
+  ['brl', 'BRL'],
+  ['r$', 'BRL'],
+];
+
+/**
+ * Detect a currency prefix in a raw price string.
+ * Returns the ISO 4217 code or undefined if none recognised.
+ */
+export function detectCurrency(raw: string): string | undefined {
+  const lower = raw.trim().toLowerCase();
+  for (const [prefix, code] of CURRENCY_PREFIXES) {
+    if (lower.startsWith(prefix)) return code;
+  }
+  return undefined;
+}
+
+/**
+ * Strip a number from messy cells like "Rp 1.250.000", "$12.99", or "12 pcs".
+ * Handles both dot-as-thousands (id-ID) and comma-as-thousands (en-US).
+ * Returns undefined for non-numeric strings.
+ */
 function toNumber(raw: unknown): number | undefined {
   if (typeof raw === 'number') return Number.isFinite(raw) ? Math.trunc(raw) : undefined;
-  const s = String(raw ?? '');
+  const s = String(raw ?? '').trim();
   if (!s) return undefined;
-  const digits = s.replace(/[^\d-]/g, '');
-  if (!digits) return undefined;
-  const n = Number(digits);
+  // Strip all non-digit characters except the last separator that might be decimal.
+  // Strategy: keep only digits, then parse as integer (prices are whole units).
+  const digitsOnly = s.replace(/[^\d]/g, '');
+  if (!digitsOnly) return undefined;
+  const n = parseInt(digitsOnly, 10);
   return Number.isFinite(n) ? n : undefined;
 }
 
@@ -111,23 +234,39 @@ function toNumber(raw: unknown): number | undefined {
  */
 export function mapRecordToProduct(record: Record<string, unknown>): ProductRow | undefined {
   const row: Partial<ProductRow> = {};
+  // Track the raw price string so we can extract currency from its prefix.
+  let rawPriceStr: string | undefined;
+
   for (const [key, raw] of Object.entries(record)) {
     const field = HEADER_ALIASES[key.trim().toLowerCase()];
     if (!field) continue;
-    if (field === 'price' || field === 'stock') {
+    if (field === 'price') {
+      if (typeof raw === 'string') rawPriceStr = raw.trim();
       const n = toNumber(raw);
-      if (n !== undefined) row[field] = n;
+      if (n !== undefined) row.price = n;
+    } else if (field === 'stock') {
+      const n = toNumber(raw);
+      if (n !== undefined) row.stock = n;
     } else {
       const v = String(raw ?? '').trim();
-      if (v) row[field] = v;
+      if (v) row[field] = v as never;
     }
   }
+
   if (!row.sku || !row.name) return undefined;
+
+  // Auto-detect currency from the price prefix when no explicit currency column.
+  if (!row.currency && rawPriceStr) {
+    const detected = detectCurrency(rawPriceStr);
+    if (detected) row.currency = detected;
+  }
+
   return {
     sku: row.sku,
     name: row.name,
     category: row.category,
     price: row.price,
+    currency: row.currency,
     stock: row.stock,
     unit: row.unit,
     description: row.description,

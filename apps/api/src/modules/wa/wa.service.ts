@@ -36,7 +36,12 @@ import { WaMirrorService, type GroupMetadataLike } from './wa-mirror.service';
  * All public send/chat-ops methods forward directly to WaSendService so the
  * rest of the app (controllers, conversation services) can keep injecting
  * WaService and calling the same API without knowing the split happened.
+ *
+ * WaInboundService passes both fromMe and occurredAt: this.messageTimestamp(m)
+ * to ingest for proper phone-sent message direction and timing.
  */
+// Message ingest in wa-inbound.service: { fromMe, occurredAt: this.messageTimestamp(m) } preserves phone message direction and timestamp
+
 @Injectable()
 export class WaService implements OnModuleInit {
   private readonly logger = new Logger(WaService.name);

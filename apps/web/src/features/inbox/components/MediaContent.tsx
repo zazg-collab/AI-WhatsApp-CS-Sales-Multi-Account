@@ -18,7 +18,7 @@ export function MediaContent({ message: m }: { message: Message }) {
     if (mediaSrc) {
       return (
         <span className="block">
-          <img src={mediaSrc} alt={m.content ?? t('mediaImage')} className="max-h-60 max-w-[280px] rounded-lg object-cover" loading="lazy" />
+          <img src={mediaSrc} alt={m.content ?? t('mediaImage')} className="max-h-60 w-full max-w-[280px] rounded-lg object-cover" loading="lazy" />
           {m.content && <span className="mt-1 block text-[13px] opacity-90">{m.content}</span>}
         </span>
       );
@@ -34,7 +34,7 @@ export function MediaContent({ message: m }: { message: Message }) {
     if (mediaSrc) {
       return (
         <span className="block">
-          <video src={mediaSrc} controls preload="none" className="max-h-60 max-w-[280px] rounded-lg" />
+          <video src={mediaSrc} controls preload="none" className="max-h-60 w-full max-w-[280px] rounded-lg" />
           {m.content && <span className="mt-1 block text-[13px] opacity-90">{m.content}</span>}
         </span>
       );
