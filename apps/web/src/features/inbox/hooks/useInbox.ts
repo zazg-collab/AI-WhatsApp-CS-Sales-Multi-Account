@@ -388,7 +388,30 @@ export function useInbox(initialConversationId: string | null) {
   const takeOver = () => act(() => api(`/conversations/${activeId}/takeover`, { method: 'POST' }));
   const returnToAi = () => act(() => api(`/conversations/${activeId}/return-to-ai`, { method: 'POST' }));
   const escalate = () => act(() => api(`/conversations/${activeId}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'pending' }) }));
-  const approveDraft = (msgId: string) => act(() => api(`/conversations/${activeId}/messages/${msgId}/approve`, { method: 'POST' }));
+  // Approve is optimistic: the backend blocks on the WhatsApp send (typing
+  // delay + anti-ban throttle, several seconds), so we DON'T run it through
+  // act()'s global busy + full reload. Clear the draft instantly, send in the
+  // background, and let the message:new socket event reconcile. Revert on error.
+  const approveDraft = async (msgId: string) => {
+    const convId = activeIdRef.current;
+    if (!convId) return;
+    setConv((prev) =>
+      prev && prev.id === convId
+        ? { ...prev, messages: prev.messages.map((m) => (m.id === msgId ? { ...m, status: 'sent' } : m)) }
+        : prev,
+    );
+    try {
+      await api(`/conversations/${convId}/messages/${msgId}/approve`, { method: 'POST' });
+      loadListRef.current(); // refresh list ordering/preview, non-blocking
+    } catch (err) {
+      setConv((prev) =>
+        prev && prev.id === convId
+          ? { ...prev, messages: prev.messages.map((m) => (m.id === msgId ? { ...m, status: 'pending' } : m)) }
+          : prev,
+      );
+      setSendError(err instanceof Error ? err.message : t('errApproveDraft'));
+    }
+  };
 
   const editDraft = (m: Message) => { setComposer(m.content ?? ''); setQuoteMessage(null); setEditingMessage(null); };
   const quoteReply = (m: Message) => { setQuoteMessage(m); setEditingMessage(null); };

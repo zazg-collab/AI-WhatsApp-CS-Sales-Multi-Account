@@ -27,6 +27,7 @@ export const dict: Dict = {
   // Error fallbacks
   errLoadUsers: { id: 'Failed to load team users from API', en: 'Failed to load team users from API' },
   errLoadAccounts: { id: 'Failed to load WhatsApp accounts from API', en: 'Failed to load WhatsApp accounts from API' },
+  errApproveDraft: { id: 'Gagal menyetujui & mengirim draft. Coba lagi.', en: 'Failed to approve & send the draft. Please try again.' },
   composerBlockedDisconnected: { id: 'Akun WhatsApp ini terputus. Sambungkan kembali sebelum mengirim pesan.', en: 'This WhatsApp account is disconnected. Reconnect it before sending messages.' },
   composerBlockedBanned: { id: 'Akun WhatsApp ini diblokir/banned. Pesan tidak dapat dikirim.', en: 'This WhatsApp account is banned. Messages cannot be sent.' },
   composerBlockedPaused: { id: 'AI dihentikan untuk percakapan ini karena risiko terdeteksi. Anda masih dapat mengirim pesan secara manual.', en: 'AI is paused on this conversation due to a detected risk. You can still send manually.' },
