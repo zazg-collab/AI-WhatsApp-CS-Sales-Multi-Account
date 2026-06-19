@@ -73,7 +73,7 @@ export class ConversationsService {
       where: { id },
       include: {
         customer: true,
-        whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true } },
+        whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true, sessionStatus: true } },
         bot: {
           select: {
             id: true,
@@ -404,7 +404,7 @@ export class ConversationsService {
         take: limit,
         include: {
           customer: { select: { id: true, name: true, phoneNumber: true, leadScore: true, leadStage: true, tags: true, avatarUrl: true } },
-          whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true } },
+          whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true, sessionStatus: true } },
           assignedAdmin: { select: { id: true, name: true } },
           messages: { orderBy: { createdAt: 'desc' }, take: 1, select: { content: true, senderType: true, createdAt: true, status: true } },
         },

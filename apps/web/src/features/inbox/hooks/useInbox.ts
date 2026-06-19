@@ -272,6 +272,9 @@ export function useInbox(initialConversationId: string | null) {
     socket.on('conversation:sla-cleared', onConvUpdate);
     socket.on('hermes:alert', onConvUpdate);
     socket.on('customer:avatar', onConvUpdate);
+    // Account connect/disconnect → refresh the open conversation so the header
+    // status and composer block reflect the new sessionStatus live.
+    socket.on('wa:status', onConvUpdate);
     socket.on('wa:presence', onPresence);
 
     return () => {
@@ -287,6 +290,7 @@ export function useInbox(initialConversationId: string | null) {
       socket.off('conversation:sla-cleared', onConvUpdate);
       socket.off('hermes:alert', onConvUpdate);
       socket.off('customer:avatar', onConvUpdate);
+      socket.off('wa:status', onConvUpdate);
       socket.off('wa:presence', onPresence);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -306,11 +310,14 @@ export function useInbox(initialConversationId: string | null) {
   }, [busy]);
 
   // ── Send message ──────────────────────────────────────────────────────────
+  // Single source of truth for account status: the conversation detail's own
+  // whatsappAccount (now includes sessionStatus), refreshed live on wa:status.
+  // The separately-fetched `accounts` list is only for the start-chat picker.
   const composerBlockedReason = (() => {
-    const activeAccount = conv ? accounts.find((a) => a.id === conv.whatsappAccount?.id) : undefined;
     if (!conv) return null;
-    if (activeAccount?.sessionStatus === 'banned') return 'composerBlockedBanned' as const;
-    if (activeAccount?.sessionStatus === 'disconnected') return 'composerBlockedDisconnected' as const;
+    const status = conv.whatsappAccount?.sessionStatus;
+    if (status === 'banned') return 'composerBlockedBanned' as const;
+    if (status === 'disconnected') return 'composerBlockedDisconnected' as const;
     return null;
   })();
 
@@ -514,7 +521,7 @@ export function useInbox(initialConversationId: string | null) {
   };
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const activeAccount = conv ? accounts.find((a) => a.id === conv.whatsappAccount?.id) : undefined;
+  const activeAccount = conv?.whatsappAccount;
   const accountDisconnected = activeAccount?.sessionStatus === 'disconnected' || activeAccount?.sessionStatus === 'banned';
   const visibleAssetSuggestions = assetSuggestions.filter((s) => !dismissedAssets.has(s.id));
 
