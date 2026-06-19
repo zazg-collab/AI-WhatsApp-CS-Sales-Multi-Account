@@ -11,11 +11,13 @@ import { cn } from '@/lib/cn';
 export function Reveal({
   children,
   className,
+  style,
   delay = 0,
   as: Tag = 'div',
 }: {
   children: React.ReactNode;
   className?: string;
+  style?: React.CSSProperties;
   delay?: number;
   as?: 'div' | 'section' | 'li' | 'article';
 }) {
@@ -51,7 +53,7 @@ export function Reveal({
   return (
     <Comp
       ref={ref as React.Ref<HTMLElement>}
-      style={delay ? { transitionDelay: `${delay}ms` } : undefined}
+      style={{ ...style, ...(delay ? { transitionDelay: `${delay}ms` } : {}) }}
       className={cn(
         'transition-all duration-700 ease-out motion-reduce:transition-none',
         shown ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0',
