@@ -18,9 +18,10 @@ export function getSocket(): Socket | null {
   if (!socket) {
     // The gateway now requires a JWT (C1) — pass it in the handshake auth.
     socket = io(`${baseUrl()}/events`, {
-      // Allow polling as a fallback so the connection still works behind proxies
-      // or when the websocket upgrade is blocked; socket.io upgrades to ws when it can.
-      transports: ['websocket', 'polling'],
+      // Connect via long-polling first, then upgrade to websocket when possible.
+      // Polling-first avoids a hard, console-noisy failure when the ws upgrade
+      // is blocked (dev proxies, some hosts) and keeps realtime working there.
+      transports: ['polling', 'websocket'],
       auth: { token },
       reconnection: true,
       reconnectionAttempts: Infinity,

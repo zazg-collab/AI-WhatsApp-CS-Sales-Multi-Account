@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { ChatThreadMessage } from './ChatThreadMessage';
 import { ChatThreadHeader, type ConversationActions } from './ChatThreadHeader';
 import { ChatComposer } from './ChatComposer';
@@ -91,12 +91,35 @@ export function ChatThread({
   onStarMessage,
 }: ChatThreadProps) {
   const timelineRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll to the latest message when the count changes.
+  const convId = conversation?.id;
   const messageCount = conversation?.messages.length ?? 0;
-  useEffect(() => {
-    if (timelineRef.current) timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
-  }, [messageCount, conversation?.id]);
+  const prevConvId = useRef(convId);
+  const prevCount = useRef(messageCount);
+  // Whether the user was near the bottom before the latest update. Kept current
+  // by the timeline's onScroll handler so we never yank them away from history.
+  const nearBottom = useRef(true);
+
+  // Scroll to the latest message only when (a) the conversation switches, or
+  // (b) a new message is appended AND the user was already near the bottom.
+  // A plain reload that doesn't add messages (e.g. approving a draft) preserves
+  // the current scroll position instead of jumping to the bottom/old messages.
+  useLayoutEffect(() => {
+    const el = timelineRef.current;
+    if (!el) return;
+    const convChanged = prevConvId.current !== convId;
+    const grew = messageCount > prevCount.current;
+    if (convChanged || (grew && nearBottom.current)) {
+      el.scrollTop = el.scrollHeight;
+    }
+    prevConvId.current = convId;
+    prevCount.current = messageCount;
+  }, [convId, messageCount]);
+
+  const handleTimelineScroll = () => {
+    const el = timelineRef.current;
+    if (!el) return;
+    nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  };
 
   if (!conversation) {
     return (
@@ -125,7 +148,7 @@ export function ChatThread({
       />
 
       {/* Message timeline */}
-      <div ref={timelineRef} className="scrollbar-thin flex-1 space-y-3 overflow-y-auto px-4 py-5 sm:px-5">
+      <div ref={timelineRef} onScroll={handleTimelineScroll} className="scrollbar-thin flex-1 space-y-3 overflow-y-auto px-4 py-5 sm:px-5">
         {conversation.messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-gray-400">
             No messages yet
