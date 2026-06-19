@@ -40,3 +40,7 @@ nul
 
 # agent scratch
 .claude_*
+
+# portable Hermes Agent runtime (large binaries — never commit)
+hermes-portable/
+memory/
