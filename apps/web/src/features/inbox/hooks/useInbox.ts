@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { api, uploadFile } from '@/lib/api';
-import { getSocket } from '@/lib/socket';
 import { useT } from '@/lib/i18n';
 import { dict } from '@/app/inbox/inbox.i18n';
+import { useInboxSocket } from './useInboxSocket';
 import type {
   AdminUser,
   WaAccount,
@@ -15,29 +15,6 @@ import type {
 } from '../inbox.types';
 
 type ConfirmAction = { type: 'retract' | 'block'; messageId?: string } | null;
-
-function playNotificationSound() {
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.setValueAtTime(800, ctx.currentTime);
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.1);
-    osc.frequency.setValueAtTime(600, ctx.currentTime + 0.15);
-    osc.start(ctx.currentTime + 0.15);
-    osc.stop(ctx.currentTime + 0.25);
-  } catch {
-    try {
-      const audio = new Audio('data:audio/wav;base64,UklGRiYAAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQIAAAAAAA==');
-      audio.volume = 0.5;
-      audio.play().catch(() => {});
-    } catch { /* silent */ }
-  }
-}
 
 export function useInbox(initialConversationId: string | null) {
   const t = useT(dict);
@@ -136,10 +113,16 @@ export function useInbox(initialConversationId: string | null) {
       const data = await api<ConvDetail>(`/conversations/${id}`);
       setConv(data);
       api(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
-    } catch {
-      setConv(null);
+    } catch (err) {
+      // A transient reload failure (network blip / 5xx) must NOT wipe the open
+      // conversation — that looks like data loss to the operator. Only clear it
+      // when the conversation genuinely no longer exists (404). For any other
+      // error keep the current view and surface a non-destructive message.
+      const status = (err as { status?: number } | null)?.status;
+      if (status === 404) setConv(null);
+      else setListError(err instanceof Error ? err.message : t('errLoadConversations'));
     }
-  }, []);
+  }, [t]);
 
   const loadFollowUps = useCallback(async (convId: string) => {
     try {
@@ -168,146 +151,36 @@ export function useInbox(initialConversationId: string | null) {
   }, []);
 
   // ── Socket live updates ───────────────────────────────────────────────────
+  // loadListRef/loadConvRef are also consumed by `act` and `approveDraft`
+  // below, so they stay here; the socket wiring itself lives in useInboxSocket.
   const loadListRef = useRef(loadList);
   loadListRef.current = loadList;
   const loadConvRef = useRef(loadConv);
   loadConvRef.current = loadConv;
 
-  useEffect(() => {
-    const socket = getSocket();
-    if (!socket) return;
-
-    let listTimer: ReturnType<typeof setTimeout> | null = null;
-    let convTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const scheduleListReload = () => {
-      if (listTimer) clearTimeout(listTimer);
-      listTimer = setTimeout(() => loadListRef.current(), 500);
-    };
-    const scheduleConvReload = () => {
-      const curId = activeIdRef.current;
-      if (!curId) return;
-      if (convTimer) clearTimeout(convTimer);
-      convTimer = setTimeout(() => loadConvRef.current(curId), 500);
-    };
-
-    const upsert = (conversationId: string, message: Message) => {
-      setConv((prev) => {
-        if (!prev || prev.id !== conversationId) return prev;
-        if (prev.messages.some((m) => m.id === message.id)) return prev;
-        return { ...prev, messages: [...prev.messages, message] };
-      });
-    };
-
-    const onNew = ({ conversationId, message }: { conversationId: string; message: Message }) => {
-      upsert(conversationId, message);
-      scheduleListReload();
-      if (conversationId === activeIdRef.current) scheduleConvReload();
-      if (message.senderType === 'customer') {
-        setTypingCustomer((prev) => (prev?.conversationId === conversationId ? null : prev));
-      }
-      if (
-        message.senderType === 'customer' &&
-        typeof window !== 'undefined' &&
-        'Notification' in window &&
-        Notification.permission === 'granted' &&
-        (document.hidden || conversationId !== activeIdRef.current)
-      ) {
-        try {
-          new Notification('Customer', {
-            body: message.content ? message.content.substring(0, 100) : '[Media message]',
-            tag: conversationId,
-            icon: '/favicon.svg',
-            badge: '/favicon.svg',
-          });
-          playNotificationSound();
-        } catch { /* ignore */ }
-      }
-    };
-
-    const onDraft = ({ conversationId, message }: { conversationId: string; message: Message }) =>
-      upsert(conversationId, message);
-
-    const onDraftRemoved = ({ conversationId, messageId }: { conversationId: string; messageId: string }) =>
-      setConv((prev) =>
-        prev && prev.id === conversationId
-          ? { ...prev, messages: prev.messages.filter((m) => m.id !== messageId) }
-          : prev,
-      );
-
-    const onStatus = ({ conversationId, messageId, status }: { conversationId: string; messageId: string; status: string }) =>
-      setConv((prev) =>
-        prev && prev.id === conversationId
-          ? { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, status } : m)) }
-          : prev,
-      );
-
-    const onMessageUpdated = ({ conversationId, message }: { conversationId: string; message: Message }) =>
-      setConv((prev) =>
-        prev && prev.id === conversationId
-          ? { ...prev, messages: prev.messages.map((m) => (m.id === message.id ? { ...m, ...message } : m)) }
-          : prev,
-      );
-
-    const onConvUpdate = () => { scheduleListReload(); scheduleConvReload(); };
-
-    const onPresence = ({ phone, typing }: { accountId: string; phone: string; typing: boolean }) => {
-      setTypingCustomer((prev) => {
-        const next = typing
-          ? { conversationId: activeIdRef.current ?? '', phone }
-          : prev?.phone === phone ? null : prev;
-        if (next && prev && next.phone === prev.phone && next.conversationId === prev.conversationId) return prev;
-        if (!next && !prev) return prev;
-        return next;
-      });
-    };
-
-    socket.on('message:new', onNew);
-    socket.on('message:draft', onDraft);
-    socket.on('message:draft-removed', onDraftRemoved);
-    socket.on('message:status', onStatus);
-    socket.on('message:updated', onMessageUpdated);
-    socket.on('conversation:updated', onConvUpdate);
-    socket.on('conversation:sla-breach', onConvUpdate);
-    socket.on('conversation:sla-cleared', onConvUpdate);
-    socket.on('hermes:alert', onConvUpdate);
-    socket.on('customer:avatar', onConvUpdate);
-    // Account connect/disconnect → refresh the open conversation so the header
-    // status and composer block reflect the new sessionStatus live.
-    socket.on('wa:status', onConvUpdate);
-    socket.on('wa:presence', onPresence);
-
-    return () => {
-      if (listTimer) clearTimeout(listTimer);
-      if (convTimer) clearTimeout(convTimer);
-      socket.off('message:new', onNew);
-      socket.off('message:draft', onDraft);
-      socket.off('message:draft-removed', onDraftRemoved);
-      socket.off('message:status', onStatus);
-      socket.off('message:updated', onMessageUpdated);
-      socket.off('conversation:updated', onConvUpdate);
-      socket.off('conversation:sla-breach', onConvUpdate);
-      socket.off('conversation:sla-cleared', onConvUpdate);
-      socket.off('hermes:alert', onConvUpdate);
-      socket.off('customer:avatar', onConvUpdate);
-      socket.off('wa:status', onConvUpdate);
-      socket.off('wa:presence', onPresence);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useInboxSocket({ activeIdRef, loadList, loadConv, setConv, setTypingCustomer });
 
   // ── Shared action wrapper ─────────────────────────────────────────────────
+  // Returns true on success, false if the action itself failed. Previously this
+  // had no catch, so a failed star/mute/forward/etc. became an unhandled
+  // rejection with no user feedback. A refetch blip after a successful action is
+  // treated as non-fatal (we don't report the action as failed).
   const act = useCallback(async (fn: () => Promise<unknown>) => {
     if (busy) return;
     setBusy(true);
+    setSendError(null);
+    let ok = false;
     try {
       await fn();
+      ok = true;
       if (activeIdRef.current) await loadConvRef.current(activeIdRef.current);
       await loadListRef.current();
+    } catch (err) {
+      if (!ok) setSendError(err instanceof Error ? err.message : t('errAction'));
     } finally {
       setBusy(false);
     }
-  }, [busy]);
+  }, [busy, t]);
 
   // ── Send message ──────────────────────────────────────────────────────────
   // Single source of truth for account status: the conversation detail's own
@@ -413,7 +286,12 @@ export function useInbox(initialConversationId: string | null) {
     }
   };
 
-  const editDraft = (m: Message) => { setComposer(m.content ?? ''); setQuoteMessage(null); setEditingMessage(null); };
+  // Editing a draft must enter edit mode so submitting PATCHes the existing
+  // draft in place (then it can be approved). Previously this only dumped the
+  // text into the composer with no edit target, so "send" created a brand-new
+  // message and left the stale draft behind — the edit-then-approve flow was
+  // unreachable.
+  const editDraft = (m: Message) => { setEditingMessage(m); setQuoteMessage(null); setComposer(m.content ?? ''); };
   const quoteReply = (m: Message) => { setQuoteMessage(m); setEditingMessage(null); };
   const editSentMessage = (m: Message) => { setEditingMessage(m); setQuoteMessage(null); setComposer(m.content ?? ''); };
 
@@ -476,6 +354,20 @@ export function useInbox(initialConversationId: string | null) {
   const setChatArchived = (archive: boolean) => act(() => api(`/conversations/${activeId}/archive`, { method: 'POST', body: JSON.stringify({ archive }) }));
   const setChatPinned = (pin: boolean) => act(() => api(`/conversations/${activeId}/pin`, { method: 'POST', body: JSON.stringify({ pin }) }));
   const setMessageStarred = (messageId: string, star: boolean) => act(() => api(`/conversations/${activeId}/messages/${messageId}/star`, { method: 'POST', body: JSON.stringify({ star }) }));
+  // Dedicated (not via act): a forward lands in a different conversation, so
+  // there is nothing in the current timeline to refetch. Returns success so the
+  // popover can keep itself open with an error and close only on success.
+  const forwardMessage = async (messageId: string, toPhone: string): Promise<boolean> => {
+    if (!activeId) return false;
+    setSendError(null);
+    try {
+      await api(`/conversations/${activeId}/messages/${messageId}/forward`, { method: 'POST', body: JSON.stringify({ toPhone }) });
+      return true;
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : t('errAction'));
+      return false;
+    }
+  };
   const setDisappearing = (enable: boolean) => act(() => api(`/conversations/${activeId}/disappearing-messages`, { method: 'POST', body: JSON.stringify({ enable, duration: 7 * 24 * 60 * 60 }) }));
   const saveLabels = (labels: string[]) => act(() => api(`/conversations/${activeId}/labels`, { method: 'PATCH', body: JSON.stringify({ labels }) }));
 
@@ -571,7 +463,7 @@ export function useInbox(initialConversationId: string | null) {
     sendAsset, dismissAsset, suggestBot,
     sendLocation, sendPoll, sendContactCard,
     setContactBlocked, setChatMuted, setChatArchived, setChatPinned,
-    setMessageStarred, setDisappearing, saveLabels,
+    setMessageStarred, forwardMessage, setDisappearing, saveLabels,
     validateNumber, startConversation, searchContacts, assignAdmin, updateNotes, handleMediaFile,
   };
 }

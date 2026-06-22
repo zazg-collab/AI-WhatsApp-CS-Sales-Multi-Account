@@ -18,6 +18,7 @@ import {
   ArrowsSplit,
   Pulse,
   SignOut,
+  Key,
   FileText,
   BookOpen,
   GraduationCap,
@@ -31,6 +32,7 @@ import { getSocket } from '@/lib/socket';
 import { cn } from '@/lib/cn';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageToggle } from './LanguageToggle';
+import { ChangePasswordModal } from './ChangePasswordModal';
 import { useT, type Dict } from '@/lib/i18n';
 
 interface NavItem {
@@ -114,6 +116,7 @@ const dict: Dict = {
   Growth: { id: 'Pertumbuhan', en: 'Growth' },
   Operations: { id: 'Operasional', en: 'Operations' },
   signOut: { id: 'Keluar', en: 'Sign out' },
+  changePassword: { id: 'Ubah kata sandi', en: 'Change password' },
   waConnected: { id: 'WhatsApp terhubung', en: 'WhatsApp connected' },
   waDegraded: { id: 'Sebagian akun WhatsApp terputus', en: 'Some WhatsApp accounts disconnected' },
   waDown: { id: 'Semua akun WhatsApp terputus', en: 'All WhatsApp accounts disconnected' },
@@ -129,6 +132,7 @@ export function Sidebar() {
   const userRole = getRoleFromToken();
   const t = useT(dict);
   const [open, setOpen] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [unread, setUnread] = useState(0);
   const [isOnline, setIsOnline] = useState(true);
   // Backend REST API reachability (null = checking on first paint).
@@ -159,6 +163,8 @@ export function Sidebar() {
     };
     // Backend reachability — single source of truth for "is the API up?",
     // replacing the per-page header badge.
+    // Kept inline (not the lib/api `API_URL` export) so the shared Sidebar does
+    // not force every page test that mocks '@/lib/api' to also stub API_URL.
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
     const checkApi = () => {
       if (typeof fetch !== 'function') { setApiOnline(false); return; }
@@ -359,16 +365,25 @@ export function Sidebar() {
         <LanguageToggle compact />
         <ThemeToggle compact />
         <button
+          onClick={() => setShowChangePassword(true)}
+          title={t('changePassword')}
+          aria-label={t('changePassword')}
+          className="ml-auto flex h-9 items-center justify-center rounded-md px-2 text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50"
+        >
+          <Key className="h-[18px] w-[18px] shrink-0" weight="regular" aria-hidden="true" />
+        </button>
+        <button
           onClick={handleLogout}
           title={t('signOut')}
           aria-label={t('signOut')}
-          className="ml-auto flex h-9 items-center justify-center gap-2 rounded-md px-2 text-[13px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-danger-300"
+          className="flex h-9 items-center justify-center gap-2 rounded-md px-2 text-[13px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-danger-300"
         >
           <SignOut className="h-[18px] w-[18px] shrink-0" weight="regular" aria-hidden="true" />
           <span className={cn('hidden', open ? 'inline' : 'lg:inline')}>{t('signOut')}</span>
         </button>
       </div>
     </aside>
+    {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
     </>
   );
 }

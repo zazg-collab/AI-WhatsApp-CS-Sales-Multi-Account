@@ -330,6 +330,9 @@ model Customer {
 
   @@unique([phoneNumber, sourceAccountId])
   @@index([leadStage])
+  @@index([sourceAccountId])
+  @@index([assignedAdminId])
+  @@index([lastMessageAt])
   @@map("customers")
 }
 
@@ -408,6 +411,9 @@ model Conversation {
 
   @@index([whatsappAccountId])
   @@index([customerId])
+  @@index([status])
+  @@index([assignedAdminId])
+  @@index([lastMessageAt])
   @@unique([whatsappAccountId, chatJid])
   @@map("conversations")
 }
@@ -441,7 +447,7 @@ model Message {
   quotedBy      Message[]    @relation("MessageQuote")
 
   @@unique([conversationId, externalId])
-  @@index([conversationId])
+  @@index([conversationId, createdAt])
   @@map("messages")
 }
 

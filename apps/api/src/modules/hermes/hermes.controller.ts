@@ -6,7 +6,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { HermesService } from './hermes.service';
@@ -24,6 +24,9 @@ import {
 export class HermesController {
   constructor(private readonly hermes: HermesService) {}
 
+  // Integration note: API-only. The supervised review runs server-side inside
+  // WaService.maybeAutoReply; this manual trigger has no frontend caller.
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Review a draft reply through Hermes supervisor' })
   @Roles('admin', 'supervisor', 'owner')
   @Post('review-reply')
@@ -45,6 +48,9 @@ export class HermesController {
     return this.hermes.dailyReport();
   }
 
+  // Integration note: API-only. Superseded by GET /hermes/snapshot, which the
+  // /hermes page consumes (its `bots[]` carries the same per-bot metrics).
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Get bot performance metrics' })
   @Roles('viewer')
   @Get('bot-performance')
@@ -80,6 +86,9 @@ export class HermesController {
     return this.hermes.knowledgeGaps();
   }
 
+  // Integration note: API-only. The UI approves/blocks at message granularity
+  // via POST /conversations/:id/messages/:messageId/approve|block instead.
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Approve a supervised conversation reply' })
   @Roles('owner', 'supervisor')
   @Post('approve')
@@ -87,6 +96,8 @@ export class HermesController {
     return this.hermes.approve(dto.conversationId);
   }
 
+  // Integration note: API-only. See the approve() note above.
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Block a conversation reply' })
   @Roles('owner', 'supervisor')
   @Post('block')

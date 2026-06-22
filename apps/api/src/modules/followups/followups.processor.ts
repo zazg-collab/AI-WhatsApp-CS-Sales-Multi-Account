@@ -2,8 +2,9 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { FollowUpsService } from './followups.service';
+import { requestContext } from '../../common/request-context';
 
-@Processor('follow-ups')
+@Processor('follow-ups', { concurrency: 5 })
 export class FollowUpsProcessor extends WorkerHost {
   private readonly logger = new Logger(FollowUpsProcessor.name);
 
@@ -13,9 +14,11 @@ export class FollowUpsProcessor extends WorkerHost {
 
   async process(job: Job) {
     if (job.name === 'send-followup') {
-      const { followUpId } = job.data as { followUpId: string };
-      this.logger.log(`Processing follow-up job: ${followUpId}`);
-      await this.followUpsService.processJob(followUpId);
+      const { followUpId, requestId } = job.data as { followUpId: string; requestId?: string };
+      await requestContext.run({ requestId }, async () => {
+        this.logger.log(`Processing follow-up job: ${followUpId}`);
+        await this.followUpsService.processJob(followUpId);
+      });
     }
   }
 }

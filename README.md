@@ -359,7 +359,18 @@ constant-time API-key check and fails closed when unconfigured.
 
 ## Documentation
 
-- [CLAUDE.md](./CLAUDE.md) — architecture & contributor guidance
+- [CLAUDE.md](./CLAUDE.md) — architecture & contributor guidance (canonical;
+  `AGENTS.md` just points here)
 - [docs/OPERATOR_GUIDE.md](./docs/OPERATOR_GUIDE.md) — day-to-day operation
-- [docs/deployment.md](./docs/deployment.md) — deploy, migrate, backup, pilot
+- [docs/deployment.md](./docs/deployment.md) — deploy, migrate, backup, pilot,
+  observability, rollback
+- [docs/observability.md](./docs/observability.md) — log retention, SLOs,
+  alert severity ladder, incident response
+- [docs/troubleshooting.md](./docs/troubleshooting.md) — generic local-dev
+  fixes (Docker not running, migration drift, QR/session reset, stuck queues)
+- [docs/vps-deploy.md](./docs/vps-deploy.md) — bare-VPS deployment walkthrough
+- [docs/vercel-railway-setup.md](./docs/vercel-railway-setup.md) — Vercel +
+  Railway managed deployment walkthrough
+- [PENDING_UI.md](./PENDING_UI.md) — backend endpoints implemented without a
+  frontend yet (live backlog)
 - [services/hermes-agent-skills/crm-report.md](./services/hermes-agent-skills/crm-report.md) — Hermes Agent CRM report skill

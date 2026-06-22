@@ -16,6 +16,7 @@ describe('CampaignsService', () => {
   let storage: any;
   let events: any;
   let queue: any;
+  let queueSvc: CampaignQueueService;
 
   beforeEach(() => {
     prisma = {
@@ -49,7 +50,7 @@ describe('CampaignsService', () => {
     queue = { add: jest.fn().mockResolvedValue({}), getJob: jest.fn() };
     const config = { get: jest.fn().mockReturnValue(undefined) };
     const crud = new CampaignCrudService(prisma, audit, queue, config as any);
-    const queueSvc = new CampaignQueueService(crud, audit);
+    queueSvc = new CampaignQueueService(crud, audit);
     const sendSvc = new CampaignSendService(crud, wa, storage, events, audit);
     service = new CampaignsService(crud, queueSvc, sendSvc);
   });
@@ -266,13 +267,13 @@ describe('CampaignsService', () => {
   describe('runScheduledCampaigns', () => {
     it('starts due scheduled campaigns', async () => {
       prisma.campaign.findMany.mockResolvedValueOnce([{ id: 'cmp1', createdById: 'u1' }]);
-      const startSpy = jest.spyOn(service, 'start').mockResolvedValue({} as any);
+      const startSpy = jest.spyOn(queueSvc, 'start').mockResolvedValue({} as any);
       await service.runScheduledCampaigns();
       expect(startSpy).toHaveBeenCalledWith('cmp1', 'u1');
     });
     it('never throws when start fails', async () => {
       prisma.campaign.findMany.mockResolvedValueOnce([{ id: 'cmp1', createdById: 'u1' }]);
-      jest.spyOn(service, 'start').mockRejectedValue(new Error('boom'));
+      jest.spyOn(queueSvc, 'start').mockRejectedValue(new Error('boom'));
       await expect(service.runScheduledCampaigns()).resolves.toBeUndefined();
     });
   });

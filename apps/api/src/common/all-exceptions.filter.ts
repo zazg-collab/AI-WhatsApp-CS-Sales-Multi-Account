@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@hermes/database';
 import { Request, Response } from 'express';
+import { ErrorReporterService } from './error-reporter.service';
 
 /**
  * A11: well-known Prisma errors map to client errors instead of opaque 500s —
@@ -22,6 +23,10 @@ const PRISMA_STATUS: Record<string, { status: number; message: string }> = {
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
+
+  // Optional: present when DI provides it (it does in the running app). Kept
+  // optional so unit tests can `new AllExceptionsFilter()` without a reporter.
+  constructor(private readonly reporter?: ErrorReporterService) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -45,6 +50,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
         `${request.method} ${request.url} failed with ${status}: ${message}`,
         exception instanceof Error ? exception.stack : undefined,
       );
+      // Forward to the central error sink (structured log + optional webhook).
+      this.reporter?.capture(exception, {
+        route: request.url,
+        method: request.method,
+        status,
+        requestId,
+      });
     }
 
     response.status(status).json({

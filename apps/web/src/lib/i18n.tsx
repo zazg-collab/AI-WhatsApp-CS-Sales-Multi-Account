@@ -21,7 +21,7 @@ interface LangContextValue {
 }
 
 // Default value applies when no provider is mounted (e.g. in unit tests):
-// language is the Indonesian default, so every `id` phrase renders unchanged.
+// the language is DEFAULT_LANG (English), so phrases resolve to their `en` value.
 const LangContext = React.createContext<LangContextValue>({
   lang: DEFAULT_LANG,
   setLang: () => {},
@@ -81,8 +81,8 @@ function interpolate(template: string, vars?: Record<string, string | number>): 
  * phrase for the active language, falling back to the Indonesian value and then
  * the raw key. Supports `{var}` interpolation.
  *
- * Because the default (and test-time) language is Indonesian, any phrase whose
- * `id` value equals the current literal renders identically with no provider.
+ * The default (and test-time) language is DEFAULT_LANG (English); users can
+ * switch to Indonesian via the LanguageProvider, which persists the choice.
  */
 export function useT(local?: Dict): TFunction {
   const { lang } = useLang();

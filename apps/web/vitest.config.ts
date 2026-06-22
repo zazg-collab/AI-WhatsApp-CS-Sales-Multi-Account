@@ -13,6 +13,10 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './vitest.setup.ts',
+    // The full suite saturates CPU on slower/Windows machines, where async
+    // userEvent + waitFor chains can exceed the 5s default and flake. Bumped so
+    // a full run is deterministic; individual tests still finish in ~1s.
+    testTimeout: 15000,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],

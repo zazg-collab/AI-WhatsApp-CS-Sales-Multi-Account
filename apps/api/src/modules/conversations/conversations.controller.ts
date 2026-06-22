@@ -41,13 +41,14 @@ export class ConversationsController {
   @Roles('viewer')
   @Get('export')
   async export(
+    @CurrentUser() user: AuthUser,
     @Query('accountId') accountId: string | undefined,
     @Query('aiMode') aiMode: AiMode | undefined,
     @Query('from') from: string | undefined,
     @Query('to') to: string | undefined,
     @Res() res: Response,
   ) {
-    const items = await this.conversations.exportList({ accountId, aiMode, from, to });
+    const items = await this.conversations.exportList({ accountId, aiMode, from, to, user });
     const header = 'id,customerName,customerPhone,aiMode,status,messageCount,lastMessageAt,leadStage\n';
     const rows = items.map((c) => csvRow([
       c.id,
@@ -107,11 +108,12 @@ export class ConversationsController {
   @Roles('viewer')
   @Get(':id/messages/search')
   searchMessages(
+    @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Query('q') q?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.conversations.searchMessages(id, q ?? '', limit ? parseInt(limit, 10) : 50);
+    return this.conversations.searchMessages(id, q ?? '', limit ? parseInt(limit, 10) : 50, user);
   }
 
   @ApiOperation({ summary: 'Get a conversation with its most recent messages' })
@@ -133,6 +135,7 @@ export class ConversationsController {
   @Roles('viewer')
   @Get(':id/messages')
   getMessages(
+    @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Query('before') before?: string,
     @Query('limit') limit?: string,
@@ -140,20 +143,20 @@ export class ConversationsController {
     return this.conversations.getMessages(id, {
       before,
       limit: limit ? parseInt(limit, 10) : 50,
-    });
+    }, user);
   }
 
   @Roles('admin', 'supervisor', 'owner')
   @Patch(':id/ai-mode')
-  setAiMode(@Param('id') id: string, @Body() dto: AiModeDto) {
-    return this.conversations.setAiMode(id, dto.aiMode);
+  setAiMode(@Param('id') id: string, @Body() dto: AiModeDto, @CurrentUser() user: AuthUser) {
+    return this.conversations.setAiMode(id, dto.aiMode, user);
   }
 
   @ApiOperation({ summary: 'Switch the bot/persona used for this conversation (null = account default)' })
   @Roles('admin', 'supervisor', 'owner')
   @Patch(':id/bot')
   setBot(@Param('id') id: string, @Body() dto: SetBotDto, @CurrentUser() user: AuthUser) {
-    return this.conversations.setBot(id, dto.botId, user.id);
+    return this.conversations.setBot(id, dto.botId, user.id, user);
   }
 
   @ApiOperation({ summary: 'Set conversation workflow status (open/pending/resolved)' })
@@ -164,7 +167,7 @@ export class ConversationsController {
     @Body() dto: ConversationStatusDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.setStatus(id, dto.status, user.id);
+    return this.conversations.setStatus(id, dto.status, user.id, user);
   }
 
   @ApiOperation({ summary: 'Assign a conversation to an admin (null = unassign)' })
@@ -175,7 +178,7 @@ export class ConversationsController {
     @Body() dto: AssignConversationDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.assign(id, dto.adminId ?? null, user.id);
+    return this.conversations.assign(id, dto.adminId ?? null, user.id, user);
   }
 
   @ApiOperation({ summary: 'Replace a conversation\'s custom labels' })
@@ -186,12 +189,12 @@ export class ConversationsController {
     @Body() dto: LabelsDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.setLabels(id, dto.labels, user.id);
+    return this.conversations.setLabels(id, dto.labels, user.id, user);
   }
 
   @Roles('admin', 'supervisor', 'owner')
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateConversationDto) {
-    return this.conversations.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateConversationDto, @CurrentUser() user: AuthUser) {
+    return this.conversations.update(id, dto, user);
   }
 }

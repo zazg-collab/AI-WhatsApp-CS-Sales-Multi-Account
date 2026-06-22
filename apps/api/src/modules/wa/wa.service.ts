@@ -3,8 +3,10 @@ import {
   Logger,
   NotFoundException,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { MetricsService } from '../../common/metrics/metrics.service';
 import { Interval } from '@nestjs/schedule';
 import { join } from 'path';
 import * as QRCode from 'qrcode';
@@ -59,6 +61,7 @@ export class WaService implements OnModuleInit {
     private readonly waInbound: WaInboundService,
     private readonly waMirror: WaMirrorService,
     config: ConfigService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {
     this.sessionDir = config.get<string>('WA_SESSION_DIR') ?? './.wa-sessions';
     this.syncFullHistory = config.get<string>('WA_SYNC_FULL_HISTORY') !== 'false';
@@ -495,6 +498,7 @@ export class WaService implements OnModuleInit {
       where: { id: accountId },
       data: { sessionStatus: status },
     });
+    this.metrics?.waEvents.inc({ event: String(status) });
     this.events.emitToAccount(accountId, 'wa:status', { accountId, status });
     if (status === SessionStatus.banned || status === SessionStatus.disconnected) {
       this.notifications.send(
@@ -530,8 +534,8 @@ export class WaService implements OnModuleInit {
     return this.waSend.sendContacts(accountId, phone, contacts);
   }
 
-  sendReaction(accountId: string, phone: string, externalId: string, emoji: string) {
-    return this.waSend.sendReaction(accountId, phone, externalId, emoji);
+  sendReaction(accountId: string, phone: string, externalId: string, emoji: string, fromMe = false) {
+    return this.waSend.sendReaction(accountId, phone, externalId, emoji, fromMe);
   }
 
   editMessage(accountId: string, phone: string, externalId: string, newText: string) {

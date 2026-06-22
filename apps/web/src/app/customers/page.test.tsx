@@ -32,7 +32,8 @@ describe('CustomersPage', () => {
     });
     render(<CustomersPage />);
     expect(await screen.findByRole('heading', { name: 'Contacts' })).toBeInTheDocument();
-    expect(await screen.findByText('Budi')).toBeInTheDocument();
+    // Name renders in both the desktop table and the mobile card layout.
+    expect((await screen.findAllByText('Budi')).length).toBeGreaterThan(0);
   });
 
   it('renders the search box', async () => {

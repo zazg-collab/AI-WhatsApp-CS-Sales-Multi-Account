@@ -180,3 +180,117 @@ any schema migration in production):
 1. Restore the latest dump into a scratch database.
 2. Run `npx prisma migrate deploy` against it — it must apply cleanly.
 3. Spot-check row counts for `customers`, `conversations`, `messages`.
+
+## 9. Rollback
+
+Releases are reversible at two layers — **application** and **database** —
+and they roll back independently. Always do the app rollback first; only touch
+the database if a migration is the problem.
+
+### Pre-deploy safety net (automatic)
+
+The deploy workflow runs `scripts/backup-db.sh` **before** migrations, producing
+a timestamped `pg_dump` under `./backups/` (last 14 kept). The API entrypoint
+runs `prisma migrate deploy` and, when `NODE_ENV=production`, **aborts the boot
+if a migration fails** — so a bad migration fails the rollout instead of serving
+a broken schema.
+
+### A. Roll back the application (no schema change)
+
+Every image is tagged with its commit SHA, so redeploy the previous one:
+
+```sh
+# On the server, from the repo root:
+export PREV_SHA=<last-known-good-commit-sha>
+git checkout "$PREV_SHA"
+docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+This is safe whenever the schema did **not** change between the two versions,
+or when the migration was written backward-compatibly (expand/contract).
+
+### B. Roll back a bad migration (schema change)
+
+Prisma migrations are forward-only — there is no `migrate down`. To recover:
+
+1. Stop the API so nothing writes mid-restore:
+   `docker compose -f docker-compose.yml -f docker-compose.prod.yml stop api`
+2. Restore the pre-deploy dump:
+   ```sh
+   gzip -dc backups/hermes-<STAMP>.sql.gz | \
+     docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+     exec -T postgres psql -U "$POSTGRES_USER" "$POSTGRES_DB"
+   ```
+3. Check out the previous good SHA (so the image matches the restored schema)
+   and `up -d` as in **A**.
+4. Investigate; reissue the migration as a backward-compatible expand/contract
+   change before redeploying.
+
+### Avoiding step B: write reversible migrations
+
+Prefer expand/contract so the previous app version always tolerates the new
+schema and an app-only rollback (**A**) is enough:
+
+- **Expand** (release N): add nullable columns / new tables; backfill; keep old
+  columns. Deploy app that writes both.
+- **Contract** (release N+1, after N is proven): drop the old columns.
+
+Never combine an additive and a destructive change in the same migration.
+
+## 10. Observability & monitoring
+
+### Logs
+
+Structured **JSON, one object per line** to stdout/stderr — ship them with any
+log agent (Loki, CloudWatch, Datadog). Every line carries `ts, level, context,
+message` and, for anything inside a request, the `requestId` and `userId`
+(propagated via AsyncLocalStorage). Set `LOG_LEVEL` to control verbosity;
+`LOG_PRETTY=true` for human-readable local dev.
+
+The same `requestId` is returned in the `x-request-id` response header and in
+error response bodies — quote it in a bug report to find the exact log lines.
+
+### Metrics (Prometheus)
+
+`GET /api/v1/metrics` exposes Prometheus text format. Protect it with
+`METRICS_TOKEN` (scraper sends `Authorization: Bearer <token>`) or keep it on an
+internal network. Key series:
+
+- `http_request_duration_seconds` / `http_requests_total` — latency p95 + error rate (labels: method, route, status).
+- `wa_session_state{state}` — **accounts by WhatsApp session status** (the #1 outage signal).
+- `bullmq_jobs{queue,state}` — campaign/health queue backlog and failures.
+- `ai_requests_total{outcome}`, `hermes_reviews_total{decision}`, `wa_events_total{event}` — AI/supervisor/gateway counters.
+- `hermes_*` default Node process metrics (event-loop lag, heap, CPU).
+
+### Health endpoints (point an external monitor at these)
+
+| Endpoint | Auth | Use |
+|---|---|---|
+| `GET /api/v1/health` | none | liveness (container healthcheck) |
+| `GET /api/v1/health/ready` | none | readiness: DB + Redis + session dir + config |
+| `GET /api/v1/health/whatsapp` | none | aggregate session counts; `status: degraded` when any account is down/banned |
+| `GET /api/v1/health/config` | owner/supervisor | non-secret config summary |
+
+A Docker healthcheck only restarts the container — it does **not** tell you the
+system is down. Poll `/health/ready` and `/health/whatsapp` from an **external**
+monitor (UptimeRobot / BetterStack / self-hosted Uptime Kuma) every 30–60s and
+alert on two consecutive failures or `status != ok`.
+
+### Errors
+
+Server errors (5xx) and process-level `unhandledRejection`/`uncaughtException`
+are sent to the central reporter: always written as a structured `error` log
+line, and additionally POSTed to `ERROR_WEBHOOK_URL` (Sentry-store / Slack / any
+JSON sink) when configured. No message bodies or phone numbers are forwarded —
+only ids and stack traces.
+
+### Suggested alert rules
+
+| Alert | Condition | Severity |
+|---|---|---|
+| WhatsApp account down | `/health/whatsapp` `down > 0` for >2 min | Critical |
+| API error spike | 5xx rate >2% over 5 min | Critical |
+| Queue backlog | `bullmq_jobs{state="waiting"}` over threshold, or `failed` rising 10 min | High |
+| Not ready | `/health/ready` non-ok ×2 | Critical |
+| Latency SLO burn | http p95 breaches PRD target sustained | High |

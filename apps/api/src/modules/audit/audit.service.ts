@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ErrorReporterService } from '../../common/error-reporter.service';
+import { logAudit } from '../../common/audit.util';
 
 interface ListFilters {
   userId?: string;
@@ -13,8 +15,15 @@ interface ListFilters {
 
 @Injectable()
 export class AuditService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Optional so existing unit tests can construct AuditService without a
+    // reporter (matches the AllExceptionsFilter pattern).
+    private readonly reporter?: ErrorReporterService,
+  ) {}
 
+  /** Delegates to the shared logAudit() write path (common/audit.util.ts) so
+   *  there is exactly one place that handles audit-write failures. */
   async log(
     userId: string | undefined,
     action: string,
@@ -22,15 +31,11 @@ export class AuditService {
     entityId?: string,
     meta?: Record<string, unknown>,
   ) {
-    return this.prisma.auditLog.create({
-      data: {
-        userId,
-        action,
-        entityType,
-        entityId,
-        newValue: meta as never,
-      },
-    });
+    return logAudit(
+      this.prisma,
+      { userId, action, entityType, entityId, newValue: meta },
+      (error, context) => this.reporter?.capture(error, context),
+    );
   }
 
   async list(filters: ListFilters) {

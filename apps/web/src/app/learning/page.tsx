@@ -157,7 +157,8 @@ export default function LearningPage() {
     setError(null);
     setNotice(null);
     try {
-      const r = await api<MineResult>(`/learning/bots/${botId}/mine`, { method: 'POST' });
+      const { jobId } = await api<{ jobId: string }>(`/learning/bots/${botId}/mine`, { method: 'POST' });
+      const r = await pollMineJob(jobId);
       const total = r.knowledge + r.persona + r.customerMemory + r.playbook;
       setNotice(
         total === 0
@@ -177,6 +178,16 @@ export default function LearningPage() {
       setError(e instanceof Error ? e.message : t('mineError'));
     } finally {
       setMining(false);
+    }
+  }
+
+  async function pollMineJob(jobId: string): Promise<MineResult> {
+    for (;;) {
+      const { status, result } = await api<{ status: string; result?: MineResult }>(
+        `/learning/mine-jobs/${jobId}`,
+      );
+      if (status === 'completed' && result) return result;
+      await new Promise((resolve) => setTimeout(resolve, 2500));
     }
   }
 

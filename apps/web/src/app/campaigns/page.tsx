@@ -2,7 +2,7 @@
 
 import {
   MegaphoneSimple, Eye, Plus, PaperPlaneTilt, CheckCircle,
-  Pause, XCircle, ArrowCounterClockwise, X,
+  Pause, XCircle, ArrowCounterClockwise, X, Prohibit, ArrowCounterClockwise as ReverseIcon, Copy,
 } from '@phosphor-icons/react';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -31,12 +31,18 @@ export default function CampaignsPage() {
     assetOptions,
     canManage, canApprove,
     isSelectedAccountConnected, isDetailAccountConnected,
-    handlePreview, createCampaign, runAction, executeAction,
+    handlePreview, createCampaign, runAction, executeAction, duplicateCampaign,
+    showOptOut, setShowOptOut, optedOut, optedOutTotal, optOutLoading,
+    openOptOut, reverseOptOut,
   } = useCampaigns();
 
   return (
     <AppLayout>
-      <PageHeader title={t('title')} subtitle={t('subtitle')} />
+      <PageHeader title={t('title')} subtitle={t('subtitle')}>
+        <Button variant="outline" size="sm" onClick={openOptOut}>
+          <Prohibit className="h-4 w-4" aria-hidden="true" />{t('optOutButton')}
+        </Button>
+      </PageHeader>
       <div className="flex flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         {/* Left: create + list */}
         <aside className="scrollbar-thin w-96 shrink-0 overflow-y-auto border-r border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
@@ -224,6 +230,11 @@ export default function CampaignsPage() {
                       <ArrowCounterClockwise className="h-4 w-4" aria-hidden="true" />{t('retryFailed')}
                     </Button>
                   )}
+                  {canManage && (
+                    <Button variant="outline" size="sm" onClick={duplicateCampaign} disabled={submitting}>
+                      <Copy className="h-4 w-4" aria-hidden="true" />{t('duplicateAction')}
+                    </Button>
+                  )}
                 </div>
               </Card>
 
@@ -295,6 +306,40 @@ export default function CampaignsPage() {
         }
       >
         {null}
+      </Modal>
+
+      <Modal
+        open={showOptOut}
+        onClose={() => setShowOptOut(false)}
+        title={t('optOutTitle')}
+        description={t('optOutDesc')}
+        footer={<Button variant="outline" size="sm" onClick={() => setShowOptOut(false)}>{t('cancelButton')}</Button>}
+      >
+        {optOutLoading ? (
+          <div className="space-y-2">{[1, 2, 3].map((n) => <div key={n} className="h-12 rounded-lg animate-shimmer" />)}</div>
+        ) : optedOut.length === 0 ? (
+          <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">{t('optOutEmpty')}</p>
+        ) : (
+          <>
+            <p className="mb-2 text-xs text-gray-400">{t('optOutTotal', { n: optedOutTotal })}</p>
+            <ul className="scrollbar-thin max-h-[50vh] divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800">
+              {optedOut.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm text-gray-900 dark:text-gray-100">{c.name || c.phoneNumber}</div>
+                    <div className="text-xs text-gray-400">
+                      {c.phoneNumber}
+                      {c.optedOutAt ? ` · ${t('optOutSince', { date: new Date(c.optedOutAt).toLocaleDateString('id-ID') })}` : ''}
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => reverseOptOut(c.id)} disabled={submitting}>
+                    <ReverseIcon className="h-4 w-4" aria-hidden="true" />{t('optInAction')}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </Modal>
     </AppLayout>
   );

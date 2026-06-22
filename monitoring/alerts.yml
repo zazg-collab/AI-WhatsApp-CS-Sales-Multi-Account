@@ -1,0 +1,102 @@
+groups:
+  - name: hermes-api
+    rules:
+      # Dead-man's switch: if Prometheus stops seeing the API's own metrics, the
+      # API is down or unreachable — this must fire even when everything else is
+      # silent, so route it as Critical/always-on in Alertmanager.
+      - alert: HermesApiUnreachable
+        expr: absent(up{job="hermes-api"} == 1)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Hermes API metrics endpoint unreachable for 5m"
+          description: "Prometheus has not scraped hermes-api successfully for 5 minutes. The app may be down or /api/v1/metrics is unreachable."
+
+      - alert: WhatsAppAccountDown
+        expr: sum(wa_session_state{state=~"disconnected|banned"}) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $value }} WhatsApp account(s) disconnected or banned"
+          description: "At least one WhatsApp session has been disconnected/banned for 5 minutes. Check /api/v1/health/whatsapp."
+
+      - alert: AiFallbackRateHigh
+        expr: |
+          (
+            sum(rate(ai_requests_total{outcome="fallback"}[10m]))
+            /
+            clamp_min(sum(rate(ai_requests_total[10m])), 0.001)
+          ) > 0.2
+        for: 10m
+        labels:
+          severity: high
+        annotations:
+          summary: "AI fallback rate above 20% over 10m"
+          description: "More than 20% of AI provider calls are falling back. Check AI_BASE_URL/AI_API_KEY and provider status."
+
+      - alert: HttpErrorRateHigh
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(http_requests_total[5m])), 0.001)
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: high
+        annotations:
+          summary: "5xx rate above 5% over 5m"
+          description: "More than 5% of HTTP responses are 5xx. Check application logs/ErrorReporter webhook for stack traces."
+
+      - alert: QueueBacklogFailed
+        expr: sum(bullmq_jobs{state="failed"}) by (queue) > 0
+        for: 15m
+        labels:
+          severity: high
+        annotations:
+          summary: "Failed jobs stuck in {{ $labels.queue }} queue"
+          description: "The {{ $labels.queue }} BullMQ queue has failed jobs that have not been retried/cleared for 15 minutes."
+
+      - alert: QueueBacklogWaiting
+        expr: sum(bullmq_jobs{state="waiting"}) by (queue) > 50
+        for: 15m
+        labels:
+          severity: medium
+        annotations:
+          summary: "{{ $labels.queue }} queue backlog over 50 waiting jobs"
+          description: "Waiting job count in {{ $labels.queue }} has exceeded 50 for 15 minutes — worker may be stalled."
+
+      - alert: HermesReviewBlockSpike
+        expr: |
+          sum(rate(hermes_reviews_total{decision=~"block|takeover_required"}[15m]))
+          >
+          (sum(rate(hermes_reviews_total{decision=~"block|takeover_required"}[1h] offset 1h)) * 2 + 0.01)
+        for: 15m
+        labels:
+          severity: medium
+        annotations:
+          summary: "Hermes block/takeover decisions spiking"
+          description: "Hermes is blocking or requiring takeover at more than 2x the rate of the prior hour — possible prompt/rule regression."
+
+      - alert: ApiLatencyP95High
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 10m
+        labels:
+          severity: medium
+        annotations:
+          summary: "API p95 latency above 2s"
+          description: "95th percentile HTTP request duration has exceeded 2s for 10 minutes."
+
+      - alert: NotificationChannelFailing
+        expr: |
+          sum(rate(hermes_notification_send_total{outcome="error"}[30m]))
+          /
+          clamp_min(sum(rate(hermes_notification_send_total[30m])), 0.001) > 0.5
+        for: 30m
+        labels:
+          severity: high
+        annotations:
+          summary: "Outbound alert channel (hermes send) failing"
+          description: "Over half of outbound notification sends have failed in the last 30 minutes — alerts may not be reaching anyone. Check HERMES_BIN/HERMES_NOTIFY_TARGET."

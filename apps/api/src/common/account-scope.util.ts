@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Minimal caller shape — id + role is all account scoping needs. */
@@ -42,4 +43,39 @@ export function accountFilter(
     return { in: scope.includes(requestedAccountId) ? [requestedAccountId] : [] };
   }
   return { in: scope };
+}
+
+/**
+ * True when `user` is allowed to touch a resource on `whatsappAccountId`.
+ * Unrestricted roles (scope === null) always pass.
+ */
+export async function canAccessAccount(
+  prisma: PrismaService,
+  whatsappAccountId: string,
+  user?: ScopedUser,
+): Promise<boolean> {
+  const scope = await allowedAccountIds(prisma, user);
+  return scope === null || scope.includes(whatsappAccountId);
+}
+
+/**
+ * Guard a conversation read/mutation by the caller's account scope. Throws the
+ * same NotFoundException the detail endpoint uses so callers can't probe which
+ * conversation ids exist outside their scope. Returns the conversation's
+ * account id for reuse.
+ */
+export async function assertConversationScope(
+  prisma: PrismaService,
+  conversationId: string,
+  user?: ScopedUser,
+): Promise<string> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { whatsappAccountId: true },
+  });
+  if (!conversation) throw new NotFoundException('Conversation not found');
+  if (!(await canAccessAccount(prisma, conversation.whatsappAccountId, user))) {
+    throw new NotFoundException('Conversation not found');
+  }
+  return conversation.whatsappAccountId;
 }

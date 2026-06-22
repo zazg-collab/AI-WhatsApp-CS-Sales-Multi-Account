@@ -11,7 +11,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
@@ -85,6 +85,10 @@ export class KnowledgeController {
     return this.knowledge.updateItem(id, dto);
   }
 
+  // Integration note: API-only. The knowledge page uses the dry-run parse flow
+  // (parse/upload + parse-url) so the user reviews/edits before saving, instead
+  // of this blind direct-persist. Kept for programmatic/bulk ingestion.
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Ingest a document (pdf/docx/xlsx/csv/txt/md/html) as knowledge items' })
   @ApiConsumes('multipart/form-data')
   @Roles('owner', 'supervisor', 'admin')
@@ -99,6 +103,9 @@ export class KnowledgeController {
     return this.knowledge.ingestFile(id, file, user.id);
   }
 
+  // Integration note: API-only. Superseded in the UI by the parse-url dry-run
+  // flow (see the items/upload note above). Kept for programmatic ingestion.
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Ingest a public web page as knowledge items' })
   @Roles('owner', 'supervisor', 'admin')
   @Post('knowledge-bases/:id/items/from-url')

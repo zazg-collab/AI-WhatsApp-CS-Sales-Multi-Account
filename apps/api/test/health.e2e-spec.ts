@@ -15,6 +15,17 @@ describe('Health (e2e)', () => {
 
   const prismaMock = {
     $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
+    // JwtStrategy re-validates against the DB on every request; the token's
+    // `sub` carries the role so the strategy resolves an active user with it.
+    user: {
+      findUnique: jest.fn(({ where }: { where: { id: string } }) => ({
+        id: where.id,
+        email: `${where.id}@x.com`,
+        role: where.id,
+        status: 'active',
+        deletedAt: null,
+      })),
+    },
   };
 
   const healthQueueMock = {
@@ -49,8 +60,9 @@ describe('Health (e2e)', () => {
     await app.close();
   });
 
+  // sub carries the role; the strategy re-derives the effective role from the DB.
   const tokenFor = (role: string) =>
-    jwt.sign({ sub: 'u1', email: 'u@example.com', role });
+    jwt.sign({ sub: role, email: 'u@example.com', role });
 
   it('GET /api/v1/health → 200 ok', async () => {
     const res = await request(app.getHttpServer())

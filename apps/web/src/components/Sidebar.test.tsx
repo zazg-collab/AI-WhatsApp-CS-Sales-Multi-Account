@@ -55,10 +55,10 @@ describe('Sidebar', () => {
     expect(inactive?.className).not.toContain('bg-hermes-50');
   });
 
-  it('logs out and navigates home', async () => {
+  it('logs out and navigates to the login page', async () => {
     render(<Sidebar />);
     await userEvent.click(screen.getByTitle('Sign out'));
-    expect(pushMock).toHaveBeenCalledWith('/');
+    expect(pushMock).toHaveBeenCalledWith('/login');
   });
 
   it('treats a malformed token as no role', () => {

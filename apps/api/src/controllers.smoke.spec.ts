@@ -132,7 +132,11 @@ describe('UsersController', () => {
     await expect(c.update('u1', { role: 'owner' } as any, { id: 'u1', role: 'admin' } as any)).rejects.toThrow(ForbiddenException);
   });
   it('changePassword enforces self/owner', () => {
-    c.changePassword('u1', {} as any, { id: 'u1', role: 'admin' } as any);
+    // self change requires the current password
+    c.changePassword('u1', { oldPassword: 'old', newPassword: 'newpass12' } as any, { id: 'u1', role: 'admin' } as any);
+    // self change without the current password is rejected
+    expect(() => c.changePassword('u1', {} as any, { id: 'u1', role: 'admin' } as any)).toThrow(ForbiddenException);
+    // changing another user's password (non-owner) is rejected
     expect(() => c.changePassword('u2', {} as any, { id: 'u1', role: 'admin' } as any)).toThrow(ForbiddenException);
   });
 });

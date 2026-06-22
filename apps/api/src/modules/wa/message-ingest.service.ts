@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiMode, MessageStatus, MessageType, SenderType, TakeoverStatus, Prisma } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -7,6 +7,7 @@ import { AutoAssignService } from './auto-assign.service';
 import { ContactSyncService } from './contact-sync.service';
 import { logAudit } from '../../common/audit.util';
 import { isGroupJid, isOptOutMessage, jidToPhone } from './wa.util';
+import { MetricsService } from '../../common/metrics/metrics.service';
 
 interface IncomingMessage {
   accountId: string;
@@ -49,12 +50,16 @@ export class MessageIngestService {
     private readonly autoAssign: AutoAssignService,
     private readonly contactSync: ContactSyncService,
     config: ConfigService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {
     const h = Number(config.get('CSAT_WINDOW_HOURS'));
     this.csatWindowHours = Number.isFinite(h) && h > 0 ? h : 24;
   }
 
   async ingest(msg: IncomingMessage) {
+    // Receipt-to-dashboard-emit timer for the PRD's "<2s display" SLI. Skip
+    // backfills/history-sync — they're not on the live-delivery path.
+    const ingestStartedAt = msg.suppressAutomation ? null : Date.now();
     const groupChat = isGroupJid(msg.remoteJid);
     let phone = groupChat ? msg.remoteJid : jidToPhone(msg.remoteJid);
 
@@ -242,6 +247,9 @@ export class MessageIngestService {
       conversationId: conversation.id,
       message,
     });
+    if (ingestStartedAt !== null) {
+      this.metrics?.messageIngestDuration.observe((Date.now() - ingestStartedAt) / 1000);
+    }
 
     let csatCaptured = false;
     if (!fromMe && !msg.suppressAutomation) {

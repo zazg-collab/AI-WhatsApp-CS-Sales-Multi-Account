@@ -21,6 +21,8 @@ export interface Customer {
   assignedAdminId?: string | null;
   assignedAdmin?: { id: string; name: string; email?: string } | null;
   avatarUrl?: string | null;
+  optedOut?: boolean;
+  optedOutAt?: string | null;
 }
 
 export interface User {
@@ -125,7 +127,7 @@ export function useCustomers() {
     // Ranked by open-conversation load (ascending) so the least-busy admin is
     // surfaced first for assignment.
     api<User[]>('/users/workload')
-      .then((users) => setAdmins(users))
+      .then((users) => setAdmins(Array.isArray(users) ? users : []))
       .catch(() => setAdmins([]));
   }, [canLoadAdmins]);
 

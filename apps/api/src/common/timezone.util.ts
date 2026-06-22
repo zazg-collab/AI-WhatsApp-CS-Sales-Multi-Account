@@ -4,39 +4,21 @@
  */
 export function convertToUTC(localTimeStr: string, timezone: string): Date {
   try {
-    const localDate = new Date(localTimeStr);
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    });
+    // Treat the wall-clock string as if it were UTC to get a reference instant.
+    // The host's own timezone never enters the calculation below, so the result
+    // is identical regardless of where this code runs (dev box or CI).
+    const hasZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(localTimeStr);
+    const asIfUtc = new Date(hasZone ? localTimeStr : `${localTimeStr}Z`);
+    if (Number.isNaN(asIfUtc.getTime())) return new Date(localTimeStr);
 
-    const parts = formatter.formatToParts(localDate);
-    const tzDate = {
-      year: parseInt(parts.find((p) => p.type === 'year')?.value || '2000'),
-      month: parseInt(parts.find((p) => p.type === 'month')?.value || '1') - 1,
-      day: parseInt(parts.find((p) => p.type === 'day')?.value || '1'),
-      hour: parseInt(parts.find((p) => p.type === 'hour')?.value || '0'),
-      minute: parseInt(parts.find((p) => p.type === 'minute')?.value || '0'),
-      second: parseInt(parts.find((p) => p.type === 'second')?.value || '0'),
-    };
-
-    const tzDateObj = new Date(
-      tzDate.year,
-      tzDate.month,
-      tzDate.day,
-      tzDate.hour,
-      tzDate.minute,
-      tzDate.second,
-    );
-    const offset = localDate.getTime() - tzDateObj.getTime();
-    const utcDate = new Date(localDate.getTime() - offset);
-    return utcDate;
+    // How does that instant read on the wall clock in the target timezone vs UTC?
+    // The difference is the target zone's offset, which we subtract to land on the
+    // real UTC instant for the requested wall-clock time. en-US formatting is used
+    // identically for both sides, so its parsing quirks cancel out.
+    const tzWall = new Date(asIfUtc.toLocaleString('en-US', { timeZone: timezone }));
+    const utcWall = new Date(asIfUtc.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const offset = tzWall.getTime() - utcWall.getTime();
+    return new Date(asIfUtc.getTime() - offset);
   } catch {
     return new Date(localTimeStr);
   }

@@ -16,7 +16,9 @@ services:
   redis:
     restart: always
     ports: []
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispass}
+    # No weak default: deploy fails loudly if REDIS_PASSWORD is unset rather than
+    # shipping a guessable password to production.
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in production}
     deploy:
       resources:
         limits:
@@ -26,6 +28,11 @@ services:
     restart: always
     environment:
       - NODE_ENV=production
+      # Redis now requires a password in prod — the connection string must carry
+      # it or the API can't reach the queue/cache.
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in production}@redis:6379
+      # Encrypts external credentials at rest; must be a strong random value in prod.
+      - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY:?SECRET_ENCRYPTION_KEY must be set in production}
     deploy:
       resources:
         limits:
@@ -35,8 +42,10 @@ services:
     restart: always
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://YOUR_SERVER_IP/api/v1}
-      - NEXT_PUBLIC_SOCKET_URL=${NEXT_PUBLIC_SOCKET_URL:-http://YOUR_SERVER_IP}
+      # Required, no placeholder default — an unset/wrong public URL silently ships
+      # a broken frontend. Fail fast instead.
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL must be set in production}
+      - NEXT_PUBLIC_SOCKET_URL=${NEXT_PUBLIC_SOCKET_URL:?NEXT_PUBLIC_SOCKET_URL must be set in production}
     deploy:
       resources:
         limits:

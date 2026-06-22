@@ -6,7 +6,25 @@ on:
   pull_request:
     branches: [master, main]
 
+# Cancel superseded runs on the same ref so a rapid series of pushes doesn't pile
+# up redundant CI.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   lint-and-build:
     name: Lint & Build
     runs-on: ubuntu-latest
@@ -81,6 +99,11 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate
 
+      # Source-level hardening guard (env template, security middleware, validation
+      # pipe, shutdown hooks, readiness endpoint). It existed but gated nothing.
+      - name: QA hardening checks
+        run: npm test
+
       - name: API unit tests
         run: npm run test --workspace=@hermes/api
 
@@ -136,3 +159,9 @@ jobs:
       - name: Verify schema matches migrations (no drift)
         run: npx prisma migrate diff --exit-code --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma
         working-directory: packages/database
+
+      # Real-DB integration tests (account-scope isolation). These mock nothing
+      # at the data layer — the one place a tenant-isolation leak would hide.
+      # Skipped automatically when DATABASE_URL is unset (e.g. local runs).
+      - name: Account-scope isolation tests (real Postgres)
+        run: npm run test:int --workspace=@hermes/api

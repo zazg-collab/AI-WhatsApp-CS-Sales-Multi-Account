@@ -17,34 +17,34 @@ function Probe() {
       <span data-testid="picked">{t('picked', { n: 3 })}</span>
       <span data-testid="missing">{t('does.not.exist')}</span>
       <span data-testid="lang">{lang}</span>
-      <button onClick={() => setLang('en')}>EN</button>
+      <button onClick={() => setLang('id')}>ID</button>
     </div>
   );
 }
 
 describe('i18n', () => {
-  it('defaults to Indonesian when no provider is mounted', () => {
+  it('defaults to English when no provider is mounted', () => {
     render(<Probe />);
-    expect(screen.getByTestId('greeting')).toHaveTextContent('Halo');
-    expect(screen.getByTestId('lang')).toHaveTextContent('id');
+    expect(screen.getByTestId('greeting')).toHaveTextContent('Hello');
+    expect(screen.getByTestId('lang')).toHaveTextContent('en');
   });
 
   it('interpolates {vars} and falls back to the raw key when missing', () => {
     render(<Probe />);
-    expect(screen.getByTestId('picked')).toHaveTextContent('3 dipilih');
+    expect(screen.getByTestId('picked')).toHaveTextContent('3 selected');
     expect(screen.getByTestId('missing')).toHaveTextContent('does.not.exist');
   });
 
-  it('switches every phrase to English via the provider', async () => {
+  it('switches every phrase to Indonesian via the provider', async () => {
     render(
       <LanguageProvider>
         <Probe />
       </LanguageProvider>,
     );
-    expect(screen.getByTestId('greeting')).toHaveTextContent('Halo');
-    await userEvent.click(screen.getByRole('button', { name: 'EN' }));
-    expect(screen.getByTestId('lang')).toHaveTextContent('en');
     expect(screen.getByTestId('greeting')).toHaveTextContent('Hello');
-    expect(screen.getByTestId('picked')).toHaveTextContent('3 selected');
+    await userEvent.click(screen.getByRole('button', { name: 'ID' }));
+    expect(screen.getByTestId('lang')).toHaveTextContent('id');
+    expect(screen.getByTestId('greeting')).toHaveTextContent('Halo');
+    expect(screen.getByTestId('picked')).toHaveTextContent('3 dipilih');
   });
 });

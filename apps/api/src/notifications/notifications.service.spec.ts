@@ -5,7 +5,8 @@ describe('NotificationsService', () => {
     const settings = {
       notifications: async () => ({ hermesNotifyTarget: env.HERMES_NOTIFY_TARGET ?? '' }),
     } as any;
-    return new NotificationsService({ get: (k: string) => env[k] } as any, settings);
+    const metrics = { notificationSend: { inc: () => undefined } } as any;
+    return new NotificationsService({ get: (k: string) => env[k] } as any, settings, metrics);
   }
 
   it('disabled when no target', () => {

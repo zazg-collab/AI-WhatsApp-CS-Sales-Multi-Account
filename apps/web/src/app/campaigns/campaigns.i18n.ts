@@ -102,4 +102,21 @@ export const dict: Dict = {
   confirmActionTitle: { id: 'Konfirmasi aksi', en: 'Confirm action' },
   confirmActionButton: { id: 'Ya, lanjutkan', en: 'Yes, continue' },
   cancelButton: { id: 'Batal', en: 'Cancel' },
+  // Opt-out / opt-in management
+  optOutButton: { id: 'Daftar opt-out', en: 'Opt-out list' },
+  optOutTitle: { id: 'Pelanggan opt-out kampanye', en: 'Campaign opt-out list' },
+  optOutDesc: {
+    id: 'Pelanggan ini dikecualikan dari semua campaign. Kembalikan untuk menyertakan mereka lagi.',
+    en: 'These customers are excluded from all campaigns. Reverse to include them again.',
+  },
+  optOutTotal: { id: '{n} pelanggan opt-out', en: '{n} opted-out customers' },
+  optOutEmpty: { id: 'Belum ada pelanggan yang opt-out.', en: 'No customers have opted out.' },
+  optInAction: { id: 'Kembalikan', en: 'Reverse' },
+  optOutSince: { id: 'Sejak {date}', en: 'Since {date}' },
+  toastOptOutLoad: { id: 'Gagal memuat daftar opt-out.', en: 'Failed to load opt-out list.' },
+  toastOptInOk: { id: 'Pelanggan dikembalikan ke campaign.', en: 'Customer re-included in campaigns.' },
+  toastOptInFailed: { id: 'Gagal mengembalikan pelanggan.', en: 'Failed to reverse opt-out.' },
+  duplicateAction: { id: 'Duplikat', en: 'Duplicate' },
+  toastDuplicated: { id: 'Campaign diduplikat sebagai draf baru.', en: 'Campaign duplicated as a new draft.' },
+  toastDuplicateFailed: { id: 'Gagal menduplikat campaign.', en: 'Failed to duplicate campaign.' },
 };

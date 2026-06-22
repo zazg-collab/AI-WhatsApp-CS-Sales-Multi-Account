@@ -22,7 +22,9 @@ describe('ConversationsService', () => {
       conversation: {
         count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([]),
-        findUnique: jest.fn(),
+        // Default to an in-scope conversation so assertConversationScope passes;
+        // tests that exercise the not-found path override this with null.
+        findUnique: jest.fn().mockResolvedValue({ whatsappAccountId: 'a1' }),
         findFirst: jest.fn(),
         create: jest.fn().mockResolvedValue({ id: 'c1', status: 'open' }),
         update: jest.fn().mockResolvedValue({ id: 'c1' }),
@@ -41,6 +43,7 @@ describe('ConversationsService', () => {
       customer: {
         upsert: jest.fn().mockResolvedValue({ id: 'cu1', phoneNumber: '628123' }),
         update: jest.fn().mockResolvedValue({}),
+        findFirst: jest.fn().mockResolvedValue(null),
       },
       bot: {
         findUnique: jest.fn(),
@@ -66,6 +69,7 @@ describe('ConversationsService', () => {
       setDisappearingMessages: jest.fn().mockResolvedValue(undefined),
       setMessageStarred: jest.fn().mockResolvedValue(undefined),
       sendTyping: jest.fn().mockResolvedValue(undefined),
+      forwardMessage: jest.fn().mockResolvedValue('ext-fwd'),
     };
     events = { emit: jest.fn(), emitToAccount: jest.fn() };
     storage = { save: jest.fn().mockResolvedValue({ key: 'k.png', url: '/media/k.png' }), read: jest.fn() };
@@ -170,6 +174,45 @@ describe('ConversationsService', () => {
       prisma.message.findFirst.mockResolvedValue(null);
       await expect(messaging.send('c1', 'admin', 'reply', 'q1')).rejects.toThrow(BadRequestException);
       expect(wa.sendText).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('forwardMessage', () => {
+    beforeEach(() => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
+      });
+    });
+
+    it('rejects an empty/garbage destination number before sending', async () => {
+      prisma.message.findFirst.mockResolvedValue({ id: 'm1', messageType: 'text', content: 'hi', mediaUrl: null });
+      await expect(messaging.forwardMessage('c1', 'm1', 'abc', 'admin')).rejects.toThrow(BadRequestException);
+      expect(wa.forwardMessage).not.toHaveBeenCalled();
+      expect(wa.sendMedia).not.toHaveBeenCalled();
+    });
+
+    it('forwards a text message to the normalized number', async () => {
+      prisma.message.findFirst.mockResolvedValue({ id: 'm1', messageType: 'text', content: 'hi', mediaUrl: null });
+      wa.forwardMessage.mockResolvedValue('wamid-fwd');
+      const res = await messaging.forwardMessage('c1', 'm1', '08123456789', 'admin');
+      expect(wa.forwardMessage).toHaveBeenCalledWith('a1', '628123456789', 'hi');
+      expect(res).toEqual({ success: true, externalId: 'wamid-fwd' });
+    });
+
+    it('re-sends media (not just text) when forwarding a media message', async () => {
+      prisma.message.findFirst.mockResolvedValue({ id: 'm1', messageType: 'image', content: 'caption', mediaUrl: '/media/x.jpg' });
+      wa.sendMedia.mockResolvedValue('wamid-media');
+      await messaging.forwardMessage('c1', 'm1', '628999000111', 'admin');
+      expect(wa.sendMedia).toHaveBeenCalledWith('a1', '628999000111', 'image', '/media/x.jpg', 'caption');
+      expect(wa.forwardMessage).not.toHaveBeenCalled();
+    });
+
+    it('rejects forwarding to a number that has opted out', async () => {
+      prisma.message.findFirst.mockResolvedValue({ id: 'm1', messageType: 'text', content: 'hi', mediaUrl: null });
+      prisma.customer.findFirst.mockResolvedValue({ id: 'cu-out' });
+      await expect(messaging.forwardMessage('c1', 'm1', '628123456789', 'admin')).rejects.toThrow(BadRequestException);
+      expect(wa.forwardMessage).not.toHaveBeenCalled();
+      expect(wa.sendMedia).not.toHaveBeenCalled();
     });
   });
 
@@ -465,7 +508,7 @@ describe('ConversationsService', () => {
       routeMocks({ id: 'm1', externalId: 'wamid1', reactions: null, senderType: 'customer' });
       prisma.message.update.mockResolvedValue({ id: 'm1', reactions: { '👍': ['me'] } });
       await messaging.reactToMessage('c1', 'm1', '👍', 'admin');
-      expect(wa.sendReaction).toHaveBeenCalledWith('a1', '628', 'wamid1', '👍');
+      expect(wa.sendReaction).toHaveBeenCalledWith('a1', '628', 'wamid1', '👍', false);
       expect(prisma.message.update.mock.calls[0][0].data.reactions['👍']).toContain('me');
       expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'message:reaction', expect.anything());
     });

@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { LeadStage } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
+import { MetricsService } from '../../common/metrics/metrics.service';
 import {
   AiProviderService,
   ChatMessage,
@@ -18,7 +19,11 @@ import {
   SENTIMENT_NO_MESSAGES,
   SUMMARIZE_SYSTEM,
   SUMMARIZE_USER,
+  FALLBACK_PHRASE,
 } from '../../i18n/bot-prompts';
+
+/** All fallback-phrase variants (all languages) — marks an AI "punt to admin". */
+const FALLBACK_MARKERS = Object.values(FALLBACK_PHRASE) as string[];
 
 export interface GeneratedReply {
   text: string;
@@ -51,6 +56,7 @@ export class AiService {
     private readonly prompts: PromptBuilderService,
     private readonly notifications: NotificationsService,
     private readonly cache: AiCacheService,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   cacheStats() {
@@ -95,16 +101,30 @@ export class AiService {
       if (botId) {
         const hit = this.cache.get(botId, lastUser as string);
         if (hit !== null) {
+          this.metrics?.aiRequests.inc({ outcome: 'cache' });
           return { text: hit, model: resolvedModel };
         }
       }
     }
 
-    const text = await this.provider.chat(messages, {
-      model,
-      // temperature omitted → uses the admin-configured value from settings.
-      maxTokens: 500,
-    });
+    let text: string;
+    const stopTimer = this.metrics?.aiRequestDuration.startTimer();
+    try {
+      text = await this.provider.chat(messages, {
+        model,
+        // temperature omitted → uses the admin-configured value from settings.
+        maxTokens: 500,
+      });
+    } catch (err) {
+      stopTimer?.();
+      this.metrics?.aiRequests.inc({ outcome: 'error' });
+      throw err;
+    }
+    stopTimer?.();
+    // "fallback" = the bot punted to the admin-confirm phrase (a quality signal,
+    // mirrors Hermes knowledge-gap detection); everything else is a real answer.
+    const outcome = FALLBACK_MARKERS.some((m) => text.includes(m)) ? 'fallback' : 'success';
+    this.metrics?.aiRequests.inc({ outcome });
 
     if (cacheable && botId) {
       this.cache.set(botId, lastUser as string, text);

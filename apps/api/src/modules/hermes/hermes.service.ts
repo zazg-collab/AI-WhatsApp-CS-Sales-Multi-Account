@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import {
   HermesDecision,
   HermesReview,
@@ -11,6 +11,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { AiProviderService } from '../ai/ai-provider.service';
 import { PromptBuilderService } from '../ai/prompt-builder.service';
 import { HermesAgentClient } from './hermes-agent.client';
+import { MetricsService } from '../../common/metrics/metrics.service';
 import { hermesSystemPrompt } from './hermes-prompt';
 import {
   t,
@@ -57,6 +58,7 @@ export class HermesService {
     private readonly events: EventsGateway,
     private readonly notifications: NotificationsService,
     private readonly agent: HermesAgentClient,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   /**
@@ -112,6 +114,7 @@ export class HermesService {
         recommendation: llm.recommendation,
       },
     });
+    this.metrics?.hermesReviews.inc({ decision: String(decision) });
 
     if (ACTIONABLE.includes(decision) || riskLevel === RiskLevel.critical) {
       this.events.emitToAccount(conversation.whatsappAccountId, 'hermes:alert', { conversationId, review });

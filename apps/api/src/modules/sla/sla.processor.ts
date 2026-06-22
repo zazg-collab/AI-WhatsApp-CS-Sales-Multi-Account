@@ -3,7 +3,7 @@ import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { SlaService } from './sla.service';
 
-@Processor('sla')
+@Processor('sla', { concurrency: 2 })
 export class SlaProcessor extends WorkerHost {
   private readonly logger = new Logger(SlaProcessor.name);
 

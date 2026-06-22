@@ -22,11 +22,18 @@ import { EditProposalDto, ListProposalsQueryDto } from './dto/learning.dto';
 export class LearningController {
   constructor(private readonly learning: LearningService) {}
 
-  @ApiOperation({ summary: 'Mine learning proposals for a bot from chat history' })
+  @ApiOperation({ summary: 'Queue a mining job for a bot from chat history (poll mine-jobs/:jobId)' })
   @Roles('owner', 'supervisor')
   @Post('bots/:botId/mine')
   mine(@Param('botId') botId: string) {
-    return this.learning.mineAll(botId);
+    return this.learning.queueMineAll(botId);
+  }
+
+  @ApiOperation({ summary: 'Check status/result of a queued mining job' })
+  @Roles('owner', 'supervisor')
+  @Get('mine-jobs/:jobId')
+  mineJob(@Param('jobId') jobId: string) {
+    return this.learning.getMineJob(jobId);
   }
 
   @ApiOperation({ summary: 'Suggest the best-fit bot/persona for a conversation (advisory)' })

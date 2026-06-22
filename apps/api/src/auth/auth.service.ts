@@ -32,11 +32,25 @@ export class AuthService {
       },
     });
     if (!user || user.status !== 'active' || user.deletedAt) {
+      // Same generic message/action for "no such user" and "inactive" so the
+      // response and the audit trail never reveal which case it was (no
+      // account-enumeration signal), while still recording the attempt.
+      await logAudit(this.prisma, {
+        action: 'login_failed',
+        entityType: 'user',
+        entityId: dto.email,
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) {
+      await logAudit(this.prisma, {
+        userId: user.id,
+        action: 'login_failed',
+        entityType: 'user',
+        entityId: user.id,
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 

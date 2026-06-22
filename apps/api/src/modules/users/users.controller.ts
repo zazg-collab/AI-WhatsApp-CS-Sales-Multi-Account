@@ -99,10 +99,16 @@ export class UsersController {
     @Body() dto: ChangePasswordDto,
     @CurrentUser() user: AuthUser,
   ) {
-    // Allow user to change their own password, or owner to change any password
+    // Allow user to change their own password, or owner to change any password.
+    const isOwnerReset = id !== user.id && user.role === 'owner';
     if (id !== user.id && user.role !== 'owner') {
       throw new ForbiddenException('You can only change your own password');
     }
-    return this.users.changePassword(id, dto);
+    // Self-service must prove the current password; an owner reset bypasses it
+    // (they can't know the target's old password).
+    if (!isOwnerReset && !dto.oldPassword) {
+      throw new ForbiddenException('Current password is required');
+    }
+    return this.users.changePassword(id, dto, user.id, isOwnerReset);
   }
 }

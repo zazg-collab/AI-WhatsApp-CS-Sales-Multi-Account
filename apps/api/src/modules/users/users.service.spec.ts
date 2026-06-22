@@ -126,22 +126,37 @@ describe('UsersService', () => {
     it('throws when user missing', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
       await expect(
-        service.changePassword('x', { oldPassword: 'o', newPassword: 'n' } as any),
+        service.changePassword('x', { oldPassword: 'o', newPassword: 'n' } as any, 'actor'),
       ).rejects.toThrow(NotFoundException);
     });
     it('throws when old password wrong', async () => {
       prisma.user.findUnique.mockResolvedValue({ ...safeUser, passwordHash: 'h' });
       mockedBcrypt.compare.mockResolvedValue(false as never);
       await expect(
-        service.changePassword('u1', { oldPassword: 'bad', newPassword: 'n' } as any),
+        service.changePassword('u1', { oldPassword: 'bad', newPassword: 'n' } as any, 'actor'),
       ).rejects.toThrow(BadRequestException);
     });
     it('hashes new password when old verifies', async () => {
       prisma.user.findUnique.mockResolvedValue({ ...safeUser, passwordHash: 'h' });
       mockedBcrypt.compare.mockResolvedValue(true as never);
       mockedBcrypt.hash.mockResolvedValue('newhash' as never);
-      await service.changePassword('u1', { oldPassword: 'o', newPassword: 'n' } as any);
+      await service.changePassword('u1', { oldPassword: 'o', newPassword: 'n' } as any, 'actor');
       expect(prisma.user.update.mock.calls[0][0].data.passwordHash).toBe('newhash');
+    });
+    it('skips old-password check for an owner reset and audits it', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...safeUser, passwordHash: 'h' });
+      mockedBcrypt.hash.mockResolvedValue('resethash' as never);
+      // No oldPassword supplied — the reset path must still succeed (it would
+      // throw BadRequestException if the old-password gate ran).
+      await service.changePassword('u1', { newPassword: 'n' } as any, 'owner1', true);
+      expect(prisma.user.update.mock.calls[0][0].data.passwordHash).toBe('resethash');
+      expect(audit.log).toHaveBeenCalledWith(
+        'owner1',
+        'user_password_changed',
+        'User',
+        'u1',
+        { reset: true },
+      );
     });
   });
 });

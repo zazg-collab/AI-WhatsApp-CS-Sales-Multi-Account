@@ -16,6 +16,7 @@ export default function HermesPage() {
     chatEndRef, liveRegionRef,
     load, ask,
     heldOrBlocked, approvalRate, blockRate,
+    snapshot, gaps, bots, selectedBotId, insight, insightLoading, loadInsight,
   } = useHermes();
 
   return (
@@ -70,6 +71,93 @@ export default function HermesPage() {
             <Button type="submit" size="md" disabled={asking}><PaperPlaneTilt className="h-4 w-4" aria-hidden="true" />{t('ask')}</Button>
           </form>
         </Card>
+
+        {!loadError && !loading && snapshot && (
+          <Card className="mb-5 p-4">
+            <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <ShieldStar className="h-4 w-4 text-hermes-600" aria-hidden="true" />{t('botPerformance')}
+            </h2>
+            <p className="mb-3 text-xs text-gray-400">{t('botPerfHint')}</p>
+            {snapshot.bots.length === 0 ? (
+              <p className="text-sm text-gray-400">{t('noBotPerf')}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-[11px] uppercase tracking-wider text-gray-400">
+                      <th className="pb-2 font-medium">{t('colBot')}</th>
+                      <th className="pb-2 text-right font-medium">{t('colReviews')}</th>
+                      <th className="pb-2 text-right font-medium">{t('colAvgConf')}</th>
+                      <th className="pb-2 text-right font-medium">{t('colAvgRisk')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {snapshot.bots.map((b, i) => (
+                      <tr key={`${b.bot}-${i}`} className="border-t border-gray-100 dark:border-gray-800">
+                        <td className="py-1.5 text-gray-900 dark:text-gray-100">{b.bot}</td>
+                        <td className="py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-300">{b.reviews}</td>
+                        <td className="py-1.5 text-right tabular-nums text-gray-600 dark:text-gray-300">{b.avgConfidence}</td>
+                        <td className={`py-1.5 text-right tabular-nums ${b.avgRisk >= 50 ? 'text-danger-600' : 'text-gray-600 dark:text-gray-300'}`}>{b.avgRisk}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Per-bot deep dive (PRD §8.3) */}
+            <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800">
+              <p className="mb-2 text-xs text-gray-400">{t('deepDiveHint')}</p>
+              <select
+                value={selectedBotId}
+                onChange={(e) => loadInsight(e.target.value)}
+                aria-label={t('deepDive')}
+                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              >
+                <option value="">{t('deepDivePick')}</option>
+                {bots.map((b) => <option key={b.id} value={b.id}>{b.botName}</option>)}
+              </select>
+              {insightLoading && <p className="mt-3 text-sm text-gray-400">{t('analyzingBot')}</p>}
+              {insight && !insightLoading && (
+                <div className="mt-3 space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    <Badge tone="neutral">{t('colReviews')}: {insight.metrics.reviews}</Badge>
+                    <Badge tone="neutral">{t('colAvgConf')}: {insight.metrics.avgConfidence}</Badge>
+                    <Badge tone={insight.metrics.avgRisk >= 50 ? 'danger' : 'neutral'}>{t('colAvgRisk')}: {insight.metrics.avgRisk}</Badge>
+                  </div>
+                  <p className="whitespace-pre-wrap rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-900 dark:bg-gray-800 dark:text-gray-100">{insight.insight}</p>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {!loadError && !loading && (
+          <Card className="mb-5 p-4">
+            <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <ChatCircle className="h-4 w-4 text-hermes-600" aria-hidden="true" />{t('knowledgeGaps')}
+              <Badge tone={gaps.length > 0 ? 'review' : 'neutral'}>{gaps.length}</Badge>
+            </h2>
+            <p className="mb-3 text-xs text-gray-400">{t('knowledgeGapsHint')}</p>
+            {gaps.length === 0 ? (
+              <p className="text-sm text-gray-400">{t('noKnowledgeGaps')}</p>
+            ) : (
+              <ul className="space-y-2">
+                {gaps.slice(0, 15).map((g) => (
+                  <li key={g.id} className="rounded-lg border border-gray-100 px-3 py-2 dark:border-gray-800">
+                    <div className="mb-0.5 flex items-center justify-between gap-2">
+                      <span className="truncate text-xs font-medium text-gray-600 dark:text-gray-300">
+                        {g.conversation?.customer?.name || g.conversation?.customer?.phoneNumber || t('customer')}
+                      </span>
+                      <span className="shrink-0 text-[11px] text-gray-400">{relTime(g.createdAt)}</span>
+                    </div>
+                    <p className="line-clamp-2 text-sm text-gray-900 dark:text-gray-100">{g.content}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        )}
 
         {loading && !loadError && (
           <div className="space-y-2">{[1,2].map((n) => <div key={n} className="h-24 rounded animate-shimmer" />)}</div>

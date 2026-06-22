@@ -28,8 +28,9 @@ describe('AuditPage', () => {
     });
     render(<AuditPage />);
     expect(await screen.findByText('Audit Log')).toBeInTheDocument();
-    expect(await screen.findByText('login')).toBeInTheDocument();
-    expect(screen.getByText('Owner')).toBeInTheDocument();
+    // Entries render in both the desktop table and the mobile card layout.
+    expect((await screen.findAllByText('login')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Owner').length).toBeGreaterThan(0);
   });
 
   it('renders gracefully with no data', async () => {

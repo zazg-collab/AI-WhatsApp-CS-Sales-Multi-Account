@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { LeadStage, Prisma } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BulkCustomerActionDto, UpdateCustomerDto } from './dto/customers.dto';
 import { allowedAccountIds, type ScopedUser } from '../../common/account-scope.util';
+import { MAX_EXPORT_ROWS } from '../../common/export-limits';
 
 interface ListFilters {
   stage?: LeadStage;
@@ -31,6 +32,8 @@ function customerScopeWhere(scope: string[] | null, user?: ScopedUser): Prisma.C
 
 @Injectable()
 export class CustomersService {
+  private readonly logger = new Logger(CustomersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -181,11 +184,17 @@ export class CustomersService {
         { phoneNumber: { contains: filters.search } },
       ];
     }
-    return this.prisma.customer.findMany({
+    const rows = await this.prisma.customer.findMany({
       where,
       orderBy: { lastMessageAt: 'desc' },
-      take: 10000,
+      take: MAX_EXPORT_ROWS,
     });
+    if (rows.length === MAX_EXPORT_ROWS) {
+      this.logger.warn(
+        `Customer export hit the ${MAX_EXPORT_ROWS}-row cap; narrow the filters to get a complete export.`,
+      );
+    }
+    return rows;
   }
 
   /**

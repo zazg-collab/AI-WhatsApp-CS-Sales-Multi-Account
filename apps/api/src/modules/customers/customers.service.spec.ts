@@ -1,6 +1,7 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { LeadStage } from '@hermes/database';
 import { CustomersService } from './customers.service';
+import { MAX_EXPORT_ROWS } from '../../common/export-limits';
 
 describe('CustomersService', () => {
   let service: CustomersService;
@@ -139,9 +140,19 @@ describe('CustomersService', () => {
   });
 
   describe('exportList', () => {
-    it('returns customers with large take', async () => {
+    it('returns customers with a capped take', async () => {
       await service.exportList({ stage: LeadStage.warm });
-      expect(prisma.customer.findMany.mock.calls[0][0].take).toBe(10000);
+      expect(prisma.customer.findMany.mock.calls[0][0].take).toBe(MAX_EXPORT_ROWS);
+    });
+
+    it('warns when the export hits the cap', async () => {
+      prisma.customer.findMany.mockResolvedValueOnce(
+        Array.from({ length: MAX_EXPORT_ROWS }, (_, i) => ({ id: String(i) })),
+      );
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      await service.exportList({ stage: LeadStage.warm });
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
   });
 });

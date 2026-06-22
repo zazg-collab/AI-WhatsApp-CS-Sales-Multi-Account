@@ -1,5 +1,5 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { DashboardService } from './dashboard.service';
@@ -45,18 +45,23 @@ export class DashboardController {
     return this.dashboardService.getPerformanceOverview(parseInt(days, 10));
   }
 
+  // Integration note: API-only drill-downs. The monitoring page reads the
+  // aggregate GET /dashboard/performance, which already embeds these metrics.
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Get response time metrics' })
   @Get('performance/response-time')
   getResponseTime(@Query('days') days = '7') {
     return this.dashboardService.getResponseTime(parseInt(days, 10));
   }
 
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Get AI quality metrics' })
   @Get('performance/ai-quality')
   getAiQuality(@Query('days') days = '7') {
     return this.dashboardService.getAiQuality(parseInt(days, 10));
   }
 
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Get campaign performance metrics' })
   @Get('performance/campaigns')
   getCampaignPerformance(@Query('days') days = '7') {

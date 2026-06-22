@@ -38,9 +38,15 @@ data/
 .claude/
 nul
 
+# Redesign-skill scaffolding / scratch artifacts (not for VCS)
+shared-references/
+frontend_redesign_skill_flow.md
+scripts/redesign_quality_gate.py
+
 # agent scratch
 .claude_*
 
 # portable Hermes Agent runtime (large binaries — never commit)
 hermes-portable/
 memory/
+.serena/

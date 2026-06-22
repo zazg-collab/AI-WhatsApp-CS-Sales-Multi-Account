@@ -46,7 +46,8 @@ describe('MonitoringPage', () => {
     apiMock.mockImplementation(routed);
     render(<MonitoringPage />);
     expect(await screen.findByText(/Admin workload/)).toBeInTheDocument();
-    expect(await screen.findByText('Ani')).toBeInTheDocument();
+    // Workload rows render in both the desktop table and the mobile card layout.
+    expect((await screen.findAllByText('Ani')).length).toBeGreaterThan(0);
   });
 
   it('renders the CSAT card', async () => {

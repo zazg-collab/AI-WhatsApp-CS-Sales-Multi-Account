@@ -8,6 +8,11 @@ export class SecurityHeadersMiddleware implements NestMiddleware {
     res.setHeader('x-frame-options', 'DENY');
     res.setHeader('referrer-policy', 'no-referrer');
     res.setHeader('permissions-policy', 'camera=(), microphone=(), geolocation=()');
+    // Force HTTPS for a year (incl. subdomains) once deployed behind TLS. Only
+    // emitted in production so local http:// dev isn't pinned to HSTS.
+    if (process.env.NODE_ENV === 'production') {
+      res.setHeader('strict-transport-security', 'max-age=31536000; includeSubDomains');
+    }
     next();
   }
 }

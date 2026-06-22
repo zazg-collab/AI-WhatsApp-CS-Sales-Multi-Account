@@ -24,7 +24,8 @@ describe('UsersPage', () => {
     });
     render(<UsersPage />);
     expect(await screen.findByRole('heading', { name: 'Team' })).toBeInTheDocument();
-    expect(await screen.findByText('Owner')).toBeInTheDocument();
+    // Name renders in both the desktop table and the mobile card layout.
+    expect((await screen.findAllByText('Owner')).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /Create user/ })).toBeInTheDocument();
   });
 

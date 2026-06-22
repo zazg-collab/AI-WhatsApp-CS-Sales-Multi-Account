@@ -1,8 +1,9 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { memo, useRef, useState } from 'react';
 import {
   ArrowBendUpLeft,
+  ArrowBendUpRight,
   PencilSimple,
   Trash,
   Star,
@@ -23,6 +24,13 @@ const dict: Dict = {
   react: { id: 'Beri reaksi', en: 'React' },
   star: { id: 'Bintangi', en: 'Star' },
   unstar: { id: 'Hapus bintang', en: 'Unstar' },
+  forward: { id: 'Teruskan', en: 'Forward' },
+  forwardTo: { id: 'Teruskan ke nomor', en: 'Forward to number' },
+  forwardPlaceholder: { id: 'Nomor tujuan, mis. 628123…', en: 'Target number, e.g. 628123…' },
+  forwardSend: { id: 'Teruskan', en: 'Forward' },
+  forwardSending: { id: 'Mengirim…', en: 'Sending…' },
+  forwardError: { id: 'Gagal meneruskan. Periksa nomor & koneksi akun.', en: 'Forward failed. Check the number & account connection.' },
+  forwardInvalid: { id: 'Masukkan nomor yang valid (mis. 628123456789).', en: 'Enter a valid number (e.g. 628123456789).' },
   edit: { id: 'Edit', en: 'Edit' },
   retract: { id: 'Tarik pesan', en: 'Retract' },
 };
@@ -40,9 +48,10 @@ interface ChatThreadMessageProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onStar?: (starred: boolean) => void;
+  onForward?: (toPhone: string) => Promise<boolean>;
 }
 
-export function ChatThreadMessage({
+function ChatThreadMessageImpl({
   message: m,
   isCustomer,
   hoveredId,
@@ -53,9 +62,13 @@ export function ChatThreadMessage({
   onEdit,
   onDelete,
   onStar,
+  onForward,
 }: ChatThreadMessageProps) {
   const t = useT(dict);
   const [showReactions, setShowReactions] = useState(false);
+  const [showForward, setShowForward] = useState(false);
+  const [forwardPhone, setForwardPhone] = useState('');
+  const [forwardState, setForwardState] = useState<'idle' | 'sending' | 'error'>('idle');
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   const isDeleted = m.deletedAt !== null && m.deletedAt !== undefined;
@@ -135,6 +148,72 @@ export function ChatThreadMessage({
             >
               <Star className={cn('h-4 w-4', m.isStarred && 'fill-amber-400 text-amber-400')} aria-hidden="true" />
             </button>
+          )}
+
+          {onForward && (
+            <div className="relative">
+              <button
+                type="button"
+                className={actionBtn}
+                onClick={() => setShowForward((v) => !v)}
+                aria-label={t('forward')}
+                title={t('forward')}
+              >
+                <ArrowBendUpRight className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <Popover
+                open={showForward}
+                onClose={() => { setShowForward(false); setForwardState('idle'); }}
+                align={isCustomer ? 'left' : 'right'}
+                side="top"
+              >
+                <form
+                  className="flex flex-col gap-2 p-2"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (forwardState === 'sending') return;
+                    // Mirror the server guard (normalizePhone collapses non-digits):
+                    // a WA number is well over 8 digits, so reject short/garbage input.
+                    const digits = forwardPhone.replace(/\D/g, '');
+                    if (digits.length < 8) { setForwardState('error'); return; }
+                    setForwardState('sending');
+                    // The forwarded message lands in a different conversation, so the
+                    // current timeline won't reflect it — await the result and only
+                    // close on success; keep the popover open with an error otherwise.
+                    const ok = await onForward(digits);
+                    if (ok) {
+                      setForwardPhone('');
+                      setForwardState('idle');
+                      setShowForward(false);
+                    } else {
+                      setForwardState('error');
+                    }
+                  }}
+                >
+                  <label className="text-[11px] font-medium text-gray-500 dark:text-gray-400">{t('forwardTo')}</label>
+                  <input
+                    type="tel"
+                    value={forwardPhone}
+                    onChange={(e) => { setForwardPhone(e.target.value); if (forwardState === 'error') setForwardState('idle'); }}
+                    placeholder={t('forwardPlaceholder')}
+                    className="w-52 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-900 outline-none focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    autoFocus
+                  />
+                  {forwardState === 'error' && (
+                    <p className="text-[11px] text-danger-600 dark:text-danger-400" role="alert">
+                      {forwardPhone.replace(/\D/g, '').length < 8 ? t('forwardInvalid') : t('forwardError')}
+                    </p>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={!forwardPhone.trim() || forwardState === 'sending'}
+                    className="rounded-md bg-hermes-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-hermes-700 disabled:opacity-50"
+                  >
+                    {forwardState === 'sending' ? t('forwardSending') : t('forwardSend')}
+                  </button>
+                </form>
+              </Popover>
+            </div>
           )}
 
           {canModify && onEdit && (
@@ -228,3 +307,22 @@ export function ChatThreadMessage({
     </div>
   );
 }
+
+// hoveredId changes on every mouse move across the timeline; without this custom
+// comparator, every bubble would re-render on every hover transition even though
+// only the previously-hovered and newly-hovered row's appearance actually changes.
+export const ChatThreadMessage = memo(ChatThreadMessageImpl, (prev, next) => {
+  if (prev.message !== next.message) return false;
+  if (prev.isCustomer !== next.isCustomer) return false;
+  if (prev.onHoverEnter !== next.onHoverEnter) return false;
+  if (prev.onHoverExit !== next.onHoverExit) return false;
+  if (prev.onReact !== next.onReact) return false;
+  if (prev.onReply !== next.onReply) return false;
+  if (prev.onEdit !== next.onEdit) return false;
+  if (prev.onDelete !== next.onDelete) return false;
+  if (prev.onStar !== next.onStar) return false;
+  if (prev.onForward !== next.onForward) return false;
+  const wasHovered = prev.hoveredId === prev.message.id;
+  const isHovered = next.hoveredId === next.message.id;
+  return wasHovered === isHovered;
+});

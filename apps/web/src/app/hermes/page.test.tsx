@@ -23,7 +23,7 @@ describe('HermesPage', () => {
       return Promise.resolve(null);
     });
     render(<HermesPage />);
-    expect(await screen.findByText('Messages today')).toBeInTheDocument();
+    expect(await screen.findByText('Approval rate')).toBeInTheDocument();
     expect(await screen.findByText('legal')).toBeInTheDocument();
   });
 
@@ -40,7 +40,8 @@ describe('HermesPage', () => {
     const input = screen.getByPlaceholderText(/.+/);
     await userEvent.type(input, 'Bagaimana performa?');
     await userEvent.keyboard('{Enter}');
-    expect(await screen.findByText('Semua baik')).toBeInTheDocument();
+    // "Semua baik" renders in both the chat bubble and the sr-only live region.
+    expect((await screen.findAllByText('Semua baik')).length).toBeGreaterThan(0);
     expect(apiMock).toHaveBeenCalledWith('/hermes/ask', expect.objectContaining({ method: 'POST' }));
   });
 });

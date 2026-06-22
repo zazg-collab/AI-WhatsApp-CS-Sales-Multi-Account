@@ -53,7 +53,7 @@ describe('BotsService', () => {
   it('create maps defaults', async () => {
     await service.create({ botName: 'Bot' } as any);
     const data = prisma.bot.create.mock.calls[0][0].data;
-    expect(data.language).toBe('id');
+    expect(data.language).toBe('en');
     expect(data.status).toBe('draft');
   });
 

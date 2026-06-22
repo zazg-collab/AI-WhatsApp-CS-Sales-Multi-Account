@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { MagnifyingGlass, ArrowsClockwise, AddressBook } from '@phosphor-icons/react';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -140,7 +141,7 @@ export default function CustomersPage() {
                           <div className="flex items-center gap-2.5">
                             <Avatar name={customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-8 w-8 text-[11px] font-semibold" />
                             <div className="min-w-0">
-                              <div className="truncate font-medium text-gray-900 dark:text-gray-100">{customer.name || t('noName')}</div>
+                              <Link href={`/customers/${customer.id}`} className="block truncate font-medium text-gray-900 hover:text-hermes-600 hover:underline dark:text-gray-100 dark:hover:text-hermes-400">{customer.name || t('noName')}</Link>
                               <div className="text-xs text-gray-400">{formatPhone(customer.phoneNumber, t('hiddenNumber'))}</div>
                             </div>
                           </div>

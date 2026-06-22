@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { WaService } from '../wa/wa.service';
 import { MediaStorageService } from '../media/media-storage.service';
-import { extForMimetype } from '../wa/wa.util';
+import { extForMimetype, normalizePhone } from '../wa/wa.util';
 import { assertSafeMediaUrl } from '../../common/media-url.util';
 import { logAudit } from '../../common/audit.util';
 
@@ -382,13 +382,21 @@ export class ConversationMessagingService {
       where: { id },
       data: { unreadCount: 0 },
     });
+    // Tell every other connected admin the unread badge is cleared — without
+    // this, a conversation read on one screen still shows unread elsewhere
+    // until a full list reload.
+    this.events.emitToAccount(conversation.whatsappAccountId, 'conversation:updated', {
+      conversationId: id,
+      unreadCount: 0,
+    });
     return { marked: externalIds.length };
   }
 
   async reactToMessage(id: string, messageId: string, emoji: string, adminId: string) {
     const { conversation, message } = await this.messageWithRoute(id, messageId);
     if (message.externalId) {
-      await this.wa.sendReaction(conversation.whatsappAccountId, conversation.customer.phoneNumber, message.externalId, emoji);
+      const fromMe = message.senderType !== SenderType.customer;
+      await this.wa.sendReaction(conversation.whatsappAccountId, conversation.customer.phoneNumber, message.externalId, emoji, fromMe);
     }
     const map: Record<string, string[]> = (message.reactions as Record<string, string[]>) ?? {};
     for (const key of Object.keys(map)) {
@@ -484,18 +492,59 @@ export class ConversationMessagingService {
 
   async forwardMessage(id: string, messageId: string, toPhone: string, adminId: string) {
     const { conversation, message } = await this.messageWithRoute(id, messageId);
-    const digits = toPhone.replace(/[^\d]/g, '').replace(/^0/, '62');
-    const externalId = await this.wa.forwardMessage(
-      conversation.whatsappAccountId,
-      digits,
-      message.content ?? '',
-    );
+    const digits = normalizePhone(toPhone);
+    // Guard against malformed targets: normalizePhone strips non-digits, so a
+    // value like "abc" collapses to "" and would otherwise build an empty JID
+    // ("@s.whatsapp.net") and send to nowhere. WA numbers are well over 8 digits.
+    if (digits.length < 8) {
+      throw new BadRequestException('A valid destination phone number is required');
+    }
+    // Respect opt-out: if the destination matches a known customer who has
+    // opted out of messaging, refuse the forward (mirrors the campaign gate).
+    const optedOut = await this.prisma.customer.findFirst({
+      where: { phoneNumber: digits, optedOut: true },
+      select: { id: true },
+    });
+    if (optedOut) {
+      throw new BadRequestException('This number has opted out of messages and cannot be contacted');
+    }
+
+    // A media message must be forwarded with its media — sending only
+    // `message.content` silently dropped images/docs/audio/video, delivering an
+    // empty (or text-only) message to the recipient. Re-send the media when the
+    // original carried a media URL; fall back to text otherwise.
+    const MEDIA_TYPES: Record<string, 'image' | 'document' | 'audio' | 'video'> = {
+      [MessageType.image]: 'image',
+      [MessageType.video]: 'video',
+      [MessageType.audio]: 'audio',
+      [MessageType.voice]: 'audio',
+      [MessageType.document]: 'document',
+      [MessageType.sticker]: 'document',
+    };
+    const mediaType = MEDIA_TYPES[message.messageType];
+
+    let externalId: string | null;
+    if (mediaType && message.mediaUrl) {
+      externalId = await this.wa.sendMedia(
+        conversation.whatsappAccountId,
+        digits,
+        mediaType,
+        message.mediaUrl,
+        message.content ?? undefined,
+      );
+    } else {
+      externalId = await this.wa.forwardMessage(
+        conversation.whatsappAccountId,
+        digits,
+        message.content ?? '',
+      );
+    }
     await logAudit(this.prisma, {
       userId: adminId,
       action: 'message_forward',
       entityType: 'message',
       entityId: messageId,
-      newValue: { toPhone: digits, externalId },
+      newValue: { toPhone: digits, externalId, mediaForwarded: Boolean(mediaType && message.mediaUrl) },
     });
     return { success: true, externalId };
   }

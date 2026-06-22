@@ -27,6 +27,39 @@ export interface DailyReport {
   reviewsByDecision: Record<string, number>;
 }
 
+export interface SnapshotBot {
+  bot: string;
+  reviews: number;
+  avgConfidence: number;
+  avgRisk: number;
+}
+
+export interface Snapshot {
+  leadDistribution: Record<string, number>;
+  knowledgeGapCount: number;
+  bots: SnapshotBot[];
+}
+
+export interface KnowledgeGap {
+  id: string;
+  content: string | null;
+  createdAt?: string;
+  conversation?: { id: string; customer?: { name?: string | null; phoneNumber: string } | null };
+}
+
+export interface BotOption { id: string; botName: string }
+
+export interface BotInsight {
+  bot: string;
+  metrics: {
+    reviews: number;
+    avgConfidence: number;
+    avgRisk: number;
+    decisions: Record<string, number>;
+  };
+  insight: string;
+}
+
 export type BadgeTone = 'success' | 'review' | 'danger' | 'critical';
 
 export const RISK_TONE: Record<string, BadgeTone> = {
@@ -62,6 +95,12 @@ export function useHermes() {
   const t = useT(dict);
   const [alerts, setAlerts] = useState<Review[]>([]);
   const [report, setReport] = useState<DailyReport | null>(null);
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [gaps, setGaps] = useState<KnowledgeGap[]>([]);
+  const [bots, setBots] = useState<BotOption[]>([]);
+  const [selectedBotId, setSelectedBotId] = useState('');
+  const [insight, setInsight] = useState<BotInsight | null>(null);
+  const [insightLoading, setInsightLoading] = useState(false);
   const [question, setQuestion] = useState('');
   const [chat, setChat] = useState<{ q: string; a: string }[]>([]);
   const [asking, setAsking] = useState(false);
@@ -89,18 +128,42 @@ export function useHermes() {
   const load = useCallback(async () => {
     setLoadError(null);
     try {
-      const [a, r] = await Promise.all([
+      const [a, r, s, g] = await Promise.all([
         api<Review[]>('/hermes/alerts'),
         api<DailyReport>('/hermes/reports/daily'),
+        api<Snapshot>('/hermes/snapshot'),
+        api<KnowledgeGap[]>('/hermes/knowledge-gaps'),
       ]);
-      setAlerts(a);
+      setAlerts(Array.isArray(a) ? a : []);
       setReport(r);
+      setSnapshot(s && Array.isArray(s.bots) ? s : null);
+      setGaps(Array.isArray(g) ? g : []);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : t('errLoad'));
     } finally {
       setLoading(false);
     }
   }, [t]);
+
+  // Bot list for the deep-dive picker (best-effort; failure just hides it).
+  useEffect(() => {
+    api<BotOption[]>('/bots').then((b) => setBots(Array.isArray(b) ? b : [])).catch(() => setBots([]));
+  }, []);
+
+  // On-demand per-bot deep dive (PRD §8.3) — fetched only when a bot is picked.
+  const loadInsight = useCallback(async (botId: string) => {
+    setSelectedBotId(botId);
+    if (!botId) { setInsight(null); return; }
+    setInsightLoading(true);
+    setInsight(null);
+    try {
+      setInsight(await api<BotInsight>(`/hermes/bot/${botId}/insight`));
+    } catch {
+      setInsight(null);
+    } finally {
+      setInsightLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     load();
@@ -148,5 +211,6 @@ export function useHermes() {
     chatEndRef, liveRegionRef,
     load, ask,
     heldOrBlocked, approvalRate, blockRate,
+    snapshot, gaps, bots, selectedBotId, insight, insightLoading, loadInsight,
   };
 }

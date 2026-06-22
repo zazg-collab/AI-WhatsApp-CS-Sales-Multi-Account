@@ -3,10 +3,18 @@ name: Deploy
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    # master is this repo's primary branch (there is no `main`). Pointing the
+    # trigger at the wrong branch meant this workflow never fired.
+    branches: [master, main]
     paths:
       - 'apps/**'
       - 'packages/**'
+
+# One deploy at a time per branch; a newer push supersedes an in-flight build so
+# we never race two pushes to the mutable :latest tag.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   docker:
@@ -18,6 +26,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       # Docker registry repo names must be lowercase; github.repository is
       # "filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account" (mixed case), which
@@ -39,6 +50,9 @@ jobs:
           context: .
           file: apps/api/Dockerfile
           push: true
+          # GitHub Actions layer cache — skips re-running `npm ci` etc. on every push.
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
           tags: |
             ghcr.io/${{ steps.image.outputs.repo }}/api:${{ github.sha }}
             ghcr.io/${{ steps.image.outputs.repo }}/api:latest
@@ -49,6 +63,39 @@ jobs:
           context: .
           file: apps/web/Dockerfile
           push: true
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
           tags: |
             ghcr.io/${{ steps.image.outputs.repo }}/web:${{ github.sha }}
             ghcr.io/${{ steps.image.outputs.repo }}/web:latest
+
+  deploy:
+    name: Deploy to server (SSH)
+    needs: docker
+    runs-on: ubuntu-latest
+    # Gate on a protected environment so a reviewer can be required and secrets
+    # are scoped to production. Configure it under Settings → Environments.
+    environment: production
+    # Only runs when the deploy target is configured; otherwise the workflow
+    # stops cleanly at "build & push" instead of failing.
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy over SSH (pull new images + migrate + up)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.DEPLOY_PATH }}
+            # Snapshot the database before any migration runs (rollback safety net).
+            ./scripts/backup-db.sh
+            git fetch --all && git checkout ${{ github.sha }} || true
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+            # The api entrypoint runs `prisma migrate deploy` (fail-fast in prod)
+            # before booting, so a bad migration aborts the rollout.
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+            docker image prune -f

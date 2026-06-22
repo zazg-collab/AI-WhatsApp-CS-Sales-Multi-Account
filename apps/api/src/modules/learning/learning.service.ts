@@ -1,15 +1,36 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { MineResult } from './learning.types';
 import { LearningMinerService } from './learning-miner.service';
 import { LearningReviewService } from './learning-review.service';
+import { currentContext } from '../../common/request-context';
 
 /** Thin facade — controller and external modules depend on this. */
 @Injectable()
 export class LearningService {
   constructor(
+    @InjectQueue('learning-mine') private readonly mineQueue: Queue,
     private readonly miner: LearningMinerService,
     private readonly review: LearningReviewService,
   ) {}
+
+  /** Mining a bot's full history can take minutes (sequential LLM calls) —
+   *  queued so it survives a dropped HTTP connection and doesn't tie up the
+   *  request. Poll via getMineJob(jobId). */
+  async queueMineAll(botId: string): Promise<{ jobId: string }> {
+    const job = await this.mineQueue.add('mine-bot', { botId, requestId: currentContext().requestId });
+    return { jobId: job.id! };
+  }
+
+  async getMineJob(jobId: string): Promise<{ status: string; result?: MineResult }> {
+    const job = await this.mineQueue.getJob(jobId);
+    if (!job) throw new NotFoundException('Mine job not found');
+    const state = await job.getState();
+    if (state === 'completed') return { status: state, result: job.returnvalue as MineResult };
+    if (state === 'failed') throw new NotFoundException(`Mine job failed: ${job.failedReason}`);
+    return { status: state };
+  }
 
   mineAll(botId: string): Promise<MineResult> { return this.miner.mineAll(botId); }
   mineKnowledge(botId: string) { return this.miner.mineKnowledge(botId); }

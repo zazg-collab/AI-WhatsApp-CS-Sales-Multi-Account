@@ -14,6 +14,14 @@ export class WaSendService {
   private readonly logger = new Logger(WaSendService.name);
   private static readonly MAX_SENDS_PER_MINUTE = 20;
 
+  /**
+   * Per-account serialization chain for slot reservation. Concurrent sends to
+   * the same account must reserve their rate-limit slot one at a time, otherwise
+   * they all read `stamps.length < limit` together and burst past the cap
+   * (anti-ban hazard). Each account's chain links reservations serially.
+   */
+  private readonly throttleChains = new Map<string, Promise<unknown>>();
+
   constructor(
     private readonly store: WaSessionStore,
     private readonly settings: SettingsService,
@@ -30,22 +38,35 @@ export class WaSendService {
   }
 
   private async throttleSend(accountId: string): Promise<void> {
-    const now = Date.now();
-    const windowStart = now - 60_000;
-    const stamps = (this.store.sendTimestamps.get(accountId) ?? []).filter((t) => t > windowStart);
+    // Serialize reservation per account so concurrent sends can't all observe a
+    // sub-limit count and burst together. The chain tail is wrapped so a failed
+    // reservation never breaks the chain for subsequent sends.
+    const prev = this.throttleChains.get(accountId) ?? Promise.resolve();
+    const run = prev.then(() => this.reserveSlot(accountId));
+    this.throttleChains.set(accountId, run.catch(() => undefined));
+    await run;
+  }
 
-    if (stamps.length >= WaSendService.MAX_SENDS_PER_MINUTE) {
-      const oldest = stamps[0];
-      const wait = oldest + 60_000 - now;
+  private async reserveSlot(accountId: string): Promise<void> {
+    const limit = WaSendService.MAX_SENDS_PER_MINUTE;
+    const windowMs = 60_000;
+    let stamps = (this.store.sendTimestamps.get(accountId) ?? []).filter((t) => t > Date.now() - windowMs);
+
+    if (stamps.length >= limit) {
+      // Wait until enough of the oldest stamps expire to drop below the limit.
+      // stamps is ascending; the stamp at index (length - limit) must age out of
+      // the window before a fresh slot is available.
+      const mustExpire = stamps[stamps.length - limit];
+      const wait = mustExpire + windowMs - Date.now();
       if (wait > 0) {
         this.logger.warn(`Throttling account ${accountId}: waiting ${wait}ms (rate limit)`);
         await new Promise((resolve) => setTimeout(resolve, wait));
       }
+      stamps = (this.store.sendTimestamps.get(accountId) ?? []).filter((t) => t > Date.now() - windowMs);
     }
 
-    const fresh = (this.store.sendTimestamps.get(accountId) ?? []).filter((t) => t > Date.now() - 60_000);
-    fresh.push(Date.now());
-    this.store.sendTimestamps.set(accountId, fresh);
+    stamps.push(Date.now());
+    this.store.sendTimestamps.set(accountId, stamps);
   }
 
   async sendText(
@@ -186,11 +207,14 @@ export class WaSendService {
     return sent?.key.id ?? null;
   }
 
-  async sendReaction(accountId: string, phone: string, externalId: string, emoji: string): Promise<void> {
+  async sendReaction(accountId: string, phone: string, externalId: string, emoji: string, fromMe = false): Promise<void> {
     const session = this.store.get(accountId);
     if (!session) throw new NotFoundException(`Account ${accountId} is not connected`);
     const jid = phoneToJid(phone);
-    await session.sock.sendMessage(jid, { react: { text: emoji, key: { remoteJid: jid, id: externalId, fromMe: false } } } as never);
+    // `fromMe` must match the target message's authorship — reacting to a
+    // message we sent needs fromMe:true, otherwise WhatsApp can't resolve the
+    // message key and the reaction silently no-ops on the customer's device.
+    await session.sock.sendMessage(jid, { react: { text: emoji, key: { remoteJid: jid, id: externalId, fromMe } } } as never);
   }
 
   async editMessage(accountId: string, phone: string, externalId: string, newText: string): Promise<void> {

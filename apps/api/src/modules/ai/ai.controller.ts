@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { AiService } from './ai.service';
@@ -55,6 +55,9 @@ export class AiController {
     return this.ai.leadScore(dto.conversationId);
   }
 
+  // Integration note: API-only. Sentiment is computed inline during reply
+  // generation; this standalone endpoint has no frontend caller yet.
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Analyze customer sentiment for a conversation' })
   @Roles('admin', 'supervisor', 'owner')
   @Post('sentiment')
@@ -62,6 +65,8 @@ export class AiController {
     return this.ai.analyzeSentiment(dto.conversationId);
   }
 
+  // Integration note: API-only diagnostics — not surfaced in the UI yet.
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'AI response cache stats (owner/supervisor)' })
   @Roles('owner', 'supervisor')
   @Get('cache/stats')

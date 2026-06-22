@@ -37,7 +37,7 @@ describe('AiSettingsPage', () => {
     await screen.findByDisplayValue('http://x/v1');
 
     apiMock.mockResolvedValueOnce(['model-a', 'model-b']);
-    await userEvent.click(screen.getByRole('button', { name: /Muat daftar model/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Load model list/ }));
     await waitFor(() => expect(container.querySelector('option[value="model-a"]')).toBeTruthy());
     expect(container.querySelector('option[value="model-b"]')).toBeTruthy();
   });
@@ -48,7 +48,7 @@ describe('AiSettingsPage', () => {
     await screen.findByDisplayValue('http://x/v1');
 
     apiMock.mockRejectedValueOnce(new Error('boom'));
-    await userEvent.click(screen.getByRole('button', { name: /Muat daftar model/ }));
-    await waitFor(() => expect(screen.getByText(/Tidak ada model ditemukan/)).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /Load model list/ }));
+    await waitFor(() => expect(screen.getByText(/No models found/)).toBeInTheDocument());
   });
 });

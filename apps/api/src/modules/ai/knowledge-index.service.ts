@@ -51,18 +51,18 @@ export class KnowledgeIndexService {
    * failures so a flaky embedding provider never breaks knowledge CRUD.
    * Skips the network call when the content hash is unchanged.
    */
-  async indexItem(id: string): Promise<void> {
-    if (!(await this.embeddings.enabled())) return;
+  async indexItem(id: string): Promise<boolean> {
+    if (!(await this.embeddings.enabled())) return false;
     try {
       const item = await this.prisma.knowledgeItem.findUnique({
         where: { id },
         select: { id: true, title: true, productName: true, content: true, contentHash: true },
       });
-      if (!item) return;
+      if (!item) return false;
 
       const model = await this.embeddings.modelName();
       const hash = contentHash(model, item.title, item.content);
-      if (item.contentHash === hash) return; // unchanged — embedding still valid
+      if (item.contentHash === hash) return false; // unchanged — embedding still valid
 
       const vec = await this.embeddings.embedOne(this.embedText(item));
       await this.prisma.$executeRawUnsafe(
@@ -72,8 +72,10 @@ export class KnowledgeIndexService {
         hash,
         id,
       );
+      return true;
     } catch (err) {
       this.logger.warn(`indexItem(${id}) failed (non-fatal): ${err}`);
+      return false;
     }
   }
 
@@ -94,10 +96,7 @@ export class KnowledgeIndexService {
     });
     let n = 0;
     for (const { id } of items) {
-      const before = await this.prisma.knowledgeItem.findUnique({ where: { id }, select: { contentHash: true } });
-      await this.indexItem(id);
-      const after = await this.prisma.knowledgeItem.findUnique({ where: { id }, select: { contentHash: true } });
-      if (before?.contentHash !== after?.contentHash) n++;
+      if (await this.indexItem(id)) n++;
     }
     return n;
   }

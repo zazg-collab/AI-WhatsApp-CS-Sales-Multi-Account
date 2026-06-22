@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AiMode,
@@ -13,7 +13,8 @@ import { EventsGateway } from '../../realtime/events.gateway';
 import { WaService } from '../wa/wa.service';
 import { LearningMinerService } from '../learning/learning-miner.service';
 import { logAudit } from '../../common/audit.util';
-import { allowedAccountIds, accountFilter, type ScopedUser } from '../../common/account-scope.util';
+import { allowedAccountIds, accountFilter, assertConversationScope, type ScopedUser } from '../../common/account-scope.util';
+import { MAX_EXPORT_ROWS } from '../../common/export-limits';
 
 const DEFAULT_CSAT_MESSAGE =
   'Terima kasih sudah menghubungi kami 🙏 Boleh bantu beri nilai layanan kami? Balas angka 1–5 (1 = kurang, 5 = sangat puas).';
@@ -36,6 +37,7 @@ interface ListFilters {
 
 @Injectable()
 export class ConversationsService {
+  private readonly logger = new Logger(ConversationsService.name);
   private readonly csatEnabled: boolean;
   private readonly csatMessage: string;
   private readonly autoLearnEnabled: boolean;
@@ -99,7 +101,8 @@ export class ConversationsService {
     return { ...conversation, messages, hasMoreMessages: hasMore, oldestCursor };
   }
 
-  async getMessages(id: string, opts: { before?: string; limit?: number } = {}) {
+  async getMessages(id: string, opts: { before?: string; limit?: number } = {}, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const take = Math.min(Math.max(opts.limit ?? 50, 1), 100);
     const before = opts.before ? new Date(opts.before) : null;
 
@@ -121,14 +124,10 @@ export class ConversationsService {
     return { messages: page, hasMore, oldestCursor };
   }
 
-  async searchMessages(id: string, query: string, limit = 50) {
+  async searchMessages(id: string, query: string, limit = 50, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const q = query.trim().slice(0, 200);
     if (!q) return { items: [] };
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-    if (!conversation) throw new NotFoundException('Conversation not found');
 
     const items = await this.prisma.message.findMany({
       where: {
@@ -142,9 +141,11 @@ export class ConversationsService {
     return { items };
   }
 
-  async exportList(filters: { accountId?: string; aiMode?: AiMode; from?: string; to?: string }) {
+  async exportList(filters: { accountId?: string; aiMode?: AiMode; from?: string; to?: string; user?: ScopedUser }) {
     const where: Prisma.ConversationWhereInput = {};
-    if (filters.accountId) where.whatsappAccountId = filters.accountId;
+    const scope = await allowedAccountIds(this.prisma, filters.user);
+    const acct = accountFilter(scope, filters.accountId);
+    if (acct !== undefined) where.whatsappAccountId = acct;
     if (filters.aiMode) where.aiMode = filters.aiMode;
     if (filters.from || filters.to) {
       where.createdAt = {
@@ -152,25 +153,33 @@ export class ConversationsService {
         ...(filters.to ? { lte: new Date(filters.to) } : {}),
       };
     }
-    return this.prisma.conversation.findMany({
+    const rows = await this.prisma.conversation.findMany({
       where,
       orderBy: { lastMessageAt: 'desc' },
-      take: 10000,
+      take: MAX_EXPORT_ROWS,
       include: {
         customer: { select: { name: true, phoneNumber: true, leadStage: true } },
         _count: { select: { messages: true } },
       },
     });
+    if (rows.length === MAX_EXPORT_ROWS) {
+      this.logger.warn(
+        `Conversation export hit the ${MAX_EXPORT_ROWS}-row cap; narrow the date range to get a complete export.`,
+      );
+    }
+    return rows;
   }
 
-  setAiMode(id: string, aiMode: AiMode) {
+  async setAiMode(id: string, aiMode: AiMode, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     return this.prisma.conversation.update({
       where: { id },
       data: { aiMode },
     });
   }
 
-  async setBot(id: string, botId: string | null, actorId?: string) {
+  async setBot(id: string, botId: string | null, actorId?: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       select: { whatsappAccountId: true, botId: true },
@@ -204,7 +213,8 @@ export class ConversationsService {
     return updated;
   }
 
-  async setStatus(id: string, status: ConversationStatus, actorId?: string) {
+  async setStatus(id: string, status: ConversationStatus, actorId?: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       select: { whatsappAccountId: true, status: true, csatRequestedAt: true },
@@ -278,7 +288,8 @@ export class ConversationsService {
     return updated;
   }
 
-  async setLabels(id: string, labels: string[], actorId?: string) {
+  async setLabels(id: string, labels: string[], actorId?: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       select: { whatsappAccountId: true },
@@ -311,7 +322,8 @@ export class ConversationsService {
     return updated;
   }
 
-  async assign(id: string, adminId: string | null, actorId?: string) {
+  async assign(id: string, adminId: string | null, actorId?: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       select: { whatsappAccountId: true },
@@ -346,7 +358,8 @@ export class ConversationsService {
     return updated;
   }
 
-  async update(id: string, dto: { aiMode?: AiMode; takeoverStatus?: TakeoverStatus }) {
+  async update(id: string, dto: { aiMode?: AiMode; takeoverStatus?: TakeoverStatus }, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({ where: { id } });
     if (!conversation) throw new NotFoundException('Conversation not found');
     const data: Prisma.ConversationUpdateInput = {

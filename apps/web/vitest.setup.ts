@@ -51,9 +51,35 @@ Object.defineProperty(window, 'localStorage', {
   writable: true,
 });
 
+// sessionStorage (used by hermes chat history) — mock for consistency + clearing.
+Object.defineProperty(window, 'sessionStorage', {
+  value: new LocalStorageMock(),
+  writable: true,
+});
+
+// jsdom does not implement scrollIntoView; several views call it in effects.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = vi.fn();
+}
+
+// Default global fetch mock. The shared <Sidebar> probes `${API_URL}/health`
+// with real fetch on mount; under jsdom that hits the network and rejects
+// AFTER the test unmounts, surfacing as an "unhandled error". Returning a
+// controlled non-ok response keeps that probe inert. Tests that exercise fetch
+// directly (e.g. downloadFile) override global.fetch themselves.
+const defaultFetch = () =>
+  Promise.resolve({
+    ok: false,
+    status: 503,
+    json: () => Promise.resolve({}),
+    text: () => Promise.resolve(''),
+    blob: () => Promise.resolve(new Blob()),
+  } as unknown as Response);
+
 beforeEach(() => {
   pushMock.mockClear();
   replaceMock.mockClear();
   window.localStorage.clear();
   pathname = '/dashboard';
+  global.fetch = vi.fn(defaultFetch) as unknown as typeof fetch;
 });

@@ -26,7 +26,10 @@ import { LearningModule } from './modules/learning/learning.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { ProductsModule } from './modules/products/products.module';
 import { AgentModule } from './modules/agent/agent.module';
+import { AlertsModule } from './modules/alerts/alerts.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import { MetricsModule } from './common/metrics/metrics.module';
+import { ErrorReporterModule } from './common/error-reporter.service';
 import { RateLimitGuard } from './common/rate-limit.guard';
 import { RequestIdMiddleware } from './common/request-id.middleware';
 import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
@@ -52,6 +55,9 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
     }),
     // Lightweight queue used only by the health controller to ping Redis (M5).
     BullModule.registerQueue({ name: 'health' }),
+    // Cross-cutting observability: Prometheus /metrics + central error reporter.
+    MetricsModule,
+    ErrorReporterModule,
     PrismaModule,
     RealtimeModule,
     NotificationsModule,
@@ -75,6 +81,7 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
     AssetsModule,
     ProductsModule,
     AgentModule,
+    AlertsModule,
   ],
   controllers: [HealthController],
   providers: [

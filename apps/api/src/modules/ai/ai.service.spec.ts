@@ -8,6 +8,7 @@ describe('AiService', () => {
   let prompts: any;
   let notifications: any;
   let cache: any;
+  let metrics: any;
 
   beforeEach(() => {
     prisma = {
@@ -33,7 +34,11 @@ describe('AiService', () => {
       set: jest.fn(),
       stats: jest.fn().mockReturnValue({ size: 0, hits: 0, misses: 0, hitRate: 0 }),
     };
-    service = new AiService(prisma, provider, prompts, notifications, cache);
+    metrics = {
+      aiRequests: { inc: jest.fn() },
+      aiRequestDuration: { startTimer: jest.fn().mockReturnValue(jest.fn()) },
+    };
+    service = new AiService(prisma, provider, prompts, notifications, cache, metrics as any);
   });
 
   it('listModels + config delegate to provider', () => {
@@ -52,6 +57,21 @@ describe('AiService', () => {
       provider.chat.mockResolvedValue('x');
       const r = await service.generateReply('c1', 'gpt-foo');
       expect(r.model).toBe('gpt-foo');
+    });
+    it('counts a real answer as outcome=success', async () => {
+      provider.chat.mockResolvedValue('here is your answer');
+      await service.generateReply('c1');
+      expect(metrics.aiRequests.inc).toHaveBeenCalledWith({ outcome: 'success' });
+    });
+    it('counts the admin-confirm punt as outcome=fallback', async () => {
+      provider.chat.mockResolvedValue('Untuk info tersebut saya bantu konfirmasi dulu ke admin ya kak.');
+      await service.generateReply('c1');
+      expect(metrics.aiRequests.inc).toHaveBeenCalledWith({ outcome: 'fallback' });
+    });
+    it('counts a provider error as outcome=error and rethrows', async () => {
+      provider.chat.mockRejectedValue(new Error('boom'));
+      await expect(service.generateReply('c1')).rejects.toThrow('boom');
+      expect(metrics.aiRequests.inc).toHaveBeenCalledWith({ outcome: 'error' });
     });
   });
 

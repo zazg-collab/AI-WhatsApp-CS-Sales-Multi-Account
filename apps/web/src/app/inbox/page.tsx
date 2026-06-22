@@ -46,7 +46,7 @@ function InboxInner() {
     sendAsset, dismissAsset, suggestBot,
     sendLocation, sendPoll, sendContactCard,
     setContactBlocked, setChatMuted, setChatArchived, setChatPinned,
-    setMessageStarred, setDisappearing, saveLabels,
+    setMessageStarred, forwardMessage, setDisappearing, saveLabels,
     validateNumber, startConversation, searchContacts, assignAdmin, updateNotes, handleMediaFile,
   } = useInbox(searchParams.get('conversation'));
 
@@ -142,6 +142,7 @@ function InboxInner() {
             onReplyToMessage={quoteReply}
             onEditMessage={editSentMessage}
             onStarMessage={setMessageStarred}
+            onForwardMessage={forwardMessage}
           />
         </div>
 

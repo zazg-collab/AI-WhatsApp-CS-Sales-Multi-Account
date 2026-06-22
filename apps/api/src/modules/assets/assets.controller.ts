@@ -25,6 +25,25 @@ import {
   UpdateAssetDto,
 } from './dto/asset.dto';
 
+// Only file types the chat surface can actually render/send are accepted on
+// upload. The stored MIME is otherwise attacker-controlled (it comes from the
+// multipart header), so without this an .html/.svg/.exe could be stored and
+// later served — reject anything outside the allowlist up front.
+const ALLOWED_UPLOAD_MIME = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'video/mp4',
+  'video/3gpp',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/aac',
+  'audio/amr',
+  'application/pdf',
+]);
+
 // Curated media library: brochures, product cards, testimonials.
 @ApiTags('assets')
 @ApiBearerAuth()
@@ -62,6 +81,10 @@ export class AssetsController {
     @CurrentUser() user: AuthUser,
   ) {
     if (!file?.buffer?.length) throw new BadRequestException('No file uploaded');
+    const mime = (file.mimetype ?? '').split(';')[0].trim().toLowerCase();
+    if (!ALLOWED_UPLOAD_MIME.has(mime)) {
+      throw new BadRequestException(`Unsupported file type: ${mime || 'unknown'}`);
+    }
     return this.assets.create(dto, file, user.id);
   }
 

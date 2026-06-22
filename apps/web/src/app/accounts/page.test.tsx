@@ -46,25 +46,23 @@ describe('AccountsPage', () => {
     expect(screen.getByText(/Connected|Terhubung/)).toBeInTheDocument();
   });
 
-  it('submits a new account then reloads', async () => {
+  // The add flow is now scan-first: choosing QR creates a blank account
+  // (POST {}), then name/number auto-fill from the device and are saved via
+  // PATCH in the confirm step. This asserts the blank-create entry point.
+  it('starts the scan-first add flow by creating a blank account', async () => {
     apiMock.mockResolvedValueOnce([]); // initial load
     render(<AccountsPage />);
     await waitFor(() => expect(apiMock).toHaveBeenCalledWith('/wa/accounts'));
 
-    apiMock.mockResolvedValueOnce({}); // POST
-    apiMock.mockResolvedValueOnce([]); // reload
+    apiMock.mockResolvedValueOnce({ id: 'new1' }); // POST {} (scan-first blank create)
 
-    await userEvent.type(screen.getByPlaceholderText('Account name'), 'New Acc');
-    await userEvent.type(
-      screen.getByPlaceholderText('Number (e.g. 628123…)'),
-      '628999',
-    );
     await userEvent.click(screen.getByRole('button', { name: 'Add account' }));
+    await userEvent.click(await screen.findByText('Scan QR code'));
 
     await waitFor(() => {
       expect(apiMock).toHaveBeenCalledWith('/wa/accounts', {
         method: 'POST',
-        body: JSON.stringify({ accountName: 'New Acc', phoneNumber: '628999' }),
+        body: JSON.stringify({}),
       });
     });
   });

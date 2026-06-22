@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { spawn } from 'node:child_process';
 import { SettingsService } from '../modules/settings/settings.service';
+import { MetricsService } from '../common/metrics/metrics.service';
 
 /**
  * Outbound alert channel — delegated to the Hermes Agent messaging gateway
@@ -29,6 +30,7 @@ export class NotificationsService {
   constructor(
     config: ConfigService,
     private readonly settings: SettingsService,
+    private readonly metrics: MetricsService,
   ) {
     this.envTarget = config.get<string>('HERMES_NOTIFY_TARGET') ?? '';
     this.bin = config.get<string>('HERMES_BIN') ?? 'hermes';
@@ -43,14 +45,18 @@ export class NotificationsService {
   async send(text: string): Promise<void> {
     // Authoritative, runtime-editable target (falls back to env via settings).
     const { hermesNotifyTarget: target } = await this.settings.notifications();
-    if (!target) return;
+    if (!target) {
+      this.metrics.notificationSend.inc({ outcome: 'unconfigured' });
+      return;
+    }
     await new Promise<void>((resolve) => {
       let stderr = '';
       let settled = false;
-      const finish = () => {
+      const finish = (outcome: 'success' | 'error' | 'timeout') => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        this.metrics.notificationSend.inc({ outcome });
         resolve();
       };
       const child = spawn(this.bin, ['send', '--to', target], {
@@ -60,18 +66,20 @@ export class NotificationsService {
       const timer = setTimeout(() => {
         this.logger.warn('hermes send timed out, killing child process');
         child.kill('SIGKILL');
-        finish();
+        finish('timeout');
       }, 10_000);
       child.stderr?.on('data', (d) => (stderr += d));
       child.on('error', (err) => {
         this.logger.error(`hermes send unavailable: ${err.message}`);
-        finish();
+        finish('error');
       });
       child.on('close', (code) => {
         if (code !== 0) {
           this.logger.warn(`hermes send exited ${code}: ${stderr.trim()}`);
+          finish('error');
+          return;
         }
-        finish();
+        finish('success');
       });
       child.stdin?.end(text);
     });

@@ -151,21 +151,26 @@ Build a single workspace: `npm run build --workspace=@hermes/api` (or `@hermes/w
 ## Repository Layout
 
 ```
-apps/api/        NestJS backend. Global prefix /api/v1. Modules: auth, wa
-                 (Baileys gateway), conversations, ai, hermes, knowledge,
-                 customers — all implemented.
+apps/api/        NestJS backend. Global prefix /api/v1. Each feature lives in
+                 modules/<name>/ with its own *.module.ts, *.controller.ts,
+                 *.service.ts, dto/, and co-located *.spec.ts. Modules:
+                   agent, ai, assets, audit, bots, campaigns, conversations,
+                   customers, dashboard, followups, hermes, knowledge,
+                   learning, media, products, quick-replies, settings, sla,
+                   users, wa.
+                 Cross-cutting at src root: auth/, common/, notifications/,
+                 prisma/, realtime/, i18n/, scripts/, health.controller.ts.
   realtime/        Socket.IO hub (EventsGateway), namespace /events. Emits
                    wa:status, wa:qr, message:new.
   modules/wa/      WaService manages one Baileys connection per account
                    (sessions Map, auth persisted to WA_SESSION_DIR, auto-
-                   reconnect). MessageIngestService upserts customer +
-                   conversation + message on inbound. wa.util has jid/phone
-                   helpers + humanDelay (anti-ban).
-apps/web/        Next.js (App Router) + Tailwind. Pages: / (login),
-                 /accounts (add account + live QR scan), /dashboard (3-panel
-                 chat/search), /customers (bulk CRM actions), /campaigns (controlled outbound messaging), /monitoring (performance metrics), /admin/users.
+                   reconnect). Decomposed into focused sub-services:
+                   wa-send, wa-inbound, wa-mirror, message-ingest,
+                   contact-sync, auto-assign. wa.util has jid/phone helpers +
+                   humanDelay (anti-ban). See wa/BACKEND_REFACTORING.md.
+apps/web/        Next.js (App Router) + Tailwind. Routes under src/app/*.
                  src/lib/api.ts (JWT), src/lib/socket.ts (live).
-packages/database/  Prisma schema (all 12 PRD tables) + shared client. Import
+packages/database/  Prisma schema (all PRD tables) + shared client. Import
                  from '@hermes/database'.
 ```
 
@@ -175,6 +180,12 @@ packages/database/  Prisma schema (all 12 PRD tables) + shared client. Import
 - All Prisma tables use `@map`/`@@map` snake_case in DB but camelCase in code.
 
 ### Frontend Conventions (React/Next.js)
+> **Migration status (partial):** the target architecture below is fully
+> realized only in `features/inbox` and `features/landing`. Most other routes
+> are still fat `app/<route>/page.tsx` files that fetch + manage state inline
+> (some with a co-located `use<Feature>.ts`). When you touch one of those
+> screens, migrate it toward the pattern below rather than extending the old
+> shape. Do not assume a `features/` module exists for a given screen — check.
 - **Feature modules**: `apps/web/src/features/[feature]/` contain `components/`, `hooks/`, `[feature].types.ts`. Each feature is self-contained and exports a public API via `index.ts`.
 - **Shared data-fetching**: Use `useApiQuery<T>(path)` from `lib/hooks/useApiQuery.ts` to fetch and cache data (returns `{ data, loading, error, refetch }`). Do not directly call `api()` with inline state management.
 - **Pages** (`app/*/page.tsx`) are thin shells: they route-param lookup, render a feature component, and nothing else. No page should exceed 400 lines.

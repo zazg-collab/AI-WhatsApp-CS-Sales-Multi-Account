@@ -35,6 +35,14 @@ export interface PreviewResult {
   sample: { customerId: string; name?: string; phoneNumber: string; tags: string[] }[];
 }
 
+export interface OptedOutCustomer {
+  id: string;
+  name: string | null;
+  phoneNumber: string;
+  optedOutAt: string | null;
+  tags: string[];
+}
+
 export const statusTone: Record<string, BadgeTone> = {
   draft: 'neutral',
   pending_approval: 'review',
@@ -73,6 +81,10 @@ export function useCampaigns() {
   const [counting, setCounting] = useState(false);
   const [pendingAction, setPendingAction] = useState<{ action: 'approve' | 'start' | 'cancel'; message: string } | null>(null);
   const [assetOptions, setAssetOptions] = useState<Array<{ id: string; title: string; kind: string; purpose: string }>>([]);
+  const [showOptOut, setShowOptOut] = useState(false);
+  const [optedOut, setOptedOut] = useState<OptedOutCustomer[]>([]);
+  const [optedOutTotal, setOptedOutTotal] = useState(0);
+  const [optOutLoading, setOptOutLoading] = useState(false);
 
   const [name, setName] = useState('');
   const [messageTemplate, setMessageTemplate] = useState('');
@@ -216,6 +228,52 @@ export function useCampaigns() {
     }
   }
 
+  const loadOptedOut = useCallback(async () => {
+    setOptOutLoading(true);
+    try {
+      const r = await api<{ items: OptedOutCustomer[]; total: number }>('/campaigns/opted-out/list');
+      setOptedOut(Array.isArray(r.items) ? r.items : []);
+      setOptedOutTotal(r.total ?? 0);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : t('toastOptOutLoad'));
+    } finally {
+      setOptOutLoading(false);
+    }
+  }, [t]);
+
+  function openOptOut() {
+    setShowOptOut(true);
+    loadOptedOut();
+  }
+
+  async function reverseOptOut(customerId: string) {
+    setSubmitting(true);
+    try {
+      await api('/campaigns/opt-in', { method: 'POST', body: JSON.stringify({ customerId }) });
+      showOk(t('toastOptInOk'));
+      await loadOptedOut();
+    } catch (err) {
+      showError(err instanceof Error ? err.message : t('toastOptInFailed'));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function duplicateCampaign() {
+    if (!selectedCampaign) return;
+    setSubmitting(true);
+    try {
+      const copy = await api<Campaign>(`/campaigns/${selectedCampaign.id}/duplicate`, { method: 'POST' });
+      showOk(t('toastDuplicated'));
+      await loadCampaigns();
+      setSelectedId(copy.id);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : t('toastDuplicateFailed'));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function runAction(action: 'submit' | 'approve' | 'start' | 'pause' | 'cancel' | 'retry-failed') {
     if (!selectedCampaign) return;
     const confirmMessages: Partial<Record<typeof action, string>> = {
@@ -264,6 +322,8 @@ export function useCampaigns() {
     canManage, canApprove,
     isSelectedAccountConnected, isDetailAccountConnected,
     selectedCampaign,
-    handlePreview, createCampaign, runAction, executeAction,
+    handlePreview, createCampaign, runAction, executeAction, duplicateCampaign,
+    showOptOut, setShowOptOut, optedOut, optedOutTotal, optOutLoading,
+    openOptOut, reverseOptOut,
   };
 }

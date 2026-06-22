@@ -1,11 +1,22 @@
 'use client';
 
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { ChatThreadMessage } from './ChatThreadMessage';
 import { ChatThreadHeader, type ConversationActions } from './ChatThreadHeader';
 import { ChatComposer } from './ChatComposer';
 import { AssetBar, type Asset, type AssetSuggestion } from './AssetBar';
 import type { ConvDetail, Message } from '../inbox.types';
+
+interface RowCallbacks {
+  onHoverEnter: () => void;
+  onHoverExit: () => void;
+  onReact?: (emoji: string) => void;
+  onReply: () => void;
+  onEdit: () => void;
+  onDelete?: () => void;
+  onStar: () => void;
+  onForward?: (toPhone: string) => Promise<boolean>;
+}
 
 interface ChatThreadProps {
   conversation: ConvDetail | null;
@@ -40,6 +51,7 @@ interface ChatThreadProps {
   onReplyToMessage?: (message: Message) => void;
   onEditMessage?: (message: Message) => void;
   onStarMessage?: (messageId: string, star: boolean) => Promise<void>;
+  onForwardMessage?: (messageId: string, toPhone: string) => Promise<boolean>;
 }
 
 /**
@@ -89,6 +101,7 @@ export function ChatThread({
   onReplyToMessage,
   onEditMessage,
   onStarMessage,
+  onForwardMessage,
 }: ChatThreadProps) {
   const timelineRef = useRef<HTMLDivElement>(null);
   const convId = conversation?.id;
@@ -121,6 +134,40 @@ export function ChatThread({
     nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   };
 
+  // Per-message callback bundles, cached by message id so identical handlers
+  // are reused across renders (e.g. while the composer is being typed into).
+  // Without this, ChatThreadMessage's memo would be defeated every render by
+  // freshly-created closures, forcing every bubble in long timelines to re-render.
+  const rowCallbacksCache = useRef(new Map<string, { deps: unknown[]; bundle: RowCallbacks }>());
+  const rowCallbacks = useMemo(() => {
+    const cache = rowCallbacksCache.current;
+    const liveIds = new Set<string>();
+    const result = new Map<string, RowCallbacks>();
+    for (const message of conversation?.messages ?? []) {
+      liveIds.add(message.id);
+      const deps = [message.id, onHoverMessageEnter, onHoverMessageExit, onReactMessage, onReplyToMessage, onEditMessage, onDeleteMessage, onStarMessage, onForwardMessage, message.isStarred];
+      const cached = cache.get(message.id);
+      if (cached && deps.every((d, i) => d === cached.deps[i])) {
+        result.set(message.id, cached.bundle);
+        continue;
+      }
+      const bundle: RowCallbacks = {
+        onHoverEnter: () => onHoverMessageEnter?.(message.id),
+        onHoverExit: () => onHoverMessageExit?.(),
+        onReact: onReactMessage ? (emoji) => onReactMessage(message.id, emoji) : undefined,
+        onReply: () => onReplyToMessage?.(message),
+        onEdit: () => onEditMessage?.(message),
+        onDelete: onDeleteMessage ? () => onDeleteMessage(message.id) : undefined,
+        onStar: () => onStarMessage?.(message.id, !message.isStarred),
+        onForward: onForwardMessage ? (toPhone) => onForwardMessage(message.id, toPhone) : undefined,
+      };
+      cache.set(message.id, { deps, bundle });
+      result.set(message.id, bundle);
+    }
+    for (const id of cache.keys()) if (!liveIds.has(id)) cache.delete(id);
+    return result;
+  }, [conversation?.messages, onHoverMessageEnter, onHoverMessageExit, onReactMessage, onReplyToMessage, onEditMessage, onDeleteMessage, onStarMessage, onForwardMessage]);
+
   // Only blank the pane when there is no conversation to show. When one is
   // already open, keep the timeline mounted during busy actions (approve,
   // return-to-ai, etc.) so its scroll position is preserved — unmounting it
@@ -150,21 +197,25 @@ export function ChatThread({
             No messages yet
           </div>
         ) : (
-          conversation.messages.map((message) => (
-            <ChatThreadMessage
-              key={message.id}
-              message={message}
-              isCustomer={message.senderType === 'customer'}
-              hoveredId={hoveredMessageId || null}
-              onHoverEnter={() => onHoverMessageEnter?.(message.id)}
-              onHoverExit={() => onHoverMessageExit?.()}
-              onReact={onReactMessage ? (emoji) => onReactMessage(message.id, emoji) : undefined}
-              onReply={() => onReplyToMessage?.(message)}
-              onEdit={() => onEditMessage?.(message)}
-              onDelete={onDeleteMessage ? () => onDeleteMessage(message.id) : undefined}
-              onStar={() => onStarMessage?.(message.id, !message.isStarred)}
-            />
-          ))
+          conversation.messages.map((message) => {
+            const cb = rowCallbacks.get(message.id);
+            return (
+              <ChatThreadMessage
+                key={message.id}
+                message={message}
+                isCustomer={message.senderType === 'customer'}
+                hoveredId={hoveredMessageId || null}
+                onHoverEnter={cb?.onHoverEnter ?? (() => onHoverMessageEnter?.(message.id))}
+                onHoverExit={cb?.onHoverExit ?? (() => onHoverMessageExit?.())}
+                onReact={cb?.onReact}
+                onReply={cb?.onReply ?? (() => onReplyToMessage?.(message))}
+                onEdit={cb?.onEdit ?? (() => onEditMessage?.(message))}
+                onDelete={cb?.onDelete}
+                onStar={cb?.onStar ?? (() => onStarMessage?.(message.id, !message.isStarred))}
+                onForward={cb?.onForward}
+              />
+            );
+          })
         )}
       </div>
 

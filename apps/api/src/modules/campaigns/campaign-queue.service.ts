@@ -3,6 +3,7 @@ import { Interval } from '@nestjs/schedule';
 import { CampaignRecipientStatus, CampaignStatus } from '@hermes/database';
 import { AuditService } from '../audit/audit.service';
 import { CampaignCrudService } from './campaign-crud.service';
+import { currentContext } from '../../common/request-context';
 
 @Injectable()
 export class CampaignQueueService {
@@ -42,10 +43,19 @@ export class CampaignQueueService {
     const baseDelay = campaign.scheduledAt && campaign.scheduledAt > new Date() ? campaign.scheduledAt.getTime() - Date.now() : 0;
     const minGap = Math.ceil(60_000 / Math.max(1, campaign.rateLimitPerMinute));
     let cumulativeDelay = baseDelay;
+    // Tag each job with the requestId of the start() call that enqueued it, so
+    // logs from the (much later) async send can be traced back to who started
+    // the campaign — the requestId of the eventual job-processing context is
+    // otherwise unrelated to any HTTP request.
+    const { requestId } = currentContext();
 
     for (const recipient of recipients) {
       cumulativeDelay += Math.max(minGap, this.randomDelay(campaign.humanDelayMinMs, campaign.humanDelayMaxMs));
-      await this.crud.campaignsQueue.add('send-recipient', { recipientId: recipient.id }, { delay: cumulativeDelay, jobId: `campaign-recipient-${recipient.id}` });
+      await this.crud.campaignsQueue.add(
+        'send-recipient',
+        { recipientId: recipient.id, requestId },
+        { delay: cumulativeDelay, jobId: `campaign-recipient-${recipient.id}` },
+      );
     }
 
     const updated = await this.crud.prisma.campaign.update({
@@ -55,6 +65,45 @@ export class CampaignQueueService {
     await this.crud.prisma.campaignRecipient.updateMany({ where: { id: { in: recipients.map((r) => r.id) } }, data: { status: CampaignRecipientStatus.queued, error: null } });
     await this.audit.log(userId, 'campaign_started', 'Campaign', id, { queuedCount: recipients.length, rateLimitPerMinute: campaign.rateLimitPerMinute, scheduledAt: campaign.scheduledAt });
     return updated;
+  }
+
+  // A recipient claimed into `sending` is freed only by processRecipient
+  // completing. If the worker crashes after the claim, or markRecipientSent
+  // exhausts its retries, the recipient is stranded in `sending` forever —
+  // blocking campaign completion (refreshCampaignCompletion never counts it).
+  // Sweep recipients stuck there past the timeout to a terminal `failed` so the
+  // campaign can finish. We do NOT re-queue: a stuck recipient may already have
+  // been delivered, and re-sending risks a duplicate message (anti-ban rule).
+  static readonly STUCK_SENDING_TIMEOUT_MS = 10 * 60 * 1000;
+
+  @Interval(120_000)
+  async reapStuckRecipients() {
+    try {
+      const cutoff = new Date(Date.now() - CampaignQueueService.STUCK_SENDING_TIMEOUT_MS);
+      const stuck = await this.crud.prisma.campaignRecipient.findMany({
+        where: { status: CampaignRecipientStatus.sending, updatedAt: { lt: cutoff } },
+        select: { id: true, campaignId: true },
+      });
+      if (stuck.length === 0) return;
+      const affectedCampaigns = new Set<string>();
+      for (const r of stuck) {
+        // Atomic guard: only flip if it's still `sending` (a late completion may
+        // have moved it to `sent` between the read and the write).
+        const claimed = await this.crud.prisma.campaignRecipient.updateMany({
+          where: { id: r.id, status: CampaignRecipientStatus.sending },
+          data: { status: CampaignRecipientStatus.failed, error: 'Stuck in sending past timeout — not retried (may have already delivered)' },
+        });
+        if (claimed.count > 0) {
+          affectedCampaigns.add(r.campaignId);
+          this.logger.warn(`Campaign recipient ${r.id} reaped from stuck \`sending\` → \`failed\` (not retried).`);
+        }
+      }
+      for (const campaignId of affectedCampaigns) {
+        await this.crud.refreshCampaignCompletion(campaignId);
+      }
+    } catch (err) {
+      this.logger.error(`reapStuckRecipients failed: ${err}`);
+    }
   }
 
   @Interval(60_000)

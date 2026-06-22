@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { WaService } from '../wa/wa.service';
 import { CreateFollowUpDto } from './dto/create-followup.dto';
 import { convertToUTC } from '../../common/timezone.util';
+import { currentContext } from '../../common/request-context';
 
 @Injectable()
 export class FollowUpsService {
@@ -39,9 +40,10 @@ export class FollowUpsService {
       },
     });
 
+    const { requestId } = currentContext();
     const job = await this.followUpsQueue.add(
       'send-followup',
-      { followUpId: followUp.id },
+      { followUpId: followUp.id, requestId },
       { delay, jobId: `followup-${followUp.id}` },
     );
 

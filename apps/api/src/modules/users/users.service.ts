@@ -155,6 +155,11 @@ export class UsersService {
     });
     if (!existing || existing.deletedAt) throw new NotFoundException('User not found');
 
+    // Block demoting the last remaining owner (lockout protection).
+    if (dto.role && dto.role !== Role.owner && existing.role === Role.owner) {
+      await this.assertNotLastOwner(id);
+    }
+
     // Check if new email already exists (if changing email)
     if (dto.email && dto.email !== existing.email) {
       const conflict = await this.prisma.user.findUnique({
@@ -215,6 +220,9 @@ export class UsersService {
     });
     if (!existing || existing.deletedAt) throw new NotFoundException('User not found');
 
+    // Block deleting the last remaining owner (lockout protection).
+    await this.assertNotLastOwner(id);
+
     await this.prisma.user.update({
       where: { id },
       data: { deletedAt: new Date() },
@@ -227,18 +235,29 @@ export class UsersService {
   }
 
   /**
-   * Change password: verify old password, hash new password.
+   * Change password.
+   *
+   * Normal (self-service) path verifies the caller's current password. An
+   * owner resetting *another* user's forgotten password passes
+   * `skipOldPasswordCheck` — they can't know the victim's old password, so the
+   * old-password gate would make admin reset impossible. The controller only
+   * sets this flag for an owner acting on a different account. Every change is
+   * audited (without logging the password itself).
    */
   async changePassword(
     userId: string,
     dto: ChangePasswordDto,
+    actorId: string,
+    skipOldPasswordCheck = false,
   ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
 
-    // Verify old password
-    const valid = await bcrypt.compare(dto.oldPassword, user.passwordHash);
-    if (!valid) throw new BadRequestException('Old password is incorrect');
+    if (!skipOldPasswordCheck) {
+      // Verify old password
+      const valid = await bcrypt.compare(dto.oldPassword ?? '', user.passwordHash);
+      if (!valid) throw new BadRequestException('Old password is incorrect');
+    }
 
     // Hash new password
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
@@ -258,6 +277,35 @@ export class UsersService {
       },
     });
 
+    await this.audit.log(actorId, 'user_password_changed', 'User', userId, {
+      reset: skipOldPasswordCheck,
+    });
+
     return updated;
+  }
+
+  /**
+   * Throw if changing/removing this user's owner role would leave the system
+   * with no active owner. Called before role downgrade and before delete.
+   */
+  private async assertNotLastOwner(targetId: string) {
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+      select: { role: true },
+    });
+    if (target?.role !== Role.owner) return;
+    const otherOwners = await this.prisma.user.count({
+      where: {
+        id: { not: targetId },
+        role: Role.owner,
+        status: 'active',
+        deletedAt: null,
+      },
+    });
+    if (otherOwners === 0) {
+      throw new BadRequestException(
+        'Cannot remove the last active owner — assign another owner first',
+      );
+    }
   }
 }

@@ -18,6 +18,8 @@ import { KnowledgeIndexService } from '../ai/knowledge-index.service';
 
 const URL_FETCH_TIMEOUT_MS = 15_000;
 const URL_MAX_BYTES = 5 * 1024 * 1024;
+/** Bound the manual redirect chain so each hop can be SSRF-re-validated. */
+const MAX_URL_REDIRECTS = 5;
 /** Cap on the content preview returned by the dry-run parse endpoints. */
 const PREVIEW_MAX_CHARS = 12_000;
 
@@ -159,14 +161,31 @@ export class KnowledgeService {
     // Same SSRF rules as media fetching: https/http only, no private ranges.
     assertSafeMediaUrl(url);
 
+    // Follow redirects manually so every hop is re-validated. With
+    // redirect:'follow', an attacker-controlled public host can 302 to
+    // http://169.254.169.254/... and the initial assertSafeMediaUrl above would
+    // never see the final (internal) target — the classic SSRF redirect bypass.
     let res: Response;
+    let currentUrl = url;
     try {
-      res = await fetch(url, {
-        signal: AbortSignal.timeout(URL_FETCH_TIMEOUT_MS),
-        headers: { 'user-agent': 'HermesKnowledgeBot/1.0' },
-        redirect: 'follow',
-      });
-    } catch {
+      for (let hop = 0; ; hop++) {
+        if (hop > MAX_URL_REDIRECTS) {
+          throw new BadRequestException('Terlalu banyak pengalihan (redirect) URL');
+        }
+        res = await fetch(currentUrl, {
+          signal: AbortSignal.timeout(URL_FETCH_TIMEOUT_MS),
+          headers: { 'user-agent': 'HermesKnowledgeBot/1.0' },
+          redirect: 'manual',
+        });
+        if (res.status < 300 || res.status >= 400) break;
+        const location = res.headers.get('location');
+        if (!location) break;
+        // Resolve relative redirects against the current URL, then re-check.
+        currentUrl = new URL(location, currentUrl).toString();
+        assertSafeMediaUrl(currentUrl);
+      }
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       throw new BadRequestException('Gagal mengambil URL (timeout / tidak terjangkau)');
     }
     if (!res.ok) {

@@ -22,6 +22,31 @@ export class HealthController {
     return { status: 'ok', service: 'hermes-api', ts: new Date().toISOString() };
   }
 
+  // WhatsApp session liveness — the system's #1 silent-outage signal. Returns
+  // aggregate counts only (no account names/numbers) so an external uptime
+  // monitor can poll it unauthenticated and alert when connected accounts drop.
+  // status: 'ok' only when there are accounts and none are down/banned.
+  @Get('whatsapp')
+  async whatsapp() {
+    const rows = await this.prisma.whatsappAccount.groupBy({
+      by: ['sessionStatus'],
+      _count: { _all: true },
+    });
+    const byState: Record<string, number> = {};
+    for (const r of rows) byState[String(r.sessionStatus)] = r._count._all;
+    const total = Object.values(byState).reduce((a, b) => a + b, 0);
+    const connected = byState['connected'] ?? 0;
+    const down = (byState['disconnected'] ?? 0) + (byState['banned'] ?? 0);
+    return {
+      status: total > 0 && down === 0 ? 'ok' : 'degraded',
+      total,
+      connected,
+      down,
+      byState,
+      ts: new Date().toISOString(),
+    };
+  }
+
   @Get('ready')
   async ready() {
     const checks = await Promise.all([

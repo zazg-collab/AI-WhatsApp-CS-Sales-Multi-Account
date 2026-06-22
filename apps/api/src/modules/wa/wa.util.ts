@@ -1,3 +1,14 @@
+/**
+ * Normalize a user-entered phone number to WhatsApp's MSISDN form (digits only,
+ * Indonesian leading `0` rewritten to country code `62`). Single source of truth
+ * — call sites must not re-implement the `0 → 62` rule inline.
+ */
+export function normalizePhone(input: string): string {
+  let digits = input.replace(/[^\d]/g, '');
+  if (digits.startsWith('0')) digits = `62${digits.slice(1)}`;
+  return digits;
+}
+
 /** Convert a phone number (digits only) to a WhatsApp JID. */
 export function phoneToJid(phone: string): string {
   if (phone.includes('@')) return phone;

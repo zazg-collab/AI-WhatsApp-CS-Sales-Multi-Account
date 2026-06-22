@@ -26,5 +26,13 @@ describe('assertSafeMediaUrl', () => {
     expect(() => assertSafeMediaUrl('http://10.0.0.5/x')).toThrow(BadRequestException);
     expect(() => assertSafeMediaUrl('http://192.168.1.10/x')).toThrow(BadRequestException);
     expect(() => assertSafeMediaUrl('http://172.16.5.5/x')).toThrow(BadRequestException);
+    expect(() => assertSafeMediaUrl('http://0.0.0.0/x')).toThrow(BadRequestException);
+  });
+
+  it('rejects private/loopback IPv6 and IPv4-mapped addresses', () => {
+    expect(() => assertSafeMediaUrl('http://[::1]/x')).toThrow(BadRequestException);
+    expect(() => assertSafeMediaUrl('http://[fe80::1]/x')).toThrow(BadRequestException);
+    expect(() => assertSafeMediaUrl('http://[fd00::1]/x')).toThrow(BadRequestException);
+    expect(() => assertSafeMediaUrl('http://[::ffff:169.254.169.254]/x')).toThrow(BadRequestException);
   });
 });
