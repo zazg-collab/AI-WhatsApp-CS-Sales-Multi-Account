@@ -385,7 +385,8 @@ interface ProposalBodyProps {
 }
 
 function ProposalBody({ type, payload, t: tProp }: ProposalBodyProps) {
-  const t = tProp || useT(dict);
+  const tOwn = useT(dict);
+  const t = tProp || tOwn;
   if (type === 'persona') {
     return (
       <div className="space-y-2 text-[13px]">

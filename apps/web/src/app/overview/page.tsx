@@ -22,7 +22,7 @@ const stateMeta: Record<AttnState, { label: string; icon: PhosphorIcon; tone: 'r
 
 export default function OverviewPage() {
   const {
-    t, summary, report, alerts, accounts, attention,
+    t, attention,
     loading, error, sectionErrors,
     load,
     pendingReviews, highRisk, failed, disconnected, slaRisk,

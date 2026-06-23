@@ -19,12 +19,18 @@ function load(): PanelWidths {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return { ...DEFAULT, ...JSON.parse(raw) };
-  } catch {}
+  } catch {
+    // localStorage unavailable/corrupt — fall back to defaults.
+  }
   return DEFAULT;
 }
 
 function save(w: PanelWidths) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(w)); } catch {}
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
+  } catch {
+    // best-effort persistence only.
+  }
 }
 
 export function useResizablePanels(intelVisible: boolean) {

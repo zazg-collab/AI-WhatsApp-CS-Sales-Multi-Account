@@ -59,7 +59,7 @@ export function useAccounts() {
   const [addCreating, setAddCreating] = useState(false);
   const [addedAccountId, setAddedAccountId] = useState<string | null>(null);
   const [addConnectMethod, setAddConnectMethod] = useState<'qr' | 'code' | null>(null);
-  const [addRequestingCode, setAddRequestingCode] = useState(false);
+  const [addRequestingCode, _setAddRequestingCode] = useState(false);
   const [addConnected, setAddConnected] = useState(false);
   // Phone entered up front for the pairing-code path (QR path needs nothing).
   const [addCodePhone, setAddCodePhone] = useState('');

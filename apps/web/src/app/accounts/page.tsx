@@ -155,7 +155,7 @@ export default function AccountsPage() {
     addCodePhone, setAddCodePhone,
     addError, addCreating, addedAccountId,
     addConnectMethod,
-    addConnected, addAutoDetected, addSaving,
+    addAutoDetected, addSaving,
     canScan, canEditHours, canDelete,
     load, openAddModal, closeAddModal,
     startQrFlow, chooseCodeMethod, submitCodePhone, confirmAndSave,
