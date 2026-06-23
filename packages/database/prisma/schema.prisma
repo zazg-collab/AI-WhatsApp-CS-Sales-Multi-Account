@@ -223,7 +223,7 @@ model Bot {
   knowledgeBaseId String?   @map("knowledge_base_id")
   marketingFlowId String?   @map("marketing_flow_id")
   defaultAiMode   AiMode    @default(ai_draft) @map("default_ai_mode")
-  language        String    @default("en")
+  language        String    @default("id")
   status          BotStatus @default(draft)
   /// Last time AI Learning mined this bot's history. Lets a re-run skip the
   /// transcript miners when no new messages have arrived since.

@@ -162,8 +162,26 @@ jobs:
       # Fails if the schema and the applied migrations have drifted apart
       # (a migration is missing for a schema change). Blocking: this exact
       # gap shipped once (customer opt-out columns without a migration).
+      #
+      # One expected, permanent exception: knowledge_items.embedding is a
+      # `vector` column declared as Prisma `Unsupported(...)`, so its HNSW
+      # index (created directly in migration 20_knowledge_embeddings, since
+      # Prisma 5 can't express vector index ops in schema.prisma) will always
+      # show as "drift" here. Allow only that one line through; fail on
+      # anything else.
       - name: Verify schema matches migrations (no drift)
-        run: npx prisma migrate diff --exit-code --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma
+        run: |
+          diff_output=$(npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma || true)
+          echo "$diff_output"
+          unexpected=$(echo "$diff_output" | sed -E 's/^[[:space:]]+//' \
+            | grep -E '^\[[*+-]\]' \
+            | grep -v -E '^\[\*\] Changed the `knowledge_items` table$' \
+            | grep -v -E '^\[-\] Removed index on columns \(embedding\)$')
+          if [ -n "$unexpected" ]; then
+            echo "::error::Unexpected schema drift detected (beyond the known knowledge_items.embedding index gap):"
+            echo "$unexpected"
+            exit 1
+          fi
         working-directory: packages/database
 
       # Real-DB integration tests (account-scope isolation). These mock nothing
