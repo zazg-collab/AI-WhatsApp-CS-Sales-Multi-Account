@@ -176,7 +176,7 @@ jobs:
           unexpected=$(echo "$diff_output" | sed -E 's/^[[:space:]]+//' \
             | grep -E '^\[[*+-]\]' \
             | grep -v -E '^\[\*\] Changed the `knowledge_items` table$' \
-            | grep -v -E '^\[-\] Removed index on columns \(embedding\)$')
+            | grep -v -E '^\[-\] Removed index on columns \(embedding\)$' || true)
           if [ -n "$unexpected" ]; then
             echo "::error::Unexpected schema drift detected (beyond the known knowledge_items.embedding index gap):"
             echo "$unexpected"
