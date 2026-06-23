@@ -39,12 +39,12 @@ d('account scope isolation (real DB)', () => {
   beforeAll(async () => {
     await prisma.$connect();
 
-    const mkUser = async (role: any) =>
+    const mkUser = async (role: any, label: string) =>
       (await prisma.user.create({
-        data: { name: `${tag}-${role}`, email: `${tag}-${role}@x.com`, passwordHash: 'x', role },
+        data: { name: `${tag}-${label}`, email: `${tag}-${label}@x.com`, passwordHash: 'x', role },
       })).id;
-    adminA = await mkUser('admin');
-    adminB = await mkUser('admin');
+    adminA = await mkUser('admin', 'adminA');
+    adminB = await mkUser('admin', 'adminB');
 
     const mkAccount = async (assignedAdminId: string | null, n: string) =>
       (await prisma.whatsappAccount.create({
