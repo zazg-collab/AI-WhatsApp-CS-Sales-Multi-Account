@@ -3,7 +3,6 @@ import { ConfigService } from '@nestjs/config';
 import {
   AiMode,
   ConversationStatus,
-  MessageStatus,
   Prisma,
   SenderType,
   TakeoverStatus,

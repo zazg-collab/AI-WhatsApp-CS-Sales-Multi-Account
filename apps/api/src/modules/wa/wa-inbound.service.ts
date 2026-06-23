@@ -17,13 +17,7 @@ import { AiService } from '../ai/ai.service';
 import { HermesService } from '../hermes/hermes.service';
 import { MediaStorageService } from '../media/media-storage.service';
 import { WaSendService } from './wa-send.service';
-import {
-  jidToPhone,
-  isGroupJid,
-  isDirectChatJid,
-  isSupportedChatJid,
-  extForMimetype,
-} from './wa.util';
+import { isGroupJid, isDirectChatJid, isSupportedChatJid, extForMimetype } from './wa.util';
 import { isWithinBusinessHours } from '../../common/business-hours.util';
 import type { AssetsService } from '../assets/assets.service';
 

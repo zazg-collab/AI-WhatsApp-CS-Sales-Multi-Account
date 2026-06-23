@@ -33,7 +33,7 @@ function isPrivateIpv4(host: string): boolean {
 
 function isPrivateIpv6(host: string): boolean {
   // URL.hostname keeps IPv6 in brackets; strip them.
-  let h = host.replace(/^\[|\]$/g, '').toLowerCase();
+  const h = host.replace(/^\[|\]$/g, '').toLowerCase();
   // IPv4-mapped, dotted form (::ffff:169.254.169.254) — defer to the v4 check.
   const mappedDotted = h.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
   if (mappedDotted) return isPrivateIpv4(mappedDotted[1]);

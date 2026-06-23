@@ -30,33 +30,21 @@ export class ClosingAnalyticsService {
   async getFunnelConversion(days: number) {
     const since = this.daysAgo(days);
 
-    const [stageCounts, resolvedByStage, stageTransitions, totalCustomers, closingCustomers] =
-      await Promise.all([
-        // Current population snapshot.
-        this.prisma.customer.groupBy({ by: ['leadStage'], _count: { _all: true } }),
+    const [stageCounts, stageTransitions, totalCustomers, closingCustomers] = await Promise.all([
+      // Current population snapshot.
+      this.prisma.customer.groupBy({ by: ['leadStage'], _count: { _all: true } }),
 
-        // For each stage: how many resolved conversations exist for customers at that stage.
-        this.prisma.conversation.groupBy({
-          by: ['status'],
-          where: {
-            status: 'resolved',
-            updatedAt: { gte: since },
-            customer: { leadStage: { in: Object.values(LeadStage) } },
-          },
-          _count: { _all: true },
-        }),
+      // Stage-transition events logged by AiService (may be empty on a fresh instance).
+      this.prisma.auditLog.findMany({
+        where: { action: 'ai_lead_stage_changed', createdAt: { gte: since } },
+        select: { oldValue: true, newValue: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: 2000,
+      }),
 
-        // Stage-transition events logged by AiService (may be empty on a fresh instance).
-        this.prisma.auditLog.findMany({
-          where: { action: 'ai_lead_stage_changed', createdAt: { gte: since } },
-          select: { oldValue: true, newValue: true, createdAt: true },
-          orderBy: { createdAt: 'desc' },
-          take: 2000,
-        }),
-
-        this.prisma.customer.count(),
-        this.prisma.customer.count({ where: { leadStage: { in: CLOSING_STAGES } } }),
-      ]);
+      this.prisma.customer.count(),
+      this.prisma.customer.count({ where: { leadStage: { in: CLOSING_STAGES } } }),
+    ]);
 
     // Build per-stage resolved-conversation count.
     const resolvedCountByStage = await this.resolvedPerStage(since);
