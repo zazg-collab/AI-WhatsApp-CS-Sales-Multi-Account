@@ -49,6 +49,18 @@ export default function CampaignsPage() {
           {canManage && (
             <Card className="mb-4 space-y-3 p-4">
               <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('createDraftHeading')}</h2>
+              {/* Step indicator */}
+              <div className="flex items-center gap-0 text-[11px]">
+                {[t('stepTarget'), t('stepFilter'), t('stepSchedule')].map((label, i) => (
+                  <div key={i} className="flex items-center">
+                    <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${i === 0 ? 'bg-hermes-600 text-white' : i === 1 ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>{i + 1}</span>
+                    <span className="mx-1 text-gray-500 dark:text-gray-400">{label}</span>
+                    {i < 2 && <span className="mr-1 text-gray-300 dark:text-gray-700">→</span>}
+                  </div>
+                ))}
+              </div>
+              <hr className="border-gray-100 dark:border-gray-800" />
+              {/* Step 1: Target */}
               <Field label={t('nameLabel')} value={name} onChange={(e) => setName(e.target.value)} placeholder="Campaign name" />
               <SelectField label={t('senderAccountLabel')} value={whatsappAccountId} onChange={(e) => setWhatsappAccountId(e.target.value)}>
                 <option value="">{t('selectAccount')}</option>
@@ -86,6 +98,8 @@ export default function CampaignsPage() {
                   ))}
                 </SelectField>
               )}
+              {/* Step 2: Filter */}
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">2 — {t('stepFilter')}</p>
               <div className="grid grid-cols-2 gap-2">
                 <SelectField label={t('leadStageLabel')} value={leadStage} onChange={(e) => setLeadStage(e.target.value)}>
                   <option value="">{t('allStages')}</option>
@@ -96,6 +110,8 @@ export default function CampaignsPage() {
                 </SelectField>
                 <Field label={t('tagFilterLabel')} value={tag} onChange={(e) => setTag(e.target.value)} placeholder={t('tagPlaceholder')} />
               </div>
+              {/* Step 3: Schedule */}
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">3 — {t('stepSchedule')}</p>
               <div className="grid grid-cols-2 gap-2">
                 <Field label={t('rateLabel')} hint={t('rateHint')} type="number" min={1} max={30} value={rateLimitPerMinute} onChange={(e) => setRateLimitPerMinute(Number(e.target.value))} />
                 <Field label={t('scheduleLabel')} hint={t('scheduleHint')} type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
@@ -132,9 +148,15 @@ export default function CampaignsPage() {
             {loading ? (
               [1, 2, 3].map((n) => <div key={n} className="h-16 rounded-lg animate-shimmer" />)
             ) : campaigns.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-gray-200 px-3 py-6 text-center text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                {t('noCampaigns')} {canManage ? t('createDraftAbove') : t('waitingDraft')}
-              </p>
+              <div className="rounded-lg border border-dashed border-gray-200 px-4 py-8 text-center dark:border-gray-800">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-300">{t('noCampaigns')}</p>
+                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                  {canManage ? t('createDraftAbove') : t('waitingDraft')}
+                </p>
+                {canManage && (
+                  <p className="mt-3 text-[11px] font-mono text-hermes-500 dark:text-hermes-400">{t('approvalFlowNote')}</p>
+                )}
+              </div>
             ) : (
               campaigns.map((campaign) => {
                 const isActive = selectedId === campaign.id;

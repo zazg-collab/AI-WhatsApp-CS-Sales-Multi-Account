@@ -45,6 +45,8 @@ export const dict: Dict = {
   contentLabel: { id: 'Isi knowledge', en: 'Knowledge content' },
   contentPlaceholder: { id: 'Tulis fakta yang boleh dipakai AI untuk menjawab…', en: 'Write the facts the AI may use to answer…' },
   addItem: { id: 'Tambah item', en: 'Add item' },
+  contentFormatHint: { id: 'Teks biasa, Markdown, atau poin-poin. Maks ~3000 karakter per item untuk hasil AI terbaik.', en: 'Plain text, Markdown, or bullet points. Max ~3000 chars per item for best AI results.' },
+  chars: { id: 'karakter', en: 'chars' },
   emptyItemsTitle: { id: 'Knowledge base masih kosong', en: 'Knowledge base is still empty' },
   emptyItemsHint: { id: 'Impor file/URL atau tambah item manual agar AI punya bahan untuk menjawab.', en: 'Import a file/URL or add an item manually so the AI has material to answer with.' },
   statusActive: { id: 'Aktif', en: 'Active' },

@@ -265,10 +265,12 @@ export function ChatComposer({
             size="sm"
             disabled={!composerValue.trim() || sending || disabled}
             onClick={handleSend}
-            aria-label="Send message"
-            className="p-2 shrink-0"
+            aria-label={sending ? 'Sending…' : 'Send message'}
+            className="shrink-0 p-2"
           >
-            <PaperPlaneTilt className="h-4 w-4" />
+            {sending
+              ? <span className="block h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+              : <PaperPlaneTilt className="h-4 w-4" />}
           </Button>
         </div>
       </div>

@@ -220,7 +220,7 @@ export function Sidebar() {
 
   // On mobile the rail is icon-only; tapping the toggle expands it to a labelled
   // drawer (overlaid). On lg+ it is always the full labelled sidebar.
-  const labelCls = open ? 'block' : 'hidden lg:block';
+  const labelCls = open ? 'block' : 'hidden md:block';
 
   return (
     <>
@@ -229,14 +229,14 @@ export function Sidebar() {
           type="button"
           aria-label="Close navigation"
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
         />
       )}
-      <aside className="flex h-full w-14 flex-col rounded border border-gray-800 bg-gray-900 shadow-[0_1px_2px_rgba(15,23,42,0.18)] lg:w-60">
+      <aside className="flex h-full w-14 flex-col rounded border border-gray-800 bg-gray-900 shadow-[0_1px_2px_rgba(15,23,42,0.18)] md:w-60">
       {/* Brand */}
-      <div className="flex h-16 items-center justify-between gap-2.5 border-b border-gray-800 px-3 lg:px-4">
+      <div className="flex h-16 items-center justify-between gap-2.5 border-b border-gray-800 px-3 md:px-4">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-hermes-600 text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-hermes-600 text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
             <ShieldStar className="h-[18px] w-[18px]" weight="duotone" aria-hidden="true" />
           </span>
           <span className="hidden min-w-0 lg:block">
@@ -250,14 +250,14 @@ export function Sidebar() {
           type="button"
           aria-label="Open navigation"
           onClick={() => setOpen(true)}
-          className="flex lg:hidden h-8 w-8 items-center justify-center rounded text-gray-400 hover:text-gray-50 hover:bg-gray-800 transition-colors"
+          className="flex md:hidden h-11 w-11 items-center justify-center rounded text-gray-400 hover:text-gray-50 hover:bg-gray-800 transition-colors"
         >
           <List className="h-5 w-5" weight="regular" aria-hidden="true" />
         </button>
       </div>
 
       {/* Nav */}
-      <nav className="scrollbar-thin flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3 lg:px-2.5">
+      <nav className="scrollbar-thin flex flex-1 flex-col gap-4 overflow-y-auto px-2 py-3 md:px-2.5">
         {sections.map((section, i) => {
           const visible = section.items.filter((it) => canView(userRole, it.requiredRole));
           if (visible.length === 0) return null;
@@ -280,7 +280,7 @@ export function Sidebar() {
                     onClick={() => setOpen(false)}
                     aria-current={isActive ? 'page' : undefined}
                     className={cn(
-                      'group relative flex items-center gap-2.5 rounded px-2 py-2 text-[13px] font-medium transition-colors duration-150 lg:justify-start lg:px-2.5',
+                      'group relative flex items-center gap-2.5 rounded px-2 py-2 text-[13px] font-medium transition-colors duration-150 md:justify-start md:px-2.5',
                       open ? 'justify-start' : 'justify-center',
                       isActive
                         ? 'bg-hermes-500/15 text-hermes-200 ring-1 ring-hermes-500/20'
@@ -297,14 +297,14 @@ export function Sidebar() {
                         aria-hidden="true"
                       />
                       {item.href === '/inbox' && unread > 0 && !open && (
-                        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-hermes-600 px-1 text-[9px] font-semibold text-white lg:hidden">
+                        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-hermes-600 px-1 text-[9px] font-semibold text-white md:hidden">
                           {unread > 9 ? '9+' : unread}
                         </span>
                       )}
                     </span>
                     <span className={cn('flex-1', labelCls)}>{item.label}</span>
                     {item.href === '/inbox' && unread > 0 && (
-                      <span className={cn('flex h-4 min-w-4 items-center justify-center rounded-full bg-hermes-600 px-1 text-[10px] font-semibold text-white', open ? 'flex' : 'hidden lg:flex')}>
+                      <span className={cn('flex h-4 min-w-4 items-center justify-center rounded-full bg-hermes-600 px-1 text-[10px] font-semibold text-white', open ? 'flex' : 'hidden md:flex')}>
                         {unread > 99 ? '99+' : unread}
                       </span>
                     )}
@@ -352,7 +352,7 @@ export function Sidebar() {
             href="/accounts"
             onClick={() => setOpen(false)}
             title={t(labelKey)}
-            className="flex items-center gap-2 border-t border-gray-800 px-3 py-2 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50 lg:px-4"
+            className="flex items-center gap-2 border-t border-gray-800 px-3 py-2 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50 md:px-4"
           >
             <span className={cn('h-2 w-2 shrink-0 rounded-full', dot)} aria-hidden="true" />
             <span className={cn('truncate', labelCls)}>{text}</span>
@@ -361,7 +361,7 @@ export function Sidebar() {
       })()}
 
       {/* Footer — single compact action row (language · theme · sign out) */}
-      <div className="flex items-center gap-1 border-t border-gray-800 px-2 py-2 lg:px-3">
+      <div className="flex items-center gap-1 border-t border-gray-800 px-2 py-2 md:px-3">
         <LanguageToggle compact />
         <ThemeToggle compact />
         <button
@@ -379,7 +379,7 @@ export function Sidebar() {
           className="flex h-9 items-center justify-center gap-2 rounded-md px-2 text-[13px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-danger-300"
         >
           <SignOut className="h-[18px] w-[18px] shrink-0" weight="regular" aria-hidden="true" />
-          <span className={cn('hidden', open ? 'inline' : 'lg:inline')}>{t('signOut')}</span>
+          <span className={cn('hidden', open ? 'inline' : 'md:inline')}>{t('signOut')}</span>
         </button>
       </div>
     </aside>

@@ -175,7 +175,13 @@ export default function KnowledgePage() {
             <form onSubmit={addItem} className="space-y-2">
               <Field label={t('titleLabel')} placeholder={t('titlePlaceholder')} value={item.title} onChange={(e) => setItem({ ...item, title: e.target.value })} required />
               <Field label={t('productNameLabel')} hint={t('productNameHint')} placeholder={t('productNamePlaceholder')} value={item.productName} onChange={(e) => setItem({ ...item, productName: e.target.value })} />
-              <TextareaField label={t('contentLabel')} placeholder={t('contentPlaceholder')} value={item.content} onChange={(e) => setItem({ ...item, content: e.target.value })} rows={prefilled ? 8 : 4} required />
+              <div>
+                <TextareaField label={t('contentLabel')} placeholder={t('contentPlaceholder')} value={item.content} onChange={(e) => setItem({ ...item, content: e.target.value })} rows={prefilled ? 8 : 4} required />
+                <div className="mt-1 flex justify-between text-[11px] text-gray-400 dark:text-gray-500">
+                  <span>{t('contentFormatHint')}</span>
+                  <span className={item.content.length > 3000 ? 'text-danger-500' : ''}>{item.content.length.toLocaleString()} {t('chars')}</span>
+                </div>
+              </div>
               <Button type="submit" size="sm"><Plus className="h-4 w-4" aria-hidden="true" />{t('addItem')}</Button>
             </form>
           </Card>
