@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: hermes-postgres
     restart: unless-stopped
     environment:
@@ -24,7 +24,7 @@ services:
           memory: 512M
 
   redis:
-    image: redis:7-alpine
+    image: redis:7
     container_name: hermes-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
@@ -104,6 +104,31 @@ services:
         limits:
           memory: 512M
 
+  waha:
+    image: devlikeapro/waha:latest
+    container_name: hermes-waha
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3000"
+    environment:
+      - WHATSAPP_DEFAULT_SESSION_NAME=default
+      - SESSIONS_DIR=/app/sessions
+      - API_KEY=${WAHA_API_KEY:-}
+    volumes:
+      - waha_sessions:/app/sessions
+    networks:
+      - hermes
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
   nginx:
     image: nginx:alpine
     container_name: hermes-nginx
@@ -129,3 +154,4 @@ volumes:
   hermes_redisdata:
   hermes_sessions:
   hermes_media:
+  waha_sessions:
