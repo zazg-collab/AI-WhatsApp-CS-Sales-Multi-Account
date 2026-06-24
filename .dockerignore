@@ -1,6 +1,12 @@
 # Dependencies
-node_modules
+**/node_modules
+**/node_modules/**
 .npm-cache
+
+# Portable / extras
+hermes-portable
+memory
+.serena
 
 # Build outputs
 dist

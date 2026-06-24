@@ -1,0 +1,688 @@
+# Hindi translations for WhatsApp inbox integration
+locale.name: '🇮🇳 हिंदी (Hindi)'
+
+# बेस लोकैल कोड - यह एक मान्य BCP 47 लोकैल होना चाहिए
+# https://en.wikipedia.org/wiki/IETF_language_tag
+# WAHA इसे संख्याएँ, मुद्रा और दिनांक/समय प्रदर्शित करने के लिए उपयोग करता है।
+locale.base: 'hi-IN'
+
+app.inbox.contact.name: 'व्हाट्सएप इंटीग्रेशन'
+app.inbox.contact.avatar.url: 'https://raw.githubusercontent.com/devlikeapro/waha/core/logo.png'
+
+# date.toLocaleString की "options"
+# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/DateTimeFormat#options
+datetime:
+  weekday: short
+  locales: hi-IN
+  day: 2-digit
+  month: short
+  year: numeric
+  hour: 2-digit
+  minute: 2-digit
+  hour12: true
+  # https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/DateTimeFormat#timezonename
+  timeZoneName: short
+  # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+  # timeZone: 'Asia/Kolkata'
+
+Today: 'आज'
+Yesterday: 'कल'
+
+job.report.error: |-
+  ⚠️ **{{{header}}}**
+  {{#attempts.nextDelay}}
+  🔄 {{attempts.nextDelay}} सेकंड में पुनः प्रयास कर रहा है...
+  {{/attempts.nextDelay}}
+  {{^attempts.nextDelay}}
+  ❌ कोई और प्रयास नहीं बचा है। कृपया बाद में पुनः प्रयास करें।
+  {{/attempts.nextDelay}}
+  प्रयास: {{{attempts.current}}} / {{{attempts.max}}}
+  विवरण: [{{{details.text}}}]({{{details.url}}})
+  {{#error}}
+  ```
+
+  {{{error}}}
+  ```
+  {{/error}}
+
+job.report.succeeded: |-
+  ✅ **सफल**
+  प्रयास: {{{attempts.current}}} / {{{attempts.max}}}
+  विवरण: [{{{details.text}}}]({{{details.url}}})
+
+whatsapp.message.sending.error: व्हाट्सएप पर संदेश नहीं भेज सका।
+whatsapp.message.receiving.error: व्हाट्सएप से संदेश प्राप्त नहीं कर सका
+whatsapp.message.removing.error: व्हाट्सएप से संदेश हटा नहीं सका
+job.scheduled.error.header: निर्धारित कार्य निष्पादित करने में विफल रहा
+
+message.from.whatsapp: |-
+  *📱 व्हाट्सएप से भेजा गया*
+
+  {{{text}}}
+
+message.from.api: |-
+  *📱 API के माध्यम से भेजा गया*
+
+  {{{text}}}
+
+message.removed.in.whatsapp: |-
+  ❌ *यह संदेश व्हाट्सएप में हटा दिया गया था*
+
+message.edited.in.whatsapp: |-
+  {{{text}}}
+
+  ✏️ *व्हाट्सएप में संपादित*
+
+whatsapp.group.message: |-
+  👥 *{{{participant}}}*
+
+  {{{text}}}
+
+whatsapp.reaction.added: |-
+  *प्रतिक्रिया दी* {{{emoji}}}
+
+whatsapp.reaction.removed: |-
+  *प्रतिक्रिया हटा दी गई*
+
+whatsapp.contact.group.suffix: 'समूह'
+whatsapp.contact.channel.suffix: 'चैनल'
+whatsapp.contact.broadcast.suffix: 'प्रसारण सूची'
+# Aka Stories
+whatsapp.contact.status.name: 'स्थिति'
+
+app.connected.message: |-
+  🔗 **कनेक्टेड: व्हाट्सएप सत्र से इनबॉक्स**
+
+  ✅ व्हाट्सएप सत्र **{{{name}}}** सफलतापूर्वक इस इनबॉक्स से जुड़ गया है।
+
+  यह इनबॉक्स अब आपके **व्हाट्सएप खाते** से जुड़ा हुआ है। आप यहां से सीधे संदेश भेज और प्राप्त कर सकते हैं — बिल्कुल व्हाट्सएप का उपयोग करने जैसा, लेकिन आपके कार्यक्षेत्र के भीतर।
+
+  आप इस इनबॉक्स से जुड़े व्हाट्सएप सत्र को भी प्रबंधित कर सकते हैं। उपलब्ध कार्यों को देखने के लिए, इस चैट पर **help** भेजें।
+
+  📋 आप जो सामान्य कार्य कर सकते हैं:
+  - जांचें कि क्या व्हाट्सएप सत्र सक्रिय है
+  - व्हाट्सएप सत्र को पुनरारंभ या बंद करें
+  - लॉग आउट करें और नए QR कोड को स्कैन करके फिर से कनेक्ट करें
+
+  यदि सब कुछ काम कर रहा है, तो आप स्वतंत्र रूप से चैट कर पाएंगे। यदि आप चेतावनियां देखते हैं, तो आपको अपने व्हाट्सएप खाते को फिर से कनेक्ट करने की आवश्यकता हो सकती है।
+
+  चलिए शुरू करते हैं! 🚀
+
+app.disconnected.message: |-
+  🔌 **डिस्कनेक्टेड: व्हाट्सएप सत्र से इनबॉक्स**
+
+  ❌ व्हाट्सएप सत्र **{{{name}}}** इस इनबॉक्स से डिस्कनेक्ट हो गया है।
+
+  आप अब व्हाट्सएप से संदेश भेज या प्राप्त नहीं कर पाएंगे।
+
+  फिर से कनेक्ट करने के लिए, कृपया अपने प्रशासक से संपर्क करें।
+
+app.updated.message: |-
+  🔄 **अपडेटेड: व्हाट्सएप सत्र सेटिंग्स**
+
+  ✅ व्हाट्सएप सत्र **{{{name}}}** की सेटिंग्स अपडेट की गई हैं।
+
+cli.usage.arguments: |-
+  [क्रिया]
+
+cli.usage.command: |-
+  [कमांड]
+
+cli.usage.options: |-
+  [विकल्प]
+
+cli.cmd.disabled: ⛔ **`{{command}}` कमांड अक्षम है**.
+
+  कृपया अपने प्रशासक से संपर्क करें।
+
+  उपलब्ध कमांड की सूची प्राप्त करने के लिए **help** भेजें।
+
+cli.cmd.root.description: |-
+  अपने **व्हाट्सएप इंटीग्रेशन** का प्रबंधन करें!
+
+cli.cmd.root.sub.session: |-
+  🖥️ **सत्र**:
+
+cli.cmd.root.sub.server: |-
+  🖥️ **सर्वर**:
+
+cli.cmd.root.sub.sync: |-
+  🔄️ **सिंक**:
+
+cli.cmd.session.status.description: |-
+  वर्तमान सत्र की स्थिति प्राप्त करें।
+
+cli.cmd.session.restart.description: |-
+  सत्र को पुनरारंभ करें।
+
+cli.cmd.session.start.description: |-
+  सत्र प्रारंभ करें।
+
+cli.cmd.session.stop.description: |-
+  सत्र रोकें।
+
+cli.cmd.session.logout.description: |-
+  नया QR कोड स्कैन करके कनेक्शन बहाल करने के लिए सत्र से लॉग आउट करें।
+
+cli.cmd.session.qr.description: |-
+  सत्र का QR कोड दिखाएं।
+
+cli.cmd.session.screenshot.description: |-
+  सत्र का स्क्रीनशॉट लें (केवल **WEBJS** इंजन के साथ उपलब्ध)।
+
+cli.cmd.contacts.summary: |-
+  व्हाट्सएप संपर्क प्राप्त करें।
+
+cli.cmd.contacts.description: |-
+  👤 सिंक शुरू करने के लिए `contacts pull` चलाएँ या प्रगति देखने के लिए `contacts status` चलाएँ।
+
+cli.cmd.contacts.action.description: |-
+  `start` से संपर्क खींचना शुरू करें या `status` से सक्रिय कार्य जांचें।
+
+cli.cmd.contacts.pull.description: |-
+  व्हाट्सएप संपर्कों को इस इनबॉक्स में लाना शुरू करें।
+
+cli.cmd.contacts.pull.option.batch: |-
+  प्रत्येक बैच में खींचे जाने वाले संपर्कों की संख्या।
+
+cli.cmd.contacts.pull.option.delay-contact: |-
+  हर संपर्क के बीच देरी ताकि अवतार खींचते समय रेट लिमिट से बचा जा सके।
+
+cli.cmd.contacts.pull.option.delay-batch: |-
+  संपर्क बैचों के बीच देरी।
+
+cli.cmd.contacts.pull.option.avatar: |-
+  संपर्क अवतार कैसे खींचें चुनें: `skip`, `if-missing`, या `update`।
+
+cli.cmd.contacts.pull.option.groups: |-
+  सिंक में WhatsApp समूह संपर्क शामिल करें।
+
+cli.cmd.contacts.pull.option.no-attributes: |-
+  यदि संपर्क पहले से मौजूद है तो उसके गुण न खींचें (इससे प्रक्रिया तेज होती है)।
+
+cli.cmd.contacts.pull.already-running: |-
+  ⏳ **Pull Contacts** कार्य पहले से ही चल रहा है। इसे समाप्त होने दें या नया शुरू करने से पहले रोकें।
+
+  विवरण के लिए `contacts status` भेजें।
+
+cli.cmd.options.job.attempts: |-
+  कार्य को विफल मानने से पहले पुनः प्रयासों की संख्या।
+
+cli.cmd.options.job.timeout: |-
+  कार्य को पुनः कोशिश करने से पहले अधिकतम चलने का समय (जैसे `30s`, `5m`, `1h`)।
+
+cli.cmd.contacts.status.description: |-
+  वर्तमान खींचने वाले कार्य की स्थिति दिखाएँ।
+
+cli.cmd.contacts.status.not-found: |-
+  ℹ️ कोई सक्रिय **Pull Contacts** कार्य नहीं मिला। `contacts pull` से एक शुरू करें।
+
+cli.cmd.server.description: |-
+  सर्वर का प्रबंधन करें।
+
+cli.cmd.server.status.description: |-
+  सर्वर का संस्करण और स्थिति दिखाएं।
+
+cli.cmd.server.reboot.description: |-
+  सर्वर को पुनरारंभ करें।
+
+cli.cmd.server.reboot.option.force: |-
+  तुरंत पुनरारंभ को मजबूर करें।
+
+cli.help.usage.title: |-
+  उपयोग: नीचे दिए गए प्रारूप में बातचीत में कमांड भेजें:
+
+cli.help.commands.defaultGroup: |-
+  **कमांड:**
+
+cli.help.arguments.title: |-
+  **आर्ग्युमेंट्स:**
+
+cli.help.options.defaultGroup: |-
+  **विकल्प:**
+
+cli.help.globalOptions.title: |-
+  **ग्लोबल विकल्प:**
+
+task.contacts.status: |-
+  👤 संपर्क खींचना: **{{state}}**
+  - ✅ सफल: {{{progress.ok}}} संपर्क
+  - ⚪ छोड़े गए: {{{progress.skipped}}} संपर्क
+  - ⚠️ त्रुटियाँ: {{{progress.errors}}} संपर्क
+
+  {{#job}}
+  ⌛ समयरेखा:
+  - कतार में: {{{timestamp}}}
+  {{#processedOn}}
+  - शुरू हुआ: {{{processedOn}}}
+  {{/processedOn}}
+  {{#finishedOn}}
+  - समाप्त: {{{finishedOn}}}
+  {{/finishedOn}}
+  {{/job}}
+
+  {{#error}}
+  विवरण:
+  [{{{details.text}}}]({{{details.url}}})
+  {{/error}}
+
+task.contacts.started: |-
+  संपर्क खींचे जा रहे हैं...
+
+task.contacts.progress: |-
+  संपर्क खींचना: ✅ {{progress.ok}}, ⚪ {{progress.skipped}}, ⚠️ {{progress.errors}}
+
+app.help.reminder: |-
+  उपलब्ध कमांड की सूची प्राप्त करने के लिए **help** भेजें।
+
+app.session.status.change: |-
+  {{{emoji}}} "{{{session}}}" सत्र {{{status}}} स्थिति में बदल गया
+
+app.session.current.status: |-
+  {{{emoji}}} **{{{session}}}** सत्र की स्थिति **{{{status}}}** में है
+  **व्हाट्सएप खाता:**
+
+  📱 **{{{name}}} ({{{id}}})**
+
+app.session.status.working: |-
+  ✅ यह इनबॉक्स आपके **व्हाट्सएप खाते** से जुड़ा हुआ है और संदेश भेजने और प्राप्त करने के लिए तैयार है!
+
+  📱 **{{{name}}} ({{{id}}})**
+
+app.session.status.error: |-
+  ⚠️ **यह इनबॉक्स व्हाट्सएप खाते से जुड़ा हुआ है लेकिन संदेश भेजने और प्राप्त करने के लिए तैयार नहीं है!**
+
+  कृपया सत्र की स्थिति जांचें और इसे पुनरारंभ करने का प्रयास करें या लॉग आउट करें और QR कोड फिर से स्कैन करें।
+
+app.session.scan.qr.code: |-
+  ⚠️ **इस इनबॉक्स के साथ व्हाट्सएप खाता जोड़ने के लिए अपने फोन पर QR कोड स्कैन करें!**
+
+app.server.version.and.status: |-
+  **संस्करण:**
+  ```
+  {{{version}}}
+  ```
+
+  **स्थिति:**
+  ```
+  {{{status}}}
+  ```
+
+app.server.reboot: |-
+  सर्वर सुचारू रूप से पुनरारंभ हो रहा है...
+
+app.server.reboot.force: |-
+  सर्वर जबरदस्ती पुनरारंभ हो रहा है...
+
+app.logout.success: |-
+  ✅ खाता सफलतापूर्वक अनधिकृत किया गया!
+
+waha.new.version.available: |-
+  🔄 **नया संस्करण उपलब्ध!**
+
+  वर्तमान संस्करण: **{{{currentVersion}}}**
+  नया संस्करण: **{{{newVersion}}}**
+
+  👉 [**🆕 चेंजलॉग**]({{{changelogUrl}}}) में क्या नया है देखें
+
+  _इन सूचनाओं को अक्षम करने के लिए, भेजें_ `queue stop check.version`
+
+waha.core.version.used: |-
+  ❤️ **WAHA का समर्थन करें!**
+
+  आप मुफ्त **WAHA Core** संस्करण का उपयोग कर रहे हैं। यदि आपको यह प्रोजेक्ट उपयोगी लगता है, तो कृपया इसके विकास का समर्थन करने पर विचार करें।
+
+  आपका समर्थन ही एकमात्र तरीका है जिससे हम अपडेट, फिक्स और नई सुविधाओं पर काम करना जारी रख सकते हैं।
+
+  [**🎁 हमें समर्थन दें**]({{{supportUrl}}})
+
+chatwoot.to.whatsapp.message.text: |-
+  {{{ content }}}
+
+chatwoot.to.whatsapp.message.media.caption: |-
+  {{#singleAttachment}}
+  {{#content}}
+  {{{ content }}}
+  {{/content}}
+  {{/singleAttachment}}
+
+whatsapp.to.chatwoot.message: |-
+  {{{payload.body}}}
+
+whatsapp.to.chatwoot.message.contacts: |-
+  👤 **साझा संपर्क**
+
+  {{#contacts}}
+  🪪 नाम: **{{fullName}}**
+  {{#phoneNumbers}}
+  - 📞 फ़ोन: **{{.}}**
+  {{/phoneNumbers}}
+
+  {{/contacts}}
+
+whatsapp.to.chatwoot.message.location: |-
+  {{#message}}
+  {{#locationMessage}}
+  📍 **साझा स्थान**
+
+  {{#name}}
+  **{{name}}**
+  {{/name}}
+
+  {{#address}}
+  📍 **पता:** {{address}}
+  {{/address}}
+
+  {{#url}}
+  🌐 **वेबसाइट:** {{url}}
+  {{/url}}
+
+  🔗 **मानचित्र पर देखें:** https://www.google.com/maps?q={{degreesLatitude}},{{degreesLongitude}}
+  {{#caption}}{{caption}}{{/caption}}
+  {{/locationMessage}}
+
+  {{#liveLocationMessage}}
+  📍📡 **लाइव लोकेशन साझा की जा रही है**
+  रीयल-टाइम अपडेट देखने के लिए **WhatsApp** खोलें।
+
+  {{#name}}
+  **{{name}}**
+  {{/name}}
+
+  {{#address}}
+  📍 **पता:** {{address}}
+  {{/address}}
+
+  {{#url}}
+  🌐 **वेबसाइट:** {{url}}
+  {{/url}}
+
+  🔗 **मानचित्र पर देखें:** https://www.google.com/maps?q={{degreesLatitude}},{{degreesLongitude}}
+  {{#caption}}{{caption}}{{/caption}}
+  {{/liveLocationMessage}}
+  {{/message}}
+
+whatsapp.to.chatwoot.message.poll: |-
+  {{#poll}}
+  📊 **मतदान**
+
+  **{{name}}**
+  {{#options}}
+  - {{optionName}}
+  {{/options}}
+  {{/poll}}
+
+whatsapp.to.chatwoot.message.list: |-
+  {{#message.listMessage}}
+  {{#title}}
+  *{{{title}}}*
+  {{/title}}
+  {{#description}}
+  {{{description}}}
+  {{/description}}
+  {{#footerText}}
+  {{{footerText}}}
+  {{/footerText}}
+
+  {{#buttonText}}
+  {{{buttonText}}}
+  {{/buttonText}}
+  {{#sections}}
+  {{#title}}
+  {{{title}}}:
+  {{/title}}
+  {{#rows}}
+  {{#title}}
+  - {{{title}}}
+  {{/title}}
+  {{/rows}}
+
+  {{/sections}}
+  {{/message.listMessage}}
+
+whatsapp.to.chatwoot.message.event: |-
+  {{#message}}
+  {{#eventMessage}}
+  📅 **कार्यक्रम**
+
+  **{{name}}**
+  {{#description}}
+  {{description}}
+  {{/description}}
+
+  {{#location.name}}
+  📍 **स्थान:** {{location.name}}
+  {{/location.name}}
+  {{#startTime}}
+  🕐 **आरंभ:** {{startTime}}
+  {{/startTime}}
+  {{#endTime}}
+  🕐 **समाप्ति:** {{endTime}}
+  {{/endTime}}
+  {{#joinLink}}
+  🔗 **जुड़ने का लिंक:** [{{joinLink}}]({{joinLink}})
+  {{/joinLink}}
+  {{/eventMessage}}
+  {{/message}}
+
+whatsapp.to.chatwoot.message.pix: |-
+  💳 **PIX - कॉपी और पेस्ट**
+
+  {{#pixData}}
+  {{#merchantName}}
+  **{{merchantName}}**
+  {{/merchantName}}
+
+  {{#key}}
+  **PIX कुंजी:** {{key}}
+  {{/key}}
+  {{#keyType}}
+  **प्रकार:** {{keyType}}
+  {{/keyType}}
+  {{#totalAmount}}
+  **राशि:** {{totalAmountFormatted}}
+  {{/totalAmount}}
+  {{#referenceId}}
+  **संदर्भ:** {{referenceId}}
+  {{/referenceId}}
+
+  💳 **PIX कॉपी और पेस्ट भेजा गया**
+  {{/pixData}}
+
+whatsapp.to.chatwoot.message.status.reply: |-
+  📣 **WhatsApp स्टेटस का जवाब**
+  🏷️ **प्रकार:** {{type}}
+  {{#quotedText}}
+  📝 **स्टेटस टेक्स्ट:** {{quotedText}}
+  {{/quotedText}}
+
+  {{content}}
+
+whatsapp.to.chatwoot.message.unsupported: |-
+  ⚠️ **इस प्रकार का संदेश इस इनबॉक्स में समर्थित नहीं है।**
+  📱 इसे देखने के लिए कृपया **WhatsApp** खोलें।
+
+  विवरण: [{{{details.text}}}]({{{details.url}}})
+
+whatsapp.to.chatwoot.message.album: |-
+  📷 **एल्बम संदेश प्राप्त हुआ**
+
+  {{#totalCount}}
+  **{{totalCount}}** मीडिया फ़ाइल(ओं) वाला एक एल्बम प्राप्त हुआ।
+  {{#expectedImageCount}}
+  📸 छवियाँ: **{{expectedImageCount}}**
+  {{/expectedImageCount}}
+  {{#expectedVideoCount}}
+  🎥 वीडियो: **{{expectedVideoCount}}**
+  {{/expectedVideoCount}}
+
+  मीडिया फ़ाइलें अगले संदेशों में वितरित की जाएंगी।
+  {{/totalCount}}
+
+whatsapp.to.chatwoot.message.facebook.ad: |-
+  📢 **फेसबुक विज्ञापन**
+
+  **शीर्षक:** {{{adData.title}}}
+
+  **विवरण:**
+  {{{adData.body}}}
+
+  **विज्ञापन लिंक:** [फेसबुक पर देखें]({{{adData.sourceUrl}}})
+  **विज्ञापन आईडी:** {{{adData.sourceId}}}
+
+  ---
+  💬 **ग्राहक संदेश:**
+  {{{payload.body}}}
+
+whatsapp.to.chatwoot.call.received: |-
+  📞🔔 *आने वाली {{#call.isVideo}}वीडियो{{/call.isVideo}}{{^call.isVideo}}वॉयस{{/call.isVideo}} कॉल*
+  📱 जवाब देने के लिए कृपया **WhatsApp** खोलें।
+
+whatsapp.to.chatwoot.call.accepted: |-
+  📞✅ *कॉल का जवाब दिया गया*
+  📱 कॉल आपके दूसरे डिवाइस पर उठाई गई।
+
+whatsapp.to.chatwoot.call.rejected: |-
+  📞❌ *कॉल समाप्त हुई*
+
+whatsapp.history.message.wrapper: |-
+  {{{content}}}
+  `{{#history}}📥{{/history}}🗓️ {{{timestamp}}}`
+
+UNKNOWN: अज्ञात
+ERROR: त्रुटि
+PENDING: भेजा जा रहा है
+SERVER: सर्वर
+DEVICE: डिवाइस
+READ: पढ़ा गया
+PLAYED: चलाया गया
+whatsapp.to.chatwoot.message.has.media.no.media: |-
+  {{#content}}
+  {{{content}}}
+
+  {{/content}}
+  🖼️⚠️ **संदेश में मीडिया है लेकिन हम इसे डाउनलोड नहीं कर सके**
+  📱 कृपया इसे देखने के लिए **WhatsApp** खोलें।
+
+  {{^content}}
+  विवरण: [{{{details.text}}}]({{{details.url}}})
+  {{/content}}
+cli.cmd.root.sub.queue: '🧩 **क्यू**:'
+cli.cmd.messages.summary: WhatsApp संदेश खींचें।
+cli.cmd.messages.description:
+  💬 संदेश सिंक शुरू करने के लिए `messages pull` चलाएँ या प्रगति देखने के लिए
+  `messages status` चलाएँ।
+cli.cmd.messages.action.description:
+  संदेश खींचने के लिए `pull` या सक्रिय कार्य देखने के लिए `status` का उपयोग
+  करें।
+cli.cmd.messages.pull.option.chat:
+  खींचने को किसी विशिष्ट WhatsApp चैट आईडी तक सीमित करें।
+cli.cmd.messages.pull.option.force:
+  अगर WhatsApp संदेश बातचीत मैपिंग में पहले से मौजूद है तब भी इनबॉक्स को संदेश
+  बनाने के लिए बाध्य करें।
+cli.cmd.messages.pull.option.batch:
+  प्रत्येक बैच में खींचे जाने वाले संदेशों की संख्या।
+cli.cmd.messages.pull.option.progress:
+  हर N संदेश पर प्रगति रिपोर्ट करें। रिपोर्ट बंद करने के लिए 0 सेट करें।
+cli.cmd.messages.pull.option.no-dm: इतिहास खींचते समय डायरेक्ट संदेश छोड़ें।
+cli.cmd.messages.pull.option.groups: इतिहास खींचते समय WhatsApp समूह शामिल करें।
+cli.cmd.messages.pull.option.channels:
+  इतिहास खींचते समय WhatsApp चैनल शामिल करें।
+cli.cmd.messages.pull.option.status:
+  इतिहास खींचते समय WhatsApp स्टेटस अपडेट शामिल करें।
+cli.cmd.messages.pull.option.broadcast:
+  इतिहास खींचते समय प्रसारण सूचियाँ शामिल करें।
+cli.cmd.messages.pull.option.media:
+  इतिहास खींचते समय मीडिया (छवियाँ, वीडियो, फाइलें) डाउनलोड करें।
+cli.cmd.messages.pull.option.pause:
+  संदेश खींचने के कार्य को रोके गए अवस्था में कतार में डालें और पूरा होने तक नए
+  WhatsApp संदेशों की प्रोसेसिंग रोकें।
+cli.cmd.messages.pull.option.resolve-conversations:
+  सभी इतिहास संदेश संसाधित होने के बाद बातचीत को हल किया हुआ चिह्नित करता है।
+cli.cmd.messages.pull.error.pause-no-queue:
+  ⛔ `--pause` का उपयोग नहीं किया जा सकता क्योंकि इस कॉन्फ़िगरेशन में **queue**
+  कमांड अक्षम है।
+cli.cmd.queue.description: क्यू प्रबंधित करें।
+cli.cmd.queue.summary: क्यू पर क्रियाएँ चलाएँ।
+cli.cmd.queue.action.description: एक क्रिया चुनें।
+cli.cmd.queue.status.description: किसी क्यू की स्थिति दिखाएँ।
+cli.cmd.queue.argument.name: 'क्यू का नाम: `inbox` या `whatsapp` (वैकल्पिक)।'
+cli.cmd.queue.start.description: नाम से क्यू शुरू करें।
+cli.cmd.queue.stop.description: नाम से क्यू बंद करें।
+cli.cmd.queue.paused:
+  ⚪🧩 क्यू रोक दी गई हैं। स्थिति देखने के लिए `queue status` भेजें।
+cli.cmd.queue.resumed:
+  🟢🧩 क्यू फिर से शुरू हो गई हैं। स्थिति देखने के लिए `queue status` भेजें।
+cli.cmd.queue.status.result: >-
+  📊 क्यू की स्थिति:
+
+  {{#queues}}
+
+  - **{{name}}**: {{#locked}}🔒{{/locked}}{{#paused}}⚪ रुकी
+  हुई{{/paused}}{{^paused}}🟢 सक्रिय{{/paused}}
+
+  {{/queues}}
+cli.cmd.messages.pull.option.timeout-media:
+  प्रत्येक संदेश के लिए मीडिया डाउनलोड करने की अवधि निर्धारित करें।
+cli.cmd.messages.pull.argument.end:
+  खींचने की विंडो कहाँ समाप्त होगी, तय करें; उदाहरण के लिए `2d` दो दिन पहले
+  रुकता है।
+cli.cmd.messages.pull.argument.start:
+  खींचने की विंडो कहाँ से शुरू होगी, तय करें; उदाहरण के लिए `1d` एक दिन पहले से
+  शुरू होता है (डिफ़ॉल्ट `0d`, यानी अभी)।
+cli.cmd.messages.pull.already-running: >-
+  ⏳ **Pull Messages** कार्य पहले से ही **{{{chat}}}** के लिए चल रहा है। समाप्त
+  होने तक प्रतीक्षा करें या नया शुरू करने से पहले इसे रोकें।
+
+
+  विवरण के लिए `messages status` भेजें।
+cli.cmd.messages.status.not-found:
+  ℹ️ कोई सक्रिय **Pull Messages** कार्य नहीं मिला। `messages pull` से एक शुरू
+  करें।
+cli.cmd.messages.pull.no-chats-found:
+  निर्धारित अवधि के लिए कोई WhatsApp चैट नहीं मिली।
+cli.cmd.contacts.pull.option.progress:
+  हर N संपर्क पर प्रगति रिपोर्ट करें। रिपोर्ट बंद करने के लिए 0 सेट करें।
+cli.cmd.contacts.pull.option.lids:
+  सिंक में WhatsApp LID (अनाम) संपर्क शामिल करें।
+task.contacts.completed:
+  👤✅ संपर्क पूरे → 🆕 {{progress.created}}, 🔄 {{progress.updated}}, ⚪
+  {{progress.skipped}}, 🔴 {{progress.errors}}, 🖼️ {{progress.avatar.updated}}
+task.messages.started:
+  ⏳ संदेश खींचे जा रहे हैं 💬 {{{chat}}} ⏱️ {{{period}}}...
+task.messages.details: और जानकारी के लिए "{{{prefix}}}messages status" भेजें।
+task.messages.progress:
+  '⏳ संदेश {{{chat}}}: 🆕 {{progress.ok}}, 🟢 {{progress.exists}}, ⚪
+  {{progress.ignored}}, 🔴 {{progress.errors}}{{#messages.last}} | 📅
+  {{{messages.last}}}{{/messages.last}}'
+task.messages.completed:
+  ✅ संदेश {{{chat}}} में {{{period}}} → 🆕 {{progress.ok}}, 🟢
+  {{progress.exists}}, ⚪ {{progress.ignored}}, 🔴 {{progress.errors}}
+task.messages.status: |-
+  **{{{chat}}}** के संदेश ⏱️ **{{{period}}}** अवधि में। ⚙️ कार्य की स्थिति: **{{state}}**.
+
+  🗨️ संदेश:
+  - 🆕 बनाए गए: **{{{progress.ok}}}**
+  - 🟢 पहले से मौजूद: {{{progress.exists}}}
+  - ⚪ अनदेखा: {{{progress.ignored}}}
+  - 🔴 त्रुटियाँ: {{{progress.errors}}}
+  {{#messages.first}}
+  - 🗓️ सबसे पुराना: **{{{messages.first}}}**
+  {{/messages.first}}
+  {{#messages.last}}
+  - 🗓️ नवीनतम: **{{{messages.last}}}**
+  {{/messages.last}}
+
+  💬 WhatsApp चैट:
+  - 🆕 **{{{chats}}}** चैट में नए संदेश
+  {{#options.resolveConversations}}
+
+  🗣️ बातचीत:
+  - 🟢 हल हुईं: **{{{progress.conversationResolve.success}}}**
+  {{#progress.conversationResolve.error}}
+  - 🔴 त्रुटियाँ: **{{{progress.conversationResolve.error}}}**
+  {{/progress.conversationResolve.error}}
+  {{/options.resolveConversations}}
+
+  विवरण:
+  [{{{details.text}}}]({{{details.url}}})

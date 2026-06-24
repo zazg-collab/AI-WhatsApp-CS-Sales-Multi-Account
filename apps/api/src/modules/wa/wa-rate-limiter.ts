@@ -72,4 +72,15 @@ export class WaRateLimiter {
     stamps.push(Date.now());
     this.sendTimestamps.set(accountId, stamps);
   }
+
+  /**
+   * Clear all rate-limit state for the given account. Removes both timestamps
+   * and the throttle chain.
+   *
+   * @param accountId the account to clear
+   */
+  clearAccount(accountId: string): void {
+    this.sendTimestamps.delete(accountId);
+    this.throttleChains.delete(accountId);
+  }
 }

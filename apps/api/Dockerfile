@@ -21,6 +21,7 @@ COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/package.json ./package.json
 COPY apps/api/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 RUN mkdir -p /app/data/wa-sessions /app/data/wa-media && chown -R hermes:nodejs /app
 USER hermes
 EXPOSE 3001

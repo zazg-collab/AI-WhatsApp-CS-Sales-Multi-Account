@@ -1,0 +1,665 @@
+# Simplified Chinese translations for WhatsApp inbox integration
+locale.name: '🇨🇳 中文（Simplified Chinese）'
+
+# 基础语言代码 - 必须是有效的 BCP 47 语言区域
+# https://en.wikipedia.org/wiki/IETF_language_tag
+# WAHA 使用它来格式化数字、货币和日期时间。
+locale.base: 'zh-CN'
+
+app.inbox.contact.name: 'WhatsApp 集成（WAHA）'
+app.inbox.contact.avatar.url: 'https://raw.githubusercontent.com/devlikeapro/waha/core/logo.png'
+
+# date.toLocaleString 的 "options"
+# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/DateTimeFormat#options
+datetime:
+  weekday: short
+  locales: zh-CN
+  day: 2-digit
+  month: short
+  year: numeric
+  hour: 2-digit
+  minute: 2-digit
+  hour12: false
+  # https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/DateTimeFormat#timezonename
+  timeZoneName: short
+  # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+  # timeZone: 'Asia/Shanghai'
+
+Today: '今天'
+Yesterday: '昨天'
+
+job.report.error: |-
+  ⚠️ **{{{header}}}**
+  {{#attempts.nextDelay}}
+  🔄 将在 {{attempts.nextDelay}} 秒后重试...
+  {{/attempts.nextDelay}}
+  {{^attempts.nextDelay}}
+  ❌ 没有更多重试机会。请稍后再试。
+  {{/attempts.nextDelay}}
+  尝试：{{{attempts.current}}} / {{{attempts.max}}}
+  详情：[{{{details.text}}}]({{{details.url}}})
+  {{#error}}
+  ```
+
+  {{{error}}}
+  ```
+  {{/error}}
+
+job.report.succeeded: |-
+  ✅ **成功**
+  尝试：{{{attempts.current}}} / {{{attempts.max}}}
+  详情：[{{{details.text}}}]({{{details.url}}})
+
+whatsapp.message.sending.error: 无法在 WhatsApp 中发送消息。
+whatsapp.message.receiving.error: 无法接收来自 WhatsApp 的消息
+whatsapp.message.removing.error: 无法从 WhatsApp 中删除消息
+job.scheduled.error.header: 计划任务执行失败
+
+message.from.whatsapp: |-
+  *📱 通过 WhatsApp 发送*
+
+  {{{text}}}
+
+message.from.api: |-
+  *📱 通过 API 发送*
+
+  {{{text}}}
+
+message.removed.in.whatsapp: |-
+  ❌ *此消息已在 WhatsApp 中被删除*
+
+message.edited.in.whatsapp: |-
+  {{{text}}}
+
+  ✏️ *已在 WhatsApp 中编辑*
+
+whatsapp.group.message: |-
+  👥 *{{{participant}}}*
+
+  {{{text}}}
+
+whatsapp.reaction.added: |-
+  *已反应* {{{emoji}}}
+
+whatsapp.reaction.removed: |-
+  *已移除反应*
+
+whatsapp.contact.group.suffix: '群组'
+whatsapp.contact.channel.suffix: '频道'
+whatsapp.contact.broadcast.suffix: '广播列表'
+# Aka Stories
+whatsapp.contact.status.name: '状态'
+
+app.connected.message: |-
+  🔗 **已连接：WhatsApp 会话到收件箱**
+
+  ✅ WhatsApp 会话 **{{{name}}}** 已成功连接到此收件箱。
+
+  此收件箱现已链接到你的**WhatsApp 账号**。你可以在这里直接收发消息——就像使用 WhatsApp 一样，但在此工作区内完成。
+
+  你也可以管理与此收件箱关联的 WhatsApp 会话。要查看可用操作，请向此对话发送 **help**。
+
+  📋 你可以执行的常见操作：
+  - 检查 WhatsApp 会话是否活动
+  - 重启或停止 WhatsApp 会话
+  - 登出并通过扫描新的二维码重新连接
+
+  如果一切正常，你就可以自由聊天。如果你看到警告，可能需要重新连接你的 WhatsApp 账号。
+
+  开始吧！🚀
+
+app.disconnected.message: |-
+  🔌 **已断开：从收件箱断开 WhatsApp 会话**
+
+  ❌ WhatsApp 会话 **{{{name}}}** 已与此收件箱断开。
+
+  你将无法再从 WhatsApp 发送或接收消息。
+
+  如需重新连接，请联系你的管理员。
+
+app.updated.message: |-
+  🔄 **已更新：WhatsApp 会话设置**
+
+  ✅ WhatsApp 会话 **{{{name}}}** 的设置已更新。
+
+cli.usage.arguments: |-
+  [操作]
+
+cli.usage.command: |-
+  [命令]
+
+cli.usage.options: |-
+  [选项]
+
+cli.cmd.disabled: ⛔ **`{{command}}` 命令已被禁用**。
+
+  请联系你的管理员。
+
+  发送 **help** 获取可用命令列表。
+
+cli.cmd.root.description: |-
+  管理你的 **WhatsApp 集成**！
+
+cli.cmd.root.sub.session: |-
+  🖥️ **会话**：
+
+cli.cmd.root.sub.server: |-
+  🖥️ **服务器**：
+
+cli.cmd.root.sub.sync: |-
+  🔄️ **同步**：
+
+cli.cmd.session.status.description: |-
+  获取当前会话状态。
+
+cli.cmd.session.restart.description: |-
+  重启会话。
+
+cli.cmd.session.start.description: |-
+  启动会话。
+
+cli.cmd.session.stop.description: |-
+  停止会话。
+
+cli.cmd.session.logout.description: |-
+  登出会话以扫描新的二维码并恢复连接。
+
+cli.cmd.session.qr.description: |-
+  显示会话二维码。
+
+cli.cmd.session.screenshot.description: |-
+  截取会话截图（仅适用于 **WEBJS** 引擎）。
+
+cli.cmd.contacts.summary: |-
+  拉取 WhatsApp 联系人。
+
+cli.cmd.contacts.description: |-
+  👤 运行 `contacts pull` 启动同步，或运行 `contacts status` 查看进度。
+
+cli.cmd.contacts.action.description: |-
+  使用 `start` 开始拉取联系人，或使用 `status` 查看进行中的任务。
+
+cli.cmd.contacts.pull.description: |-
+  开始将 WhatsApp 联系人拉取到此收件箱。
+
+cli.cmd.contacts.pull.option.batch: |-
+  每批次拉取的联系人数量。
+
+cli.cmd.contacts.pull.option.delay-contact: |-
+  在每个联系人之间延迟，以避免拉取头像时触发频率限制。
+
+cli.cmd.contacts.pull.option.delay-batch: |-
+  在联系人批次之间的延迟。
+
+cli.cmd.contacts.pull.option.avatar: |-
+  选择如何拉取联系人头像：`skip`、`if-missing` 或 `update`。
+
+cli.cmd.contacts.pull.option.groups: |-
+  在同步中包含 WhatsApp 群组联系人。
+
+cli.cmd.contacts.pull.option.no-attributes: |-
+  如果联系人已存在，则不要拉取其属性（可加快流程）。
+
+cli.cmd.contacts.pull.already-running: |-
+  ⏳ **Pull Contacts** 任务已在运行。请等待完成或先停止再启动新的。
+
+  发送 `contacts status` 获取详情。
+
+cli.cmd.options.job.attempts: |-
+  任务标记为失败前的最大重试次数。
+
+cli.cmd.options.job.timeout: |-
+  任务重新尝试前允许运行的最长时间（支持 `30s`、`5m`、`1h` 等值）。
+
+cli.cmd.contacts.status.description: |-
+  显示当前拉取任务的状态。
+
+cli.cmd.contacts.status.not-found: |-
+  ℹ️ 未找到正在运行的 **Pull Contacts** 任务。使用 `contacts pull` 启动一个。
+
+cli.cmd.server.description: |-
+  管理服务器。
+
+cli.cmd.server.status.description: |-
+  显示服务器版本和状态。
+
+cli.cmd.server.reboot.description: |-
+  重启服务器。
+
+cli.cmd.server.reboot.option.force: |-
+  强制立即重启。
+
+cli.help.usage.title: |-
+  用法：按以下格式向对话发送命令：
+
+cli.help.commands.defaultGroup: |-
+  **命令：**
+
+cli.help.arguments.title: |-
+  **参数：**
+
+cli.help.options.defaultGroup: |-
+  **选项：**
+
+cli.help.globalOptions.title: |-
+  **全局选项：**
+
+task.contacts.status: |-
+  👤 联系人拉取：**{{state}}**
+  - ✅ 成功：{{{progress.ok}}} 位联系人
+  - ⚪ 跳过：{{{progress.skipped}}} 位联系人
+  - ⚠️ 错误：{{{progress.errors}}} 位联系人
+
+  {{#job}}
+  ⌛ 时间线：
+  - 排队：{{{timestamp}}}
+  {{#processedOn}}
+  - 开始：{{{processedOn}}}
+  {{/processedOn}}
+  {{#finishedOn}}
+  - 完成：{{{finishedOn}}}
+  {{/finishedOn}}
+  {{/job}}
+
+  {{#error}}
+  详情：
+  [{{{details.text}}}]({{{details.url}}})
+  {{/error}}
+
+task.contacts.started: |-
+  正在拉取联系人...
+
+task.contacts.progress: |-
+  联系人拉取：✅ {{progress.ok}}，⚪ {{progress.skipped}}，⚠️ {{progress.errors}}
+
+app.help.reminder: |-
+  发送 **help** 获取可用命令列表。
+
+app.session.status.change: |-
+  {{{emoji}}} "{{{session}}}" 会话已切换为 {{{status}}} 状态
+
+app.session.current.status: |-
+  {{{emoji}}} **{{{session}}}** 会话状态为 **{{{status}}}**
+  **WhatsApp 账号：**
+
+  📱 **{{{name}}} ({{{id}}})**
+
+app.session.status.working: |-
+  ✅ 此收件箱已链接到你的**WhatsApp 账号**，可以正常收发消息！
+
+  📱 **{{{name}}} ({{{id}}})**
+
+app.session.status.error: |-
+  ⚠️ **此收件箱已链接到 WhatsApp 账号，但尚未准备好收发消息！**
+
+  请检查会话状态，尝试重启，或登出后重新扫描二维码。
+
+app.session.scan.qr.code: |-
+  ⚠️ **请在手机上扫描二维码，将 WhatsApp 账号与此收件箱关联！**
+
+app.server.version.and.status: |-
+  **版本：**
+  ```
+  {{{version}}}
+  ```
+
+  **状态：**
+  ```
+  {{{status}}}
+  ```
+
+app.server.reboot: |-
+  服务器正在优雅重启...
+
+app.server.reboot.force: |-
+  服务器正在强制重启...
+
+app.logout.success: |-
+  ✅ 账号已成功取消授权！
+
+waha.new.version.available: |-
+  🔄 **有新版本可用！**
+
+  当前版本：**{{{currentVersion}}}**
+  新版本：**{{{newVersion}}}**
+
+  👉 查看[**🆕 更新日志**]({{{changelogUrl}}})
+
+  _要禁用这些通知，请发送_ `queue stop check.version`
+
+waha.core.version.used: |-
+  ❤️ **支持 WAHA！**
+
+  你正在使用免费的 **WAHA Core** 版本。如果你觉得该项目有帮助，请考虑支持其开发。
+
+  你的支持是我们持续进行更新、修复和新增功能的唯一动力。
+
+  [**🎁 支持我们**]({{{supportUrl}}})
+
+chatwoot.to.whatsapp.message.text: |-
+  {{{ content }}}
+
+chatwoot.to.whatsapp.message.media.caption: |-
+  {{#singleAttachment}}
+  {{#content}}
+  {{{ content }}}
+  {{/content}}
+  {{/singleAttachment}}
+
+whatsapp.to.chatwoot.message: |-
+  {{{payload.body}}}
+
+whatsapp.to.chatwoot.message.contacts: |-
+  👤 **共享联系人**
+
+  {{#contacts}}
+  🪪 姓名: **{{fullName}}**
+  {{#phoneNumbers}}
+  - 📞 电话: **{{.}}**
+  {{/phoneNumbers}}
+
+  {{/contacts}}
+
+whatsapp.to.chatwoot.message.location: |-
+  {{#message}}
+  {{#locationMessage}}
+  📍 **共享位置**
+
+  {{#name}}
+  **{{name}}**
+  {{/name}}
+
+  {{#address}}
+  📍 **地址：** {{address}}
+  {{/address}}
+
+  {{#url}}
+  🌐 **网站：** {{url}}
+  {{/url}}
+
+  🔗 **在地图上查看：** https://www.google.com/maps?q={{degreesLatitude}},{{degreesLongitude}}
+  {{#caption}}{{caption}}{{/caption}}
+  {{/locationMessage}}
+
+  {{#liveLocationMessage}}
+  📍📡 **正在共享实时位置**
+  打开 **WhatsApp** 查看实时更新。
+
+  {{#name}}
+  **{{name}}**
+  {{/name}}
+
+  {{#address}}
+  📍 **地址：** {{address}}
+  {{/address}}
+
+  {{#url}}
+  🌐 **网站：** {{url}}
+  {{/url}}
+
+  🔗 **在地图上查看：** https://www.google.com/maps?q={{degreesLatitude}},{{degreesLongitude}}
+  {{#caption}}{{caption}}{{/caption}}
+  {{/liveLocationMessage}}
+  {{/message}}
+
+whatsapp.to.chatwoot.message.poll: |-
+  {{#poll}}
+  📊 **投票**
+
+  **{{name}}**
+  {{#options}}
+  - {{optionName}}
+  {{/options}}
+  {{/poll}}
+
+whatsapp.to.chatwoot.message.list: |-
+  {{#message.listMessage}}
+  {{#title}}
+  *{{{title}}}*
+  {{/title}}
+  {{#description}}
+  {{{description}}}
+  {{/description}}
+  {{#footerText}}
+  {{{footerText}}}
+  {{/footerText}}
+
+  {{#buttonText}}
+  {{{buttonText}}}
+  {{/buttonText}}
+  {{#sections}}
+  {{#title}}
+  {{{title}}}:
+  {{/title}}
+  {{#rows}}
+  {{#title}}
+  - {{{title}}}
+  {{/title}}
+  {{/rows}}
+
+  {{/sections}}
+  {{/message.listMessage}}
+
+whatsapp.to.chatwoot.message.event: |-
+  {{#message}}
+  {{#eventMessage}}
+  📅 **活动**
+
+  **{{name}}**
+  {{#description}}
+  {{description}}
+  {{/description}}
+
+  {{#location.name}}
+  📍 **地点：** {{location.name}}
+  {{/location.name}}
+  {{#startTime}}
+  🕐 **开始时间：** {{startTime}}
+  {{/startTime}}
+  {{#endTime}}
+  🕐 **结束时间：** {{endTime}}
+  {{/endTime}}
+  {{#joinLink}}
+  🔗 **加入链接：** [{{joinLink}}]({{joinLink}})
+  {{/joinLink}}
+  {{/eventMessage}}
+  {{/message}}
+
+whatsapp.to.chatwoot.message.pix: |-
+  💳 **PIX - 复制粘贴**
+
+  {{#pixData}}
+  {{#merchantName}}
+  **{{merchantName}}**
+  {{/merchantName}}
+
+  {{#key}}
+  **PIX 密钥：** {{key}}
+  {{/key}}
+  {{#keyType}}
+  **类型：** {{keyType}}
+  {{/keyType}}
+  {{#totalAmount}}
+  **金额：** {{totalAmountFormatted}}
+  {{/totalAmount}}
+  {{#referenceId}}
+  **参考：** {{referenceId}}
+  {{/referenceId}}
+
+  💳 **PIX 复制粘贴已发送**
+  {{/pixData}}
+
+whatsapp.to.chatwoot.message.status.reply: |-
+  📣 **回复 WhatsApp 状态**
+  🏷️ **类型：**{{type}}
+  {{#quotedText}}
+  📝 **状态文本：**{{quotedText}}
+  {{/quotedText}}
+
+  {{content}}
+
+whatsapp.to.chatwoot.message.unsupported: |-
+  ⚠️ **此收件箱不支持此消息类型。**
+  📱 请打开 **WhatsApp** 查看。
+
+  详情: [{{{details.text}}}]({{{details.url}}})
+
+whatsapp.to.chatwoot.message.album: |-
+  📷 **收到相册消息**
+
+  {{#totalCount}}
+  收到一个包含 **{{totalCount}}** 个媒体文件的相册。
+  {{#expectedImageCount}}
+  📸 图片: **{{expectedImageCount}}**
+  {{/expectedImageCount}}
+  {{#expectedVideoCount}}
+  🎥 视频: **{{expectedVideoCount}}**
+  {{/expectedVideoCount}}
+
+  媒体文件将在以下消息中送达。
+  {{/totalCount}}
+
+whatsapp.to.chatwoot.message.facebook.ad: |-
+  📢 **Facebook 广告**
+
+  **标题:** {{{adData.title}}}
+
+  **描述:**
+  {{{adData.body}}}
+
+  **广告链接:** [在 Facebook 查看]({{{adData.sourceUrl}}})
+  **广告 ID:** {{{adData.sourceId}}}
+
+  ---
+  💬 **客户消息:**
+  {{{payload.body}}}
+
+whatsapp.to.chatwoot.call.received: |-
+  📞🔔 *收到{{#call.isVideo}}视频{{/call.isVideo}}{{^call.isVideo}}语音{{/call.isVideo}}来电*
+  📱 请打开 **WhatsApp** 接听。
+
+whatsapp.to.chatwoot.call.accepted: |-
+  📞✅ *已接听来电*
+  📱 来电已在你的其他设备上接听。
+
+whatsapp.to.chatwoot.call.rejected: |-
+  📞❌ *通话已结束*
+
+whatsapp.history.message.wrapper: |-
+  {{{content}}}
+  `{{#history}}📥{{/history}}🗓️ {{{timestamp}}}`
+
+UNKNOWN: 未知
+ERROR: 错误
+PENDING: 正在发送
+SERVER: 服务器
+DEVICE: 设备
+READ: 已读
+PLAYED: 已播放
+whatsapp.to.chatwoot.message.has.media.no.media: |-
+  {{#content}}
+  {{{content}}}
+
+  {{/content}}
+  🖼️⚠️ **该消息包含媒体，但我们无法下载**
+  📱 请打开 **WhatsApp** 查看。
+
+  {{^content}}
+  详情：[{{{details.text}}}]({{{details.url}}})
+  {{/content}}
+cli.cmd.root.sub.queue: 🧩 **队列**：
+cli.cmd.messages.summary: 拉取 WhatsApp 消息。
+cli.cmd.messages.description:
+  💬 运行 `messages pull` 开始同步，或运行 `messages status` 查看进度。
+cli.cmd.messages.action.description:
+  使用 `pull` 开始拉取或 `status` 查看正在执行的任务。
+cli.cmd.messages.pull.option.chat: 将拉取限制为特定 WhatsApp 聊天 ID。
+cli.cmd.messages.pull.option.force:
+  即使该 WhatsApp 消息已存在于会话映射中，也强制收件箱创建消息。
+cli.cmd.messages.pull.option.batch: 每个批次要拉取的消息数量。
+cli.cmd.messages.pull.option.progress:
+  每隔 N 条消息报告进度。设置为 0 可关闭报告。
+cli.cmd.messages.pull.option.no-dm: 拉取历史时跳过私聊消息。
+cli.cmd.messages.pull.option.groups: 拉取历史时包含 WhatsApp 群聊。
+cli.cmd.messages.pull.option.channels: 拉取历史时包含 WhatsApp 频道。
+cli.cmd.messages.pull.option.status: 拉取历史时包含 WhatsApp 状态更新。
+cli.cmd.messages.pull.option.broadcast: 拉取历史时包含群发列表。
+cli.cmd.messages.pull.option.media: 拉取历史时下载媒体附件（图片、视频、文件）。
+cli.cmd.messages.pull.option.pause:
+  将拉取任务以暂停状态加入队列，并在完成前暂停新的 WhatsApp 消息处理。
+cli.cmd.messages.pull.option.resolve-conversations: 在处理完所有历史消息后将会话标记为已解决。
+cli.cmd.messages.pull.error.pause-no-queue:
+  ⛔ 无法使用 `--pause`，因为此配置中 **queue** 命令已禁用。
+cli.cmd.queue.description: 管理队列。
+cli.cmd.queue.summary: 对队列执行操作。
+cli.cmd.queue.action.description: 选择一个操作。
+cli.cmd.queue.status.description: 显示队列状态。
+cli.cmd.queue.argument.name: 队列名称：`inbox` 或 `whatsapp`（可选）。
+cli.cmd.queue.start.description: 按名称启动队列。
+cli.cmd.queue.stop.description: 按名称停止队列。
+cli.cmd.queue.paused: ⚪🧩 队列已暂停。发送 `queue status` 查看状态。
+cli.cmd.queue.resumed: 🟢🧩 队列已恢复。发送 `queue status` 查看状态。
+cli.cmd.queue.status.result: >-
+  📊 队列状态：
+
+  {{#queues}}
+
+  - **{{name}}**：{{#locked}}🔒{{/locked}}{{#paused}}⚪
+  暂停{{/paused}}{{^paused}}🟢 运行中{{/paused}}
+
+  {{/queues}}
+cli.cmd.messages.pull.option.timeout-media: 设置每条消息尝试下载媒体的时长。
+cli.cmd.messages.pull.argument.end:
+  设置拉取窗口结束时间，例如 `2d` 表示截至两天前。
+cli.cmd.messages.pull.argument.start:
+  设置拉取窗口开始时间，例如 `1d` 表示从一天前开始（默认 `0d`，即现在）。
+cli.cmd.messages.pull.already-running: |-
+  ⏳ **Pull Messages** 任务已在 **{{{chat}}}** 上运行。请等待完成或先停止后再启动新的任务。
+
+  发送 `messages status` 获取详情。
+cli.cmd.messages.status.not-found:
+  ℹ️ 未找到活动的 **Pull Messages** 任务。请使用 `messages pull` 启动。
+cli.cmd.messages.pull.no-chats-found: 在该时间段内未找到可拉取的 WhatsApp 聊天。
+cli.cmd.contacts.pull.option.progress:
+  每隔 N 个联系人报告进度。设置为 0 关闭报告。
+cli.cmd.contacts.pull.option.lids: 在同步中包含 WhatsApp LID（匿名）联系人。
+task.contacts.completed:
+  👤✅ 联系人同步完成 → 🆕 {{progress.created}}，🔄 {{progress.updated}}，⚪
+  {{progress.skipped}}，🔴 {{progress.errors}}，🖼️ {{progress.avatar.updated}}
+task.messages.started: ⏳ 正在拉取消息 💬 {{{chat}}} ⏱️ {{{period}}}...
+task.messages.details: 发送 "{{{prefix}}}messages status" 查看更多详情。
+task.messages.progress:
+  ⏳ 消息 {{{chat}}}：🆕 {{progress.ok}}，🟢 {{progress.exists}}，⚪
+  {{progress.ignored}}，🔴 {{progress.errors}}{{#messages.last}} | 📅
+  {{{messages.last}}}{{/messages.last}}
+task.messages.completed:
+  ✅ 消息 {{{chat}}} 于 {{{period}}} → 🆕 {{progress.ok}}，🟢
+  {{progress.exists}}，⚪ {{progress.ignored}}，🔴 {{progress.errors}}
+task.messages.status: |-
+  **{{{chat}}}** 的消息在 ⏱️ **{{{period}}}** 内。⚙️ 任务状态：**{{state}}**。
+
+  🗨️ 消息：
+  - 🆕 新建：**{{{progress.ok}}}**
+  - 🟢 已存在：{{{progress.exists}}}
+  - ⚪ 忽略：{{{progress.ignored}}}
+  - 🔴 错误：{{{progress.errors}}}
+  {{#messages.first}}
+  - 🗓️ 最早：**{{{messages.first}}}**
+  {{/messages.first}}
+  {{#messages.last}}
+  - 🗓️ 最新：**{{{messages.last}}}**
+  {{/messages.last}}
+
+  💬 WhatsApp 会话：
+  - 🆕 **{{{chats}}}** 个会话出现新消息
+  {{#options.resolveConversations}}
+
+  🗣️ 会话：
+  - 🟢 已解决：**{{{progress.conversationResolve.success}}}**
+  {{#progress.conversationResolve.error}}
+  - 🔴 错误：**{{{progress.conversationResolve.error}}}**
+  {{/progress.conversationResolve.error}}
+  {{/options.resolveConversations}}
+
+  详情：
+  [{{{details.text}}}]({{{details.url}}})

@@ -1,0 +1,687 @@
+# Urdu translations for WhatsApp inbox integration
+locale.name: '🇵🇰 اردو (Urdu)'
+
+# بنیادی لوکل کوڈ - یہ ایک معتبر BCP 47 لوکل ہونا چاہیے
+# https://en.wikipedia.org/wiki/IETF_language_tag
+# WAHA اسے نمبرز، کرنسی اور تاریخ/وقت کی نمائندگی کے لیے استعمال کرتا ہے۔
+locale.base: 'ur-PK'
+
+app.inbox.contact.name: 'واٹس ایپ انٹیگریشن'
+app.inbox.contact.avatar.url: 'https://raw.githubusercontent.com/devlikeapro/waha/core/logo.png'
+
+# date.toLocaleString کی "options"
+# https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/DateTimeFormat#options
+datetime:
+  weekday: short
+  locales: ur-PK
+  day: 2-digit
+  month: short
+  year: numeric
+  hour: 2-digit
+  minute: 2-digit
+  hour12: true
+  # https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat/DateTimeFormat#timezonename
+  timeZoneName: short
+  # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+  # timeZone: 'Asia/Karachi'
+
+Today: 'آج'
+Yesterday: 'کل'
+
+job.report.error: |-
+  ⚠️ **{{{header}}}**
+  {{#attempts.nextDelay}}
+  🔄 {{attempts.nextDelay}} سیکنڈ میں دوبارہ کوشش کر رہا ہے...
+  {{/attempts.nextDelay}}
+  {{^attempts.nextDelay}}
+  ❌ مزید کوششیں نہیں بچی ہیں۔ براہ کرم بعد میں دوبارہ کوشش کریں۔
+  {{/attempts.nextDelay}}
+  کوشش: {{{attempts.current}}} / {{{attempts.max}}}
+  تفصیلات: [{{{details.text}}}]({{{details.url}}})
+  {{#error}}
+  ```
+
+  {{{error}}}
+  ```
+  {{/error}}
+
+job.report.succeeded: |-
+  ✅ **کامیاب ہوا**
+  کوشش: {{{attempts.current}}} / {{{attempts.max}}}
+  تفصیلات: [{{{details.text}}}]({{{details.url}}})
+
+whatsapp.message.sending.error: واٹس ایپ پر پیغام نہیں بھیج سکا۔
+whatsapp.message.receiving.error: واٹس ایپ سے پیغام موصول نہیں کر سکا
+whatsapp.message.removing.error: واٹس ایپ سے پیغام ہٹا نہیں سکا
+job.scheduled.error.header: شیڈول کردہ کام انجام دینے میں ناکام رہا
+
+message.from.whatsapp: |-
+  *📱 واٹس ایپ سے بھیجا گیا*
+
+  {{{text}}}
+
+message.from.api: |-
+  *📱 API کے ذریعے بھیجا گیا*
+
+  {{{text}}}
+
+message.removed.in.whatsapp: |-
+  ❌ *یہ پیغام واٹس ایپ میں حذف کر دیا گیا تھا*
+
+message.edited.in.whatsapp: |-
+  {{{text}}}
+
+  ✏️ *واٹس ایپ میں ترمیم کی گئی*
+
+whatsapp.group.message: |-
+  👥 *{{{participant}}}*
+
+  {{{text}}}
+
+whatsapp.reaction.added: |-
+  *ردعمل دیا* {{{emoji}}}
+
+whatsapp.reaction.removed: |-
+  *ردعمل ہٹا دیا گیا*
+
+whatsapp.contact.group.suffix: 'گروپ'
+whatsapp.contact.channel.suffix: 'چینل'
+whatsapp.contact.broadcast.suffix: 'براڈکاسٹ فہرست'
+# Aka Stories
+whatsapp.contact.status.name: 'سٹیٹس'
+
+app.connected.message: |-
+  🔗 **منسلک: واٹس ایپ سیشن انبکس سے**
+
+  ✅ واٹس ایپ سیشن **{{{name}}}** کامیابی سے اس انبکس سے منسلک ہو گیا ہے۔
+
+  یہ انبکس اب آپ کے **واٹس ایپ اکاؤنٹ** سے منسلک ہے۔ آپ یہاں سے براہ راست پیغامات بھیج اور موصول کر سکتے ہیں — بالکل واٹس ایپ استعمال کرنے کی طرح، لیکن اس ورک اسپیس کے اندر۔
+
+  آپ اس انبکس سے منسلک واٹس ایپ سیشن کا انتظام بھی کر سکتے ہیں۔ دستیاب اقدامات دیکھنے کے لیے، اس چیٹ میں **help** بھیجیں۔
+
+  📋 عام اقدامات جو آپ کر سکتے ہیں:
+  - چیک کریں کہ آیا واٹس ایپ سیشن فعال ہے
+  - واٹس ایپ سیشن کو دوبارہ شروع کریں یا روکیں
+  - لاگ آؤٹ کریں اور نیا QR کوڈ اسکین کر کے دوبارہ منسلک ہوں
+
+  اگر سب کچھ کام کر رہا ہے، تو آپ آزادانہ طور پر چیٹ کر سکیں گے۔ اگر آپ کو انتباہات نظر آتے ہیں، تو آپ کو اپنے واٹس ایپ اکاؤنٹ کو دوبارہ منسلک کرنے کی ضرورت ہو سکتی ہے۔
+
+  آئیے شروع کریں! 🚀
+
+app.disconnected.message: |-
+  🔌 **منقطع: واٹس ایپ سیشن انبکس سے**
+
+  ❌ واٹس ایپ سیشن **{{{name}}}** اس انبکس سے منقطع ہو گیا ہے۔
+
+  آپ اب واٹس ایپ سے پیغامات بھیجنے یا موصول کرنے کے قابل نہیں ہوں گے۔
+
+  دوبارہ منسلک ہونے کے لیے، براہ کرم اپنے منتظم سے رابطہ کریں۔
+
+app.updated.message: |-
+  🔄 **اپڈیٹ شدہ: واٹس ایپ سیشن کی ترتیبات**
+
+  ✅ واٹس ایپ سیشن **{{{name}}}** کی ترتیبات اپڈیٹ کر دی گئی ہیں۔
+
+cli.usage.arguments: |-
+  [عمل]
+
+cli.usage.command: |-
+  [کمانڈ]
+
+cli.usage.options: |-
+  [اختیارات]
+
+cli.cmd.disabled: ⛔ **`{{command}}` کمانڈ غیر فعال ہے**.
+
+  براہ کرم اپنے منتظم سے رابطہ کریں۔
+
+  دستیاب کمانڈز کی فہرست حاصل کرنے کے لیے **help** بھیجیں۔
+
+cli.cmd.root.description: |-
+  اپنے **واٹس ایپ انٹیگریشن** کا انتظام کریں!
+
+cli.cmd.root.sub.session: |-
+  🖥️ **سیشن**:
+
+cli.cmd.root.sub.server: |-
+  🖥️ **سرور**:
+
+cli.cmd.root.sub.sync: |-
+  🔄️ **ہم وقت سازی**:
+
+cli.cmd.session.status.description: |-
+  موجودہ سیشن کی حالت حاصل کریں۔
+
+cli.cmd.session.restart.description: |-
+  سیشن کو دوبارہ شروع کریں۔
+
+cli.cmd.session.start.description: |-
+  سیشن شروع کریں۔
+
+cli.cmd.session.stop.description: |-
+  سیشن روکیں۔
+
+cli.cmd.session.logout.description: |-
+  کنکشن بحال کرنے کے لیے نیا QR کوڈ اسکین کرنے کی خاطر سیشن سے لاگ آؤٹ کریں۔
+
+cli.cmd.session.qr.description: |-
+  سیشن کا QR کوڈ دکھائیں۔
+
+cli.cmd.session.screenshot.description: |-
+  سیشن کا اسکرین شاٹ لیں (صرف **WEBJS** انجن کے ساتھ دستیاب)۔
+
+cli.cmd.contacts.summary: |-
+  واٹس ایپ روابط نکالیں۔
+
+cli.cmd.contacts.description: |-
+  👤 ہم وقت سازی شروع کرنے کے لیے `contacts pull` چلائیں یا پیش رفت دیکھنے کے لیے `contacts status` چلائیں۔
+
+cli.cmd.contacts.action.description: |-
+  `start` سے روابط نکالنا شروع کریں یا `status` سے فعال کام چیک کریں۔
+
+cli.cmd.contacts.pull.description: |-
+  واٹس ایپ روابط کو اس انبکس میں لانا شروع کریں۔
+
+cli.cmd.contacts.pull.option.batch: |-
+  ہر بیچ میں نکالے جانے والے رابطوں کی تعداد۔
+
+cli.cmd.contacts.pull.option.delay-contact: |-
+  ہر رابطے کے درمیان وقفہ تاکہ اوتار نکالتے وقت ریٹ لمٹس سے بچا جا سکے۔
+
+cli.cmd.contacts.pull.option.delay-batch: |-
+  رابطوں کے بیچوں کے درمیان وقفہ۔
+
+cli.cmd.contacts.pull.option.avatar: |-
+  یہ منتخب کریں کہ رابطوں کے اوتار کس طرح نکالے جائیں: `skip`, `if-missing`, یا `update`.
+
+cli.cmd.contacts.pull.option.groups: |-
+  واٹس ایپ گروپ روابط کو ہم وقت سازی میں شامل کریں۔
+
+cli.cmd.contacts.pull.option.no-attributes: |-
+  اگر رابطہ پہلے سے موجود ہو تو اس کے خواص نہ نکالیں (اس سے عمل تیز ہوتا ہے)۔
+
+cli.cmd.contacts.pull.already-running: |-
+  ⏳ **Pull Contacts** کام پہلے ہی چل رہا ہے۔ اسے مکمل ہونے دیں یا نیا شروع کرنے سے پہلے روک دیں۔
+
+  تفصیلات کے لیے `contacts status` بھیجیں۔
+
+cli.cmd.options.job.attempts: |-
+  کام کو ناکام قرار دینے سے پہلے دوبارہ کوششوں کی تعداد۔
+
+cli.cmd.options.job.timeout: |-
+  کام کو دوبارہ چلانے سے پہلے زیادہ سے زیادہ مدت (جیسے `30s`, `5m`, `1h`)۔
+
+cli.cmd.contacts.status.description: |-
+  موجودہ نکاسی کے کام کی حالت دکھائیں۔
+
+cli.cmd.contacts.status.not-found: |-
+  ℹ️ کوئی فعال **Pull Contacts** کام نہیں ملا۔ `contacts pull` سے ایک شروع کریں۔
+
+cli.cmd.server.description: |-
+  سرور کا انتظام کریں۔
+
+cli.cmd.server.status.description: |-
+  سرور کا ورژن اور حالت دکھائیں۔
+
+cli.cmd.server.reboot.description: |-
+  سرور کو دوبارہ شروع کریں۔
+
+cli.cmd.server.reboot.option.force: |-
+  فوری ریبوٹ کو لازمی بنائیں۔
+
+cli.help.usage.title: |-
+  استعمال: ذیل کے فارمیٹ میں گفتگو کو کمانڈ بھیجیں:
+
+cli.help.commands.defaultGroup: |-
+  **کمانڈز:**
+
+cli.help.arguments.title: |-
+  **دلائل:**
+
+cli.help.options.defaultGroup: |-
+  **اختیارات:**
+
+cli.help.globalOptions.title: |-
+  **عالمی اختیارات:**
+
+task.contacts.status: |-
+  👤 رابطے نکالنا: **{{state}}**
+  - ✅ کامیابی: {{{progress.ok}}} روابط
+  - ⚪ چھوڑے گئے: {{{progress.skipped}}} روابط
+  - ⚠️ غلطیاں: {{{progress.errors}}} روابط
+
+  {{#job}}
+  ⌛ ٹائم لائن:
+  - قطار میں: {{{timestamp}}}
+  {{#processedOn}}
+  - آغاز: {{{processedOn}}}
+  {{/processedOn}}
+  {{#finishedOn}}
+  - اختتام: {{{finishedOn}}}
+  {{/finishedOn}}
+  {{/job}}
+
+  {{#error}}
+  تفصیلات:
+  [{{{details.text}}}]({{{details.url}}})
+  {{/error}}
+
+task.contacts.started: |-
+  روابط نکالے جا رہے ہیں...
+
+task.contacts.progress: |-
+  رابطے نکالنا: ✅ {{progress.ok}}، ⚪ {{progress.skipped}}، ⚠️ {{progress.errors}}
+
+app.help.reminder: |-
+  دستیاب کمانڈز کی فہرست حاصل کرنے کے لیے **help** بھیجیں۔
+
+app.session.status.change: |-
+  {{{emoji}}} "{{{session}}}" سیشن {{{status}}} حالت میں تبدیل ہو گیا
+
+app.session.current.status: |-
+  {{{emoji}}} **{{{session}}}** سیشن کی حالت **{{{status}}}** میں ہے
+  **واٹس ایپ اکاؤنٹ:**
+
+  📱 **{{{name}}} ({{{id}}})**
+
+app.session.status.working: |-
+  ✅ یہ انبکس آپ کے **واٹس ایپ اکاؤنٹ** سے منسلک ہے اور پیغامات بھیجنے اور موصول کرنے کے لیے تیار ہے!
+
+  📱 **{{{name}}} ({{{id}}})**
+
+app.session.status.error: |-
+  ⚠️ **یہ انبکس واٹس ایپ اکاؤنٹ سے منسلک ہے لیکن پیغامات بھیجنے اور موصول کرنے کے لیے تیار نہیں ہے!**
+
+  براہ کرم سیشن کی حالت چیک کریں اور اسے دوبارہ شروع کرنے کی کوشش کریں یا لاگ آؤٹ کریں اور QR کوڈ دوبارہ اسکین کریں۔
+
+app.session.scan.qr.code: |-
+  ⚠️ **اس انبکس کے ساتھ واٹس ایپ اکاؤنٹ کو منسلک کرنے کے لیے اپنے فون پر QR کوڈ اسکین کریں!**
+
+app.server.version.and.status: |-
+  **ورژن:**
+  ```
+  {{{version}}}
+  ```
+
+  **حالت:**
+  ```
+  {{{status}}}
+  ```
+
+app.server.reboot: |-
+  سرور آرام سے دوبارہ شروع ہو رہا ہے...
+
+app.server.reboot.force: |-
+  سرور زبردستی دوبارہ شروع ہو رہا ہے...
+
+app.logout.success: |-
+  ✅ اکاؤنٹ کامیابی سے غیر مجاز ہو گیا!
+
+waha.new.version.available: |-
+  🔄 **نیا ورژن دستیاب ہے!**
+
+  موجودہ ورژن: **{{{currentVersion}}}**
+  نیا ورژن: **{{{newVersion}}}**
+
+  👉 [**🆕 تبدیلیوں کی فہرست**]({{{changelogUrl}}}) میں نیا کیا ہے دیکھیں
+
+  _ان اطلاعات کو بند کرنے کے لیے بھیجیں_ `queue stop check.version`
+
+waha.core.version.used: |-
+  ❤️ **WAHA کی حمایت کریں!**
+
+  آپ مفت **WAHA Core** ورژن استعمال کر رہے ہیں۔ اگر آپ کو یہ پروجیکٹ مفید لگتا ہے، تو براہ کرم اس کی ترقی کی حمایت کرنے پر غور کریں۔
+
+  آپ کی حمایت ہی وہ واحد طریقہ ہے جس سے ہم اپڈیٹس، فکسز، اور نئی خصوصیات پر کام جاری رکھ سکتے ہیں۔
+
+  [**🎁 ہماری حمایت کریں**]({{{supportUrl}}})
+
+chatwoot.to.whatsapp.message.text: |-
+  {{{ content }}}
+
+chatwoot.to.whatsapp.message.media.caption: |-
+  {{#singleAttachment}}
+  {{#content}}
+  {{{ content }}}
+  {{/content}}
+  {{/singleAttachment}}
+
+whatsapp.to.chatwoot.message: |-
+  {{{payload.body}}}
+
+whatsapp.to.chatwoot.message.contacts: |-
+  👤 **شیئر کیے گئے رابطہ(رابطے)**
+
+  {{#contacts}}
+  🪪 نام: **{{fullName}}**
+  {{#phoneNumbers}}
+  - 📞 فون: **{{.}}**
+  {{/phoneNumbers}}
+
+  {{/contacts}}
+
+whatsapp.to.chatwoot.message.location: |-
+  {{#message}}
+  {{#locationMessage}}
+  📍 **شیئر کی گئی لوکیشن**
+
+  {{#name}}
+  **{{name}}**
+  {{/name}}
+
+  {{#address}}
+  📍 **پتہ:** {{address}}
+  {{/address}}
+
+  {{#url}}
+  🌐 **ویب سائٹ:** {{url}}
+  {{/url}}
+
+  🔗 **نقشے پر دیکھیں:** https://www.google.com/maps?q={{degreesLatitude}},{{degreesLongitude}}
+  {{#caption}}{{caption}}{{/caption}}
+  {{/locationMessage}}
+
+  {{#liveLocationMessage}}
+  📍📡 **لائیو لوکیشن شیئر کی جا رہی ہے**
+  حقیقی وقت کی تازہ کاریوں کے لیے **WhatsApp** کھولیں۔
+
+  {{#name}}
+  **{{name}}**
+  {{/name}}
+
+  {{#address}}
+  📍 **پتہ:** {{address}}
+  {{/address}}
+
+  {{#url}}
+  🌐 **ویب سائٹ:** {{url}}
+  {{/url}}
+
+  🔗 **نقشے پر دیکھیں:** https://www.google.com/maps?q={{degreesLatitude}},{{degreesLongitude}}
+  {{#caption}}{{caption}}{{/caption}}
+  {{/liveLocationMessage}}
+  {{/message}}
+
+whatsapp.to.chatwoot.message.poll: |-
+  {{#poll}}
+  📊 **رائے شماری**
+
+  **{{name}}**
+  {{#options}}
+  - {{optionName}}
+  {{/options}}
+  {{/poll}}
+
+whatsapp.to.chatwoot.message.list: |-
+  {{#message.listMessage}}
+  {{#title}}
+  *{{{title}}}*
+  {{/title}}
+  {{#description}}
+  {{{description}}}
+  {{/description}}
+  {{#footerText}}
+  {{{footerText}}}
+  {{/footerText}}
+
+  {{#buttonText}}
+  {{{buttonText}}}
+  {{/buttonText}}
+  {{#sections}}
+  {{#title}}
+  {{{title}}}:
+  {{/title}}
+  {{#rows}}
+  {{#title}}
+  - {{{title}}}
+  {{/title}}
+  {{/rows}}
+
+  {{/sections}}
+  {{/message.listMessage}}
+
+whatsapp.to.chatwoot.message.event: |-
+  {{#message}}
+  {{#eventMessage}}
+  📅 **ایونٹ**
+
+  **{{name}}**
+  {{#description}}
+  {{description}}
+  {{/description}}
+
+  {{#location.name}}
+  📍 **مقام:** {{location.name}}
+  {{/location.name}}
+  {{#startTime}}
+  🕐 **آغاز:** {{startTime}}
+  {{/startTime}}
+  {{#endTime}}
+  🕐 **اختتام:** {{endTime}}
+  {{/endTime}}
+  {{#joinLink}}
+  🔗 **شمولیت کا لنک:** [{{joinLink}}]({{joinLink}})
+  {{/joinLink}}
+  {{/eventMessage}}
+  {{/message}}
+
+whatsapp.to.chatwoot.message.pix: |-
+  💳 **PIX - کاپی اور پیسٹ**
+
+  {{#pixData}}
+  {{#merchantName}}
+  **{{merchantName}}**
+  {{/merchantName}}
+
+  {{#key}}
+  **PIX کلید:** {{key}}
+  {{/key}}
+  {{#keyType}}
+  **قسم:** {{keyType}}
+  {{/keyType}}
+  {{#totalAmount}}
+  **رقم:** {{totalAmountFormatted}}
+  {{/totalAmount}}
+  {{#referenceId}}
+  **حوالہ:** {{referenceId}}
+  {{/referenceId}}
+
+  💳 **PIX کاپی اور پیسٹ بھیج دیا گیا**
+  {{/pixData}}
+
+whatsapp.to.chatwoot.message.status.reply: |-
+  📣 **WhatsApp اسٹیٹس کا جواب**
+  🏷️ **قسم:** {{type}}
+  {{#quotedText}}
+  📝 **اسٹیٹس کا متن:** {{quotedText}}
+  {{/quotedText}}
+
+  {{content}}
+
+whatsapp.to.chatwoot.message.unsupported: |-
+  ⚠️ **اس قسم کا پیغام اس انبکس میں معاونت یافتہ نہیں ہے۔**
+  📱 اسے دیکھنے کے لیے براہ کرم **WhatsApp** کھولیں۔
+
+  تفصیلات: [{{{details.text}}}]({{{details.url}}})
+
+whatsapp.to.chatwoot.message.album: |-
+  📷 **البم پیغام موصول ہوا**
+
+  {{#totalCount}}
+  **{{totalCount}}** میڈیا فائل(ز) کے ساتھ ایک البم موصول ہوا۔
+  {{#expectedImageCount}}
+  📸 تصاویر: **{{expectedImageCount}}**
+  {{/expectedImageCount}}
+  {{#expectedVideoCount}}
+  🎥 ویڈیوز: **{{expectedVideoCount}}**
+  {{/expectedVideoCount}}
+
+  میڈیا فائلیں اگلے پیغامات میں فراہم کی جائیں گی۔
+  {{/totalCount}}
+
+whatsapp.to.chatwoot.message.facebook.ad: |-
+  📢 **فیس بک اشتہار**
+
+  **عنوان:** {{{adData.title}}}
+
+  **تفصیل:**
+  {{{adData.body}}}
+
+  **اشتہار کا لنک:** [فیس بک پر دیکھیں]({{{adData.sourceUrl}}})
+  **اشتہار کا شناختی نمبر:** {{{adData.sourceId}}}
+
+  ---
+  💬 **گاہک کا پیغام:**
+  {{{payload.body}}}
+
+whatsapp.to.chatwoot.call.received: |-
+  📞🔔 *آنے والی {{#call.isVideo}}ویڈیو{{/call.isVideo}}{{^call.isVideo}}آواز{{/call.isVideo}} کال*
+  📱 جواب دینے کے لیے براہ کرم **WhatsApp** کھولیں۔
+
+whatsapp.to.chatwoot.call.accepted: |-
+  📞✅ *کال کا جواب دے دیا گیا*
+  📱 کال آپ کے دوسرے ڈیوائس پر اٹھائی گئی۔
+
+whatsapp.to.chatwoot.call.rejected: |-
+  📞❌ *کال ختم ہو گئی*
+
+whatsapp.history.message.wrapper: |-
+  {{{content}}}
+  `{{#history}}📥{{/history}}🗓️ {{{timestamp}}}`
+
+UNKNOWN: نامعلوم
+ERROR: خرابی
+PENDING: بھجوایا جا رہا ہے
+SERVER: سرور
+DEVICE: ڈیوائس
+READ: پڑھا گیا
+PLAYED: چلایا گیا
+whatsapp.to.chatwoot.message.has.media.no.media: |-
+  {{#content}}
+  {{{content}}}
+
+  {{/content}}
+  🖼️⚠️ **پیغام میں میڈیا موجود ہے لیکن ہم اسے ڈاؤن لوڈ نہیں کر سکے**
+  📱 براہ کرم دیکھنے کے لیے **WhatsApp** کھولیں۔
+
+  {{^content}}
+  تفصیلات: [{{{details.text}}}]({{{details.url}}})
+  {{/content}}
+cli.cmd.root.sub.queue: '🧩 **قطار**:'
+cli.cmd.messages.summary: WhatsApp پیغامات کھینچیں۔
+cli.cmd.messages.description:
+  💬 پیغامات کی ہم آہنگی شروع کرنے کے لیے `messages pull` چلائیں یا پیش رفت
+  دیکھنے کے لیے `messages status` چلائیں۔
+cli.cmd.messages.action.description:
+  پیغامات کھینچنے کے لیے `pull` یا فعال کام دیکھنے کے لیے `status` استعمال کریں۔
+cli.cmd.messages.pull.option.chat:
+  کھینچنے کو مخصوص WhatsApp چیٹ آئی ڈی تک محدود کریں۔
+cli.cmd.messages.pull.option.force:
+  اگر WhatsApp پیغام پہلے سے گفتگو کے میپ میں موجود ہو تب بھی ان باکس کو پیغامات
+  بنانے پر مجبور کریں۔
+cli.cmd.messages.pull.option.batch:
+  ہر بیچ میں کھینچے جانے والے پیغامات کی تعداد۔
+cli.cmd.messages.pull.option.progress:
+  ہر N پیغامات کے بعد پیش رفت بتائیں۔ رپورٹ بند کرنے کے لیے 0 مقرر کریں۔
+cli.cmd.messages.pull.option.no-dm: تاریخ کھینچتے وقت ڈائریکٹ پیغامات چھوڑ دیں۔
+cli.cmd.messages.pull.option.groups: تاریخ کھینچتے وقت WhatsApp گروپس شامل کریں۔
+cli.cmd.messages.pull.option.channels:
+  تاریخ کھینچتے وقت WhatsApp چینلز شامل کریں۔
+cli.cmd.messages.pull.option.status:
+  تاریخ کھینچتے وقت WhatsApp اسٹیٹس اپ ڈیٹس شامل کریں۔
+cli.cmd.messages.pull.option.broadcast:
+  تاریخ کھینچتے وقت نشریاتی فہرستیں شامل کریں۔
+cli.cmd.messages.pull.option.media:
+  تاریخ کھینچتے وقت میڈیا (تصاویر، ویڈیوز، فائلیں) ڈاؤن لوڈ کریں۔
+cli.cmd.messages.pull.option.pause:
+  پیغامات کھینچنے کے کام کو معطل حالت میں قطار میں ڈالیں اور مکمل ہونے تک نئے
+  WhatsApp پیغامات کی پروسیسنگ روک دیں۔
+cli.cmd.messages.pull.option.resolve-conversations:
+  تمام تاریخی پیغامات کے پراسیس ہونے کے بعد گفتگوؤں کو حل شدہ کے طور پر نشان زد
+  کرتا ہے۔
+cli.cmd.messages.pull.error.pause-no-queue:
+  ⛔ `--pause` استعمال نہیں کیا جا سکتا کیونکہ اس ترتیب میں **queue** کمانڈ غیر
+  فعال ہے۔
+cli.cmd.queue.description: قطاروں کا انتظام کریں۔
+cli.cmd.queue.summary: قطاروں پر کارروائیاں انجام دیں۔
+cli.cmd.queue.action.description: کوئی کارروائی منتخب کریں۔
+cli.cmd.queue.status.description: قطار کی حالت دکھائیں۔
+cli.cmd.queue.argument.name: 'قطار کا نام: `inbox` یا `whatsapp` (اختیاری)।'
+cli.cmd.queue.start.description: نام کے ذریعے قطار شروع کریں۔
+cli.cmd.queue.stop.description: نام کے ذریعے قطار روکیں۔
+cli.cmd.queue.paused:
+  ⚪🧩 قطاریں معطل کر دی گئی ہیں۔ حالت جاننے کے لیے `queue status` بھیجیں۔
+cli.cmd.queue.resumed:
+  🟢🧩 قطاریں دوبارہ شروع ہو گئی ہیں۔ حالت جاننے کے لیے `queue status` بھیجیں۔
+cli.cmd.queue.status.result: >-
+  📊 قطار کی حالت:
+
+  {{#queues}}
+
+  - **{{name}}**: {{#locked}}🔒{{/locked}}{{#paused}}⚪
+  معطل{{/paused}}{{^paused}}🟢 فعال{{/paused}}
+
+  {{/queues}}
+cli.cmd.messages.pull.option.timeout-media:
+  ہر پیغام کے لیے میڈیا ڈاؤن لوڈ کرنے کی مدت مقرر کریں۔
+cli.cmd.messages.pull.argument.end:
+  کھینچنے کی ونڈو کہاں ختم ہو گی طے کریں؛ مثال کے طور پر `2d` دو دن پہلے رک جاتی
+  ہے۔
+cli.cmd.messages.pull.argument.start:
+  کھینچنے کی ونڈو کہاں سے شروع ہو گی طے کریں؛ مثال کے طور پر `1d` ایک دن پہلے سے
+  شروع ہوتی ہے (طے شدہ `0d` یعنی ابھی)۔
+cli.cmd.messages.pull.already-running: >-
+  ⏳ **Pull Messages** کام پہلے سے ہی **{{{chat}}}** کے لیے چل رہا ہے۔ نیا شروع
+  کرنے سے پہلے اس کے مکمل ہونے کا انتظار کریں یا اسے روک دیں۔
+
+
+  تفصیلات کے لیے `messages status` بھیجیں۔
+cli.cmd.messages.status.not-found:
+  ℹ️ کوئی فعال **Pull Messages** کام نہیں ملا۔ `messages pull` کے ساتھ ایک شروع
+  کریں۔
+cli.cmd.messages.pull.no-chats-found: اس مدت کے لیے کوئی WhatsApp چیٹ نہیں ملی۔
+cli.cmd.contacts.pull.option.progress:
+  ہر N رابطوں پر پیش رفت بتائیں۔ رپورٹ بند کرنے کے لیے 0 مقرر کریں۔
+cli.cmd.contacts.pull.option.lids:
+  WhatsApp LID (گمنام) رابطوں کو ہم آہنگی میں شامل کریں۔
+task.contacts.completed:
+  👤✅ رابطے مکمل → 🆕 {{progress.created}}, 🔄 {{progress.updated}}, ⚪
+  {{progress.skipped}}, 🔴 {{progress.errors}}, 🖼️ {{progress.avatar.updated}}
+task.messages.started:
+  ⏳ پیغامات کھینچے جا رہے ہیں 💬 {{{chat}}} ⏱️ {{{period}}}...
+task.messages.details: مزید تفصیلات کے لیے "{{{prefix}}}messages status" بھیجیں۔
+task.messages.progress:
+  '⏳ پیغامات {{{chat}}}: 🆕 {{progress.ok}}, 🟢 {{progress.exists}}, ⚪
+  {{progress.ignored}}, 🔴 {{progress.errors}}{{#messages.last}} | 📅
+  {{{messages.last}}}{{/messages.last}}'
+task.messages.completed:
+  ✅ پیغامات {{{chat}}} میں {{{period}}} → 🆕 {{progress.ok}}, 🟢
+  {{progress.exists}}, ⚪ {{progress.ignored}}, 🔴 {{progress.errors}}
+task.messages.status: |-
+  **{{{chat}}}** کے پیغامات ⏱️ **{{{period}}}** کے دوران۔ ⚙️ کام کی حالت: **{{state}}**۔
+
+  🗨️ پیغامات:
+  - 🆕 بنے: **{{{progress.ok}}}**
+  - 🟢 پہلے سے موجود: {{{progress.exists}}}
+  - ⚪ نظر انداز: {{{progress.ignored}}}
+  - 🔴 خامیاں: {{{progress.errors}}}
+  {{#messages.first}}
+  - 🗓️ قدیم ترین: **{{{messages.first}}}**
+  {{/messages.first}}
+  {{#messages.last}}
+  - 🗓️ تازہ ترین: **{{{messages.last}}}**
+  {{/messages.last}}
+
+  💬 WhatsApp چیٹس:
+  - 🆕 **{{{chats}}}** چیٹس میں نئے پیغامات
+  {{#options.resolveConversations}}
+
+  🗣️ گفتگوئیں:
+  - 🟢 حل شدہ: **{{{progress.conversationResolve.success}}}**
+  {{#progress.conversationResolve.error}}
+  - 🔴 خامیاں: **{{{progress.conversationResolve.error}}}**
+  {{/progress.conversationResolve.error}}
+  {{/options.resolveConversations}}
+
+  تفصیلات:
+  [{{{details.text}}}]({{{details.url}}})
