@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { WaController } from './wa.controller';
 import { MediaController } from './media.controller';
 import { WaService } from './wa.service';
@@ -10,14 +9,18 @@ import { WaMirrorService } from './wa-mirror.service';
 import { MessageIngestService } from './message-ingest.service';
 import { AutoAssignService } from './auto-assign.service';
 import { ContactSyncService } from './contact-sync.service';
+import { WahaClientService } from './waha-client.service';
+import { WaRateLimiter } from './wa-rate-limiter';
 import { AiModule } from '../ai/ai.module';
 import { HermesModule } from '../hermes/hermes.module';
 import { MediaModule } from '../media/media.module';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), AiModule, HermesModule, MediaModule],
+  imports: [AiModule, HermesModule, MediaModule],
   controllers: [WaController, MediaController],
   providers: [
+    WahaClientService,
+    WaRateLimiter,
     WaSessionStore,
     WaSendService,
     WaInboundService,
@@ -27,6 +30,6 @@ import { MediaModule } from '../media/media.module';
     AutoAssignService,
     ContactSyncService,
   ],
-  exports: [WaService, ContactSyncService],
+  exports: [WaService, ContactSyncService, WahaClientService],
 })
 export class WaModule {}

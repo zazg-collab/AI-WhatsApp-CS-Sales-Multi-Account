@@ -69,8 +69,12 @@ export class WaController {
   @ApiOperation({ summary: 'Get QR code for a WhatsApp account' })
   @Roles('viewer')
   @Get(':id/qr')
-  qr(@Param('id') id: string) {
-    return { qr: this.wa.getQr(id), connected: this.wa.isConnected(id) };
+  async qr(@Param('id') id: string) {
+    const [{ qr, status }, connected] = await Promise.all([
+      this.wa.getQr(id),
+      this.wa.isConnected(id),
+    ]);
+    return { qr, connected, status };
   }
 
   @ApiOperation({ summary: 'Get auto-populated metadata (phone, name) after successful scan' })
@@ -90,12 +94,11 @@ export class WaController {
     const account = await this.prisma.whatsappAccount.findUnique({
       where: { id },
     });
-    const { liveSocket, reconnectAttempts } = this.wa.getHealth(id);
+    const { status } = await this.wa.getHealth(id);
     return {
       accountId: id,
       dbStatus: account?.sessionStatus ?? null,
-      liveSocket,
-      reconnectAttempts,
+      wahaStatus: status,
     };
   }
 
