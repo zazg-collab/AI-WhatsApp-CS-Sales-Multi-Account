@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { UserPlus, PhoneCall, MagnifyingGlass, AddressBook } from '@phosphor-icons/react';
 import { useT, type Dict } from '@/lib/i18n';
+import Link from 'next/link';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/Button';
 import { WhatsAppMark } from '@/components/WhatsAppMark';
@@ -30,6 +31,8 @@ const dict: Dict = {
   checkNumber: { id: 'Cek nomor', en: 'Check number' },
   openChat: { id: 'Buka chat', en: 'Open chat' },
   noConversationsFilter: { id: 'Tidak ada percakapan dengan filter ini', en: 'No conversations match this filter' },
+  noConversationsAll: { id: 'Belum ada percakapan masuk.\nPastikan akun WhatsApp sudah terhubung.', en: 'No conversations yet.\nMake sure a WhatsApp account is connected.' },
+  goToAccounts: { id: 'Kelola akun WhatsApp →', en: 'Manage WhatsApp accounts →' },
 };
 
 interface ConversationListProps {
@@ -299,8 +302,18 @@ export function ConversationList({
         {error ? (
           <li className="px-4 py-10 text-center text-sm text-danger-600">{error}</li>
         ) : visible.length === 0 && !loading ? (
-          <li className="px-4 py-10 text-center text-sm text-gray-400">
-            {t('noConversationsFilter')}
+          <li className="px-4 py-10 text-center">
+            {conversations.length === 0 ? (
+              <div className="space-y-2">
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('noConversationsAll').split('\n')[0]}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">{t('noConversationsAll').split('\n')[1]}</p>
+                <Link href="/accounts" className="mt-3 inline-block text-xs text-hermes-600 underline-offset-2 hover:underline dark:text-hermes-400">
+                  {t('goToAccounts')}
+                </Link>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">{t('noConversationsFilter')}</p>
+            )}
           </li>
         ) : (
           visible.map((c) => (

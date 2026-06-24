@@ -50,7 +50,7 @@ const inputClass =
 
 const dict: Dict = {
   title: { id: 'WhatsApp Contact Book', en: 'WhatsApp Contact Book' },
-  subtitle: { id: 'Kontak asli dari history sync dan contacts update Baileys', en: 'Original contacts from Baileys history sync and contact updates' },
+  subtitle: { id: 'Buku telepon WhatsApp yang disinkronisasi dari akun WA — beda dengan CRM Contacts yang dibuat dari percakapan masuk', en: 'Phone book synced from WhatsApp — different from CRM Contacts which are created from inbound conversations' },
   reload: { id: 'Muat ulang', en: 'Reload' },
   selectAccount: { id: 'Pilih akun WhatsApp', en: 'Select WhatsApp account' },
   contactsSynced: { id: 'kontak tersync', en: 'contacts synced' },

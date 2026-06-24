@@ -83,7 +83,7 @@ const sections: NavSection[] = [
       { href: '/inbox', label: 'Inbox', icon: Tray },
       { href: '/accounts', label: 'Accounts', icon: DeviceMobile },
       { href: '/customers', label: 'Contacts', icon: AddressBook },
-      { href: '/wa-contacts', label: 'WA Contacts', icon: BookOpen },
+      { href: '/wa-contacts', label: 'WA Phone Book', icon: BookOpen },
       { href: '/hermes', label: 'Hermes Review', icon: ShieldStar },
     ],
   },
