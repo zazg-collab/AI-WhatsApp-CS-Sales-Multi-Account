@@ -108,8 +108,12 @@ export default function CustomersPage() {
           ) : customers.length === 0 ? (
             <Card className="flex flex-col items-center justify-center py-16 text-center">
               <AddressBook className="mb-2 h-6 w-6 text-gray-300" aria-hidden="true" />
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('emptyTitle')}</p>
-              <p className="mt-1 text-[13px] text-gray-400">{t('emptyHint')}</p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {(!search && !stageFilter && !tagFilter) ? t('emptyTitleFresh') : t('emptyTitle')}
+              </p>
+              <p className="mt-1 text-[13px] text-gray-400">
+                {(!search && !stageFilter && !tagFilter) ? t('emptyHintFresh') : t('emptyHint')}
+              </p>
               <Button variant="outline" size="sm" className="mt-3" onClick={loadCustomers}>
                 <ArrowsClockwise className="h-4 w-4" aria-hidden="true" />{t('retry')}
               </Button>

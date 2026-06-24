@@ -319,7 +319,9 @@ export default function AccountsPage() {
                           </div>
                         ) : (
                           <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-gray-300 py-6 dark:border-gray-700">
-                            <QrCode className="h-8 w-8 text-gray-300" aria-hidden="true" />
+                            <div className="flex h-52 w-52 animate-pulse items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
+                              <QrCode className="h-12 w-12 text-gray-300 dark:text-gray-600" aria-hidden="true" />
+                            </div>
                             <p className="text-xs text-gray-500">{t('waitingScan')}</p>
                             <Button type="button" variant="outline" size="sm" onClick={() => requestPairingCode(a.id)} disabled={requestingCode[a.id]}>
                               <QrCode className="h-3.5 w-3.5" aria-hidden="true" />

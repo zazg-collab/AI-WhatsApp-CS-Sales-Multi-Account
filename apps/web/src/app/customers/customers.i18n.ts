@@ -65,6 +65,8 @@ export const dict: Dict = {
   apply: { id: 'Terapkan', en: 'Apply' },
   emptyTitle: { id: 'Belum ada pelanggan cocok', en: 'No matching contacts yet' },
   emptyHint: { id: 'Longgarkan filter pencarian, atau muat ulang setelah ada chat masuk dari WhatsApp.', en: 'Loosen the search filters, or reload after a chat comes in from WhatsApp.' },
+  emptyTitleFresh: { id: 'Belum ada kontak pelanggan', en: 'No customer contacts yet' },
+  emptyHintFresh: { id: 'Kontak akan muncul otomatis saat pesan pertama masuk dari WhatsApp. Pastikan akun WA sudah terhubung.', en: 'Contacts appear automatically when the first message comes in from WhatsApp. Make sure a WA account is connected.' },
   retry: { id: 'Coba lagi', en: 'Try again' },
   selectAllAria: { id: 'Pilih semua pelanggan yang tampil', en: 'Select all visible contacts' },
   colCustomer: { id: 'Pelanggan', en: 'Contact' },
