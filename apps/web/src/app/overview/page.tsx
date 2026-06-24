@@ -11,6 +11,9 @@ import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Avatar } from '@/components/ui/Avatar';
 import { useOverview, relTime, deriveState, type QueueTone, type AttnState } from './useOverview';
+import { useApiQuery } from '@/lib/hooks/useApiQuery';
+import { useT } from '@/lib/i18n';
+import { dict } from './overview.i18n';
 
 const toneRing: Record<QueueTone, string> = { review: 'text-review-600', danger: 'text-danger-600' };
 
@@ -19,6 +22,36 @@ const stateMeta: Record<AttnState, { label: string; icon: PhosphorIcon; tone: 'r
   'needs-review': { label: 'st_review', icon: Warning, tone: 'review' },
   'sending-blocked': { label: 'st_blocked', icon: XCircle, tone: 'danger' },
 };
+
+function SetupChecklist() {
+  const { data: accounts } = useApiQuery<{ id: string }[]>('/wa/accounts');
+  const t = useT(dict);
+  if (!accounts || accounts.length > 0) return null;
+
+  const steps = [
+    { n: 1, label: t('setup_step1'), hint: t('setup_hint1'), href: '/accounts', done: false },
+    { n: 2, label: t('setup_step2'), hint: t('setup_hint2'), href: '/bots', done: false },
+    { n: 3, label: t('setup_step3'), hint: t('setup_hint3'), href: '/settings/ai', done: false },
+  ];
+
+  return (
+    <Card className="border-hermes-200 bg-hermes-50/60 p-5 dark:border-hermes-700/40 dark:bg-hermes-900/10">
+      <p className="mb-1 text-[13px] font-bold text-hermes-700 dark:text-hermes-400">{t('setup_title')}</p>
+      <p className="mb-4 text-[12px] text-hermes-700/70 dark:text-hermes-400/70">{t('setup_subtitle')}</p>
+      <ol className="space-y-3">
+        {steps.map((s) => (
+          <li key={s.n} className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-hermes-600 text-[11px] font-bold text-white">{s.n}</span>
+            <div className="flex-1">
+              <Link href={s.href} className="text-[13px] font-semibold text-hermes-700 underline-offset-2 hover:underline dark:text-hermes-400">{s.label}</Link>
+              <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{s.hint}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
+}
 
 export default function OverviewPage() {
   const {
@@ -62,6 +95,8 @@ export default function OverviewPage() {
                 <p className="mt-0.5 text-[12px] text-review-700/90 dark:text-review-400/90">{t('partialDetail', { sections: Object.keys(sectionErrors).join(', ') })}</p>
               </Card>
             )}
+
+            <SetupChecklist />
 
             <section aria-labelledby="queues-h">
               <h2 id="queues-h" className="mb-3 text-[10px] font-bold uppercase tracking-[0.1em] text-gray-400">{t('attnRequired')}</h2>

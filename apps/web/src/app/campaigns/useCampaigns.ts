@@ -86,14 +86,20 @@ export function useCampaigns() {
   const [optedOutTotal, setOptedOutTotal] = useState(0);
   const [optOutLoading, setOptOutLoading] = useState(false);
 
-  const [name, setName] = useState('');
-  const [messageTemplate, setMessageTemplate] = useState('');
-  const [whatsappAccountId, setWhatsappAccountId] = useState('');
-  const [leadStage, setLeadStage] = useState('');
-  const [tag, setTag] = useState('');
-  const [rateLimitPerMinute, setRateLimitPerMinute] = useState(6);
-  const [scheduledAt, setScheduledAt] = useState('');
-  const [assetId, setAssetId] = useState('');
+  const DRAFT_KEY = 'hermes_campaign_draft';
+  const savedDraft = (() => {
+    if (typeof window === 'undefined') return null;
+    try { return JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null'); } catch { return null; }
+  })();
+
+  const [name, setName] = useState<string>(savedDraft?.name ?? '');
+  const [messageTemplate, setMessageTemplate] = useState<string>(savedDraft?.messageTemplate ?? '');
+  const [whatsappAccountId, setWhatsappAccountId] = useState<string>(savedDraft?.whatsappAccountId ?? '');
+  const [leadStage, setLeadStage] = useState<string>(savedDraft?.leadStage ?? '');
+  const [tag, setTag] = useState<string>(savedDraft?.tag ?? '');
+  const [rateLimitPerMinute, setRateLimitPerMinute] = useState<number>(savedDraft?.rateLimitPerMinute ?? 6);
+  const [scheduledAt, setScheduledAt] = useState<string>(savedDraft?.scheduledAt ?? '');
+  const [assetId, setAssetId] = useState<string>(savedDraft?.assetId ?? '');
 
   const showError = (msg: string) => setToast({ msg, tone: 'error' });
   const showOk = (msg: string) => setToast({ msg, tone: 'success' });
@@ -145,6 +151,14 @@ export function useCampaigns() {
       showError(err instanceof Error ? err.message : t('toastLoadDetail'));
     }
   }, [t]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        name, messageTemplate, whatsappAccountId, leadStage, tag, rateLimitPerMinute, scheduledAt, assetId,
+      }));
+    } catch { /* ok */ }
+  }, [name, messageTemplate, whatsappAccountId, leadStage, tag, rateLimitPerMinute, scheduledAt, assetId]);
 
   useEffect(() => {
     setRole(getRoleFromToken());
@@ -220,6 +234,7 @@ export function useCampaigns() {
       setName('');
       setMessageTemplate('');
       setAssetId('');
+      try { localStorage.removeItem(DRAFT_KEY); } catch { /* ok */ }
       await loadCampaigns();
     } catch (err) {
       showError(err instanceof Error ? err.message : t('toastCreateFailed'));
