@@ -102,4 +102,156 @@ export class WahaClientService {
   async stopTyping(sessionId: string, chatId: string): Promise<void> {
     await this.request('POST', '/api/stopTyping', { session: sessionId, chatId });
   }
+
+  // ── Session lifecycle (missing) ───────────────────────────────────────────
+
+  async restartSession(sessionId: string): Promise<void> {
+    await this.request('POST', `/api/sessions/${sessionId}/restart`);
+  }
+
+  // ── Auth (missing) ────────────────────────────────────────────────────────
+
+  async requestPairingCode(sessionId: string, phoneNumber: string): Promise<string> {
+    const res = await this.request<{ code: string }>(
+      'POST',
+      `/api/${sessionId}/auth/request-code`,
+      { phoneNumber, method: 'sms' },
+    );
+    return res.code;
+  }
+
+  async getMe(sessionId: string): Promise<{ id: string; pushName: string } | null> {
+    try {
+      return await this.request('GET', `/api/sessions/${sessionId}/me`);
+    } catch {
+      return null;
+    }
+  }
+
+  // ── Send ops (missing) ────────────────────────────────────────────────────
+
+  async sendVoice(sessionId: string, chatId: string, url: string): Promise<string | null> {
+    const res = await this.request<{ id?: string }>('POST', '/api/sendVoice', {
+      session: sessionId, chatId, file: { url },
+    });
+    return res.id ?? null;
+  }
+
+  async sendVideo(sessionId: string, chatId: string, url: string, caption?: string): Promise<string | null> {
+    const res = await this.request<{ id?: string }>('POST', '/api/sendVideo', {
+      session: sessionId, chatId, file: { url }, caption: caption ?? '',
+    });
+    return res.id ?? null;
+  }
+
+  async sendLocation(sessionId: string, chatId: string, latitude: number, longitude: number, title?: string): Promise<string | null> {
+    const res = await this.request<{ id?: string }>('POST', '/api/sendLocation', {
+      session: sessionId, chatId, latitude, longitude, title: title ?? '',
+    });
+    return res.id ?? null;
+  }
+
+  async sendPoll(sessionId: string, chatId: string, name: string, options: string[], selectableCount?: number): Promise<string | null> {
+    const res = await this.request<{ id?: string }>('POST', '/api/sendPoll', {
+      session: sessionId, chatId,
+      poll: { name, options, multipleAnswers: (selectableCount ?? 1) > 1 },
+    });
+    return res.id ?? null;
+  }
+
+  async sendContact(sessionId: string, chatId: string, contacts: Array<{ name: string; phone: string }>): Promise<string | null> {
+    const res = await this.request<{ id?: string }>('POST', '/api/sendContactVcard', {
+      session: sessionId, chatId,
+      contacts: contacts.map((c) => ({ fullName: c.name, phoneNumber: c.phone })),
+    });
+    return res.id ?? null;
+  }
+
+  // ── Message ops (missing) ─────────────────────────────────────────────────
+
+  async setReaction(sessionId: string, messageId: string, reaction: string): Promise<void> {
+    await this.request('PUT', '/api/reaction', { session: sessionId, messageId, reaction });
+  }
+
+  async setStar(sessionId: string, chatId: string, messageId: string, star: boolean): Promise<void> {
+    await this.request('PUT', '/api/star', { session: sessionId, chatId, messageId, star });
+  }
+
+  async deleteMessage(sessionId: string, chatId: string, messageId: string): Promise<void> {
+    await this.request('DELETE', `/api/messages/${messageId}`, { session: sessionId, chatId });
+  }
+
+  async forwardMessage(sessionId: string, chatId: string, messageId: string): Promise<string | null> {
+    const res = await this.request<{ id?: string }>('POST', '/api/forwardMessage', {
+      session: sessionId, chatId, messageId,
+    });
+    return res.id ?? null;
+  }
+
+  // ── Chat state (missing) ──────────────────────────────────────────────────
+
+  async setArchived(sessionId: string, chatId: string, archived: boolean): Promise<void> {
+    await this.request('PUT', `/api/${sessionId}/chats/${chatId}/archive`, { archived });
+  }
+
+  async setPinned(sessionId: string, chatId: string, pinned: boolean): Promise<void> {
+    await this.request('PUT', `/api/${sessionId}/chats/${chatId}/pin`, { pinned });
+  }
+
+  async setMuted(sessionId: string, chatId: string, muted: boolean): Promise<void> {
+    const muteEndTime = muted ? Date.now() + 365 * 24 * 60 * 60 * 1000 : 0;
+    await this.request('PUT', `/api/${sessionId}/chats/${chatId}/mute`, { muteEndTime });
+  }
+
+  async setDisappearing(sessionId: string, chatId: string, enabled: boolean, durationSeconds?: number): Promise<void> {
+    await this.request('PUT', `/api/${sessionId}/chats/${chatId}/disappearing`, {
+      disappearingMessagesInChat: enabled ? (durationSeconds ?? 604800) : 0,
+    });
+  }
+
+  // ── Contacts (missing) ────────────────────────────────────────────────────
+
+  async checkNumberStatus(sessionId: string, phone: string): Promise<{ numberExists: boolean; chatId?: string }> {
+    return this.request('GET', `/api/checkNumberStatus?session=${sessionId}&phone=${encodeURIComponent(phone)}`);
+  }
+
+  async getContacts(sessionId: string, search?: string, limit = 50, offset = 0): Promise<Array<{ id: string; name?: string; pushName?: string; number?: string }>> {
+    const q = new URLSearchParams({ session: sessionId, limit: String(limit), offset: String(offset) });
+    if (search) q.set('search', search);
+    return this.request('GET', `/api/${sessionId}/contacts?${q}`);
+  }
+
+  async getContactAvatar(sessionId: string, contactId: string): Promise<string | null> {
+    try {
+      const res = await this.request<{ url?: string }>(
+        'GET', `/api/${sessionId}/contacts/${encodeURIComponent(contactId)}/profile-picture`,
+      );
+      return res.url ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  async setContactBlocked(sessionId: string, contactId: string, blocked: boolean): Promise<void> {
+    await this.request('PUT', `/api/${sessionId}/contacts/${encodeURIComponent(contactId)}/block`, { blocked });
+  }
+
+  // ── Groups (missing) ──────────────────────────────────────────────────────
+
+  async getGroupInfo(sessionId: string, groupId: string): Promise<{
+    id: string; subject?: string; owner?: string; desc?: string;
+    participants?: Array<{ id: string; admin?: string | null }>;
+  } | null> {
+    try {
+      return await this.request('GET', `/api/${sessionId}/groups/${encodeURIComponent(groupId)}`);
+    } catch {
+      return null;
+    }
+  }
+
+  // ── Media (missing) ───────────────────────────────────────────────────────
+
+  mediaDownloadUrl(sessionId: string, messageId: string): string {
+    return `${this.baseUrl}/api/${sessionId}/messages/${messageId}/download`;
+  }
 }

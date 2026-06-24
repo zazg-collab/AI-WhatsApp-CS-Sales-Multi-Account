@@ -58,4 +58,19 @@ describe('WahaClientService', () => {
     const qr = await svc.getQr('acc1');
     expect(qr).toBe('data:image/png;base64,ABC');
   });
+
+  it('getMe returns null on error without throwing', async () => {
+    (fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status: 404, text: async () => 'not found' });
+    const result = await svc.getMe('acc1');
+    expect(result).toBeNull();
+  });
+
+  it('setReaction calls PUT /api/reaction', async () => {
+    (fetch as jest.Mock).mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    await svc.setReaction('acc1', 'msg123', '👍');
+    expect(fetch).toHaveBeenCalledWith(
+      'http://waha:3000/api/reaction',
+      expect.objectContaining({ method: 'PUT' }),
+    );
+  });
 });
