@@ -9,7 +9,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { ContactSyncService } from './contact-sync.service';
-import { WaSessionStore } from './wa-session.store';
+import { WahaClientService } from './waha-client.service';
 import { jidToPhone, isGroupJid, isDirectChatJid } from './wa.util';
 
 type LongLike = { toString(): string };
@@ -33,7 +33,7 @@ export class WaMirrorService {
     private readonly prisma: PrismaService,
     private readonly events: EventsGateway,
     private readonly contactSync: ContactSyncService,
-    private readonly store: WaSessionStore,
+    private readonly wahaClient: WahaClientService,
   ) {}
 
   private longToNumber(value: number | LongLike | null | undefined): number | undefined {
@@ -151,12 +151,9 @@ export class WaMirrorService {
     update: { id?: string; author?: string; participants?: string[]; action?: string },
   ) {
     if (!update.id || !isGroupJid(update.id)) return;
-    const sock = this.store.getSock(accountId);
     let conversation = await this.ensureGroupConversation(accountId, { id: update.id });
-    if (sock) {
-      const metadata = await sock.groupMetadata(update.id).catch(() => null);
-      if (metadata) conversation = await this.ensureGroupConversation(accountId, metadata as GroupMetadataLike);
-    }
+    const metadata = await this.wahaClient.getGroupInfo(accountId, update.id);
+    if (metadata) conversation = await this.ensureGroupConversation(accountId, metadata);
     const participants = update.participants ?? [];
     const count = participants.length;
     const sample = participants.slice(0, 3).map(jidToPhone).join(', ');
