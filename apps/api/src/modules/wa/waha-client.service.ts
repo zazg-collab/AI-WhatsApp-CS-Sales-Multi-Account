@@ -49,7 +49,7 @@ export class WahaClientService {
     await this.request('DELETE', `/api/sessions/${sessionId}`, undefined);
   }
 
-  async getSession(sessionId: string): Promise<{ name: string; status: string; me?: { id: string; pushName: string } }> {
+  async getSessionStatus(sessionId: string): Promise<{ status: string }> {
     return this.request('GET', `/api/sessions/${sessionId}`);
   }
 
