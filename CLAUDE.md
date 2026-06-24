@@ -176,6 +176,7 @@ packages/database/  Prisma schema (all PRD tables) + shared client. Import
 
 ### Conventions
 - Auth: `@UseGuards(JwtAuthGuard)` for any protected route; add `RolesGuard` + `@Roles('owner', ...)` for role restrictions. Get the caller via `@CurrentUser()`.
+- **Authorization scope (deliberate):** access control is **role-based, not object-ownership-based** — most mutations authorize by role, not by "does this user own this account/conversation". This is intentional for the **single-instance, single-tenant** deployment (one org per instance), where every authenticated admin is trusted across all accounts. **If this ever goes multi-tenant, this becomes a Critical gap**: every account-scoped route would need an ownership/tenant check. Treat that boundary as a conscious decision, not an oversight.
 - The active knowledge items of a bot's knowledge base are injected into the AI prompt by `PromptBuilderService` (only `status: active` and within `validUntil`). Editing knowledge immediately changes AI answers.
 - All Prisma tables use `@map`/`@@map` snake_case in DB but camelCase in code.
 

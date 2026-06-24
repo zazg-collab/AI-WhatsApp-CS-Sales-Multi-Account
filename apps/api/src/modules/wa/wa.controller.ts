@@ -157,17 +157,6 @@ export class WaController {
     @Body() dto: UpdateAccountDto,
     @CurrentUser() user: AuthUser,
   ) {
-    const account = await this.prisma.whatsappAccount.update({
-      where: { id },
-      data: dto,
-    });
-    await logAudit(this.prisma, {
-      userId: user.id,
-      action: 'account_update',
-      entityType: 'whatsapp_account',
-      entityId: id,
-      newValue: dto as Record<string, unknown>,
-    });
-    return account;
+    return this.wa.updateAccount(id, dto, user.id);
   }
 }

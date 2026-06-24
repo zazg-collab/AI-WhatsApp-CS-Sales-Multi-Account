@@ -19,6 +19,8 @@ import makeWASocket, {
   type WASocket,
 } from '@whiskeysockets/baileys';
 import { SessionStatus } from '@hermes/database';
+import { UpdateAccountDto } from './dto/update-account.dto';
+import { buildAccountUpdateData } from './account-update.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -481,6 +483,25 @@ export class WaService implements OnModuleInit {
     const phone = jidToPhone(session.sock.user.id);
     const suggestedName = session.sock.user.name ?? null;
     return { phoneNumber: phone, suggestedName };
+  }
+
+  /**
+   * Update an account's editable settings. Maps only the known, client-editable
+   * fields into the Prisma write instead of spreading the DTO straight through —
+   * so the persisted column set is an explicit allowlist here, not whatever
+   * happens to be on the DTO. Undefined fields are dropped (partial update).
+   */
+  async updateAccount(id: string, dto: UpdateAccountDto, userId?: string) {
+    const data = buildAccountUpdateData(dto);
+    const account = await this.prisma.whatsappAccount.update({ where: { id }, data });
+    await logAudit(this.prisma, {
+      userId,
+      action: 'account_update',
+      entityType: 'whatsapp_account',
+      entityId: id,
+      newValue: dto as Record<string, unknown>,
+    });
+    return account;
   }
 
   async logAiModeChange(conversationId: string, oldMode: string, newMode: string) {

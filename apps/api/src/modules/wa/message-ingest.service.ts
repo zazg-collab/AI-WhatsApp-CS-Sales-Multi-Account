@@ -152,6 +152,19 @@ export class MessageIngestService {
       }
     }
 
+    // Back-fill the bot link: `botId` is otherwise stamped only at conversation
+    // creation (above), so any conversation that predates the account's bot
+    // assignment stays `botId: null` forever — meaning PromptBuilder injects no
+    // persona and no knowledge base, and the AI fabricates an identity from chat
+    // context. If this conversation still has no bot but the account now has one
+    // assigned, adopt it on this inbound. Group chats stay unmanaged (ai_off).
+    if (!groupChat && !conversation.botId && account.assignedBotId) {
+      conversation = await this.prisma.conversation.update({
+        where: { id: conversation.id },
+        data: { botId: account.assignedBotId },
+      });
+    }
+
     // Idempotency (H1): WhatsApp may redeliver the same message. Skip if we
     // have already ingested this external id for this conversation, so we never
     // double-store or trigger a duplicate auto-reply.
