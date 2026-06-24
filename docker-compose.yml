@@ -111,15 +111,14 @@ services:
     ports:
       - "127.0.0.1:3002:3000"
     environment:
-      - WHATSAPP_DEFAULT_SESSION_NAME=default
-      - SESSIONS_DIR=/app/sessions
-      - API_KEY=${WAHA_API_KEY:-}
+      - WAHA_ENGINE=${WAHA_ENGINE:-NOWEB}
+      - WHATSAPP_API_KEY=${WAHA_API_KEY:-changeme}
     volumes:
-      - waha_sessions:/app/sessions
+      - waha_sessions:/app/.sessions
     networks:
       - hermes
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
