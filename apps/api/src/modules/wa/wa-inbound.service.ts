@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ModuleRef } from '@nestjs/core';
-import { downloadMediaMessage, type proto } from '@whiskeysockets/baileys';
 import {
   AiMode,
   HermesDecision,
@@ -16,10 +15,11 @@ import { MessageIngestService } from './message-ingest.service';
 import { AiService } from '../ai/ai.service';
 import { HermesService } from '../hermes/hermes.service';
 import { MediaStorageService } from '../media/media-storage.service';
-import { WaSendService } from './wa-send.service';
-import { isGroupJid, isDirectChatJid, isSupportedChatJid, extForMimetype } from './wa.util';
+import { WahaClientService } from './waha-client.service';
+import { isGroupJid, isDirectChatJid, isSupportedChatJid, extForMimetype, phoneToJid } from './wa.util';
 import { isWithinBusinessHours } from '../../common/business-hours.util';
 import type { AssetsService } from '../assets/assets.service';
+import { WaMessageShape } from './wa.types';
 
 /**
  * Processes inbound WhatsApp messages: ingests, triggers auto-away replies,
@@ -38,7 +38,7 @@ export class WaInboundService {
     private readonly ai: AiService,
     private readonly hermes: HermesService,
     private readonly storage: MediaStorageService,
-    private readonly send: WaSendService,
+    private readonly wahaClient: WahaClientService,
     private readonly moduleRef: ModuleRef,
     config: ConfigService,
   ) {
@@ -49,58 +49,49 @@ export class WaInboundService {
 
   async handleIncoming(
     accountId: string,
-    m: proto.IWebMessageInfo,
+    m: WaMessageShape,
     opts: { suppressAutomation?: boolean } = {},
-  ) {
-    const remoteJid = m.message?.deviceSentMessage?.destinationJid ?? m.key.remoteJid;
+  ): Promise<void> {
+    const remoteJid = m.key.remoteJid;
     if (!remoteJid) return;
     if (!isSupportedChatJid(remoteJid)) return;
+
     const groupChat = isGroupJid(remoteJid);
     const fromMe = m.key.fromMe === true;
-    const msg = this.unwrapMessage(m.message);
 
-    const text =
-      msg?.conversation ??
-      msg?.extendedTextMessage?.text ??
-      msg?.imageMessage?.caption ??
-      msg?.videoMessage?.caption ??
-      msg?.documentMessage?.caption ??
-      '';
-
-    const type = this.resolveType(msg);
+    const type = this.wahaTypeToMessageType(m.wahaType);
+    const text = m.body ?? '';
     if (!text && type === MessageType.text) return;
 
     let mediaUrl: string | undefined;
-    if (!opts.suppressAutomation &&
-        (type === MessageType.image || type === MessageType.video ||
-         type === MessageType.audio || type === MessageType.document)) {
-      mediaUrl = await this.downloadInboundMedia(m).catch((err) => {
-        this.logger.warn(`Media download failed for ${m.key.id}: ${err}`);
+    if (
+      !opts.suppressAutomation &&
+      m.mediaUrl &&
+      (type === MessageType.image ||
+        type === MessageType.video ||
+        type === MessageType.audio ||
+        type === MessageType.document)
+    ) {
+      mediaUrl = await this.uploadWahaMedia(m.mediaUrl, m.mediaMimetype).catch((err) => {
+        this.logger.warn(`Media upload failed for ${m.key.id}: ${err}`);
         return undefined;
       });
     }
 
-    const ctx =
-      msg?.extendedTextMessage?.contextInfo ??
-      msg?.imageMessage?.contextInfo ??
-      msg?.videoMessage?.contextInfo ??
-      msg?.documentMessage?.contextInfo;
-
-    const key = m.key as typeof m.key & { senderPn?: string | null; participantPn?: string | null };
-    const senderPn = key.senderPn ?? key.participantPn ?? undefined;
-
     const result = await this.ingest.ingest({
       accountId,
       remoteJid,
-      senderPn: senderPn ?? undefined,
+      senderPn: m.key.senderPn ?? undefined,
       externalId: m.key.id ?? '',
       pushName: m.pushName ?? undefined,
       text,
       type,
       mediaUrl,
-      quotedExternalId: ctx?.stanzaId ?? undefined,
+      quotedExternalId: m.quotedId ?? undefined,
       fromMe,
-      occurredAt: this.messageTimestamp(m),
+      occurredAt: m.messageTimestamp
+        ? new Date(m.messageTimestamp * 1000)
+        : new Date(),
       suppressAutomation: opts.suppressAutomation || groupChat,
     });
 
@@ -119,35 +110,44 @@ export class WaInboundService {
     }
   }
 
+  private wahaTypeToMessageType(wahaType: string): MessageType {
+    const map: Record<string, MessageType> = {
+      text: MessageType.text,
+      image: MessageType.image,
+      video: MessageType.video,
+      audio: MessageType.audio,
+      voice: MessageType.audio,
+      document: MessageType.document,
+      sticker: MessageType.document,
+      location: MessageType.text,
+      poll_creation: MessageType.text,
+    };
+    return map[wahaType] ?? MessageType.text;
+  }
+
+  private async uploadWahaMedia(
+    wahaMediaUrl: string,
+    mimetype?: string | null,
+  ): Promise<string | undefined> {
+    const res = await fetch(wahaMediaUrl, {
+      headers: { 'x-api-key': process.env.WAHA_API_KEY ?? '' },
+    });
+    if (!res.ok) return undefined;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.length > this.mediaMaxBytes) {
+      this.logger.warn(`Media too large (${buffer.length} bytes), skipping`);
+      return undefined;
+    }
+    const ext = extForMimetype(mimetype ?? '');
+    const stored = await this.storage.save(buffer, ext);
+    return stored.url;
+  }
+
   private async maybeFetchAvatar(accountId: string, customerId: string, phone: string) {
-    const url = await this.send.fetchAvatar(accountId, phone);
+    const url = await this.wahaClient.getContactAvatar(accountId, phoneToJid(phone));
     if (!url) return;
     await this.prisma.customer.update({ where: { id: customerId }, data: { avatarUrl: url } });
     this.events.emitToAccount(accountId, 'customer:avatar', { customerId, avatarUrl: url });
-  }
-
-  private messageTimestamp(m: proto.IWebMessageInfo): Date | undefined {
-    const raw = m.messageTimestamp;
-    if (raw === undefined || raw === null) return undefined;
-    const seconds = Number(typeof raw === 'object' && 'toString' in raw ? raw.toString() : raw);
-    if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
-    return new Date(seconds * 1000);
-  }
-
-  private unwrapMessage(message?: proto.IMessage | null): proto.IMessage | undefined {
-    let current = message ?? undefined;
-    for (let i = 0; i < 5 && current; i++) {
-      const wrapped =
-        current.ephemeralMessage?.message ??
-        current.viewOnceMessage?.message ??
-        current.viewOnceMessageV2?.message ??
-        current.viewOnceMessageV2Extension?.message ??
-        current.documentWithCaptionMessage?.message ??
-        current.deviceSentMessage?.message;
-      if (!wrapped || wrapped === current) return current;
-      current = wrapped;
-    }
-    return current;
   }
 
   private async maybeAutoAway(result: {
@@ -175,7 +175,7 @@ export class WaInboundService {
     });
     if (claim.count === 0) return;
 
-    const externalId = await this.send.sendText(account.id, customer.phoneNumber, account.awayMessage);
+    const externalId = await this.wahaClient.sendText(account.id, phoneToJid(customer.phoneNumber), account.awayMessage);
     const message = await this.prisma.message.create({
       data: {
         conversationId: conversation.id,
@@ -255,7 +255,7 @@ export class WaInboundService {
     text: string,
     hermesReviewId?: string,
   ) {
-    const externalId = await this.send.sendText(convo.whatsappAccountId, convo.customer.phoneNumber, text);
+    const externalId = await this.wahaClient.sendText(convo.whatsappAccountId, phoneToJid(convo.customer.phoneNumber), text);
     const message = await this.prisma.message.create({
       data: {
         conversationId: convo.id,
@@ -294,32 +294,6 @@ export class WaInboundService {
     this.logger.debug(`storeDraft: created draft ${message.id} for conversation ${conversationId}`);
     this.events.emitToAccount(accountId, 'message:draft', { conversationId, message });
     return message;
-  }
-
-  private async downloadInboundMedia(m: proto.IWebMessageInfo): Promise<string | undefined> {
-    const buffer = await downloadMediaMessage(m as never, 'buffer', {});
-    if (!buffer || buffer.length === 0) return undefined;
-    if (buffer.length > this.mediaMaxBytes) {
-      this.logger.warn(`Media ${m.key.id} is ${buffer.length}B > cap ${this.mediaMaxBytes}B, skipping`);
-      return undefined;
-    }
-    const mime =
-      m.message?.imageMessage?.mimetype ??
-      m.message?.videoMessage?.mimetype ??
-      m.message?.audioMessage?.mimetype ??
-      m.message?.documentMessage?.mimetype;
-    const { url } = await this.storage.save(buffer, extForMimetype(mime));
-    return url;
-  }
-
-  private resolveType(msg?: proto.IMessage | null): MessageType {
-    if (msg?.imageMessage) return MessageType.image;
-    if (msg?.videoMessage) return MessageType.video;
-    if (msg?.audioMessage) return MessageType.audio;
-    if (msg?.documentMessage) return MessageType.document;
-    if (msg?.stickerMessage) return MessageType.sticker;
-    if (msg?.locationMessage) return MessageType.location;
-    return MessageType.text;
   }
 
   /** Check if a phone is a direct (non-group) chat. Delegates to util. */
