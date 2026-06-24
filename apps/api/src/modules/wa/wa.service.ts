@@ -514,7 +514,7 @@ export class WaService implements OnModuleInit {
     });
   }
 
-  private async setStatus(accountId: string, status: SessionStatus) {
+  async setStatus(accountId: string, status: SessionStatus) {
     const account = await this.prisma.whatsappAccount.update({
       where: { id: accountId },
       data: { sessionStatus: status },
