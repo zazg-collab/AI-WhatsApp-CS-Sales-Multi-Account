@@ -25,13 +25,19 @@ const stateMeta: Record<AttnState, { label: string; icon: PhosphorIcon; tone: 'r
 
 function SetupChecklist() {
   const { data: accounts } = useApiQuery<{ id: string }[]>('/wa/accounts');
+  const { data: bots } = useApiQuery<{ id: string }[]>('/bots');
+  const { data: aiConfig } = useApiQuery<{ baseUrl?: string; model?: string }>('/ai/config');
   const t = useT(dict);
-  if (!accounts || accounts.length > 0) return null;
+
+  const hasAccount = (accounts?.length ?? 0) > 0;
+  const hasBot = (bots?.length ?? 0) > 0;
+  const hasAi = !!(aiConfig?.baseUrl && aiConfig?.model);
+  if (hasAccount && hasBot && hasAi) return null;
 
   const steps = [
-    { n: 1, label: t('setup_step1'), hint: t('setup_hint1'), href: '/accounts', done: false },
-    { n: 2, label: t('setup_step2'), hint: t('setup_hint2'), href: '/bots', done: false },
-    { n: 3, label: t('setup_step3'), hint: t('setup_hint3'), href: '/settings/ai', done: false },
+    { n: 1, label: t('setup_step1'), hint: t('setup_hint1'), href: '/accounts', done: hasAccount },
+    { n: 2, label: t('setup_step2'), hint: t('setup_hint2'), href: '/bots', done: hasBot },
+    { n: 3, label: t('setup_step3'), hint: t('setup_hint3'), href: '/settings/ai', done: hasAi },
   ];
 
   return (
@@ -41,10 +47,14 @@ function SetupChecklist() {
       <ol className="space-y-3">
         {steps.map((s) => (
           <li key={s.n} className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-hermes-600 text-[11px] font-bold text-white">{s.n}</span>
+            <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${s.done ? 'bg-channel-500 text-white' : 'bg-hermes-600 text-white'}`}>
+              {s.done ? '✓' : s.n}
+            </span>
             <div className="flex-1">
-              <Link href={s.href} className="text-[13px] font-semibold text-hermes-700 underline-offset-2 hover:underline dark:text-hermes-400">{s.label}</Link>
-              <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{s.hint}</p>
+              {s.done
+                ? <span className="text-[13px] font-semibold text-gray-400 line-through dark:text-gray-500">{s.label}</span>
+                : <Link href={s.href} className="text-[13px] font-semibold text-hermes-700 underline-offset-2 hover:underline dark:text-hermes-400">{s.label}</Link>}
+              {!s.done && <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{s.hint}</p>}
             </div>
           </li>
         ))}

@@ -59,6 +59,7 @@ export const dict: Dict = {
   },
   qrFreshJustNow: { id: 'QR baru saja diperbarui', en: 'QR just refreshed' },
   qrFreshSecondsAgo: { id: 'Diperbarui {seconds}s lalu', en: 'Updated {seconds}s ago' },
+  qrRefresh: { id: 'Perbarui QR', en: 'Refresh QR' },
   qrFreshStale: { id: 'QR mungkin sudah kedaluwarsa — menunggu pembaruan otomatis…', en: 'QR may be stale — waiting for an automatic refresh…' },
   qrAutoRefresh: { id: 'QR diperbarui otomatis oleh WhatsApp', en: 'WhatsApp refreshes this QR automatically' },
   copyCode: { id: 'Salin kode', en: 'Copy code' },

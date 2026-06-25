@@ -42,7 +42,7 @@ function getStatusHint(status: string, t: ReturnType<typeof useT>): string | und
   return map[status];
 }
 
-function QrFreshness({ receivedAt, t }: { receivedAt: number; t: ReturnType<typeof useT> }) {
+function QrFreshness({ receivedAt, t, onRefresh }: { receivedAt: number; t: ReturnType<typeof useT>; onRefresh?: () => void }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -51,9 +51,20 @@ function QrFreshness({ receivedAt, t }: { receivedAt: number; t: ReturnType<type
   const seconds = Math.floor((now - receivedAt) / 1000);
   const stale = seconds >= 45;
   return (
-    <p className={`mt-2 text-center text-[11px] ${stale ? 'text-review-600 dark:text-review-400' : 'text-gray-400'}`}>
-      {stale ? t('qrFreshStale') : seconds < 2 ? t('qrFreshJustNow') : t('qrFreshSecondsAgo', { seconds: String(seconds) })}
-    </p>
+    <div className="mt-2 flex flex-col items-center gap-1.5">
+      <p className={`text-center text-[11px] ${stale ? 'text-review-600 dark:text-review-400' : 'text-gray-400'}`}>
+        {stale ? t('qrFreshStale') : seconds < 2 ? t('qrFreshJustNow') : t('qrFreshSecondsAgo', { seconds: String(seconds) })}
+      </p>
+      {stale && onRefresh && (
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="rounded px-2 py-0.5 text-[11px] font-medium text-review-600 underline underline-offset-2 hover:text-review-700 dark:text-review-400"
+        >
+          {t('qrRefresh')}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -314,7 +325,7 @@ export default function AccountsPage() {
                         ) : qr[a.id] ? (
                           <div className="flex flex-col items-center gap-2">
                             <img src={qr[a.id]} alt="WhatsApp QR code" className="h-52 w-52 rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700" />
-                            {qrReceivedAt[a.id] ? <QrFreshness receivedAt={qrReceivedAt[a.id]} t={t} /> : <p className="text-[11px] text-gray-400">{t('qrAutoRefresh')}</p>}
+                            {qrReceivedAt[a.id] ? <QrFreshness receivedAt={qrReceivedAt[a.id]} t={t} onRefresh={() => restartAccount(a.id)} /> : <p className="text-[11px] text-gray-400">{t('qrAutoRefresh')}</p>}
                             <Button type="button" variant="outline" size="sm" onClick={() => requestPairingCode(a.id)} disabled={requestingCode[a.id]} className="mt-1">
                               <QrCode className="h-3.5 w-3.5" aria-hidden="true" />
                               {requestingCode[a.id] ? t('requestingPairingCode') : t('requestPairingCode')}
@@ -472,7 +483,7 @@ export default function AccountsPage() {
             ) : addConnectMethod === 'qr' && addedAccountId && qr[addedAccountId] ? (
               <>
                 <img src={qr[addedAccountId]} alt="WhatsApp QR code" className="h-56 w-56 rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700" />
-                {qrReceivedAt[addedAccountId] && <QrFreshness receivedAt={qrReceivedAt[addedAccountId]} t={t} />}
+                {qrReceivedAt[addedAccountId] && <QrFreshness receivedAt={qrReceivedAt[addedAccountId]} t={t} onRefresh={addedAccountId ? () => restartAccount(addedAccountId) : undefined} />}
               </>
             ) : (
               <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-gray-300 px-8 py-10 dark:border-gray-700">

@@ -81,6 +81,18 @@ export const dict: Dict = {
     id: 'Nama, pesan, dan akun WhatsApp wajib diisi.',
     en: 'Name, message, and WhatsApp account are required.',
   },
+  toastMsgTooLong: {
+    id: 'Pesan melebihi batas 4096 karakter WhatsApp.',
+    en: 'Message exceeds WhatsApp\'s 4096-character limit.',
+  },
+  toastRateTooHigh: {
+    id: 'Laju maksimal yang diizinkan adalah 30 pesan/menit.',
+    en: 'Maximum allowed rate is 30 messages per minute.',
+  },
+  toastSchedulePast: {
+    id: 'Waktu jadwal harus di masa depan.',
+    en: 'Scheduled time must be in the future.',
+  },
   toastDraftCreated: {
     id: 'Draf campaign dibuat. Ajukan persetujuan dulu sebelum dikirim.',
     en: 'Campaign draft created. Submit for approval before sending.',

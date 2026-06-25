@@ -49,18 +49,9 @@ export default function CampaignsPage() {
           {canManage && (
             <Card className="mb-4 space-y-3 p-4">
               <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('createDraftHeading')}</h2>
-              {/* Step indicator */}
-              <div className="flex items-center gap-0 text-[11px]">
-                {[t('stepTarget'), t('stepFilter'), t('stepSchedule')].map((label, i) => (
-                  <div key={i} className="flex items-center">
-                    <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${i === 0 ? 'bg-hermes-600 text-white' : i === 1 ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400' : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>{i + 1}</span>
-                    <span className="mx-1 text-gray-500 dark:text-gray-400">{label}</span>
-                    {i < 2 && <span className="mr-1 text-gray-300 dark:text-gray-700">→</span>}
-                  </div>
-                ))}
-              </div>
               <hr className="border-gray-100 dark:border-gray-800" />
-              {/* Step 1: Target */}
+              {/* Section 1: Target & Message */}
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">1 — {t('stepTarget')}</h3>
               <Field label={t('nameLabel')} value={name} onChange={(e) => setName(e.target.value)} placeholder="Campaign name" />
               <SelectField label={t('senderAccountLabel')} value={whatsappAccountId} onChange={(e) => setWhatsappAccountId(e.target.value)}>
                 <option value="">{t('selectAccount')}</option>
@@ -79,15 +70,22 @@ export default function CampaignsPage() {
                   Account disconnected. <a href="/accounts" className="font-semibold underline">Reconnect in Accounts</a> before sending.
                 </div>
               )}
-              <TextareaField
-                label={t('messageLabel')}
-                hint={assetId ? t('captionHint') : t('messageHint')}
-                rows={4}
-                value={messageTemplate}
-                onChange={(e) => setMessageTemplate(e.target.value)}
-                placeholder="Campaign message… use {{name}} / {{phone}} tokens"
-                className="resize-none"
-              />
+              <div>
+                <TextareaField
+                  label={t('messageLabel')}
+                  hint={assetId ? t('captionHint') : t('messageHint')}
+                  rows={4}
+                  value={messageTemplate}
+                  onChange={(e) => setMessageTemplate(e.target.value)}
+                  placeholder="Campaign message… use {{name}} / {{phone}} tokens"
+                  className="resize-none"
+                />
+                <div className="mt-1 flex justify-end">
+                  <span className={`text-[11px] tabular-nums ${messageTemplate.length > 4096 ? 'font-semibold text-danger-500' : 'text-gray-400'}`}>
+                    {messageTemplate.length.toLocaleString()} / 4096
+                  </span>
+                </div>
+              </div>
               {assetOptions.length > 0 && (
                 <SelectField label={t('attachAssetLabel')} hint={t('attachAssetHint')} value={assetId} onChange={(e) => setAssetId(e.target.value)}>
                   <option value="">{t('noAsset')}</option>
@@ -98,8 +96,8 @@ export default function CampaignsPage() {
                   ))}
                 </SelectField>
               )}
-              {/* Step 2: Filter */}
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">2 — {t('stepFilter')}</p>
+              {/* Section 2: Filter */}
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">2 — {t('stepFilter')}</h3>
               <div className="grid grid-cols-2 gap-2">
                 <SelectField label={t('leadStageLabel')} value={leadStage} onChange={(e) => setLeadStage(e.target.value)}>
                   <option value="">{t('allStages')}</option>
@@ -110,8 +108,8 @@ export default function CampaignsPage() {
                 </SelectField>
                 <Field label={t('tagFilterLabel')} value={tag} onChange={(e) => setTag(e.target.value)} placeholder={t('tagPlaceholder')} />
               </div>
-              {/* Step 3: Schedule */}
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">3 — {t('stepSchedule')}</p>
+              {/* Section 3: Schedule */}
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">3 — {t('stepSchedule')}</h3>
               <div className="grid grid-cols-2 gap-2">
                 <Field label={t('rateLabel')} hint={t('rateHint')} type="number" min={1} max={30} value={rateLimitPerMinute} onChange={(e) => setRateLimitPerMinute(Number(e.target.value))} />
                 <Field label={t('scheduleLabel')} hint={t('scheduleHint')} type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />

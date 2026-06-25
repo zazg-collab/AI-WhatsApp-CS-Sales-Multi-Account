@@ -215,6 +215,18 @@ export function useCampaigns() {
       showError(t('toastRequired'));
       return;
     }
+    if (messageTemplate.length > 4096) {
+      showError(t('toastMsgTooLong'));
+      return;
+    }
+    if (rateLimitPerMinute > 30) {
+      showError(t('toastRateTooHigh'));
+      return;
+    }
+    if (scheduledAt && new Date(scheduledAt) <= new Date()) {
+      showError(t('toastSchedulePast'));
+      return;
+    }
     setSubmitting(true);
     try {
       const campaign = await api<Campaign>('/campaigns', {
