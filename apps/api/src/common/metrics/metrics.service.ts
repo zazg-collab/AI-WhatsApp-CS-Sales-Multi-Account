@@ -40,6 +40,16 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // Token usage per model — the only visibility into AI spend. prom-client
+  // counters take floats, so multiply by your per-token rate in the dashboard
+  // to get cost. kind = prompt | completion.
+  readonly aiTokens = new Counter({
+    name: 'ai_tokens_total',
+    help: 'AI provider token usage by model and kind',
+    labelNames: ['model', 'kind'] as const,
+    registers: [this.registry],
+  });
+
   // Measures the PRD §performance-targets "AI draft generation: < 10s" SLI.
   readonly aiRequestDuration = new Histogram({
     name: 'ai_request_duration_seconds',

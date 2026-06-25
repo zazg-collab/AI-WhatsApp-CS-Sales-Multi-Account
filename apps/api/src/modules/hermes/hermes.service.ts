@@ -12,7 +12,7 @@ import { AiProviderService } from '../ai/ai-provider.service';
 import { PromptBuilderService } from '../ai/prompt-builder.service';
 import { HermesAgentClient } from './hermes-agent.client';
 import { MetricsService } from '../../common/metrics/metrics.service';
-import { hermesSystemPrompt } from './hermes-prompt';
+import { hermesSystemPrompt, HERMES_PROMPT_VERSION } from './hermes-prompt';
 import {
   t,
   HERMES_PARSE_FALLBACK,
@@ -112,6 +112,7 @@ export class HermesService {
         decision,
         reason,
         recommendation: llm.recommendation,
+        promptVersion: HERMES_PROMPT_VERSION,
       },
     });
     this.metrics?.hermesReviews.inc({ decision: String(decision) });

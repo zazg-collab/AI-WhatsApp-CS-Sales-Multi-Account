@@ -76,5 +76,43 @@ describe('AiProviderService', () => {
       global.fetch = jest.fn().mockRejectedValue(new Error('down')) as any;
       await expect(makeService().chat([])).rejects.toThrow(ServiceUnavailableException);
     });
+
+    it('retries a transient 500 then succeeds', async () => {
+      const fetchMock = jest
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 500, text: async () => 'boom' })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+        });
+      global.fetch = fetchMock as any;
+      expect(await makeService().chat([])).toBe('ok');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not retry a 400 bad request', async () => {
+      const fetchMock = jest
+        .fn()
+        .mockResolvedValue({ ok: false, status: 400, text: async () => 'bad' });
+      global.fetch = fetchMock as any;
+      await expect(makeService().chat([])).rejects.toThrow(ServiceUnavailableException);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('records token usage to metrics when present', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'hi' } }],
+          usage: { prompt_tokens: 12, completion_tokens: 5 },
+        }),
+      }) as any;
+      const aiTokens = { inc: jest.fn() };
+      const settings = { ai: async () => ({ baseUrl: 'http://x', apiKey: '', model: 'm', temperature: 0.6, timeoutMs: 1000 }) } as any;
+      const svc = new AiProviderService(settings, { aiTokens } as any);
+      await svc.chat([]);
+      expect(aiTokens.inc).toHaveBeenCalledWith({ model: 'm', kind: 'prompt' }, 12);
+      expect(aiTokens.inc).toHaveBeenCalledWith({ model: 'm', kind: 'completion' }, 5);
+    });
   });
 });

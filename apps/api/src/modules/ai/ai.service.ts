@@ -20,6 +20,7 @@ import {
   SUMMARIZE_SYSTEM,
   SUMMARIZE_USER,
   FALLBACK_PHRASE,
+  stripDataFences,
 } from '../../i18n/bot-prompts';
 
 /** All fallback-phrase variants (all languages) — marks an AI "punt to admin". */
@@ -45,6 +46,39 @@ export interface SentimentResult {
 }
 
 const CACHEABLE_MAX_QUESTION_CHARS = 200;
+
+export interface BuyingSignals {
+  score: number;
+  reasons: string[];
+}
+
+/**
+ * Deterministic buying-signal detector (PRD §lead-scoring triggers). Scans the
+ * customer's own messages for concrete intent — price, stock, payment, booking/
+ * DP, volunteering personal data — and returns a weighted score + the matched
+ * trigger labels. Bilingual id/en. Used as a FLOOR under the LLM lead score so
+ * a clear signal is never lost to a flaky model. Pure + exported for testing.
+ */
+const BUYING_TRIGGERS: { points: number; label: string; pattern: RegExp }[] = [
+  { points: 45, label: 'booking/DP', pattern: /\b(dp|booking|book|pesan|order|deposit|uang muka|tanda jadi)\b/i },
+  { points: 35, label: 'metode bayar', pattern: /\b(bayar|pembayaran|transfer|rekening|cod|payment|cicil|installment|qris)\b/i },
+  { points: 30, label: 'tanya harga', pattern: /\b(harga|berapa|brp|price|cost|diskon|promo|nego)\b/i },
+  { points: 25, label: 'kirim data diri', pattern: /\b(alamat|kirim ke| kode pos|nama lengkap|nomor hp|no hp)\b/i },
+  { points: 20, label: 'cek stok', pattern: /\b(stok|stock|ready|tersedia|available|sisa|inden)\b/i },
+];
+
+export function detectBuyingSignals(messages: string[]): BuyingSignals {
+  const text = (messages ?? []).join('\n');
+  let score = 0;
+  const reasons: string[] = [];
+  for (const trig of BUYING_TRIGGERS) {
+    if (trig.pattern.test(text)) {
+      score += trig.points;
+      reasons.push(trig.label);
+    }
+  }
+  return { score: Math.min(100, score), reasons };
+}
 
 @Injectable()
 export class AiService {
@@ -121,6 +155,9 @@ export class AiService {
       throw err;
     }
     stopTimer?.();
+    // Output guard: never let internal reference-data fence markers reach the
+    // customer, even if the model echoed them back (defense in depth).
+    text = stripDataFences(text);
     // "fallback" = the bot punted to the admin-confirm phrase (a quality signal,
     // mirrors Hermes knowledge-gap detection); everything else is a real answer.
     const outcome = FALLBACK_MARKERS.some((m) => text.includes(m)) ? 'fallback' : 'success';
@@ -238,7 +275,14 @@ export class AiService {
       maxTokens: 300,
     });
 
-    const result = this.parseLeadScore(raw);
+    // Ground the LLM number in deterministic buying signals (audit #7). The
+    // heuristic is a FLOOR, not a cap: a clear signal can't be under-scored by a
+    // flaky model, but the LLM may still score higher for nuance the keywords
+    // miss — we never suppress a potential hot lead on a sales tool.
+    const signals = detectBuyingSignals(
+      history.filter((m) => m.role === 'user').map((m) => m.content),
+    );
+    const result = this.blendLeadScore(this.parseLeadScore(raw), signals);
 
     const before = await this.prisma.customer.findUnique({
       where: { id: conversation.customerId },
@@ -274,6 +318,20 @@ export class AiService {
     }
 
     return result;
+  }
+
+  /**
+   * Merge the LLM score with deterministic buying signals. Final score is the
+   * higher of the two (floor); reasons combine both, signals first so the
+   * concrete, explainable triggers lead. Stage is re-derived from the final.
+   */
+  private blendLeadScore(
+    llm: LeadScoreResult,
+    signals: BuyingSignals,
+  ): LeadScoreResult {
+    const score = Math.max(llm.score, signals.score);
+    const reasons = Array.from(new Set([...signals.reasons, ...llm.reasons]));
+    return { score, stage: this.stageFromScore(score), reasons };
   }
 
   private parseLeadScore(raw: string): LeadScoreResult {

@@ -1,5 +1,5 @@
 import { LeadStage } from '@hermes/database';
-import { AiService } from './ai.service';
+import { AiService, detectBuyingSignals } from './ai.service';
 
 describe('AiService', () => {
   let service: AiService;
@@ -175,6 +175,45 @@ describe('AiService', () => {
       provider.chat.mockResolvedValue('{"score": 10, "stage": "cold", "reasons": []}');
       await service.leadScore('c1');
       expect(notifications.send).not.toHaveBeenCalled();
+    });
+
+    it('floors a low LLM score when buying signals are present', async () => {
+      // Customer clearly asks DP + payment (45+35=80) but the LLM under-scores.
+      prompts.buildForConversation.mockResolvedValue([
+        { role: 'user', content: 'kak mau DP dulu bisa? bayar transfer ya' },
+      ]);
+      provider.chat.mockResolvedValue('{"score": 20, "stage": "cold", "reasons": ["ragu"]}');
+      const r = await service.leadScore('c1');
+      expect(r.score).toBe(80); // floored to the deterministic signal (45+35)
+      expect(r.stage).toBe(LeadStage.hot); // 80 → hot (very_hot starts at 81)
+      expect(r.reasons).toEqual(expect.arrayContaining(['booking/DP', 'metode bayar', 'ragu']));
+    });
+
+    it('keeps the higher LLM score when it exceeds the signal floor', async () => {
+      prompts.buildForConversation.mockResolvedValue([
+        { role: 'user', content: 'tanya harga dong' }, // 30
+      ]);
+      provider.chat.mockResolvedValue('{"score": 95, "stage": "very_hot", "reasons": ["siap closing"]}');
+      const r = await service.leadScore('c1');
+      expect(r.score).toBe(95);
+    });
+  });
+
+  describe('detectBuyingSignals', () => {
+    it('returns 0 with no reasons for chit-chat', () => {
+      expect(detectBuyingSignals(['halo kak', 'makasih ya'])).toEqual({ score: 0, reasons: [] });
+    });
+    it('weights and sums distinct triggers, capped at 100', () => {
+      const r = detectBuyingSignals(['mau DP', 'bayar pakai transfer', 'harga berapa', 'stok ready?']);
+      expect(r.score).toBe(100); // 45+35+30+20 = 130 → capped
+      expect(r.reasons).toEqual(expect.arrayContaining(['booking/DP', 'metode bayar', 'tanya harga', 'cek stok']));
+    });
+    it('detects English phrasings', () => {
+      expect(detectBuyingSignals(['what is the price?']).score).toBe(30);
+    });
+    it('handles empty/undefined input', () => {
+      expect(detectBuyingSignals([])).toEqual({ score: 0, reasons: [] });
+      expect(detectBuyingSignals(undefined as unknown as string[])).toEqual({ score: 0, reasons: [] });
     });
   });
 });

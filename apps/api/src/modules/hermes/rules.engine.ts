@@ -67,11 +67,18 @@ export function evaluateRules(text: string): RuleHit | null {
   return hit;
 }
 
-/** Apply PRD 16 confidence gates on top of an LLM decision. */
+/**
+ * Apply PRD 16 confidence gates on top of an LLM decision.
+ *   <50  → block (admin required)
+ *   50–89 → draft (hold for admin). The PRD splits this into "draft only"
+ *           (50–69) and "light supervision" (70–89), but in this system both
+ *           outcomes are the same action — hold as a draft — so they collapse
+ *           into one branch deliberately (not a missing case).
+ *   ≥90  → approve (eligible for auto-send)
+ */
 export function decisionFromConfidence(confidence: number): HermesDecision {
   if (confidence < 50) return HermesDecision.block;
-  if (confidence < 70) return HermesDecision.draft;
-  if (confidence < 90) return HermesDecision.draft; // 70-89: supervise → draft
+  if (confidence < 90) return HermesDecision.draft;
   return HermesDecision.approve;
 }
 

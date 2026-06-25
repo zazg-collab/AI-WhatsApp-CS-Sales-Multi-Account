@@ -61,6 +61,21 @@ export function fenceData(content: string, lang: BotLang): string {
   return [t(DATA_FENCE_OPEN, lang), content, t(DATA_FENCE_CLOSE, lang)].join('\n');
 }
 
+/**
+ * Output guard: strip any reference-data fence markers (all languages) the
+ * model may have echoed back. These are internal scaffolding and must never
+ * reach the customer (SECURITY_DIRECTIVE forbids it); this is the defense-in-
+ * depth net for when the model ignores that. Both the open and close markers
+ * are `<<…>>` blocks containing DATA_REFERENSI / REFERENCE_DATA.
+ */
+export function stripDataFences(text: string): string {
+  return (text ?? '')
+    .replace(/<<[^>]*(?:DATA_REFERENSI|REFERENCE_DATA)[^>]*>>/gi, '')
+    // Collapse the blank lines a removed marker leaves behind.
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export const PERSONA_SECTION_LABEL = {
   id: 'Persona (Soul):',
   en: 'Persona (Soul):',

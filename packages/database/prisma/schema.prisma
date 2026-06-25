@@ -462,6 +462,9 @@ model HermesReview {
   decision        HermesDecision
   reason          String?
   recommendation  String?
+  // Short hash of the Hermes system prompt that produced this review. Lets you
+  // group reviews by prompt version to see if a prompt edit shifted decisions.
+  promptVersion   String?        @map("prompt_version")
   createdAt       DateTime       @default(now()) @map("created_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
