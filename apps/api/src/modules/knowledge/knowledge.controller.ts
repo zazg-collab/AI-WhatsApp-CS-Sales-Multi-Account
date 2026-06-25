@@ -2,7 +2,9 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -71,6 +73,14 @@ export class KnowledgeController {
     return this.knowledge.updateBase(id, dto, user.id);
   }
 
+  @ApiOperation({ summary: 'Delete a knowledge base and all its items' })
+  @Roles('owner', 'supervisor')
+  @Delete('knowledge-bases/:id')
+  @HttpCode(204)
+  deleteBase(@Param('id') id: string) {
+    return this.knowledge.deleteBase(id);
+  }
+
   @ApiOperation({ summary: 'Add an item to a knowledge base' })
   @Roles('owner', 'supervisor', 'admin')
   @Post('knowledge-bases/:id/items')
@@ -83,6 +93,14 @@ export class KnowledgeController {
   @Patch('knowledge-items/:id')
   updateItem(@Param('id') id: string, @Body() dto: UpdateKnowledgeItemDto) {
     return this.knowledge.updateItem(id, dto);
+  }
+
+  @ApiOperation({ summary: 'Delete a knowledge item' })
+  @Roles('owner', 'supervisor', 'admin')
+  @Delete('knowledge-items/:id')
+  @HttpCode(204)
+  deleteItem(@Param('id') id: string) {
+    return this.knowledge.deleteItem(id);
   }
 
   // Integration note: API-only. The knowledge page uses the dry-run parse flow

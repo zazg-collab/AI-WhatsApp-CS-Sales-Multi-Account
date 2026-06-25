@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { UploadSimple, Link, Plus, Books } from '@phosphor-icons/react';
+import { UploadSimple, Link, Plus, Books, PencilSimple, Trash, X } from '@/components/ui/core-essential-icons';
 import { api, uploadFile } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Field, TextareaField } from '@/components/ui/Field';
+import { Modal } from '@/components/ui/Modal';
 import { useT } from '@/lib/i18n';
 import { dict } from './knowledge.i18n';
 
@@ -30,6 +31,13 @@ export default function KnowledgePage() {
   const [error, setError] = useState<string | null>(null);
   const [loadingBases, setLoadingBases] = useState(true);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [renameBase, setRenameBase] = useState<Base | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [confirmDeleteBase, setConfirmDeleteBase] = useState<Base | null>(null);
+  const [editItem, setEditItem] = useState<Item | null>(null);
+  const [editForm, setEditForm] = useState({ title: '', content: '', productName: '', status: 'active' });
+  const [savingItem, setSavingItem] = useState(false);
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState<Item | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadBases = useCallback(async () => {
@@ -75,6 +83,45 @@ export default function KnowledgePage() {
 
   // File/URL are now action-first: parse (no persistence) and pre-fill the form
   // so the user reviews/trims before saving, instead of silently creating items.
+  async function saveRenameBase() {
+    if (!renameBase) return;
+    await api(`/knowledge-bases/${renameBase.id}`, { method: 'PATCH', body: JSON.stringify({ name: renameValue.trim() }) });
+    setBases((prev) => prev.map((b) => b.id === renameBase.id ? { ...b, name: renameValue.trim() } : b));
+    setRenameBase(null);
+  }
+
+  async function doDeleteBase() {
+    if (!confirmDeleteBase) return;
+    await api(`/knowledge-bases/${confirmDeleteBase.id}`, { method: 'DELETE' });
+    setBases((prev) => prev.filter((b) => b.id !== confirmDeleteBase.id));
+    if (selected === confirmDeleteBase.id) { setSelected(null); setItems([]); }
+    setConfirmDeleteBase(null);
+  }
+
+  function openEditItem(it: Item) {
+    setEditForm({ title: it.title, content: it.content, productName: it.productName ?? '', status: it.status });
+    setEditItem(it);
+  }
+
+  async function saveEditItem() {
+    if (!editItem) return;
+    setSavingItem(true);
+    try {
+      const updated = await api<Item>(`/knowledge-items/${editItem.id}`, { method: 'PATCH', body: JSON.stringify(editForm) });
+      setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+      setEditItem(null);
+    } finally {
+      setSavingItem(false);
+    }
+  }
+
+  async function doDeleteItem() {
+    if (!confirmDeleteItem) return;
+    await api(`/knowledge-items/${confirmDeleteItem.id}`, { method: 'DELETE' });
+    setItems((prev) => prev.filter((i) => i.id !== confirmDeleteItem.id));
+    setConfirmDeleteItem(null);
+  }
+
   async function handleFileUpload(file: File) {
     if (ingesting) return;
     setIngesting(true); setIngestMsg(null);
@@ -132,11 +179,15 @@ export default function KnowledgePage() {
               {bases.map((b) => {
                 const isActive = selected === b.id;
                 return (
-                  <li key={b.id}>
+                  <li key={b.id} className="group relative">
                     <button onClick={() => loadBase(b.id)} className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${isActive ? 'border-hermes-200 bg-hermes-50 text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-200' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'}`}>
-                      <span className="truncate">{b.name}</span>
+                      <span className="truncate pr-8">{b.name}</span>
                       <Badge tone={isActive ? 'hermes' : 'neutral'}>{b._count?.items ?? 0}</Badge>
                     </button>
+                    <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden gap-0.5 group-hover:flex">
+                      <button onClick={(e) => { e.stopPropagation(); setRenameValue(b.name); setRenameBase(b); }} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800" aria-label={t('renameBaseTitle')}><PencilSimple className="h-3 w-3" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteBase(b); }} className="rounded p-1 text-gray-400 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/20" aria-label={t('deleteBaseTitle')}><Trash className="h-3 w-3" /></button>
+                    </div>
                   </li>
                 );
               })}
@@ -200,12 +251,20 @@ export default function KnowledgePage() {
                 {items.map((it) => (
                   <li key={it.id}>
                     <Card className="p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium text-gray-900 dark:text-gray-100">{it.title}</p>
-                        <Badge tone={it.status === 'active' ? 'success' : 'neutral'}>{it.status === 'active' ? t('statusActive') : it.status}</Badge>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-900 dark:text-gray-100">{it.title}</p>
+                            <Badge tone={it.status === 'active' ? 'success' : 'neutral'}>{it.status === 'active' ? t('statusActive') : it.status}</Badge>
+                          </div>
+                          {it.productName && <p className="text-xs text-gray-400">{it.productName}</p>}
+                          <p className="mt-1 text-sm text-gray-600 dark:text-gray-300 line-clamp-3">{it.content}</p>
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          <button onClick={() => openEditItem(it)} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800" aria-label={t('editItemTitle')}><PencilSimple className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => setConfirmDeleteItem(it)} className="rounded p-1 text-gray-400 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/20" aria-label={t('deleteItemTitle')}><Trash className="h-3.5 w-3.5" /></button>
+                        </div>
                       </div>
-                      {it.productName && <p className="text-xs text-gray-400">{it.productName}</p>}
-                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{it.content}</p>
                     </Card>
                   </li>
                 ))}
@@ -214,6 +273,72 @@ export default function KnowledgePage() {
           )}
         </section>
       </div>
+      {renameBase && (
+        <Modal open size="sm" title={t('renameBaseTitle')} onClose={() => setRenameBase(null)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setRenameBase(null)}>{t('cancel')}</Button>
+              <Button onClick={saveRenameBase} disabled={!renameValue.trim()}>{t('renameBaseBtn')}</Button>
+            </>
+          }
+        >
+          <Field label={t('renameBaseLabel')} value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus required />
+        </Modal>
+      )}
+
+      {confirmDeleteBase && (
+        <Modal open size="sm" title={t('deleteBaseTitle')} onClose={() => setConfirmDeleteBase(null)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setConfirmDeleteBase(null)}>{t('cancel')}</Button>
+              <Button variant="danger" onClick={doDeleteBase}><Trash className="h-4 w-4" aria-hidden="true" />{t('deleteBaseBtn')}</Button>
+            </>
+          }
+        >
+          <p className="text-sm text-gray-700 dark:text-gray-200">{t('deleteBaseBody')}</p>
+          <p className="mt-1 font-medium text-gray-900 dark:text-gray-100">{confirmDeleteBase.name}</p>
+        </Modal>
+      )}
+
+      {editItem && (
+        <Modal open size="md" title={t('editItemTitle')} onClose={() => setEditItem(null)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setEditItem(null)}>{t('cancel')}</Button>
+              <Button onClick={saveEditItem} disabled={savingItem}>{savingItem ? t('saving') : t('saveItem')}</Button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <Field label={t('titleLabel')} value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} required />
+            <Field label={t('productNameLabel')} value={editForm.productName} onChange={(e) => setEditForm({ ...editForm, productName: e.target.value })} />
+            <TextareaField label={t('contentLabel')} value={editForm.content} onChange={(e) => setEditForm({ ...editForm, content: e.target.value })} rows={6} required />
+            <div>
+              <span className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">Status</span>
+              <button type="button"
+                onClick={() => setEditForm({ ...editForm, status: editForm.status === 'active' ? 'inactive' : 'active' })}
+                className={`rounded-full px-3 py-1 text-xs font-medium ${editForm.status === 'active' ? 'bg-channel-100 text-channel-700' : 'bg-gray-100 text-gray-500'}`}
+              >
+                {editForm.status === 'active' ? t('toggleInactive') : t('toggleActive')}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {confirmDeleteItem && (
+        <Modal open size="sm" title={t('deleteItemTitle')} onClose={() => setConfirmDeleteItem(null)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setConfirmDeleteItem(null)}>{t('cancel')}</Button>
+              <Button variant="danger" onClick={doDeleteItem}><Trash className="h-4 w-4" aria-hidden="true" />{t('deleteItemBtn')}</Button>
+            </>
+          }
+        >
+          <p className="text-sm text-gray-700 dark:text-gray-200">{t('deleteItemBody')}</p>
+          <p className="mt-1 font-medium text-gray-900 dark:text-gray-100">{confirmDeleteItem.title}</p>
+        </Modal>
+      )}
     </AppLayout>
   );
 }

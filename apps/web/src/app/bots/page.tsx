@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, PencilSimple, Trash, ArrowsSplit, X } from '@phosphor-icons/react';
+import { Plus, PencilSimple, Trash, ArrowsSplit, X } from '@/components/ui/core-essential-icons';
 import { api } from '@/lib/api';
 import { SessionStatusBadge } from '@/components/ui/SessionStatusBadge';
 import { AppLayout } from '@/components/AppLayout';
@@ -31,9 +31,9 @@ function FormError({ message }: { message: string }) {
 
 // ── PersonaModal ───────────────────────────────────────────────────────────────
 
-function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: (p: Persona) => void }) {
+function PersonaModal({ onClose, onCreated, persona }: { onClose: () => void; onCreated: (p: Persona) => void; persona?: Persona }) {
   const t = useT(dict);
-  const [form, setForm] = useState({ name: '', soulMd: '', tone: '', style: '', rules: '' });
+  const [form, setForm] = useState({ name: persona?.name ?? '', soulMd: persona?.soulMd ?? '', tone: persona?.tone ?? '', style: persona?.style ?? '', rules: persona?.rules ?? '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,11 +42,11 @@ function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     setLoading(true);
     setError(null);
     try {
-      const created = await api<Persona>('/bots/personas', {
-        method: 'POST',
+      const saved = await api<Persona>(persona ? `/bots/personas/${persona.id}` : '/bots/personas', {
+        method: persona ? 'PATCH' : 'POST',
         body: JSON.stringify({ name: form.name, soulMd: form.soulMd, tone: form.tone || undefined, style: form.style || undefined, rules: form.rules || undefined }),
       });
-      onCreated(created);
+      onCreated(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errCreatePersona'));
     } finally {
@@ -55,11 +55,11 @@ function PersonaModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
   }
 
   return (
-    <Modal open onClose={onClose} title={t('personaTitle')} description={t('personaDesc')}
+    <Modal open onClose={onClose} title={persona ? t('editPersonaTitle') : t('personaTitle')} description={persona ? undefined : t('personaDesc')}
       footer={
         <>
           <Button type="button" variant="ghost" onClick={onClose}>{t('cancel')}</Button>
-          <Button type="submit" form="persona-form" disabled={loading}>{loading ? t('saving') : t('createPersona')}</Button>
+          <Button type="submit" form="persona-form" disabled={loading}>{loading ? t('saving') : (persona ? t('savePersona') : t('createPersona'))}</Button>
         </>
       }
     >
@@ -302,6 +302,19 @@ function BotCard({ bot, onEdit, onDelete }: { bot: Bot; onEdit: () => void; onDe
 
 export default function BotsPage() {
   const { t, bots, personas, kbs, accounts, loading, error, setError, editBot, setEditBot, confirmDelete, setConfirmDelete, load, handleDelete } = useBots();
+  const [editPersona, setEditPersona] = useState<Persona | undefined>(undefined);
+  const [confirmDeletePersona, setConfirmDeletePersona] = useState<Persona | null>(null);
+  const [showNewPersona, setShowNewPersona] = useState(false);
+
+  async function handleDeletePersona(p: Persona) {
+    try {
+      await api(`/bots/personas/${p.id}`, { method: 'DELETE' });
+      setConfirmDeletePersona(null);
+      load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error');
+    }
+  }
 
   return (
     <AppLayout>
@@ -340,6 +353,31 @@ export default function BotsPage() {
           </div>
         )}
 
+        <section className="mt-6">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('personasSection')}</h2>
+            <Button size="sm" variant="outline" onClick={() => setShowNewPersona(true)}><Plus className="h-4 w-4" aria-hidden="true" />{t('createPersona')}</Button>
+          </div>
+          {personas.length === 0 ? (
+            <p className="text-sm text-gray-400">{t('noPersonas')}</p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {personas.map((p) => (
+                <Card key={p.id} className="flex items-start justify-between gap-2 p-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{p.name}</p>
+                    {p.tone && <p className="text-xs text-gray-400">{p.tone}{p.style ? ` · ${p.style}` : ''}</p>}
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <button onClick={() => setEditPersona(p)} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800" aria-label={t('editPersonaTitle')}><PencilSimple className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setConfirmDeletePersona(p)} className="rounded p-1 text-gray-400 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/20" aria-label={t('deletePersonaTitle')}><Trash className="h-3.5 w-3.5" /></button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
+
         {editBot !== undefined && (
           <BotModal
             bot={editBot}
@@ -369,6 +407,37 @@ export default function BotsPage() {
           </Modal>
         )}
       </main>
+
+      {(editPersona !== undefined) && (
+        <PersonaModal
+          persona={editPersona}
+          onClose={() => setEditPersona(undefined)}
+          onCreated={() => { setEditPersona(undefined); load(); }}
+        />
+      )}
+
+      {showNewPersona && (
+        <PersonaModal
+          onClose={() => setShowNewPersona(false)}
+          onCreated={() => { setShowNewPersona(false); load(); }}
+        />
+      )}
+
+      {confirmDeletePersona && (
+        <Modal open size="sm" title={t('deletePersonaTitle')} onClose={() => setConfirmDeletePersona(null)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setConfirmDeletePersona(null)}>{t('cancel')}</Button>
+              <Button variant="danger" onClick={() => handleDeletePersona(confirmDeletePersona)}>
+                <Trash className="h-4 w-4" aria-hidden="true" />{t('deletePersonaBtn')}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-gray-700 dark:text-gray-200">{t('deletePersonaBody')}</p>
+          <p className="mt-1 font-medium text-gray-900 dark:text-gray-100">{confirmDeletePersona.name}</p>
+        </Modal>
+      )}
     </AppLayout>
   );
 }

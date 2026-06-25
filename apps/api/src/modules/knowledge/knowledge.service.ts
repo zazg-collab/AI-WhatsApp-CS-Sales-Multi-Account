@@ -87,6 +87,11 @@ export class KnowledgeService {
     });
   }
 
+  async deleteBase(id: string) {
+    // Items cascade-delete via the schema's onDelete: Cascade relation.
+    return this.prisma.knowledgeBase.delete({ where: { id } });
+  }
+
   /**
    * Create a manually-entered item. Long pastes are auto-chunked (same
    * CHUNK_CHARS boundary as file/URL ingest) so one item never becomes a
@@ -137,6 +142,10 @@ export class KnowledgeService {
     // Content may have changed → re-embed (indexItem skips if hash unchanged).
     this.indexInBackground(item.id);
     return item;
+  }
+
+  async deleteItem(id: string) {
+    return this.prisma.knowledgeItem.delete({ where: { id } });
   }
 
   /**

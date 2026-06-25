@@ -97,7 +97,7 @@ export function useCampaigns() {
   const [whatsappAccountId, setWhatsappAccountId] = useState<string>(savedDraft?.whatsappAccountId ?? '');
   const [leadStage, setLeadStage] = useState<string>(savedDraft?.leadStage ?? '');
   const [tag, setTag] = useState<string>(savedDraft?.tag ?? '');
-  const [rateLimitPerMinute, setRateLimitPerMinute] = useState<number>(savedDraft?.rateLimitPerMinute ?? 6);
+  const [rateLimitPerMinute, setRateLimitPerMinute] = useState<number>(savedDraft?.rateLimitPerMinute ?? 20);
   const [scheduledAt, setScheduledAt] = useState<string>(savedDraft?.scheduledAt ?? '');
   const [assetId, setAssetId] = useState<string>(savedDraft?.assetId ?? '');
 

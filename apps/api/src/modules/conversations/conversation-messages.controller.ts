@@ -11,7 +11,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiConsumes, ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiConsumes, ApiTags, ApiOperation, ApiBearerAuth, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
@@ -81,6 +81,8 @@ export class ConversationMessagesController {
     return this.conversations.send(id, user.id, dto.text, dto.quotedMessageId);
   }
 
+  // ponytail: legacy alias for POST :id/messages without quotedMessageId support — kept for any existing integrations
+  @ApiExcludeEndpoint()
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/send')
   sendLegacy(
