@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   SquaresFour,
@@ -124,6 +124,7 @@ const dict: Dict = {
   appOffline: { id: 'Realtime terputus', en: 'Realtime offline' },
   apiOffline: { id: 'API mati', en: 'API offline' },
   apiChecking: { id: 'Cek koneksi…', en: 'Checking…' },
+  retryConnection: { id: 'Coba koneksi lagi', en: 'Retry connection' },
 };
 
 export function Sidebar() {
@@ -140,6 +141,27 @@ export function Sidebar() {
   // WhatsApp account health: how many Baileys sessions are connected vs total.
   const [waHealth, setWaHealth] = useState<{ connected: number; total: number } | null>(null);
 
+  const refreshWaHealth = useCallback(() => {
+    api<Array<{ sessionStatus?: string }>>('/wa/accounts')
+      .then((accts) => {
+        const list = accts ?? [];
+        setWaHealth({
+          connected: list.filter((a) => a.sessionStatus === 'connected').length,
+          total: list.length,
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  const checkApi = useCallback(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+    if (typeof fetch !== 'function') { setApiOnline(false); return; }
+    fetch(`${apiUrl}/health`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+      .then((res: { status?: string }) => setApiOnline(res.status === 'ok'))
+      .catch(() => setApiOnline(false));
+  }, []);
+
   useEffect(() => {
     if (!getToken()) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -150,36 +172,12 @@ export function Sidebar() {
         api<{ count: number }>('/conversations/unread-count').then((r) => setUnread(r?.count ?? 0)).catch(() => {});
       }, 500);
     };
-    const refreshWaHealth = () => {
-      api<Array<{ sessionStatus?: string }>>('/wa/accounts')
-        .then((accts) => {
-          const list = accts ?? [];
-          setWaHealth({
-            connected: list.filter((a) => a.sessionStatus === 'connected').length,
-            total: list.length,
-          });
-        })
-        .catch(() => {});
-    };
-    // Backend reachability — single source of truth for "is the API up?",
-    // replacing the per-page header badge.
-    // Kept inline (not the lib/api `API_URL` export) so the shared Sidebar does
-    // not force every page test that mocks '@/lib/api' to also stub API_URL.
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
-    const checkApi = () => {
-      if (typeof fetch !== 'function') { setApiOnline(false); return; }
-      fetch(`${apiUrl}/health`)
-        .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
-        .then((res: { status?: string }) => setApiOnline(res.status === 'ok'))
-        .catch(() => setApiOnline(false));
-    };
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
     refreshUnread();
     refreshWaHealth();
     checkApi();
-    // Poll WA health + API reachability so the rail reflects reconnects/drops.
     const waTimer = setInterval(refreshWaHealth, 30_000);
     const apiTimer = setInterval(checkApi, 30_000);
 
@@ -203,7 +201,7 @@ export function Sidebar() {
         socket.off('disconnect', handleOffline);
       }
     };
-  }, [pathname]);
+  }, [pathname, checkApi, refreshWaHealth]);
 
   // Escape closes the mobile drawer.
   useEffect(() => {
@@ -348,15 +346,27 @@ export function Sidebar() {
           checking: 'bg-gray-500 animate-pulse',
         }[tone];
         return (
-          <Link
-            href="/accounts"
-            onClick={() => setOpen(false)}
-            title={t(labelKey)}
-            className="flex items-center gap-2 border-t border-gray-800 px-3 py-2 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50 md:px-4"
-          >
-            <span className={cn('h-2 w-2 shrink-0 rounded-full', dot)} aria-hidden="true" />
-            <span className={cn('truncate', labelCls)}>{text}</span>
-          </Link>
+          <div className="flex items-center border-t border-gray-800">
+            <Link
+              href="/accounts"
+              onClick={() => setOpen(false)}
+              title={t(labelKey)}
+              className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-[11px] font-medium text-gray-400 transition-colors hover:bg-gray-800 hover:text-gray-50 md:px-4"
+            >
+              <span className={cn('h-2 w-2 shrink-0 rounded-full', dot)} aria-hidden="true" />
+              <span className={cn('truncate', labelCls)}>{text}</span>
+            </Link>
+            {tone === 'down' && (
+              <button
+                onClick={() => { checkApi(); refreshWaHealth(); }}
+                title={t('retryConnection')}
+                aria-label={t('retryConnection')}
+                className="shrink-0 px-2 py-2 text-[11px] text-gray-500 transition-colors hover:text-gray-200"
+              >
+                ↺
+              </button>
+            )}
+          </div>
         );
       })()}
 
