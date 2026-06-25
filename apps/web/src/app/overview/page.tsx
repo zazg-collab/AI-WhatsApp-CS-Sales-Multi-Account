@@ -161,7 +161,7 @@ export default function OverviewPage() {
                       return (
                         <li key={c.id}>
                           <Link href={`/inbox?conversation=${c.id}`} className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40">
-                            <Avatar name={c.customer.name} phone={c.customer.phoneNumber} className="h-9 w-9" />
+                            <Avatar name={c.customer.name} phone={c.customer.phoneNumber} avatarUrl={c.customer.avatarUrl} className="h-9 w-9" />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{name}</p>

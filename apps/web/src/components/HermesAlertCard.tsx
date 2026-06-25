@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Warning, ArrowUpRight } from '@phosphor-icons/react';
 import { Card } from '@/components/ui/Card';
 import { Badge, type BadgeProps } from '@/components/ui/Badge';
+import { Avatar } from '@/components/ui/Avatar';
 import type { TFunction } from '@/lib/i18n';
 
 export interface HermesAlertCardProps {
@@ -10,6 +11,7 @@ export interface HermesAlertCardProps {
   customer?: {
     name?: string | null;
     phoneNumber: string;
+    avatarUrl?: string | null;
   };
   riskLevel: string;
   decision: string;
@@ -53,6 +55,14 @@ export function HermesAlertCard({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
+            {customer && (
+              <Avatar
+                name={customer.name}
+                phone={customer.phoneNumber}
+                avatarUrl={customer.avatarUrl}
+                className="h-7 w-7 shrink-0 text-[10px]"
+              />
+            )}
             <span className="font-medium text-gray-900 dark:text-gray-100">
               {customerName}
             </span>

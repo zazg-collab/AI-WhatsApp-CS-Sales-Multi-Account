@@ -40,7 +40,7 @@ export interface ConvSummary {
   slaBreachedAt?: string | null;
   lastMessage: string | null;
   lastMessageAt: string | null;
-  customer: { name: string | null; phoneNumber: string };
+  customer: { name: string | null; phoneNumber: string; avatarUrl?: string | null };
   whatsappAccount: { accountName: string };
   messages?: { status: string }[];
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { Plus, PencilSimple, Trash, UsersThree, ShieldWarning } from '@phosphor-icons/react';
+import { Avatar } from '@/components/ui/Avatar';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -168,7 +169,12 @@ export default function UsersPage() {
                     const deleteBlockedReason = isSelf ? t('cantDeleteSelf') : isLastOwner ? t('cantDeleteLastOwner') : null;
                     return (
                       <tr key={user.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40">
-                        <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{user.email}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar name={user.name} phone={user.email} className="h-7 w-7 shrink-0 text-[10px]" />
+                            <span className="text-gray-900 dark:text-gray-100">{user.email}</span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{user.name}</td>
                         <td className="px-4 py-3"><Badge tone={roleTone[user.role] ?? 'neutral'}>{user.role}</Badge></td>
                         <td className="px-4 py-3"><Badge tone={user.status === 'active' ? 'success' : 'danger'}>{user.status}</Badge></td>
