@@ -80,6 +80,38 @@ describe('KnowledgeService', () => {
       const data = prisma.knowledgeItem.create.mock.calls[0][0].data;
       expect(data.validFrom).toBeUndefined();
     });
+
+    it('does not chunk short content (single item, unchanged behaviour)', async () => {
+      await service.addItem('kb1', { title: 'T', content: 'pendek saja' } as any);
+      expect(prisma.knowledgeItem.create).toHaveBeenCalledTimes(1);
+      expect(prisma.knowledgeItem.create.mock.calls[0][0].data.title).toBe('T');
+    });
+
+    it('chunks content longer than CHUNK_CHARS into multiple titled items', async () => {
+      const longContent = 'kalimat panjang. '.repeat(1000); // > 8000 chars
+      const result = await service.addItem('kb1', { title: 'Dokumen Besar', content: longContent } as any);
+      expect(prisma.knowledgeItem.create.mock.calls.length).toBeGreaterThan(1);
+      expect(Array.isArray(result)).toBe(true);
+      const titles = prisma.knowledgeItem.create.mock.calls.map((c: any) => c[0].data.title);
+      expect(titles[0]).toMatch(/Dokumen Besar \(bagian 1\//);
+      expect(knowledgeIndex.indexItem).toHaveBeenCalledTimes(titles.length);
+    });
+
+    it('preserves productName/category/status across every chunk', async () => {
+      const longContent = 'fakta produk. '.repeat(1000);
+      await service.addItem('kb1', {
+        title: 'Spek',
+        content: longContent,
+        productName: 'Produk A',
+        category: 'spec',
+        status: 'active',
+      } as any);
+      for (const call of prisma.knowledgeItem.create.mock.calls) {
+        expect(call[0].data.productName).toBe('Produk A');
+        expect(call[0].data.category).toBe('spec');
+        expect(call[0].data.status).toBe('active');
+      }
+    });
   });
 
   describe('updateItem', () => {

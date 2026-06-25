@@ -19,29 +19,66 @@ function kindForMime(mime: string): MediaKind {
 }
 
 /**
- * Hesitation/skeptic cues. When a customer says these, a testimonial asset is
- * worth offering even if no explicit trigger keyword matched — that's exactly
- * when social proof helps convert.
+ * Loose intent cues per asset `purpose`. When a customer's recent messages
+ * match a cue here (even with no exact trigger-keyword hit), the matching
+ * purpose is worth suggesting. This is the ADVISORY path only — `suggest()`
+ * surfaces these to an admin to click-send (AssetBar); `maybeAutoSend` never
+ * reads this, by design (see its docstring: exact keyword match only).
  */
-const HESITATION_CUES = [
-  'ragu',
-  'yakin',
-  'beneran',
-  'bener ga',
-  'real',
-  'asli',
-  'penipuan',
-  'penipu',
-  'aman ga',
-  'aman kah',
-  'bukti',
-  'testimoni',
-  'terpercaya',
-  'percaya',
-  'takut',
-];
+const INTENT_CUES: Record<string, string[]> = {
+  // Skepticism/trust-seeking → social proof helps convert.
+  testimonial: [
+    'ragu', 'yakin', 'beneran', 'bener ga', 'real', 'asli', 'penipuan',
+    'penipu', 'aman ga', 'aman kah', 'bukti', 'testimoni', 'terpercaya',
+    'percaya', 'takut',
+  ],
+  // Price/availability questions → a product card with live price/stock helps.
+  product: [
+    'harga', 'berapa', 'brp', 'price', 'stok', 'stock', 'ready', 'tersedia',
+    'available', 'sisa', 'beli', 'order', 'mau pesan',
+  ],
+  // How-it-works/spec questions → a brochure/spec sheet clarifies.
+  brochure: [
+    'gimana caranya', 'bagaimana cara', 'cara pakai', 'cara kerja', 'spek',
+    'spesifikasi', 'detail produk', 'how to', 'how does it work',
+  ],
+};
+
+/** Human-readable reason per purpose, shown in the admin's AssetBar suggestion. */
+const INTENT_REASON: Record<string, string> = {
+  testimonial: 'Pelanggan tampak ragu — kirim testimoni',
+  product: 'Pelanggan tanya harga/stok — kirim kartu produk',
+  brochure: 'Pelanggan tanya cara kerja/spesifikasi — kirim brosur',
+};
+
+/** Reverse-index: each cue → which purpose it suggests. Built once at module load. */
+const CUE_TO_PURPOSE: Array<{ cue: string; purpose: string }> = Object.entries(
+  INTENT_CUES,
+).flatMap(([purpose, cues]) => cues.map((cue) => ({ cue, purpose })));
 
 const MAX_SUGGESTIONS = 4;
+
+/**
+ * Pure intent detector: scans lowercased customer text for the first matching
+ * cue per category, returns which asset `purpose` each implies. Deterministic,
+ * zero LLM cost, exported for unit testing. Advisory-only by construction —
+ * callers decide what to do with the result (suggest() shows it to an admin;
+ * nothing here sends anything).
+ */
+export function detectAssetIntent(text: string): Array<{ purpose: string; cue: string }> {
+  const hay = (text ?? '').toLowerCase();
+  if (!hay.trim()) return [];
+  const seen = new Set<string>();
+  const hits: Array<{ purpose: string; cue: string }> = [];
+  for (const { cue, purpose } of CUE_TO_PURPOSE) {
+    if (seen.has(purpose)) continue; // one reason per purpose is enough
+    if (hay.includes(cue)) {
+      hits.push({ purpose, cue });
+      seen.add(purpose);
+    }
+  }
+  return hits;
+}
 
 @Injectable()
 export class AssetsService {
@@ -214,7 +251,10 @@ export class AssetsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const hesitant = HESITATION_CUES.some((c) => text.includes(c));
+    // purpose → why (first matching cue's label), for the fallback path below.
+    const intentByPurpose = new Map(
+      detectAssetIntent(text).map((h) => [h.purpose, h.cue]),
+    );
     const suggestions: Array<{
       id: string;
       title: string;
@@ -226,8 +266,11 @@ export class AssetsService {
     for (const a of assets) {
       const matched = a.triggerKeywords.find((k) => k && text.includes(k.toLowerCase()));
       let reason = '';
-      if (matched) reason = `Cocok dengan "${matched}"`;
-      else if (a.purpose === 'testimonial' && hesitant) reason = 'Pelanggan tampak ragu — kirim testimoni';
+      if (matched) {
+        reason = `Cocok dengan "${matched}"`;
+      } else if (intentByPurpose.has(a.purpose)) {
+        reason = INTENT_REASON[a.purpose] ?? `Relevan dengan pertanyaan customer ("${intentByPurpose.get(a.purpose)}")`;
+      }
       if (!reason) continue;
       suggestions.push({ id: a.id, title: a.title, kind: a.kind, purpose: a.purpose, reason });
       if (suggestions.length >= MAX_SUGGESTIONS) break;

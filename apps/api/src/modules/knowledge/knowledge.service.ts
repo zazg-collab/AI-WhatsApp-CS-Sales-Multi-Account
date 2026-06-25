@@ -7,6 +7,7 @@ import {
   UpdateKnowledgeItemDto,
 } from './dto/knowledge.dto';
 import {
+  CHUNK_CHARS,
   chunkText,
   extractFromFile,
   htmlTitle,
@@ -86,21 +87,42 @@ export class KnowledgeService {
     });
   }
 
+  /**
+   * Create a manually-entered item. Long pastes are auto-chunked (same
+   * CHUNK_CHARS boundary as file/URL ingest) so one item never becomes a
+   * multi-topic blob that blurs retrieval and bloats every prompt it's
+   * injected into — see chunkText(). Short content (the common case) is
+   * unaffected: exactly one item, same as before.
+   */
   async addItem(baseId: string, dto: CreateKnowledgeItemDto) {
-    const item = await this.prisma.knowledgeItem.create({
-      data: {
-        knowledgeBaseId: baseId,
-        title: dto.title,
-        content: dto.content,
-        category: dto.category,
-        productName: dto.productName,
-        validFrom: dto.validFrom ? new Date(dto.validFrom) : undefined,
-        validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
-        status: dto.status,
-      },
-    });
-    this.indexInBackground(item.id);
-    return item;
+    const shared = {
+      knowledgeBaseId: baseId,
+      category: dto.category,
+      productName: dto.productName,
+      validFrom: dto.validFrom ? new Date(dto.validFrom) : undefined,
+      validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
+      status: dto.status,
+    };
+
+    if (dto.content.length <= CHUNK_CHARS) {
+      const item = await this.prisma.knowledgeItem.create({
+        data: { ...shared, title: dto.title, content: dto.content },
+      });
+      this.indexInBackground(item.id);
+      return item;
+    }
+
+    const chunks = chunkText(dto.content);
+    const items = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const title = `${dto.title} (bagian ${i + 1}/${chunks.length})`;
+      const created = await this.prisma.knowledgeItem.create({
+        data: { ...shared, title, content: chunks[i] },
+      });
+      this.indexInBackground(created.id);
+      items.push(created);
+    }
+    return items;
   }
 
   async updateItem(id: string, dto: UpdateKnowledgeItemDto) {
