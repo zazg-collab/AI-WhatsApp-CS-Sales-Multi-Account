@@ -210,7 +210,10 @@ export default function AccountsPage() {
 
         {error && (
           <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 border-danger-200 bg-danger-50 p-4 dark:border-danger-800 dark:bg-danger-900/20">
-            <p className="text-sm text-danger-700 dark:text-danger-300">{error}</p>
+            <div>
+              <p className="text-sm text-danger-700 dark:text-danger-300">{error}</p>
+              <p className="mt-1 font-mono text-[11px] text-danger-500 dark:text-danger-400">{t('wahaDownHint')}</p>
+            </div>
             <Button variant="outline" size="sm" onClick={load}>{t('retry')}</Button>
           </Card>
         )}

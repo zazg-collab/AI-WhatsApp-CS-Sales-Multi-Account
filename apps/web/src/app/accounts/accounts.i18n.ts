@@ -72,6 +72,10 @@ export const dict: Dict = {
   pairingCodeStep2: { id: '2. Buka Pengaturan → Perangkat Tertaut → Tautkan Perangkat', en: '2. Go to Settings → Linked Devices → Link a Device' },
   pairingCodeStep3: { id: '3. Pilih "Tautkan dengan nomor telepon" dan masukkan kode di bawah ini', en: '3. Tap "Link with phone number" and enter the code below' },
   loadFailed: { id: 'Gagal memuat daftar akun.', en: 'Failed to load the account list.' },
+  wahaDownHint: {
+    id: 'Pastikan container WAHA sudah berjalan: docker compose up -d waha',
+    en: 'Make sure the WAHA container is running: docker compose up -d waha',
+  },
   addFailed: { id: 'Gagal menambahkan akun.', en: 'Failed to add the account.' },
 
   // Scan-first add flow
