@@ -365,8 +365,8 @@ export default function ProductsPage() {
                     {sources.map((s) => (
                       <li key={s.id} className="flex items-center gap-2 rounded bg-gray-50 px-2.5 py-1.5 text-[12px] dark:bg-gray-800">
                         <span className="min-w-0 flex-1 truncate"><strong>{s.name}</strong> {s.lastResult && <span className="text-gray-400">· {s.lastResult}</span>}</span>
-                        <button type="button" onClick={() => syncSource(s.id)} disabled={busy} title={t('syncNow')} className="text-hermes-600 hover:text-hermes-700"><ArrowsClockwise className="h-4 w-4" /></button>
-                        <button type="button" onClick={() => setDeletingSourceId(s.id)} title={t('delete')} className="text-gray-400 hover:text-danger-600"><Trash className="h-4 w-4" /></button>
+                        <button type="button" onClick={() => syncSource(s.id)} disabled={busy} aria-label={t('syncNow')} title={t('syncNow')} className="text-hermes-600 hover:text-hermes-700"><ArrowsClockwise className="h-4 w-4" aria-hidden="true" /></button>
+                        <button type="button" onClick={() => setDeletingSourceId(s.id)} aria-label={t('delete')} title={t('delete')} className="text-gray-400 hover:text-danger-600"><Trash className="h-4 w-4" aria-hidden="true" /></button>
                       </li>
                     ))}
                   </ul>
@@ -394,7 +394,7 @@ export default function ProductsPage() {
             <div className="scrollbar-thin hidden overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800 sm:block">
               <table className="w-full min-w-[28rem] text-[13px]">
                 <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                  <tr><th className="px-3 py-2">{t('colProduct')}</th><th className="px-3 py-2">{t('colSku')}</th><th className="px-3 py-2 text-right">{t('colPrice')}</th><th className="px-3 py-2 text-right">{t('colStock')}</th></tr>
+                  <tr><th scope="col" className="px-3 py-2">{t('colProduct')}</th><th scope="col" className="px-3 py-2">{t('colSku')}</th><th scope="col" className="px-3 py-2 text-right">{t('colPrice')}</th><th scope="col" className="px-3 py-2 text-right">{t('colStock')}</th></tr>
                 </thead>
                 <tbody>
                   {products.map((p) => (

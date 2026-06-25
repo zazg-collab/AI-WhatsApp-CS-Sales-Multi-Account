@@ -102,7 +102,7 @@ const sections: NavSection[] = [
   {
     heading: 'Operations',
     items: [
-      { href: '/bots', label: 'Automation Mode', icon: ArrowsSplit },
+      { href: '/bots', label: 'Bots & Personas', icon: ArrowsSplit },
       { href: '/templates', label: 'Templates', icon: FileText },
       { href: '/audit', label: 'Audit Log', icon: ClockCounterClockwise, requiredRole: 'supervisor' },
       { href: '/admin/users', label: 'Team', icon: UsersThree, requiredRole: 'supervisor' },

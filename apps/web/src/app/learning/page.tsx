@@ -245,10 +245,12 @@ export default function LearningPage() {
         )}
 
         {/* Status tabs */}
-        <div className="mb-4 flex gap-1 border-b border-gray-200 dark:border-gray-800">
+        <div role="tablist" aria-label="Filter proposal status" className="mb-4 flex gap-1 border-b border-gray-200 dark:border-gray-800">
           {statusTabs.map((tb) => (
             <button
               key={tb.key}
+              role="tab"
+              aria-selected={tab === tb.key}
               onClick={() => setTab(tb.key)}
               className={cn(
                 'border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors',

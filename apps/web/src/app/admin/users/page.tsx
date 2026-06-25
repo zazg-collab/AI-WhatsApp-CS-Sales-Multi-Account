@@ -152,12 +152,12 @@ export default function UsersPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
-                    <th className="px-4 py-3 font-medium">{t('emailLabel')}</th>
-                    <th className="px-4 py-3 font-medium">{t('thNama')}</th>
-                    <th className="px-4 py-3 font-medium">{t('roleLabel')}</th>
-                    <th className="px-4 py-3 font-medium">{t('thStatus')}</th>
-                    <th className="px-4 py-3 font-medium">{t('thDibuat')}</th>
-                    <th className="px-4 py-3 text-right font-medium">{t('thAksi')}</th>
+                    <th scope="col" className="px-4 py-3 font-medium">{t('emailLabel')}</th>
+                    <th scope="col" className="px-4 py-3 font-medium">{t('thNama')}</th>
+                    <th scope="col" className="px-4 py-3 font-medium">{t('roleLabel')}</th>
+                    <th scope="col" className="px-4 py-3 font-medium">{t('thStatus')}</th>
+                    <th scope="col" className="px-4 py-3 font-medium">{t('thDibuat')}</th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">{t('thAksi')}</th>
                   </tr>
                 </thead>
                 <tbody>

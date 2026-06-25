@@ -128,11 +128,11 @@ export default function CustomersPage() {
                       <th className="w-10 px-4 py-3">
                         <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={t('selectAllAria')} className="accent-hermes-600" />
                       </th>
-                      <th className="px-4 py-3 font-medium">{t('colCustomer')}</th>
-                      <th className="px-4 py-3 font-medium">{t('colStage')}</th>
-                      <th className="px-4 py-3 font-medium">{t('colTag')}</th>
-                      <th className="px-4 py-3 font-medium">{t('colAdmin')}</th>
-                      <th className="px-4 py-3 font-medium">{t('colLastContact')}</th>
+                      <th scope="col" className="px-4 py-3 font-medium">{t('colCustomer')}</th>
+                      <th scope="col" className="px-4 py-3 font-medium">{t('colStage')}</th>
+                      <th scope="col" className="px-4 py-3 font-medium">{t('colTag')}</th>
+                      <th scope="col" className="px-4 py-3 font-medium">{t('colAdmin')}</th>
+                      <th scope="col" className="px-4 py-3 font-medium">{t('colLastContact')}</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -167,9 +167,17 @@ export function useAccounts() {
   };
 
   const closeAddModal = useCallback(() => {
+    // If user closes during QR scan step, clean up the placeholder account
+    // so it doesn't appear as an orphaned unnamed entry.
+    if (addStep === 'scan' && addedAccountId) {
+      api(`/wa/accounts/${addedAccountId}`, { method: 'DELETE' }).catch(() => {});
+      setAddedAccountId(null);
+    }
     setAddModalOpen(false);
+    setAddStep('method');
+    setAddError(null);
     load();
-  }, [load]);
+  }, [load, addStep, addedAccountId]);
 
   // QR path — fully scan-first: create with placeholder name/number (the
   // device will report the real ones), then show the QR and wait for connect.

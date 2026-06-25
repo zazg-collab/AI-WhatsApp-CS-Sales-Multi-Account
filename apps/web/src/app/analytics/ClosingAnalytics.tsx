@@ -133,12 +133,12 @@ function BotAttributionPanel({ data }: { data: BotAttributionResult }) {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-gray-100 text-left text-[10px] font-semibold uppercase text-gray-400 dark:border-gray-800">
-              <th className="pb-2 pr-4">Bot / Persona</th>
-              <th className="pb-2 pr-4 text-right">Conversations</th>
-              <th className="pb-2 pr-4 text-right">Resolved</th>
-              <th className="pb-2 pr-4 text-right">Hot Leads</th>
-              <th className="pb-2 pr-4 text-right">Avg Score</th>
-              <th className="pb-2 text-right">CSAT</th>
+              <th scope="col" className="pb-2 pr-4">Bot / Persona</th>
+              <th scope="col" className="pb-2 pr-4 text-right">Conversations</th>
+              <th scope="col" className="pb-2 pr-4 text-right">Resolved</th>
+              <th scope="col" className="pb-2 pr-4 text-right">Hot Leads</th>
+              <th scope="col" className="pb-2 pr-4 text-right">Avg Score</th>
+              <th scope="col" className="pb-2 text-right">CSAT</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">

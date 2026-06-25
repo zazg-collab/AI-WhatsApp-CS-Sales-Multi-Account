@@ -85,10 +85,10 @@ export default function HermesPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-[11px] uppercase tracking-wider text-gray-400">
-                      <th className="pb-2 font-medium">{t('colBot')}</th>
-                      <th className="pb-2 text-right font-medium">{t('colReviews')}</th>
-                      <th className="pb-2 text-right font-medium">{t('colAvgConf')}</th>
-                      <th className="pb-2 text-right font-medium">{t('colAvgRisk')}</th>
+                      <th scope="col" className="pb-2 font-medium">{t('colBot')}</th>
+                      <th scope="col" className="pb-2 text-right font-medium">{t('colReviews')}</th>
+                      <th scope="col" className="pb-2 text-right font-medium">{t('colAvgConf')}</th>
+                      <th scope="col" className="pb-2 text-right font-medium">{t('colAvgRisk')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -140,7 +140,10 @@ export default function HermesPage() {
             </h2>
             <p className="mb-3 text-xs text-gray-400">{t('knowledgeGapsHint')}</p>
             {gaps.length === 0 ? (
-              <p className="text-sm text-gray-400">{t('noKnowledgeGaps')}</p>
+              <div className="flex items-center gap-2 rounded-lg border border-channel-200 bg-channel-50 px-3 py-2.5 dark:border-channel-700/40 dark:bg-channel-900/10">
+                <span className="text-lg leading-none">✅</span>
+                <p className="text-[13px] text-channel-700 dark:text-channel-400">{t('noKnowledgeGaps')}</p>
+              </div>
             ) : (
               <ul className="space-y-2">
                 {gaps.slice(0, 15).map((g) => (

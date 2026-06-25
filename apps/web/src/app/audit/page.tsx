@@ -144,11 +144,11 @@ export default function AuditPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
-                      <th className="px-4 py-3 font-medium">{t('colWaktu')}</th>
-                      <th className="px-4 py-3 font-medium">{t('colPengguna')}</th>
-                      <th className="px-4 py-3 font-medium">{t('colAksi')}</th>
-                      <th className="px-4 py-3 font-medium">{t('colEntitas')}</th>
-                      <th className="px-4 py-3 font-medium">{t('colPerubahan')}</th>
+                      <th scope="col" className="px-4 py-3 font-medium">{t('colWaktu')}</th>
+                      <th scope="col" className="px-4 py-3 font-medium">{t('colPengguna')}</th>
+                      <th scope="col" className="px-4 py-3 font-medium">{t('colAksi')}</th>
+                      <th scope="col" className="px-4 py-3 font-medium">{t('colEntitas')}</th>
+                      <th scope="col" className="px-4 py-3 font-medium">{t('colPerubahan')}</th>
                     </tr>
                   </thead>
                   <tbody>
