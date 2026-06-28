@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Interval } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -294,13 +294,23 @@ export class CampaignsService {
       );
     }
 
-    const updated = await this.prisma.campaign.update({
-      where: { id },
+    // Atomic optimistic-lock claim: only one concurrent caller can transition
+    // the campaign out of approved/paused/scheduled → running. If another
+    // request already claimed it, count === 0 and we roll back the queued jobs.
+    const claimed = await this.prisma.campaign.updateMany({
+      where: {
+        id,
+        status: { in: [CampaignStatus.approved, CampaignStatus.paused, CampaignStatus.scheduled] },
+      },
       data: {
         status: baseDelay > 0 ? CampaignStatus.scheduled : CampaignStatus.running,
         startedAt: new Date(),
       },
     });
+    if (claimed.count === 0) {
+      await this.removeRecipientJobs(id);
+      throw new ConflictException('Campaign start was claimed by a concurrent request; please refresh and retry.');
+    }
     await this.prisma.campaignRecipient.updateMany({
       where: { id: { in: recipients.map((recipient) => recipient.id) } },
       data: { status: CampaignRecipientStatus.queued, error: null },
@@ -310,7 +320,7 @@ export class CampaignsService {
       rateLimitPerMinute: campaign.rateLimitPerMinute,
       scheduledAt: campaign.scheduledAt,
     });
-    return updated;
+    return this.prisma.campaign.findUniqueOrThrow({ where: { id } });
   }
 
   async pause(id: string, userId: string) {
@@ -367,7 +377,13 @@ export class CampaignsService {
         try {
           await this.start(campaign.id, campaign.createdById ?? undefined);
         } catch (err) {
-          this.logger.warn(`Scheduled campaign ${campaign.id} failed to auto-start: ${err}`);
+          // BadRequestException = another campaign is already running on this account;
+          // the scheduler will retry in 60s. Any other error is unexpected.
+          if (err instanceof BadRequestException || err instanceof ConflictException) {
+            this.logger.warn(`Scheduled campaign ${campaign.id} deferred (concurrent active campaign): ${err.message}`);
+          } else {
+            this.logger.error(`Scheduled campaign ${campaign.id} failed to auto-start unexpectedly: ${err}`);
+          }
         }
       }
     } catch (err) {
@@ -610,8 +626,17 @@ export class CampaignsService {
         if (attempt === 3) {
           this.logger.error(
             `Campaign recipient ${recipientId} DELIVERED but could not be marked sent after ${attempt} attempts: ${err}. ` +
-              'Recipient remains in `sending`; do NOT re-send it.',
+              'Marking as failed to unblock campaign completion — message was already delivered.',
           );
+          // Mark failed (not sent) so refreshCampaignCompletion can close the campaign.
+          // The message was delivered; we log the discrepancy so ops can reconcile.
+          this.prisma.campaignRecipient
+            .update({
+              where: { id: recipientId },
+              data: { status: CampaignRecipientStatus.failed, error: 'Delivered but DB record failed — do not resend' },
+            })
+            .then(() => this.refreshCampaignCompletion(campaignId))
+            .catch((e) => this.logger.error(`Could not mark delivered-but-unrecorded recipient ${recipientId}: ${e}`));
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, attempt * 1000));

@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -69,7 +70,7 @@ type GroupMetadataLike = {
  * resumes without re-scanning the QR.
  */
 @Injectable()
-export class WaService implements OnModuleInit {
+export class WaService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WaService.name);
   private readonly sessions = new Map<string, Session>();
   private readonly sessionDir: string;
@@ -83,6 +84,7 @@ export class WaService implements OnModuleInit {
   private readonly reconnectAttempts = new Map<string, number>();
   private readonly sendTimestamps = new Map<string, number[]>();
   private readonly reconnectingSince = new Map<string, number>();
+  private readonly reconnectTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -129,6 +131,13 @@ export class WaService implements OnModuleInit {
         this.logger.error(`Failed to start session ${account.id}: ${err}`),
       );
     }
+  }
+
+  onModuleDestroy() {
+    for (const timer of this.reconnectTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.reconnectTimers.clear();
   }
 
   async startSession(accountId: string): Promise<void> {
@@ -866,11 +875,13 @@ export class WaService implements OnModuleInit {
       `Account ${accountId} reconnecting in ${delay}ms ` +
         `(attempt ${attempt + 1}/${WaService.MAX_RECONNECT_ATTEMPTS})`,
     );
-    setTimeout(() => {
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(accountId);
       this.startSession(accountId).catch((err) =>
         this.logger.error(`Reconnect failed ${accountId}: ${err}`),
       );
     }, delay);
+    this.reconnectTimers.set(accountId, timer);
   }
 
   /**

@@ -183,24 +183,48 @@ export class MessageIngestService {
       quotedMessageId = quoted?.id ?? null;
     }
 
+    // Pre-compute conversationData before the transaction so the computation
+    // does not depend on the created message record.
+    const conversationData: Prisma.ConversationUpdateInput = {};
+    const shouldRefreshLastMessage =
+      !conversation.lastMessageAt || occurredAt >= conversation.lastMessageAt;
+    if (shouldRefreshLastMessage) {
+      conversationData.lastMessage = msg.text;
+      conversationData.lastMessageAt = occurredAt;
+    }
+    if (!fromMe && !msg.suppressAutomation) {
+      conversationData.unreadCount = { increment: 1 };
+    }
+
+    // Wrap message.create + conversation.update in a single transaction so a
+    // process crash between them cannot leave conversation state stale.
     let message;
     try {
-      message = await this.prisma.message.create({
-        data: {
-          conversationId: conversation.id,
-          senderType: fromMe ? SenderType.admin : SenderType.customer,
-          senderId: fromMe ? account.assignedAdminId ?? null : customer.id,
-          messageType: msg.type,
-          content: msg.text,
-          mediaUrl: msg.mediaUrl,
-          externalId: msg.externalId || null,
-          quotedMessageId,
-          status: fromMe ? MessageStatus.sent : MessageStatus.delivered,
-          createdAt: occurredAt,
-        },
-        include: {
-          quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } },
-        },
+      message = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.message.create({
+          data: {
+            conversationId: conversation.id,
+            senderType: fromMe ? SenderType.admin : SenderType.customer,
+            senderId: fromMe ? account.assignedAdminId ?? null : customer.id,
+            messageType: msg.type,
+            content: msg.text,
+            mediaUrl: msg.mediaUrl,
+            externalId: msg.externalId || null,
+            quotedMessageId,
+            status: fromMe ? MessageStatus.sent : MessageStatus.delivered,
+            createdAt: occurredAt,
+          },
+          include: {
+            quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } },
+          },
+        });
+        if (Object.keys(conversationData).length > 0) {
+          await tx.conversation.update({
+            where: { id: conversation.id },
+            data: conversationData,
+          });
+        }
+        return created;
       });
     } catch (err) {
       // Unique violation = concurrent duplicate delivery; treat as no-op.
@@ -216,21 +240,7 @@ export class MessageIngestService {
       throw err;
     }
 
-    const conversationData: Prisma.ConversationUpdateInput = {};
-    const shouldRefreshLastMessage =
-      !conversation.lastMessageAt || occurredAt >= conversation.lastMessageAt;
-    if (shouldRefreshLastMessage) {
-      conversationData.lastMessage = msg.text;
-      conversationData.lastMessageAt = occurredAt;
-    }
-    if (!fromMe && !msg.suppressAutomation) {
-      conversationData.unreadCount = { increment: 1 };
-    }
     if (Object.keys(conversationData).length > 0) {
-      await this.prisma.conversation.update({
-        where: { id: conversation.id },
-        data: conversationData,
-      });
       this.events.emitToAccount(account.id, 'conversation:updated', {
         conversationId: conversation.id,
         ...('lastMessage' in conversationData ? { lastMessage: msg.text, lastMessageAt: occurredAt } : {}),
