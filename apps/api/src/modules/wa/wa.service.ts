@@ -586,7 +586,11 @@ export class WaService implements OnModuleInit {
   }
 
   getQr(accountId: string): { qr: string | null; status: SessionStatus | 'unknown' } {
-    return { qr: this.store.getQr(accountId), status: this.store.has(accountId) ? SessionStatus.connected : 'unknown' };
+    const qr = this.store.getQr(accountId);
+    // M3: status should reflect whether a QR scan is needed, not just socket existence.
+    // If socket exists + QR is set: scanning. If socket exists + no QR: connected.
+    if (!this.store.has(accountId)) return { qr, status: 'unknown' };
+    return { qr, status: qr ? SessionStatus.qr_required : SessionStatus.connected };
   }
 
   isConnected(accountId: string): boolean {
