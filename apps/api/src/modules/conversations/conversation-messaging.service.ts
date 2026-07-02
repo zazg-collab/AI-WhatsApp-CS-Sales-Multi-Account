@@ -190,6 +190,23 @@ export class ConversationMessagingService {
     const text = editedText?.trim() || draft.content || '';
     if (!text) throw new BadRequestException('Draft text is empty');
 
+    // A segmented draft quotes the customer message it answers; preserve that
+    // quote on send so the customer sees which message each reply addresses.
+    let quoted: { externalId: string; content: string | null; fromMe: boolean } | undefined;
+    if (draft.quotedMessageId) {
+      const quotedMsg = await this.prisma.message.findFirst({
+        where: { id: draft.quotedMessageId, conversationId: id },
+        select: { externalId: true, content: true, senderType: true },
+      });
+      if (quotedMsg?.externalId) {
+        quoted = {
+          externalId: quotedMsg.externalId,
+          content: quotedMsg.content,
+          fromMe: quotedMsg.senderType !== SenderType.customer,
+        };
+      }
+    }
+
     // A2: atomic claim — set to sent BEFORE sending so a concurrent approve
     // sees count=0 and bails out rather than double-sending.
     const claimed = await this.prisma.message.updateMany({
@@ -203,12 +220,26 @@ export class ConversationMessagingService {
         conversation.whatsappAccountId,
         conversation.customer.phoneNumber,
         text,
+        quoted,
       );
 
-      const updated = await this.prisma.message.update({
-        where: { id: messageId },
-        data: { content: text, externalId, ...(editedText ? { editedAt: new Date() } : {}) },
-      });
+      let updated;
+      try {
+        updated = await this.prisma.message.update({
+          where: { id: messageId },
+          data: { content: text, externalId, ...(editedText ? { editedAt: new Date() } : {}) },
+        });
+      } catch (updateErr: any) {
+        // H4: If update fails with P2002 (unique constraint on conversationId+externalId),
+        // the message was already sent and persisted in a prior attempt (or send returned
+        // a duplicate externalId). Don't rollback — just fetch the current state and proceed.
+        if (updateErr.code === 'P2002') {
+          updated = await this.prisma.message.findUnique({ where: { id: messageId } });
+          if (!updated) throw new NotFoundException('Message disappeared after send');
+        } else {
+          throw updateErr;
+        }
+      }
 
       await this.prisma.conversation.update({
         where: { id },
@@ -225,6 +256,7 @@ export class ConversationMessagingService {
       return updated;
     } catch (err) {
       // A2 rollback: put the draft back to pending so the admin can retry.
+      // (But NOT if send succeeded; rollback is only for pre-send failures.)
       await this.prisma.message.update({ where: { id: messageId }, data: { status: MessageStatus.pending } });
       throw err;
     }

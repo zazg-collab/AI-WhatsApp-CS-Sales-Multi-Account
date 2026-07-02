@@ -295,7 +295,16 @@ export class WaInboundService {
     }
 
     if (effectiveMode === AiMode.ai_supervised) {
-      const review = await this.sentinel.review(conversationId, text);
+      let review;
+      try {
+        review = await this.sentinel.review(conversationId, text);
+      } catch (err) {
+        // M1: Hermes/provider timeout/failure. Don't lose the message. Fall back to draft
+        // so the admin can see it and manually route the decision. Log the failure for ops.
+        this.logger.error(`Sentinel review failed (supervised mode fallback to draft): ${err instanceof Error ? err.message : err}`);
+        await this.storeDraft(conversationId, convo.whatsappAccountId, text);
+        return;
+      }
       if (review.decision === SentinelDecision.approve) {
         await this.sendAndStore(convo, text, review.id);
       } else if (review.decision === SentinelDecision.draft) {

@@ -24,6 +24,12 @@ export function useInbox(initialConversationId: string | null) {
   const [activeId, setActiveId] = useState<string | null>(initialConversationId);
   const [conv, setConv] = useState<ConvDetail | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
+  // Remembered across visits — re-picking "Account X" + "hide groups" on every
+  // reload is the kind of friction WA itself doesn't impose (its tabs persist too).
+  const [accountFilter, setAccountFilter] = useState(() =>
+    typeof window === 'undefined' ? '' : localStorage.getItem('hermes:inbox:accountFilter') ?? '');
+  const [excludeGroups, setExcludeGroups] = useState(() =>
+    typeof window === 'undefined' ? false : localStorage.getItem('hermes:inbox:excludeGroups') === 'true');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [composer, setComposer] = useState('');
@@ -42,6 +48,12 @@ export function useInbox(initialConversationId: string | null) {
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [showRightPanel, setShowRightPanel] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
+  const [msgSearch, setMsgSearch] = useState('');
+  const [msgSearchResults, setMsgSearchResults] = useState<Message[]>([]);
+  const [msgSearching, setMsgSearching] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [oldestCursor, setOldestCursor] = useState<string | null>(null);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [bots, setBots] = useState<Array<{ id: string; botName: string; persona?: { name: string } | null }>>([]);
   const [botSuggestion, setBotSuggestion] = useState<{ botId: string; botName: string; personaName: string | null; reason: string } | null>(null);
   const [assets, setAssets] = useState<Array<{ id: string; title: string; kind: string; purpose: string }>>([]);
@@ -87,10 +99,20 @@ export function useInbox(initialConversationId: string | null) {
     ).then(setAssetSuggestions).catch(() => setAssetSuggestions([]));
   }, [activeId, conv?.messages?.length]);
 
+  useEffect(() => {
+    localStorage.setItem('hermes:inbox:accountFilter', accountFilter);
+  }, [accountFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('hermes:inbox:excludeGroups', String(excludeGroups));
+  }, [excludeGroups]);
+
   // ── Conversation list ─────────────────────────────────────────────────────
   const loadList = useCallback(async () => {
     const params = new URLSearchParams({ limit: '50' });
     if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
+    if (accountFilter) params.set('accountId', accountFilter);
+    if (excludeGroups) params.set('excludeGroups', 'true');
     try {
       const data = await api<{ items: ConvSummary[] }>(`/conversations?${params}`);
       setList(data.items);
@@ -98,7 +120,7 @@ export function useInbox(initialConversationId: string | null) {
     } catch (err) {
       setListError(err instanceof Error ? err.message : t('errLoadConversations'));
     }
-  }, [debouncedSearch, t]);
+  }, [debouncedSearch, accountFilter, excludeGroups, t]);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedSearch(search), 300);
@@ -110,8 +132,13 @@ export function useInbox(initialConversationId: string | null) {
   // ── Active conversation ───────────────────────────────────────────────────
   const loadConv = useCallback(async (id: string) => {
     try {
-      const data = await api<ConvDetail>(`/conversations/${id}`);
+      const data = await api<ConvDetail & { hasMoreMessages?: boolean; oldestCursor?: string | null }>(`/conversations/${id}`);
+      // H3 guard: ignore stale responses from a conversation we've since switched away from.
+      // Switch from A (slow) to B (fast), then A's late response overwrites B with A's messages.
+      if (activeIdRef.current !== id) return;
       setConv(data);
+      setHasMoreMessages(data.hasMoreMessages ?? false);
+      setOldestCursor(data.oldestCursor ?? null);
       api(`/conversations/${id}/read`, { method: 'POST' }).catch(() => {});
     } catch (err) {
       // A transient reload failure (network blip / 5xx) must NOT wipe the open
@@ -134,8 +161,15 @@ export function useInbox(initialConversationId: string | null) {
   }, []);
 
   useEffect(() => {
-    if (activeId) { loadConv(activeId); loadFollowUps(activeId); }
-    else { setConv(null); setFollowUps([]); }
+    if (activeId) {
+      loadConv(activeId);
+      loadFollowUps(activeId);
+      // Auto-send read receipt to WhatsApp (blue tick) when admin opens chat.
+      api(`/conversations/${activeId}/read`, { method: 'POST' }).catch(() => {});
+    } else {
+      setConv(null);
+      setFollowUps([]);
+    }
   }, [activeId, loadConv, loadFollowUps]);
 
   useEffect(() => {
@@ -368,8 +402,33 @@ export function useInbox(initialConversationId: string | null) {
       return false;
     }
   };
-  const setDisappearing = (enable: boolean) => act(() => api(`/conversations/${activeId}/disappearing-messages`, { method: 'POST', body: JSON.stringify({ enable, duration: 7 * 24 * 60 * 60 }) }));
+  const setDisappearing = (enable: boolean, duration = 7 * 24 * 60 * 60) => act(() => api(`/conversations/${activeId}/disappearing-messages`, { method: 'POST', body: JSON.stringify({ enable, duration }) }));
   const saveLabels = (labels: string[]) => act(() => api(`/conversations/${activeId}/labels`, { method: 'PATCH', body: JSON.stringify({ labels }) }));
+
+  const loadOlderMessages = useCallback(async () => {
+    if (!activeId || !oldestCursor || loadingOlderMessages) return;
+    setLoadingOlderMessages(true);
+    try {
+      const res = await api<{ messages: Message[]; hasMore: boolean; oldestCursor: string | null }>(
+        `/conversations/${activeId}/messages?before=${encodeURIComponent(oldestCursor)}&limit=50`
+      );
+      setConv((prev) => prev ? { ...prev, messages: [...(res.messages ?? []), ...prev.messages] } : prev);
+      setHasMoreMessages(res.hasMore ?? false);
+      setOldestCursor(res.oldestCursor ?? null);
+    } catch { /* best-effort */ }
+    finally { setLoadingOlderMessages(false); }
+  }, [activeId, oldestCursor, loadingOlderMessages]);
+
+  const searchMessages = useCallback(async (q: string) => {
+    setMsgSearch(q);
+    if (!activeId || !q.trim()) { setMsgSearchResults([]); return; }
+    setMsgSearching(true);
+    try {
+      const res = await api<{ messages: Message[] }>(`/conversations/${activeId}/messages/search?q=${encodeURIComponent(q)}`);
+      setMsgSearchResults(res.messages ?? []);
+    } catch { setMsgSearchResults([]); }
+    finally { setMsgSearching(false); }
+  }, [activeId]);
 
   const validateNumber = async (accountId: string, phone: string) => {
     try {
@@ -443,6 +502,7 @@ export function useInbox(initialConversationId: string | null) {
   return {
     // state
     list, activeId, setActiveId, conv, filter, setFilter, search, setSearch,
+    accountFilter, setAccountFilter, excludeGroups, setExcludeGroups,
     composer, setComposer, sending, busy,
     admins, accounts, bots, assets, assetSuggestions: visibleAssetSuggestions,
     quickReplies, followUps,
@@ -465,5 +525,7 @@ export function useInbox(initialConversationId: string | null) {
     setContactBlocked, setChatMuted, setChatArchived, setChatPinned,
     setMessageStarred, forwardMessage, setDisappearing, saveLabels,
     validateNumber, startConversation, searchContacts, assignAdmin, updateNotes, handleMediaFile,
+    msgSearch, msgSearchResults, msgSearching, searchMessages,
+    hasMoreMessages, loadingOlderMessages, loadOlderMessages,
   };
 }
