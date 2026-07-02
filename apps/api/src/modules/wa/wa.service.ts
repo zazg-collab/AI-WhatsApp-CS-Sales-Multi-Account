@@ -16,11 +16,11 @@ import makeWASocket, {
   downloadMediaMessage,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  Browsers,
+  makeCacheableSignalKeyStore,
   type WASocket,
   type proto,
+  type WAMessage,
 } from '@whiskeysockets/baileys';
-import { makeCacheableSignalKeyStore } from '@whiskeysockets/baileys/lib/Utils/auth-utils';
 import { SessionStatus } from '@hermes/database';
 import { MetricsService } from '../../common/metrics/metrics.service';
 import { UpdateAccountDto } from './dto/update-account.dto';
@@ -121,11 +121,18 @@ export class WaService implements OnModuleInit {
       logger,
       printQRInTerminal: false,
       syncFullHistory: this.syncFullHistory,
-      // macOS/desktop browser identity is required by Baileys/WhatsApp's server
-      // to grant a full history sync — 'Chrome' identity was observed getting
-      // only a capped `RECENT` snapshot (same small batch every reconnect)
-      // instead of `FULL`/`INITIAL_BOOTSTRAP`.
-      browser: Browsers.macOS('Desktop'),
+      // macOS platform is required by Baileys/WhatsApp's server to grant a full
+      // history sync — 'Chrome'/Ubuntu identity was observed getting only a
+      // capped `RECENT` snapshot instead of `FULL`/`INITIAL_BOOTSTRAP`.
+      // WA_BROWSER_NAME/VERSION let ops rotate away from Baileys' literal
+      // default tuple ('Mac OS','Desktop','14.4.1') if WhatsApp starts
+      // fingerprinting/blocking that exact signature (see WhiskeySockets/Baileys
+      // #2370, #2658 — server-side registration rejection tied to browser id).
+      browser: [
+        'Mac OS',
+        process.env.WA_BROWSER_NAME || 'Safari',
+        process.env.WA_BROWSER_VERSION || '17.4.1',
+      ],
       markOnlineOnConnect: false,
       keepAliveIntervalMs: parseInt(process.env.WA_KEEPALIVE_MS ?? '30000', 10),
       // ponytail: required by Baileys to resolve message content during history sync
@@ -284,6 +291,7 @@ export class WaService implements OnModuleInit {
 
     sock.ev.on('chats.upsert', async (chats) => {
       for (const chat of chats) {
+        if (!chat.id) continue;
         await this.waMirror.applyChatMirrorState(accountId, chat.id, chat).catch((err) =>
           this.logger.warn(`Chat upsert mirror failed for ${chat.id}: ${err}`),
         );
@@ -328,12 +336,13 @@ export class WaService implements OnModuleInit {
         this.logger.warn(`History contact sync failed: ${err}`),
       );
       // parallel: group metadata + chat mirror state (independent per chat)
+      const validChats = (chats ?? []).filter((c): c is typeof c & { id: string } => !!c.id);
       await Promise.allSettled([
-        ...( chats ?? []).filter(c => isGroupJid(c.id)).map(chat =>
+        ...validChats.filter(c => isGroupJid(c.id)).map(chat =>
           this.waMirror.applyGroupMetadata(accountId, { id: chat.id, subject: (chat as { name?: string }).name })
             .catch((err) => this.logger.warn(`History group metadata mirror failed for ${chat.id}: ${err}`)),
         ),
-        ...(chats ?? []).map(chat =>
+        ...validChats.map(chat =>
           this.waMirror.applyChatMirrorState(accountId, chat.id, chat)
             .catch((err) => this.logger.warn(`History chat mirror failed for ${chat.id}: ${err}`)),
         ),
@@ -490,6 +499,7 @@ export class WaService implements OnModuleInit {
     m: proto.IWebMessageInfo,
     suppressAutomation: boolean,
   ): Promise<void> {
+    if (!m.key) return;
     const shape = mapBaileysMessage(m);
     if (!suppressAutomation && !m.key.fromMe && shape.mediaMimetype && isDownloadableMedia(shape.wahaType) && shape.wahaType !== 'sticker') {
       shape.mediaUrl = await this.downloadMedia(accountId, m, shape.mediaMimetype).catch((err) => {
@@ -505,9 +515,10 @@ export class WaService implements OnModuleInit {
     m: proto.IWebMessageInfo,
     mimetype: string,
   ): Promise<string | undefined> {
+    if (!m.key) return undefined;
     const sock = this.store.getSock(accountId);
     const buffer = await downloadMediaMessage(
-      m,
+      m as WAMessage,
       'buffer',
       {},
       { logger: pino({ level: 'silent' }) as never, reuploadRequest: sock!.updateMediaMessage },

@@ -35,7 +35,8 @@
       ]
     },
     "moduleNameMapper": {
-      "^@hermes/database$": "<rootDir>/../../packages/database/src/index.ts"
+      "^@hermes/database$": "<rootDir>/../../packages/database/src/index.ts",
+      "^@whiskeysockets/baileys$": "<rootDir>/test/baileys.mock.ts"
     },
     "collectCoverageFrom": [
       "src/**/*.(t|j)s",
@@ -64,6 +65,7 @@
     "@nestjs/swagger": "^11.4.4",
     "@nestjs/websockets": "^10.4.0",
     "@prisma/client": "^5.22.0",
+    "@whiskeysockets/baileys": "7.0.0-rc13",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.78.0",
     "class-transformer": "^0.5.1",
@@ -80,7 +82,8 @@
     "reflect-metadata": "0.1.14",
     "rxjs": "^7.8.1",
     "socket.io": "^4.8.0",
-    "swagger-ui-express": "^5.0.1"
+    "swagger-ui-express": "^5.0.1",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.5",
