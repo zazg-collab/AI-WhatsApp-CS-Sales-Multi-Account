@@ -8,7 +8,7 @@ import { AiController } from './modules/ai/ai.controller';
 import { DashboardController } from './modules/dashboard/dashboard.controller';
 import { KnowledgeController } from './modules/knowledge/knowledge.controller';
 import { BotsController } from './modules/bots/bots.controller';
-import { HermesController } from './modules/hermes/hermes.controller';
+import { SentinelController } from './modules/sentinel/sentinel.controller';
 import { CampaignsController } from './modules/campaigns/campaigns.controller';
 import { UsersController } from './modules/users/users.controller';
 import { AuditController } from './modules/audit/audit.controller';
@@ -37,23 +37,21 @@ describe('HealthController', () => {
 });
 
 describe('AiController', () => {
-  const ai = { config: fn(), listModels: fn(), generateReply: fn(), summarizeChat: jest.fn().mockResolvedValue('s'), leadScore: fn() } as any;
+  const ai = { config: fn(), listModels: fn(), summarizeChat: jest.fn().mockResolvedValue('s'), leadScore: fn() } as any;
   const c = new AiController(ai);
   it('delegates all', async () => {
     c.config();
     c.models();
-    c.generateReply({ conversationId: 'c1' } as any);
-    c.generateDraft({ conversationId: 'c1' } as any);
     expect(await c.summarize({ conversationId: 'c1' } as any)).toEqual({ summary: 's' });
     c.leadScore({ conversationId: 'c1' } as any);
-    expect(ai.generateReply).toHaveBeenCalledTimes(2);
+    expect(ai.config).toHaveBeenCalled();
   });
 });
 
 describe('DashboardController', () => {
   const svc: any = {
     getSummary: fn(), getLeadFunnel: fn(), getMessageVolume: fn(), getAiModeBreakdown: fn(),
-    getPerformanceOverview: fn(), getResponseTime: fn(), getAiQuality: fn(), getCampaignPerformance: fn(),
+    getPerformanceOverview: fn(),
     getAdminWorkload: fn(),
   };
   const closingSvc: any = {
@@ -62,7 +60,7 @@ describe('DashboardController', () => {
   const c = new DashboardController(svc, closingSvc);
   it('delegates with parsed days', () => {
     c.getSummary(); c.getLeadFunnel(); c.getMessageVolume('5'); c.getAiModeBreakdown();
-    c.getPerformance('10'); c.getResponseTime('3'); c.getAiQuality('7'); c.getCampaignPerformance('14');
+    c.getPerformance('10');
     expect(svc.getMessageVolume).toHaveBeenCalledWith(5);
     expect(svc.getPerformanceOverview).toHaveBeenCalledWith(10);
   });
@@ -88,15 +86,12 @@ describe('BotsController', () => {
   });
 });
 
-describe('HermesController', () => {
-  const svc: any = { review: fn(), alerts: fn(), dailyReport: fn(), botPerformance: fn(), performanceSnapshot: fn(), ask: fn(), botInsight: fn(), knowledgeGaps: fn(), approve: fn(), block: fn() };
-  const c = new HermesController(svc);
+describe('SentinelController', () => {
+  const svc: any = { alerts: fn(), dailyReport: fn(), performanceSnapshot: fn(), ask: fn(), botInsight: fn(), knowledgeGaps: fn() };
+  const c = new SentinelController(svc);
   it('delegates', () => {
-    c.reviewReply({ conversationId: 'c1', draftText: 'd' } as any);
-    c.alerts(); c.dailyReport(); c.botPerformance(); c.snapshot();
+    c.alerts(); c.dailyReport(); c.snapshot();
     c.ask({ question: 'q' } as any); c.botInsight('b1'); c.knowledgeGaps();
-    c.approve({ conversationId: 'c1' } as any); c.block({ conversationId: 'c1' } as any);
-    expect(svc.review).toHaveBeenCalledWith('c1', 'd');
     expect(svc.ask).toHaveBeenCalledWith('q');
   });
 });
@@ -160,15 +155,16 @@ describe('FollowUpsController', () => {
 });
 
 describe('WaController', () => {
-  const wa: any = { startSession: fn(), getQr: jest.fn().mockReturnValue('qr'), isConnected: jest.fn().mockReturnValue(true), restart: fn() };
+  const wa: any = { startSession: fn(), getQr: jest.fn().mockReturnValue({ qr: 'qr', status: 'scanning' }), isConnected: jest.fn().mockReturnValue(true), restart: fn(), updateAccount: fn() };
   const prisma: any = {
     whatsappAccount: { findMany: fn(), create: jest.fn().mockResolvedValue({ id: 'acc1' }), update: fn() },
   };
   const contacts: any = { list: fn() };
-  const c = new WaController(wa, prisma, contacts);
+  const settings: any = { sentinel: jest.fn().mockResolvedValue({ defaultAiMode: 'ai_draft' }) };
+  const c = new WaController(wa, prisma, contacts, settings);
   it('list/qr/restart/update/create', async () => {
     c.list();
-    expect(c.qr('acc1')).toEqual({ qr: 'qr', connected: true });
+    expect(await c.qr('acc1')).toEqual({ qr: 'qr', connected: true, status: 'scanning' });
     expect(await c.restart('acc1')).toEqual({ success: true });
     c.update('acc1', {} as any, { id: 'u1' } as any);
     await c.create({ accountName: 'A' } as any, { id: 'u1' } as any);

@@ -21,7 +21,7 @@ import {
   Smiley,
   CaretDown,
   WhatsappLogo,
-} from '@phosphor-icons/react';
+} from '@/components/ui/core-essential-icons';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/cn';
 import { landingDict } from '../landing.i18n';
@@ -32,12 +32,12 @@ import { AnalyticsMock } from './AnalyticsMock';
 import { SupervisorReviewMock } from './SupervisorReviewMock';
 
 // Primary conversion target. Set your business WhatsApp number (international
-// format, digits only) via NEXT_PUBLIC_CONTACT_WHATSAPP, or replace the fallback.
-const WA_NUMBER = process.env.NEXT_PUBLIC_CONTACT_WHATSAPP ?? '6281234567890';
-const WA_TEXT = encodeURIComponent(
-  "Hi Hermes, I'd like a demo of the WhatsApp Sales & CS control center for my team.",
-);
-const WHATSAPP_URL = `https://wa.me/${WA_NUMBER}?text=${WA_TEXT}`;
+// format, digits only) via NEXT_PUBLIC_CONTACT_WHATSAPP. Omit for no demo CTA.
+const WA_NUMBER = process.env.NEXT_PUBLIC_CONTACT_WHATSAPP;
+const WA_TEXT = WA_NUMBER
+  ? encodeURIComponent("Hi Hermes, I'd like a demo of the WhatsApp Sales & CS control center for my team.")
+  : '';
+const WHATSAPP_URL = WA_NUMBER ? `https://wa.me/${WA_NUMBER}?text=${WA_TEXT}` : '';
 
 // Midnight Ops brand surfaces (dark-first landing pilot). Kept as local tokens
 // so the rest of the app's `hermes` theme is untouched until global rollout.
@@ -186,15 +186,17 @@ export function Landing() {
                 {t('heroSub')}
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
-                <a
-                  href={WHATSAPP_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex h-11 items-center gap-2 rounded bg-channel-600 px-5 text-sm font-semibold text-white shadow-[0_8px_24px_-10px_rgba(29,167,101,0.75)] transition-all hover:bg-channel-700 hover:shadow-[0_10px_28px_-8px_rgba(29,167,101,0.8)] active:scale-[0.98]"
-                >
-                  <WhatsappLogo className="h-[18px] w-[18px]" weight="fill" aria-hidden="true" />
-                  {t('ctaWhatsapp')}
-                </a>
+                {WA_NUMBER && (
+                  <a
+                    href={WHATSAPP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex h-11 items-center gap-2 rounded bg-channel-600 px-5 text-sm font-semibold text-white shadow-[0_8px_24px_-10px_rgba(29,167,101,0.75)] transition-all hover:bg-channel-700 hover:shadow-[0_10px_28px_-8px_rgba(29,167,101,0.8)] active:scale-[0.98]"
+                  >
+                    <WhatsappLogo className="h-[18px] w-[18px]" weight="fill" aria-hidden="true" />
+                    {t('ctaWhatsapp')}
+                  </a>
+                )}
                 <a
                   href="#supervisor"
                   className="inline-flex h-11 items-center gap-2 rounded border px-5 text-sm font-semibold text-slate-200 backdrop-blur-sm transition-colors hover:bg-white/5"
@@ -298,15 +300,17 @@ export function Landing() {
                   </li>
                 ))}
               </ul>
-              <a
-                href={WHATSAPP_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-channel-500 transition-colors hover:text-channel-400"
-              >
-                <WhatsappLogo className="h-[18px] w-[18px]" weight="fill" aria-hidden="true" />
-                {t('supDemo')}
-              </a>
+              {WA_NUMBER && (
+                <a
+                  href={WHATSAPP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-channel-500 transition-colors hover:text-channel-400"
+                >
+                  <WhatsappLogo className="h-[18px] w-[18px]" weight="fill" aria-hidden="true" />
+                  {t('supDemo')}
+                </a>
+              )}
             </Reveal>
 
             <Reveal delay={120}>
@@ -455,17 +459,21 @@ export function Landing() {
                 </p>
                 <h2 className="text-3xl font-semibold tracking-[-0.03em] text-white sm:text-4xl">{t('ctaTitle')}</h2>
                 <p className="mt-4 text-base leading-7 text-indigo-50/90">{t('ctaSub')}</p>
-                <a
-                  href={WHATSAPP_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-8 inline-flex h-11 items-center gap-2 rounded bg-white px-6 text-sm font-semibold text-channel-700 transition-transform hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <WhatsappLogo className="h-[18px] w-[18px]" weight="fill" aria-hidden="true" />
-                  {t('ctaWhatsapp')}
-                </a>
-                <p className="mt-4 text-[13px] font-medium text-indigo-50/80">{t('ctaReassure')}</p>
-                <p className="mx-auto mt-2 max-w-md text-[11.5px] leading-5 text-indigo-50/60">{t('ctaTerms')}</p>
+                {WA_NUMBER ? (
+                  <>
+                    <a
+                      href={WHATSAPP_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-8 inline-flex h-11 items-center gap-2 rounded bg-white px-6 text-sm font-semibold text-channel-700 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                      <WhatsappLogo className="h-[18px] w-[18px]" weight="fill" aria-hidden="true" />
+                      {t('ctaWhatsapp')}
+                    </a>
+                    <p className="mt-4 text-[13px] font-medium text-indigo-50/80">{t('ctaReassure')}</p>
+                    <p className="mx-auto mt-2 max-w-md text-[11.5px] leading-5 text-indigo-50/60">{t('ctaTerms')}</p>
+                  </>
+                ) : null}
               </div>
             </Reveal>
           </div>

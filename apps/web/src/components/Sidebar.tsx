@@ -25,8 +25,11 @@ import {
   Images,
   Cube,
   List,
+  Radio,
+  Eye,
+  PlugsConnected,
   type Icon as PhosphorIcon,
-} from '@phosphor-icons/react';
+} from '@/components/ui/core-essential-icons';
 import { getToken, clearToken, api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { cn } from '@/lib/cn';
@@ -82,9 +85,12 @@ const sections: NavSection[] = [
       { href: '/overview', label: 'Overview', icon: SquaresFour },
       { href: '/inbox', label: 'Inbox', icon: Tray },
       { href: '/accounts', label: 'Accounts', icon: DeviceMobile },
+      { href: '/groups', label: 'Groups', icon: UsersThree },
+      { href: '/channels', label: 'Channels', icon: Radio },
+      { href: '/status', label: 'Status', icon: Eye },
       { href: '/customers', label: 'Contacts', icon: AddressBook },
       { href: '/wa-contacts', label: 'WA Phone Book', icon: BookOpen },
-      { href: '/hermes', label: 'Hermes Review', icon: ShieldStar },
+      { href: '/sentinel', label: 'Sentinel Review', icon: ShieldStar },
     ],
   },
   {
@@ -106,6 +112,7 @@ const sections: NavSection[] = [
       { href: '/templates', label: 'Templates', icon: FileText },
       { href: '/audit', label: 'Audit Log', icon: ClockCounterClockwise, requiredRole: 'supervisor' },
       { href: '/admin/users', label: 'Team', icon: UsersThree, requiredRole: 'supervisor' },
+      { href: '/webhooks', label: 'Webhooks', icon: PlugsConnected, requiredRole: 'supervisor' },
       { href: '/settings/ai', label: 'Settings', icon: Gear },
     ],
   },
@@ -130,7 +137,7 @@ const dict: Dict = {
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const userRole = getRoleFromToken();
+  const [userRole, setUserRole] = useState<string | null>(null);
   const t = useT(dict);
   const [open, setOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -160,6 +167,10 @@ export function Sidebar() {
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
       .then((res: { status?: string }) => setApiOnline(res.status === 'ok'))
       .catch(() => setApiOnline(false));
+  }, []);
+
+  useEffect(() => {
+    setUserRole(getRoleFromToken());
   }, []);
 
   useEffect(() => {
@@ -211,7 +222,12 @@ export function Sidebar() {
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
 
-  function handleLogout() {
+  async function handleLogout() {
+    try {
+      await api('/auth/logout', { method: 'POST' });
+    } catch {
+      // logout endpoint failure doesn't block exit
+    }
     clearToken();
     router.push('/login');
   }

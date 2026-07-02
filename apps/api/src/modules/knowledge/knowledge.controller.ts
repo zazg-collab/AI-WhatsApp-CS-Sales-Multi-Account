@@ -122,19 +122,6 @@ export class KnowledgeController {
   }
 
   // Integration note: API-only. Superseded in the UI by the parse-url dry-run
-  // flow (see the items/upload note above). Kept for programmatic ingestion.
-  @ApiExcludeEndpoint()
-  @ApiOperation({ summary: 'Ingest a public web page as knowledge items' })
-  @Roles('owner', 'supervisor', 'admin')
-  @Post('knowledge-bases/:id/items/from-url')
-  ingestUrl(
-    @Param('id') id: string,
-    @Body() dto: IngestUrlDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.knowledge.ingestUrl(id, dto.url, user.id);
-  }
-
   @ApiOperation({ summary: 'Dry-run parse of a file (no persistence) to pre-fill the add-item form' })
   @ApiConsumes('multipart/form-data')
   @Roles('owner', 'supervisor', 'admin')

@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiExcludeEndpoint } from '@nestj
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { AiService } from './ai.service';
-import { GenerateDto, ConversationRefDto } from './dto/ai-request.dto';
+import { ConversationRefDto } from './dto/ai-request.dto';
 
 // PRD 14.4 — AI engine. Provider is OpenAI-compatible and selected via env.
 @ApiTags('ai')
@@ -25,20 +25,6 @@ export class AiController {
   @Get('models')
   models() {
     return this.ai.listModels();
-  }
-
-  @ApiOperation({ summary: 'Generate AI reply for a conversation' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post('generate-reply')
-  generateReply(@Body() dto: GenerateDto) {
-    return this.ai.generateReply(dto.conversationId, dto.model);
-  }
-
-  @ApiOperation({ summary: 'Generate AI draft for a conversation' })
-  @Roles('admin', 'supervisor', 'owner')
-  @Post('generate-draft')
-  generateDraft(@Body() dto: GenerateDto) {
-    return this.ai.generateReply(dto.conversationId, dto.model);
   }
 
   @ApiOperation({ summary: 'Summarize conversation chat history' })
