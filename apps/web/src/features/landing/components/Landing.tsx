@@ -39,16 +39,9 @@ const WA_TEXT = WA_NUMBER
   : '';
 const WHATSAPP_URL = WA_NUMBER ? `https://wa.me/${WA_NUMBER}?text=${WA_TEXT}` : '';
 
-// Midnight Ops brand surfaces (dark-first landing pilot). Kept as local tokens
-// so the rest of the app's `hermes` theme is untouched until global rollout.
-const CANVAS = '#0B1220';
-const SURFACE = '#131C2E';
-const SURFACE_2 = '#0E1626';
-const BORDER = '#233047';
-
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-400">
+    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-hermes-600 dark:text-hermes-400">
       {children}
     </p>
   );
@@ -66,12 +59,12 @@ const integrations = [
 function IntegrationLogo({ slug, name }: { slug: string; name: string }) {
   return (
     <span
-      className="inline-flex items-center opacity-60 grayscale transition duration-200 hover:opacity-100 hover:grayscale-0"
+      className="inline-flex items-center opacity-50 grayscale transition duration-200 hover:opacity-100 hover:grayscale-0"
       title={name}
     >
-      {/* Real brand marks via Simple Icons CDN, tinted for the dark canvas. */}
+      {/* Real brand marks via Simple Icons CDN, tinted for the light canvas. */}
       <img
-        src={`https://cdn.simpleicons.org/${slug}/94a3b8`}
+        src={`https://cdn.simpleicons.org/${slug}/64748b`}
         alt={name}
         width={28}
         height={28}
@@ -119,33 +112,33 @@ const faqs = [
   { q: 'faq4Q', a: 'faq4A' },
 ] as const;
 
-// AI modes carry the product's semantic state colors (mirrors the in-app status
-// system), retinted for the Midnight Ops dark canvas.
+// AI modes carry the product's semantic state colors — the same tokens used
+// throughout the app (hermes = active/primary, accent = AI/informational,
+// review = attention-needed, gray = idle).
 const modes = [
-  { title: 'modeOnTitle', body: 'modeOnBody', ring: 'ring-emerald-500/40', dot: 'bg-emerald-400', label: 'text-emerald-300' },
-  { title: 'modeSupTitle', body: 'modeSupBody', ring: 'ring-indigo-500/40', dot: 'bg-indigo-400', label: 'text-indigo-300' },
-  { title: 'modeDraftTitle', body: 'modeDraftBody', ring: 'ring-cyan-500/40', dot: 'bg-cyan-400', label: 'text-cyan-300' },
-  { title: 'modePausedTitle', body: 'modePausedBody', ring: 'ring-amber-500/40', dot: 'bg-amber-400', label: 'text-amber-300' },
-  { title: 'modeOffTitle', body: 'modeOffBody', ring: 'ring-slate-600/60', dot: 'bg-slate-500', label: 'text-slate-300' },
+  { title: 'modeOnTitle', body: 'modeOnBody', ring: 'ring-emerald-300 dark:ring-emerald-500/40', dot: 'bg-emerald-500', label: 'text-emerald-700 dark:text-emerald-300' },
+  { title: 'modeSupTitle', body: 'modeSupBody', ring: 'ring-hermes-300 dark:ring-hermes-500/40', dot: 'bg-hermes-500', label: 'text-hermes-700 dark:text-hermes-300' },
+  { title: 'modeDraftTitle', body: 'modeDraftBody', ring: 'ring-accent-300 dark:ring-accent-500/40', dot: 'bg-accent-500', label: 'text-accent-700 dark:text-accent-300' },
+  { title: 'modePausedTitle', body: 'modePausedBody', ring: 'ring-review-200 dark:ring-review-500/40', dot: 'bg-review-500', label: 'text-review-700 dark:text-review-400' },
+  { title: 'modeOffTitle', body: 'modeOffBody', ring: 'ring-gray-300 dark:ring-gray-600/60', dot: 'bg-gray-400', label: 'text-gray-600 dark:text-gray-300' },
 ] as const;
 
 const accentPill =
-  'inline-flex items-center gap-2 rounded-full bg-indigo-500/15 px-3 py-1 text-[13px] font-semibold text-indigo-300 ring-1 ring-indigo-500/30';
+  'inline-flex items-center gap-2 rounded-full bg-hermes-50 px-3 py-1 text-[13px] font-semibold text-hermes-700 ring-1 ring-hermes-200 dark:bg-hermes-900/30 dark:text-hermes-300 dark:ring-hermes-700/40';
 const iconChip =
-  'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/30';
-const sectionHeading = 'text-3xl font-semibold tracking-[-0.03em] text-white sm:text-4xl';
+  'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-hermes-50 text-hermes-600 ring-1 ring-hermes-200 dark:bg-hermes-900/30 dark:text-hermes-400 dark:ring-hermes-700/40';
+const sectionHeading = 'text-3xl font-semibold tracking-[-0.03em] text-gray-900 dark:text-white sm:text-4xl';
+const cardSurface = 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900';
+const sectionAlt = 'bg-gray-50 dark:bg-gray-950';
 
 export function Landing() {
   const t = useT(landingDict);
 
   return (
-    <div
-      className="h-[100dvh] overflow-y-auto overflow-x-hidden scroll-smooth text-slate-100"
-      style={{ backgroundColor: CANVAS }}
-    >
+    <div className="h-[100dvh] overflow-y-auto overflow-x-hidden scroll-smooth bg-white text-gray-600 dark:bg-gray-950 dark:text-gray-300">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-hermes-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
       >
         {t('skipToContent')}
       </a>
@@ -155,22 +148,22 @@ export function Landing() {
       <main id="main">
         {/* Hero: asymmetric split */}
         <section className="relative overflow-hidden">
-          {/* Layered backdrop: indigo + cyan glows + faint grid, faded at edges. */}
+          {/* Layered backdrop: soft brand-tinted glows + faint grid, faded at edges. */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_45%_at_78%_-5%,rgba(99,102,241,0.20),transparent_70%)]"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_45%_at_78%_-5%,rgba(20,184,166,0.10),transparent_70%)] dark:bg-[radial-gradient(55%_45%_at_78%_-5%,rgba(20,184,166,0.16),transparent_70%)]"
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(40%_40%_at_8%_110%,rgba(34,211,238,0.10),transparent_70%)]"
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(40%_40%_at_8%_110%,rgba(59,130,246,0.06),transparent_70%)] dark:bg-[radial-gradient(40%_40%_at_8%_110%,rgba(59,130,246,0.10),transparent_70%)]"
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 opacity-60 [mask-image:radial-gradient(70%_60%_at_50%_0%,black,transparent_75%)] bg-[linear-gradient(to_right,rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:38px_38px]"
+            className="pointer-events-none absolute inset-0 opacity-70 [mask-image:radial-gradient(70%_60%_at_50%_0%,black,transparent_75%)] bg-[linear-gradient(to_right,rgba(148,163,184,0.14)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.14)_1px,transparent_1px)] bg-[size:38px_38px] dark:opacity-60 dark:bg-[linear-gradient(to_right,rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.08)_1px,transparent_1px)]"
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute -right-24 top-10 h-72 w-72 rounded-full bg-indigo-600/20 blur-3xl motion-safe:animate-pulse"
+            className="pointer-events-none absolute -right-24 top-10 h-72 w-72 rounded-full bg-hermes-300/20 blur-3xl motion-safe:animate-pulse dark:bg-hermes-600/20"
           />
 
           <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:py-28">
@@ -179,10 +172,10 @@ export function Landing() {
                 <Lightning className="h-3 w-3" weight="fill" aria-hidden="true" />
                 {t('heroEyebrow')}
               </span>
-              <h1 className="text-[2.6rem] font-semibold leading-[1.05] tracking-[-0.04em] text-white sm:text-[3.25rem]">
+              <h1 className="text-[2.6rem] font-semibold leading-[1.05] tracking-[-0.04em] text-gray-900 dark:text-white sm:text-[3.25rem]">
                 {t('heroTitle')}
               </h1>
-              <p className="mt-5 max-w-lg text-[17px] leading-7 text-slate-300">
+              <p className="mt-5 max-w-lg text-[17px] leading-7 text-gray-600 dark:text-gray-300">
                 {t('heroSub')}
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -191,7 +184,7 @@ export function Landing() {
                     href={WHATSAPP_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex h-11 items-center gap-2 rounded bg-channel-600 px-5 text-sm font-semibold text-white shadow-[0_8px_24px_-10px_rgba(29,167,101,0.75)] transition-all hover:bg-channel-700 hover:shadow-[0_10px_28px_-8px_rgba(29,167,101,0.8)] active:scale-[0.98]"
+                    className="inline-flex h-11 items-center gap-2 rounded bg-channel-600 px-5 text-sm font-semibold text-white shadow-[0_8px_24px_-10px_rgba(29,167,101,0.5)] transition-all hover:bg-channel-700 hover:shadow-[0_10px_28px_-8px_rgba(29,167,101,0.55)] active:scale-[0.98]"
                   >
                     <WhatsappLogo className="h-[18px] w-[18px]" weight="fill" aria-hidden="true" />
                     {t('ctaWhatsapp')}
@@ -199,20 +192,19 @@ export function Landing() {
                 )}
                 <a
                   href="#supervisor"
-                  className="inline-flex h-11 items-center gap-2 rounded border px-5 text-sm font-semibold text-slate-200 backdrop-blur-sm transition-colors hover:bg-white/5"
-                  style={{ borderColor: BORDER, backgroundColor: `${SURFACE}b3` }}
+                  className="inline-flex h-11 items-center gap-2 rounded border border-gray-200 bg-white/80 px-5 text-sm font-semibold text-gray-700 backdrop-blur-sm transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900/70 dark:text-gray-200 dark:hover:bg-gray-800"
                 >
                   {t('heroSecondary')}
                 </a>
               </div>
-              <p className="mt-6 text-[13px] font-medium text-slate-500">{t('heroNote')}</p>
+              <p className="mt-6 text-[13px] font-medium text-gray-400 dark:text-gray-500">{t('heroNote')}</p>
             </Reveal>
 
             <Reveal delay={120} className="relative lg:pl-4">
               {/* Depth: a soft tinted panel sits behind the product mock. */}
               <div
                 aria-hidden="true"
-                className="absolute -right-3 -top-4 hidden h-[88%] w-[92%] rotate-2 rounded-2xl bg-gradient-to-br from-indigo-700/30 to-cyan-800/20 blur-[2px] sm:block"
+                className="absolute -right-3 -top-4 hidden h-[88%] w-[92%] rotate-2 rounded-2xl bg-gradient-to-br from-hermes-200/40 to-accent-200/30 blur-[2px] sm:block dark:from-hermes-700/30 dark:to-accent-800/20"
               />
               <div className="relative">
                 <DashboardMock t={t} />
@@ -222,15 +214,15 @@ export function Landing() {
         </section>
 
         {/* Stats band */}
-        <section className="border-y" style={{ borderColor: BORDER, backgroundColor: SURFACE_2 }}>
+        <section className={cn('border-y border-gray-200 dark:border-gray-800', sectionAlt)}>
           <div className="mx-auto max-w-6xl px-5 py-12 sm:px-6">
             <dl className="grid grid-cols-2 gap-x-6 gap-y-9 sm:grid-cols-4">
               {stats.map((s, i) => (
                 <Reveal key={s.label} delay={i * 70}>
-                  <dd className="font-mono text-4xl font-semibold tracking-tight text-cyan-300 sm:text-[2.75rem]">
+                  <dd className="font-mono text-4xl font-semibold tracking-tight text-hermes-600 dark:text-hermes-400 sm:text-[2.75rem]">
                     {s.value}
                   </dd>
-                  <dt className="mt-2 text-[13px] leading-5 text-slate-400">{t(s.label)}</dt>
+                  <dt className="mt-2 text-[13px] leading-5 text-gray-500 dark:text-gray-400">{t(s.label)}</dt>
                 </Reveal>
               ))}
             </dl>
@@ -238,9 +230,9 @@ export function Landing() {
         </section>
 
         {/* Integrations strip */}
-        <section className="border-b" style={{ borderColor: BORDER, backgroundColor: CANVAS }}>
+        <section className="border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
           <div className="mx-auto max-w-6xl px-5 py-10 sm:px-6">
-            <p className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <p className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-gray-400 dark:text-gray-500">
               {t('intLabel')}
             </p>
             <div className="mt-7 flex flex-wrap items-center justify-center gap-x-10 gap-y-6 sm:gap-x-14">
@@ -255,26 +247,25 @@ export function Landing() {
         <section className="mx-auto max-w-6xl px-5 py-20 sm:px-6 lg:py-28">
           <Reveal className="max-w-2xl">
             <h2 className={sectionHeading}>{t('aiTitle')}</h2>
-            <p className="mt-4 text-base leading-7 text-slate-300">{t('aiSub')}</p>
+            <p className="mt-4 text-base leading-7 text-gray-600 dark:text-gray-300">{t('aiSub')}</p>
           </Reveal>
-          <Reveal
-            delay={100}
-            className="mt-12 overflow-hidden rounded-xl border"
-            style={{ borderColor: BORDER, backgroundColor: SURFACE }}
-          >
+          <Reveal delay={100} className={cn('mt-12 overflow-hidden rounded-xl border', cardSurface)}>
             <dl className="grid sm:grid-cols-2">
               {aiPoints.map((p, i) => (
                 <div
                   key={p.title}
-                  className={cn('flex gap-4 p-6 lg:p-7', i % 2 === 0 ? 'sm:border-r' : '', i < 2 ? 'border-b' : '')}
-                  style={{ borderColor: BORDER }}
+                  className={cn(
+                    'flex gap-4 border-gray-200 p-6 dark:border-gray-800 lg:p-7',
+                    i % 2 === 0 ? 'sm:border-r' : '',
+                    i < 2 ? 'border-b' : '',
+                  )}
                 >
                   <span className={iconChip}>
                     <p.icon className="h-5 w-5" aria-hidden="true" />
                   </span>
                   <div>
-                    <dt className="text-base font-semibold text-white">{t(p.title)}</dt>
-                    <dd className="mt-1.5 text-sm leading-6 text-slate-300">{t(p.body)}</dd>
+                    <dt className="text-base font-semibold text-gray-900 dark:text-white">{t(p.title)}</dt>
+                    <dd className="mt-1.5 text-sm leading-6 text-gray-600 dark:text-gray-300">{t(p.body)}</dd>
                   </div>
                 </div>
               ))}
@@ -283,7 +274,7 @@ export function Landing() {
         </section>
 
         {/* Supervisor split */}
-        <section id="supervisor" className="mx-auto max-w-6xl scroll-mt-20 border-t px-5 py-20 sm:px-6 lg:py-28" style={{ borderColor: BORDER }}>
+        <section id="supervisor" className="mx-auto max-w-6xl scroll-mt-20 border-t border-gray-200 px-5 py-20 dark:border-gray-800 sm:px-6 lg:py-28">
           <div className="grid items-center gap-12 lg:grid-cols-2">
             <Reveal>
               <p className={accentPill}>
@@ -291,11 +282,11 @@ export function Landing() {
                 {t('supEyebrow')}
               </p>
               <h2 className={cn('mt-4', sectionHeading)}>{t('supTitle')}</h2>
-              <p className="mt-4 text-base leading-7 text-slate-300">{t('supBody')}</p>
+              <p className="mt-4 text-base leading-7 text-gray-600 dark:text-gray-300">{t('supBody')}</p>
               <ul className="mt-6 space-y-3">
                 {['supPoint1', 'supPoint2', 'supPoint3'].map((k) => (
-                  <li key={k} className="flex items-start gap-3 text-[15px] text-slate-200">
-                    <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-indigo-400" weight="fill" aria-hidden="true" />
+                  <li key={k} className="flex items-start gap-3 text-[15px] text-gray-700 dark:text-gray-200">
+                    <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-hermes-500" weight="fill" aria-hidden="true" />
                     {t(k)}
                   </li>
                 ))}
@@ -305,7 +296,7 @@ export function Landing() {
                   href={WHATSAPP_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-channel-500 transition-colors hover:text-channel-400"
+                  className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-channel-600 transition-colors hover:text-channel-700"
                 >
                   <WhatsappLogo className="h-[18px] w-[18px]" weight="fill" aria-hidden="true" />
                   {t('supDemo')}
@@ -320,7 +311,7 @@ export function Landing() {
         </section>
 
         {/* Capabilities bento */}
-        <section id="features" className="scroll-mt-20 border-t" style={{ borderColor: BORDER, backgroundColor: SURFACE_2 }}>
+        <section id="features" className={cn('scroll-mt-20 border-t border-gray-200 dark:border-gray-800', sectionAlt)}>
           <div className="mx-auto max-w-6xl px-5 py-20 sm:px-6 lg:py-28">
             <Reveal className="max-w-2xl">
               <Eyebrow>{t('capEyebrow')}</Eyebrow>
@@ -333,16 +324,16 @@ export function Landing() {
                   as="article"
                   delay={(i % 3) * 80}
                   className={cn(
-                    'rounded-xl border p-6 transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-500/40',
+                    'rounded-xl border p-6 transition-all duration-200 hover:-translate-y-0.5 hover:border-hermes-300 dark:hover:border-hermes-600/60',
+                    cardSurface,
                     c.wide && 'lg:col-span-2',
                   )}
-                  style={{ borderColor: BORDER, backgroundColor: SURFACE }}
                 >
                   <span className={iconChip}>
                     <c.icon className="h-5 w-5" aria-hidden="true" />
                   </span>
-                  <h3 className="mt-4 text-base font-semibold text-white">{t(c.title)}</h3>
-                  <p className="mt-1.5 text-sm leading-6 text-slate-300">{t(c.body)}</p>
+                  <h3 className="mt-4 text-base font-semibold text-gray-900 dark:text-white">{t(c.title)}</h3>
+                  <p className="mt-1.5 text-sm leading-6 text-gray-600 dark:text-gray-300">{t(c.body)}</p>
                 </Reveal>
               ))}
             </div>
@@ -361,11 +352,11 @@ export function Landing() {
                 {t('anaEyebrow')}
               </p>
               <h2 className={cn('mt-4', sectionHeading)}>{t('anaTitle')}</h2>
-              <p className="mt-4 text-base leading-7 text-slate-300">{t('anaSub')}</p>
+              <p className="mt-4 text-base leading-7 text-gray-600 dark:text-gray-300">{t('anaSub')}</p>
               <ul className="mt-6 space-y-3">
                 {['anaPoint1', 'anaPoint2', 'anaPoint3'].map((k) => (
-                  <li key={k} className="flex items-start gap-3 text-[15px] text-slate-200">
-                    <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-indigo-400" weight="fill" aria-hidden="true" />
+                  <li key={k} className="flex items-start gap-3 text-[15px] text-gray-700 dark:text-gray-200">
+                    <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-hermes-500" weight="fill" aria-hidden="true" />
                     {t(k)}
                   </li>
                 ))}
@@ -375,7 +366,7 @@ export function Landing() {
         </section>
 
         {/* How it works */}
-        <section id="how" className="mx-auto max-w-6xl scroll-mt-20 border-t px-5 py-20 sm:px-6 lg:py-28" style={{ borderColor: BORDER }}>
+        <section id="how" className="mx-auto max-w-6xl scroll-mt-20 border-t border-gray-200 px-5 py-20 dark:border-gray-800 sm:px-6 lg:py-28">
           <Reveal className="max-w-2xl">
             <Eyebrow>{t('howEyebrow')}</Eyebrow>
             <h2 className={cn('mt-3', sectionHeading)}>{t('howTitle')}</h2>
@@ -384,22 +375,22 @@ export function Landing() {
             {steps.map((s, i) => (
               <Reveal key={s.title} as="li" delay={i * 90} className="relative">
                 <div className="flex items-center gap-4">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-indigo-500 text-white">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-hermes-600 text-white">
                     <s.icon className="h-5 w-5" aria-hidden="true" />
                   </span>
-                  <span className="font-mono text-sm font-semibold text-cyan-300">
+                  <span className="font-mono text-sm font-semibold text-hermes-600 dark:text-hermes-400">
                     {String(i + 1).padStart(2, '0')}
                   </span>
                 </div>
-                <h3 className="mt-5 text-lg font-semibold text-white">{t(s.title)}</h3>
-                <p className="mt-1.5 text-sm leading-6 text-slate-300">{t(s.body)}</p>
+                <h3 className="mt-5 text-lg font-semibold text-gray-900 dark:text-white">{t(s.title)}</h3>
+                <p className="mt-1.5 text-sm leading-6 text-gray-600 dark:text-gray-300">{t(s.body)}</p>
               </Reveal>
             ))}
           </ol>
         </section>
 
         {/* AI modes: semantic state grid */}
-        <section id="modes" className="scroll-mt-20 border-t" style={{ borderColor: BORDER, backgroundColor: SURFACE_2 }}>
+        <section id="modes" className={cn('scroll-mt-20 border-t border-gray-200 dark:border-gray-800', sectionAlt)}>
           <div className="mx-auto max-w-6xl px-5 py-20 sm:px-6 lg:py-28">
             <Reveal className="max-w-2xl">
               <Eyebrow>{t('modeEyebrow')}</Eyebrow>
@@ -410,14 +401,13 @@ export function Landing() {
                 <Reveal
                   key={m.title}
                   delay={(i % 3) * 80}
-                  className={cn('rounded-xl border border-transparent p-5 ring-1', m.ring)}
-                  style={{ backgroundColor: SURFACE }}
+                  className={cn('rounded-xl border border-transparent bg-white p-5 ring-1 dark:bg-gray-900', m.ring)}
                 >
                   <div className="flex items-center gap-2.5">
                     <span className={cn('h-2.5 w-2.5 rounded-full', m.dot)} aria-hidden="true" />
                     <span className={cn('font-mono text-[13px] font-semibold tracking-wide', m.label)}>{t(m.title)}</span>
                   </div>
-                  <p className="mt-2.5 text-sm leading-6 text-slate-300">{t(m.body)}</p>
+                  <p className="mt-2.5 text-sm leading-6 text-gray-600 dark:text-gray-300">{t(m.body)}</p>
                 </Reveal>
               ))}
             </div>
@@ -425,19 +415,19 @@ export function Landing() {
         </section>
 
         {/* FAQ */}
-        <section className="mx-auto max-w-3xl scroll-mt-20 border-t px-5 py-20 sm:px-6 lg:py-28" style={{ borderColor: BORDER }}>
+        <section className="mx-auto max-w-3xl scroll-mt-20 border-t border-gray-200 px-5 py-20 dark:border-gray-800 sm:px-6 lg:py-28">
           <Reveal className="text-center">
             <h2 className={sectionHeading}>{t('faqTitle')}</h2>
           </Reveal>
           <div className="mt-10 space-y-3">
             {faqs.map((f, i) => (
               <Reveal key={f.q} delay={i * 60}>
-                <details className="group rounded-xl border px-5" style={{ borderColor: BORDER, backgroundColor: SURFACE }}>
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-[15px] font-semibold text-white [&::-webkit-details-marker]:hidden">
+                <details className={cn('group rounded-xl border px-5', cardSurface)}>
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 text-[15px] font-semibold text-gray-900 dark:text-white [&::-webkit-details-marker]:hidden">
                     {t(f.q)}
-                    <CaretDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
+                    <CaretDown className="h-4 w-4 shrink-0 text-gray-400 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
                   </summary>
-                  <p className="pb-5 pr-6 text-sm leading-6 text-slate-300">{t(f.a)}</p>
+                  <p className="pb-5 pr-6 text-sm leading-6 text-gray-600 dark:text-gray-300">{t(f.a)}</p>
                 </details>
               </Reveal>
             ))}
@@ -445,9 +435,9 @@ export function Landing() {
         </section>
 
         {/* Final CTA band */}
-        <section className="border-t" style={{ borderColor: BORDER }}>
+        <section className="border-t border-gray-200 dark:border-gray-800">
           <div className="mx-auto max-w-6xl px-5 py-20 sm:px-6 lg:py-24">
-            <Reveal className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-900 px-8 py-14 text-center sm:px-12">
+            <Reveal className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-hermes-600 to-hermes-800 px-8 py-14 text-center sm:px-12">
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_80%_at_50%_0%,rgba(255,255,255,0.16),transparent_70%)]"
@@ -458,7 +448,7 @@ export function Landing() {
                   {t('ctaEarly')}
                 </p>
                 <h2 className="text-3xl font-semibold tracking-[-0.03em] text-white sm:text-4xl">{t('ctaTitle')}</h2>
-                <p className="mt-4 text-base leading-7 text-indigo-50/90">{t('ctaSub')}</p>
+                <p className="mt-4 text-base leading-7 text-hermes-50/90">{t('ctaSub')}</p>
                 {WA_NUMBER ? (
                   <>
                     <a
@@ -470,8 +460,8 @@ export function Landing() {
                       <WhatsappLogo className="h-[18px] w-[18px]" weight="fill" aria-hidden="true" />
                       {t('ctaWhatsapp')}
                     </a>
-                    <p className="mt-4 text-[13px] font-medium text-indigo-50/80">{t('ctaReassure')}</p>
-                    <p className="mx-auto mt-2 max-w-md text-[11.5px] leading-5 text-indigo-50/60">{t('ctaTerms')}</p>
+                    <p className="mt-4 text-[13px] font-medium text-hermes-50/90">{t('ctaReassure')}</p>
+                    <p className="mx-auto mt-2 max-w-md text-[11.5px] leading-5 text-hermes-50/70">{t('ctaTerms')}</p>
                   </>
                 ) : null}
               </div>
@@ -481,28 +471,28 @@ export function Landing() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t" style={{ borderColor: BORDER, backgroundColor: CANVAS }}>
+      <footer className="border-t border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:px-6 md:flex-row md:items-center md:justify-between">
           <div className="max-w-sm">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded bg-indigo-600 text-white">
+              <span className="flex h-8 w-8 items-center justify-center rounded bg-hermes-600 text-white">
                 <ShieldStar className="h-4 w-4" aria-hidden="true" />
               </span>
-              <span className="text-[15px] font-semibold tracking-tight text-white">Hermes</span>
+              <span className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">Hermes</span>
             </div>
-            <p className="mt-3 text-[13px] leading-6 text-slate-500">{t('footTagline')}</p>
-            <p className="mt-3 border-l-2 border-indigo-500/40 pl-3 text-[13px] italic leading-6 text-slate-300">
+            <p className="mt-3 text-[13px] leading-6 text-gray-500 dark:text-gray-400">{t('footTagline')}</p>
+            <p className="mt-3 border-l-2 border-hermes-300 pl-3 text-[13px] italic leading-6 text-gray-600 dark:border-hermes-500/40 dark:text-gray-300">
               {t('founderNote')}
             </p>
           </div>
           <div className="flex flex-col items-start gap-3 md:items-end">
-            <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] font-medium text-slate-400">
-              <a href="#features" className="hover:text-white">{t('navFeatures')}</a>
-              <a href="#supervisor" className="hover:text-white">{t('navSupervisor')}</a>
-              <a href="#modes" className="hover:text-white">{t('navModes')}</a>
-              <Link href="/login" className="hover:text-white">{t('navSignIn')}</Link>
+            <nav className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] font-medium text-gray-500 dark:text-gray-400">
+              <a href="#features" className="hover:text-gray-900 dark:hover:text-white">{t('navFeatures')}</a>
+              <a href="#supervisor" className="hover:text-gray-900 dark:hover:text-white">{t('navSupervisor')}</a>
+              <a href="#modes" className="hover:text-gray-900 dark:hover:text-white">{t('navModes')}</a>
+              <Link href="/login" className="hover:text-gray-900 dark:hover:text-white">{t('navSignIn')}</Link>
             </nav>
-            <p className="text-[12px] text-slate-500">{t('footRights')}</p>
+            <p className="text-[12px] text-gray-400 dark:text-gray-500">{t('footRights')}</p>
           </div>
         </div>
       </footer>
