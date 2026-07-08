@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: hermes-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: AI_BASE_URL
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        sync: false
+      - key: SEED_OWNER_EMAIL
+        value: owner@hermes.local
+      - key: SEED_OWNER_PASSWORD
+        generateValue: true
