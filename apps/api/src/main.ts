@@ -56,7 +56,8 @@ async function bootstrap() {
     reporter.capture(err, { kind: 'uncaughtException' }),
   );
 
-  const port = process.env.API_PORT ?? 3001;
+  // API_PORT is our own convention; PORT is what Render/Railway/Heroku inject.
+  const port = process.env.API_PORT ?? process.env.PORT ?? 3001;
   await app.listen(port);
 
   const logger = new Logger('Bootstrap');
