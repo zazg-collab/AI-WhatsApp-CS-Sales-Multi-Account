@@ -81,6 +81,7 @@ export default function GroupsPage() {
   // Invite code modal
   const [inviteModal, setInviteModal] = useState<{ groupId: string; code: string } | null>(null);
   const [inviteLoading, setInviteLoading] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   // Leave confirmation
@@ -213,14 +214,15 @@ export default function GroupsPage() {
 
   async function handleGetInvite(groupId: string) {
     setInviteLoading(groupId);
+    setInviteError(null);
     try {
       const data = await api<{ code: string }>(
         `/wa/accounts/${selectedAccountId}/groups/${encodeURIComponent(groupId)}/invite-code`
       );
       setInviteModal({ groupId, code: data.code });
       setCopied(false);
-    } catch {
-      // silently fail — could show toast
+    } catch (err: unknown) {
+      setInviteError(err instanceof Error ? err.message : 'Failed to load invite code');
     } finally {
       setInviteLoading(null);
     }
@@ -313,6 +315,15 @@ export default function GroupsPage() {
             </select>
           )}
         </div>
+
+        {inviteError && (
+          <Card className="mb-4 flex items-center justify-between border-danger-200 bg-danger-50 p-3 dark:border-danger-800 dark:bg-danger-900/20">
+            <p className="text-sm text-danger-700 dark:text-danger-300">{inviteError}</p>
+            <button type="button" className="text-xs font-medium text-danger-600 hover:underline dark:text-danger-400" onClick={() => setInviteError(null)}>
+              Dismiss
+            </button>
+          </Card>
+        )}
 
         {/* Group list */}
         {loadingGroups ? (

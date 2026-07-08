@@ -27,6 +27,7 @@ export interface Campaign {
   whatsappAccount?: Account;
   _count?: { recipients: number };
   recipientStats?: Record<string, number>;
+  recipients?: Array<{ id: string; customer?: { name?: string }; phoneNumber: string; error?: string; status: string }>;
 }
 
 export interface PreviewResult {

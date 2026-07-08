@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
+import { Toast } from '@/components/ui/Toast';
 import { api } from '@/lib/api';
 
 const inputClass =
@@ -54,6 +55,7 @@ export default function ChannelsPage() {
 
   // Follow / mute in-flight
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; tone: 'success' | 'danger' } | null>(null);
 
   useEffect(() => {
     api<WaAccount[]>('/wa/accounts')
@@ -106,7 +108,7 @@ export default function ChannelsPage() {
       await api(`/wa/accounts/${selectedAccountId}/channels/${channelId}`, { method: 'DELETE' });
       setChannels((prev) => prev.filter((c) => (c.id ?? '') !== channelId));
     } catch (err: unknown) {
-      alert((err as Error).message ?? 'Failed to delete channel');
+      setToast({ message: (err as Error).message ?? 'Failed to delete channel', tone: 'danger' });
     } finally {
       setDeletingChannelId(null);
     }
@@ -120,7 +122,7 @@ export default function ChannelsPage() {
         body: JSON.stringify({ follow }),
       });
     } catch (err: unknown) {
-      alert((err as Error).message ?? 'Action failed');
+      setToast({ message: (err as Error).message ?? 'Action failed', tone: 'danger' });
     } finally {
       setActionInFlight(null);
     }
@@ -134,7 +136,7 @@ export default function ChannelsPage() {
         body: JSON.stringify({ mute }),
       });
     } catch (err: unknown) {
-      alert((err as Error).message ?? 'Action failed');
+      setToast({ message: (err as Error).message ?? 'Action failed', tone: 'danger' });
     } finally {
       setActionInFlight(null);
     }
@@ -166,6 +168,11 @@ export default function ChannelsPage() {
   return (
     <AppLayout>
       <div className="flex flex-col gap-6 p-6">
+        {toast && (
+          <div className="fixed right-6 top-6 z-50 w-80">
+            <Toast message={toast.message} tone={toast.tone} onDismiss={() => setToast(null)} />
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <PageHeader title="Channels" subtitle="Manage WhatsApp Newsletters & Channels" />
           {selectedAccountId && (

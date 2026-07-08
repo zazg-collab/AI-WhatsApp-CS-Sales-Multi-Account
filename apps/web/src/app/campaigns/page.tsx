@@ -282,10 +282,10 @@ export default function CampaignsPage() {
                   {t('recipientSample')}
                 </div>
                 <div className="scrollbar-thin max-h-[420px] overflow-y-auto">
-                  {!(detail as never as { recipients?: unknown[] }).recipients?.length && (
+                  {!detail.recipients?.length && (
                     <p className="px-4 py-6 text-center text-xs text-gray-500 dark:text-gray-400">{t('noRecipients')}</p>
                   )}
-                  {(detail as never as { recipients?: Array<{ id: string; customer?: { name?: string }; phoneNumber: string; error?: string; status: string }> }).recipients?.map((recipient) => (
+                  {detail.recipients?.map((recipient) => (
                     <div key={recipient.id} className="grid grid-cols-[1fr_120px] gap-3 border-b border-gray-50 px-4 py-3 text-sm last:border-0 dark:border-gray-800/60">
                       <div>
                         <div className="text-gray-900 dark:text-gray-100">{recipient.customer?.name || recipient.phoneNumber}</div>
