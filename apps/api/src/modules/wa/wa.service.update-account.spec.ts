@@ -16,12 +16,17 @@ describe('WaService.updateAccount', () => {
     };
     const config = { get: jest.fn().mockReturnValue(undefined) } as any;
     service = new WaService(
-      null as any, // wahaClient
-      null as any, // rateLimiter
+      null as any, // store
+      null as any, // gateway
       prisma,      // prisma
       null as any, // events
       null as any, // notifications
+      null as any, // storage
       null as any, // contactSync
+      null as any, // waInbound
+      null as any, // waMirror
+      null as any, // learning
+      config,      // config
     );
   });
 

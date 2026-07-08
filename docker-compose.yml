@@ -104,30 +104,6 @@ services:
         limits:
           memory: 512M
 
-  waha:
-    image: devlikeapro/waha:latest
-    container_name: hermes-waha
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:3002:3000"
-    environment:
-      - WAHA_ENGINE=${WAHA_ENGINE:-NOWEB}
-      - WHATSAPP_API_KEY=${WAHA_API_KEY:-changeme}
-    volumes:
-      - waha_sessions:/app/.sessions
-    networks:
-      - hermes
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-
   nginx:
     image: nginx:alpine
     container_name: hermes-nginx
@@ -153,4 +129,3 @@ volumes:
   hermes_redisdata:
   hermes_sessions:
   hermes_media:
-  waha_sessions:

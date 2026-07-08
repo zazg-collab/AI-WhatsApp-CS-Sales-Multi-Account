@@ -8,9 +8,10 @@ import { ConversationChatOpsService } from './conversation-chat-ops.service';
 import { WaModule } from '../wa/wa.module';
 import { MediaModule } from '../media/media.module';
 import { LearningModule } from '../learning/learning.module';
+import { WebhooksModule } from '../webhooks/webhooks.module';
 
 @Module({
-  imports: [WaModule, MediaModule, LearningModule],
+  imports: [WaModule, MediaModule, LearningModule, WebhooksModule],
   controllers: [
     ConversationsController,
     ConversationMessagesController,

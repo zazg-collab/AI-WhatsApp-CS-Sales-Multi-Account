@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { FollowUpStatus, LeadStage } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DashboardService } from '../dashboard/dashboard.service';
-import { HermesService } from '../hermes/hermes.service';
+import { SentinelService } from '../sentinel/sentinel.service';
 
 /**
  * Assembles a read-only CRM report for an external supervisor agent (the Hermes
@@ -14,7 +14,7 @@ export class AgentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly dashboard: DashboardService,
-    private readonly hermes: HermesService,
+    private readonly sentinel: SentinelService,
   ) {}
 
   async crmReport(days: number) {
@@ -25,9 +25,9 @@ export class AgentService {
         this.dashboard.getSummary(),
         this.dashboard.getPerformanceOverview(rangeDays),
         this.dashboard.getLeadFunnel(),
-        this.hermes.dailyReport(),
-        this.hermes.knowledgeGaps(20),
-        this.hermes.alerts(20),
+        this.sentinel.dailyReport(),
+        this.sentinel.knowledgeGaps(20),
+        this.sentinel.alerts(20),
         this.pendingFollowUps(),
         this.recentHotLeads(),
       ]);

@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Check, CircleNotch } from '@/components/ui/core-essential-icons';
+import { useT } from '@/lib/i18n';
+import { dict } from '@/app/inbox/inbox.i18n';
 import type { ConvDetail } from '../inbox.types';
 
 interface InternalNotesProps {
@@ -15,6 +18,7 @@ export function InternalNotes({
   onUpdateNotes,
   loading = false,
 }: InternalNotesProps) {
+  const t = useT(dict);
   const [editing, setEditing] = useState(false);
   const [draftNotes, setDraftNotes] = useState(conversation.customer.notes || '');
   const [saving, setSaving] = useState(false);
@@ -59,16 +63,16 @@ export function InternalNotes({
             disabled={busy}
             rows={4}
             className="w-full rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-            placeholder="Add internal notes..."
+            placeholder={t('addInternalNotesPlaceholder')}
           />
           <div className="flex gap-2">
             <Button
               size="sm"
               disabled={busy}
               onClick={handleSave}
-              className="flex-1"
+              className="flex flex-1 items-center justify-center gap-1"
             >
-              {saving ? '⏳' : '✓'} Save
+              {saving ? <CircleNotch className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Check className="h-3.5 w-3.5" aria-hidden="true" />} Save
             </Button>
             <Button
               variant="ghost"

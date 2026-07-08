@@ -10,6 +10,7 @@ interface CustomerCardProps {
 
 export function CustomerCard({ conversation }: CustomerCardProps) {
   const customer = conversation.customer;
+  const displayName = customer.waName ?? customer.name;
 
   const leadStageBadgeColor: Record<string, 'success' | 'review' | 'danger'> = {
     prospect: 'success',
@@ -23,14 +24,14 @@ export function CustomerCard({ conversation }: CustomerCardProps) {
       {/* Avatar + name + phone */}
       <div className="mb-3 flex items-start gap-3">
         <Avatar
-          name={customer.name}
+          name={displayName}
           phone={customer.phoneNumber}
           avatarUrl={customer.avatarUrl}
           className="h-12 w-12"
         />
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-gray-900 dark:text-gray-100">
-            {customer.name || 'No name'}
+            {displayName || customer.phoneNumber}
           </p>
           <p className="text-xs text-gray-600 dark:text-gray-400">
             {customer.phoneNumber}
@@ -70,6 +71,42 @@ export function CustomerCard({ conversation }: CustomerCardProps) {
               </Badge>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Conversation CRM fields */}
+      {(conversation.reopenCount !== undefined || conversation.sentimentLabel || conversation.firstResponseAt) && (
+        <div className="mb-3 space-y-2 text-sm">
+          {conversation.sentimentLabel && (
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600 dark:text-gray-400">Sentimen</span>
+              <Badge
+                tone={conversation.sentimentLabel === 'positive' ? 'success' : conversation.sentimentLabel === 'negative' ? 'danger' : 'review'}
+                className="text-xs capitalize"
+              >
+                {conversation.sentimentLabel === 'positive' ? 'Positif' : conversation.sentimentLabel === 'negative' ? 'Negatif' : 'Netral'}
+                {conversation.sentimentScore !== null && conversation.sentimentScore !== undefined ? ` (${conversation.sentimentScore})` : ''}
+              </Badge>
+            </div>
+          )}
+          {!!conversation.reopenCount && (
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600 dark:text-gray-400">Dibuka ulang</span>
+              <Badge tone="danger" className="text-xs">{conversation.reopenCount}×</Badge>
+            </div>
+          )}
+          {conversation.resolvedAt && (
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600 dark:text-gray-400">Selesai</span>
+              <span className="text-xs text-gray-500">{new Date(conversation.resolvedAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</span>
+            </div>
+          )}
+          {conversation.firstResponseAt && (
+            <div className="flex items-center justify-between">
+              <span className="text-gray-600 dark:text-gray-400">Respon pertama</span>
+              <span className="text-xs text-gray-500">{new Date(conversation.firstResponseAt).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}</span>
+            </div>
+          )}
         </div>
       )}
 

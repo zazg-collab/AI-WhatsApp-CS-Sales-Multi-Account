@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, getToken } from '@/lib/api';
+import { api, getToken, uploadFile } from '@/lib/api';
 import { useT } from '@/lib/i18n';
 import { dict } from './customers.i18n';
 
@@ -20,6 +20,7 @@ export interface Customer {
   lastMessageAt?: string | null;
   assignedAdminId?: string | null;
   assignedAdmin?: { id: string; name: string; email?: string } | null;
+  waName?: string | null;
   avatarUrl?: string | null;
   optedOut?: boolean;
   optedOutAt?: string | null;
@@ -168,6 +169,26 @@ export function useCustomers() {
     }
   }
 
+  async function importCsv(file: File) {
+    const form = new FormData();
+    form.append('file', file);
+    setSubmitting(true);
+    try {
+      const result = await uploadFile<{ created: number; updated: number; skipped: number; errors: string[] }>(
+        '/customers/import',
+        form,
+      );
+      const msg = `Import selesai: ${result.created} baru, ${result.updated} diupdate, ${result.skipped} dilewati` +
+        (result.errors.length ? ` (${result.errors.length} error)` : '');
+      setToast({ message: msg, tone: result.errors.length ? 'danger' : 'success' });
+      await loadCustomers();
+    } catch (err) {
+      setToast({ message: err instanceof Error ? err.message : 'Import gagal', tone: 'danger' });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return {
     t, customers, admins, selectedIds, selectedSet, allVisibleSelected,
     search, setSearch, stageFilter, setStageFilter, tagFilter, setTagFilter,
@@ -176,6 +197,6 @@ export function useCustomers() {
     loading, submitting, toast, setToast,
     page, setPage, total,
     canBulkEdit,
-    loadCustomers, toggleCustomer, toggleAllVisible, applyBulkAction,
+    loadCustomers, toggleCustomer, toggleAllVisible, applyBulkAction, importCsv,
   };
 }

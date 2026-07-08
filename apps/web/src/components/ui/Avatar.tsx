@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { UsersThree } from '@phosphor-icons/react';
+import { UsersThree } from '@/components/ui/core-essential-icons';
 import { resolveMediaUrl } from '@/lib/api';
 import { cn } from '@/lib/cn';
 

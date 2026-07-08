@@ -1,11 +1,25 @@
 'use client';
 
-import { DotsThreeVertical, ArrowLeft, Info } from '@phosphor-icons/react';
+import {
+  DotsThreeVertical,
+  ArrowLeft,
+  Info,
+  Warning,
+  PushPin,
+  BellSlash,
+  Archive,
+  Clock,
+  Prohibit,
+  ArrowUUpLeft,
+  type Icon,
+} from '@/components/ui/core-essential-icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { Popover, useSinglePopover } from '@/components/ui/Popover';
 import { cn } from '@/lib/cn';
 import { contactDisplayName, formatPhone } from '@/lib/contact';
+import { useT } from '@/lib/i18n';
+import { dict } from '@/app/inbox/inbox.i18n';
 import type { ConvDetail } from '../inbox.types';
 
 export interface ConversationActions {
@@ -16,7 +30,7 @@ export interface ConversationActions {
   onToggleArchive?: (archive: boolean) => void;
   onTogglePin?: (pin: boolean) => void;
   onToggleBlock?: (block: boolean) => void;
-  onToggleDisappearing?: (enable: boolean) => void;
+  onToggleDisappearing?: (enable: boolean, duration?: number) => void;
 }
 
 interface ChatThreadHeaderProps {
@@ -34,16 +48,21 @@ export function ChatThreadHeader({
   actions,
   customerTyping = false,
 }: ChatThreadHeaderProps) {
+  const t = useT(dict);
   const { isOpen, toggle, close } = useSinglePopover<'menu'>();
   const customer = conversation.customer;
   // NOTE: this reflects OUR WhatsApp account's connection, not the customer's
   // presence (which WhatsApp does not expose reliably). Label it honestly.
   const accountConnected = conversation.whatsappAccount?.sessionStatus === 'connected';
   const accountName = conversation.whatsappAccount?.accountName;
+  const displayName = customer.waName ?? customer.name;
   const title = conversation.isGroup
-    ? conversation.groupSubject || contactDisplayName(customer.name, customer.phoneNumber)
-    : contactDisplayName(customer.name, customer.phoneNumber);
-  const subtitle = conversation.isGroup ? 'Group' : formatPhone(customer.phoneNumber, 'Nomor tersembunyi');
+    ? conversation.groupSubject || contactDisplayName(displayName, customer.phoneNumber)
+    : contactDisplayName(displayName, customer.phoneNumber);
+  const participantCount = conversation.groupParticipants?.length;
+  const subtitle = conversation.isGroup
+    ? (participantCount ? `${participantCount} peserta` : 'Group')
+    : formatPhone(customer.phoneNumber, 'Nomor tersembunyi');
 
   return (
     <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900 sm:px-5">
@@ -54,14 +73,14 @@ export function ChatThreadHeader({
             size="sm"
             onClick={onBack}
             className="sm:hidden"
-            aria-label="Back to list"
+            aria-label={t('ariaBackToList')}
           >
             <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           </Button>
         )}
 
         <Avatar
-          name={customer.name}
+          name={displayName}
           phone={customer.phoneNumber}
           avatarUrl={customer.avatarUrl}
           isGroup={conversation.isGroup}
@@ -99,7 +118,7 @@ export function ChatThreadHeader({
               variant="ghost"
               size="sm"
               onClick={() => toggle('menu')}
-              aria-label="Conversation actions"
+              aria-label={t('ariaConversationActions')}
             >
               <DotsThreeVertical className="h-5 w-5" aria-hidden="true" />
             </Button>
@@ -109,42 +128,64 @@ export function ChatThreadHeader({
                   <MenuItem label="Mark as read" onClick={() => { actions.onMarkRead?.(); close(); }} />
                 )}
                 {onShowDetails && (
-                  <MenuItem label="ℹ️ Lihat detail" onClick={() => { onShowDetails?.(); close(); }} />
+                  <MenuItem icon={Info} label="Lihat detail" onClick={() => { onShowDetails?.(); close(); }} />
                 )}
                 {conversation.takeoverStatus === 'admin_takeover' && actions.onReturnToAi && (
-                  <MenuItem label="↩️ Return to AI" onClick={() => { actions.onReturnToAi?.(); close(); }} />
+                  <MenuItem icon={ArrowUUpLeft} label="Return to AI" onClick={() => { actions.onReturnToAi?.(); close(); }} />
                 )}
                 {actions.onEscalate && conversation.status !== 'pending' && (
-                  <MenuItem label="⚠️ Escalate" onClick={() => { actions.onEscalate?.(); close(); }} />
+                  <MenuItem icon={Warning} label="Escalate" onClick={() => { actions.onEscalate?.(); close(); }} />
                 )}
                 {actions.onTogglePin && (
                   <MenuItem
-                    label={conversation.isPinned ? 'Unpin chat' : '📌 Pin chat'}
+                    icon={PushPin}
+                    label={conversation.isPinned ? 'Unpin chat' : 'Pin chat'}
                     onClick={() => { actions.onTogglePin?.(!conversation.isPinned); close(); }}
                   />
                 )}
                 {actions.onToggleMute && (
                   <MenuItem
-                    label={conversation.isMuted ? 'Unmute' : '🔕 Mute'}
+                    icon={BellSlash}
+                    label={conversation.isMuted ? 'Unmute' : 'Mute'}
                     onClick={() => { actions.onToggleMute?.(!conversation.isMuted); close(); }}
                   />
                 )}
                 {actions.onToggleArchive && (
                   <MenuItem
-                    label={conversation.isArchived ? 'Unarchive' : '🗄️ Archive'}
+                    icon={Archive}
+                    label={conversation.isArchived ? 'Unarchive' : 'Archive'}
                     onClick={() => { actions.onToggleArchive?.(!conversation.isArchived); close(); }}
                   />
                 )}
                 {actions.onToggleDisappearing && (
-                  <MenuItem
-                    label="⏲️ Disappearing messages"
-                    onClick={() => { actions.onToggleDisappearing?.(true); close(); }}
-                  />
+                  <>
+                    <MenuItem
+                      icon={Clock}
+                      label="Disappearing: Off"
+                      onClick={() => { actions.onToggleDisappearing?.(false, 0); close(); }}
+                    />
+                    <MenuItem
+                      icon={Clock}
+                      label="Disappearing: 24 hours"
+                      onClick={() => { actions.onToggleDisappearing?.(true, 86400); close(); }}
+                    />
+                    <MenuItem
+                      icon={Clock}
+                      label="Disappearing: 7 days"
+                      onClick={() => { actions.onToggleDisappearing?.(true, 604800); close(); }}
+                    />
+                    <MenuItem
+                      icon={Clock}
+                      label="Disappearing: 90 days"
+                      onClick={() => { actions.onToggleDisappearing?.(true, 7776000); close(); }}
+                    />
+                  </>
                 )}
                 {actions.onToggleBlock && (
                   <MenuItem
                     danger
-                    label={conversation.isBlocked ? 'Unblock contact' : '🚫 Block contact'}
+                    icon={Prohibit}
+                    label={conversation.isBlocked ? 'Unblock contact' : 'Block contact'}
                     onClick={() => { actions.onToggleBlock?.(!conversation.isBlocked); close(); }}
                   />
                 )}
@@ -157,8 +198,8 @@ export function ChatThreadHeader({
             variant="ghost"
             size="sm"
             onClick={onShowDetails}
-            aria-label="Show conversation details"
-            title="Lihat detail"
+            aria-label={t('ariaShowDetails')}
+            title={t('showDetails')}
           >
             <Info className="h-5 w-5" aria-hidden="true" />
           </Button>
@@ -168,16 +209,27 @@ export function ChatThreadHeader({
   );
 }
 
-function MenuItem({ label, onClick, danger }: { label: string; onClick: () => void; danger?: boolean }) {
+function MenuItem({
+  label,
+  onClick,
+  danger,
+  icon: IconComponent,
+}: {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+  icon?: Icon;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        'w-full rounded px-2 py-1.5 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700',
+        'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700',
         danger ? 'text-danger-600 dark:text-danger-400' : 'text-gray-700 dark:text-gray-300',
       )}
     >
+      {IconComponent && <IconComponent className="h-4 w-4 shrink-0" aria-hidden="true" />}
       {label}
     </button>
   );

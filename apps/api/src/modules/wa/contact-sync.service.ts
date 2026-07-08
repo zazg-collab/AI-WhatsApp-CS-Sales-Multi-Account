@@ -153,115 +153,198 @@ export class ContactSyncService {
     });
   }
 
-  async syncContacts(accountId: string, contacts: ContactLike[] = []) {
-    const synced = [];
-    for (const contact of contacts) {
-      const jid = contact.jid ?? contact.id;
-      if (!jid || !isDirectChatJid(jid)) continue;
+  /** imgUrl = 'unchanged' means Baileys has no update for this field — treat as absent. */
+  private resolveImgUrl(raw: string | null | undefined): string | null {
+    if (!raw || raw === 'unchanged') return null;
+    return raw;
+  }
 
-      let phoneNumber = jidToPhone(jid);
+  private async syncOneContact(accountId: string, contact: ContactLike): Promise<void> {
+    const rawJid = contact.jid ?? contact.id;
+    if (!rawJid) return;
+    // Baileys multi-device: history contacts can arrive with device suffix
+    // like `628123:20@s.whatsapp.net`. Strip it so isDirectChatJid accepts
+    // the JID and the upsert key matches the phonebook entry.
+    const jid = rawJid.replace(/^(\d+):\d+(@\S+)$/, '$1$2');
+    if (!isDirectChatJid(jid)) return;
 
-      // If the JID is a @lid, try to resolve to a real phone number from
-      // another contact entry that shares the same lid field.
-      if (phoneNumber.endsWith('@lid') && contact.lid) {
-        const resolved = await this.prisma.whatsappContact.findFirst({
-          where: {
-            whatsappAccountId: accountId,
-            lid: contact.lid,
-            jid: { not: jid, contains: '@s.whatsapp.net' },
-            phoneNumber: { not: null, notIn: [''] },
-            NOT: { phoneNumber: { contains: '@lid' } },
-          },
-          select: { phoneNumber: true },
-        });
-        if (resolved?.phoneNumber) {
-          phoneNumber = resolved.phoneNumber;
-        }
-      }
+    let phoneNumber = jidToPhone(jid);
 
-      const name = contact.name ?? contact.notify ?? contact.verifiedName ?? null;
-      const customer = phoneNumber
-        ? await this.prisma.customer.findUnique({
-            where: {
-              phoneNumber_sourceAccountId: {
-                phoneNumber,
-                sourceAccountId: accountId,
-              },
-            },
-            select: { id: true, name: true, avatarUrl: true },
-          })
-        : null;
-
-      const row = await this.prisma.whatsappContact.upsert({
-        where: { whatsappAccountId_jid: { whatsappAccountId: accountId, jid } },
-        create: {
+    if (phoneNumber.endsWith('@lid') && contact.lid) {
+      const resolved = await this.prisma.whatsappContact.findFirst({
+        where: {
           whatsappAccountId: accountId,
-          customerId: customer?.id,
-          jid,
-          lid: contact.lid ?? (contact.id?.endsWith('@lid') ? contact.id : null),
-          phoneNumber,
-          name,
-          notify: contact.notify ?? null,
-          verifiedName: contact.verifiedName ?? null,
-          avatarUrl: contact.imgUrl ?? null,
-          status: contact.status ?? null,
-          raw: contact as Prisma.InputJsonObject,
+          lid: contact.lid,
+          jid: { not: jid, contains: '@s.whatsapp.net' },
+          phoneNumber: { not: null, notIn: [''] },
+          NOT: { phoneNumber: { contains: '@lid' } },
         },
-        update: {
-          customerId: customer?.id,
-          lid: contact.lid ?? (contact.id?.endsWith('@lid') ? contact.id : undefined),
-          phoneNumber,
-          name,
-          notify: contact.notify ?? null,
-          verifiedName: contact.verifiedName ?? null,
-          avatarUrl: contact.imgUrl ?? null,
-          status: contact.status ?? null,
-          raw: contact as Prisma.InputJsonObject,
-          lastSyncedAt: new Date(),
+        select: { phoneNumber: true },
+      });
+      if (resolved?.phoneNumber) phoneNumber = resolved.phoneNumber;
+    }
+
+    const name = contact.name ?? contact.notify ?? contact.verifiedName ?? null;
+    const avatarUrl = this.resolveImgUrl(contact.imgUrl);
+
+    const customer = phoneNumber
+      ? await this.prisma.customer.findUnique({
+          where: { phoneNumber_sourceAccountId: { phoneNumber, sourceAccountId: accountId } },
+          select: { id: true, name: true, avatarUrl: true },
+        })
+      : null;
+
+    await this.prisma.whatsappContact.upsert({
+      where: { whatsappAccountId_jid: { whatsappAccountId: accountId, jid } },
+      create: {
+        whatsappAccountId: accountId,
+        customerId: customer?.id,
+        jid,
+        lid: contact.lid ?? (contact.id?.endsWith('@lid') ? contact.id : null),
+        phoneNumber,
+        name,
+        notify: contact.notify ?? null,
+        verifiedName: contact.verifiedName ?? null,
+        avatarUrl,
+        status: contact.status ?? null,
+        raw: contact as Prisma.InputJsonObject,
+      },
+      update: {
+        customerId: customer?.id,
+        lid: contact.lid ?? (contact.id?.endsWith('@lid') ? contact.id : undefined),
+        phoneNumber,
+        name,
+        notify: contact.notify ?? null,
+        verifiedName: contact.verifiedName ?? null,
+        // only overwrite avatarUrl when we actually received one
+        ...(avatarUrl !== null ? { avatarUrl } : {}),
+        status: contact.status ?? null,
+        raw: contact as Prisma.InputJsonObject,
+        lastSyncedAt: new Date(),
+      },
+    });
+
+    if (customer?.id && (name || avatarUrl) && (!customer.name || !customer.avatarUrl)) {
+      await this.prisma.customer.update({
+        where: { id: customer.id },
+        data: {
+          ...(customer.name ? {} : { name }),
+          ...(customer.avatarUrl || !avatarUrl ? {} : { avatarUrl }),
         },
       });
-      synced.push(row);
+    }
 
-      if (customer?.id && (name || contact.imgUrl) && (!customer.name || !customer.avatarUrl)) {
-        await this.prisma.customer.update({
-          where: { id: customer.id },
-          data: {
-            ...(customer.name ? {} : { name }),
-            ...(customer.avatarUrl ? {} : { avatarUrl: contact.imgUrl ?? undefined }),
-          },
-        });
-      }
-
-      // Retroactive fix: if this contact resolved to a real phone and there's
-      // an existing customer with the @lid as their phone number, migrate them.
-      if (phoneNumber && !phoneNumber.endsWith('@lid') && jid.endsWith('@lid')) {
-        const lidCustomer = await this.prisma.customer.findUnique({
-          where: {
-            phoneNumber_sourceAccountId: { phoneNumber: jid, sourceAccountId: accountId },
-          },
+    if (phoneNumber && !phoneNumber.endsWith('@lid') && jid.endsWith('@lid')) {
+      const lidCustomer = await this.prisma.customer.findUnique({
+        where: { phoneNumber_sourceAccountId: { phoneNumber: jid, sourceAccountId: accountId } },
+        select: { id: true },
+      });
+      if (lidCustomer) {
+        const realCustomer = await this.prisma.customer.findUnique({
+          where: { phoneNumber_sourceAccountId: { phoneNumber, sourceAccountId: accountId } },
           select: { id: true },
         });
-        if (lidCustomer) {
-          // Check if a customer with the real phone already exists
-          const realCustomer = await this.prisma.customer.findUnique({
-            where: {
-              phoneNumber_sourceAccountId: { phoneNumber, sourceAccountId: accountId },
-            },
-            select: { id: true },
-          });
-          if (!realCustomer) {
-            await this.prisma.customer.update({
-              where: { id: lidCustomer.id },
-              data: { phoneNumber },
-            });
-            this.logger.log(`Migrated @lid customer ${lidCustomer.id} to phone ${phoneNumber}`);
-          } else if (realCustomer.id !== lidCustomer.id) {
-            await this.mergeCustomerInto(lidCustomer.id, realCustomer.id);
-          }
+        if (!realCustomer) {
+          await this.prisma.customer.update({ where: { id: lidCustomer.id }, data: { phoneNumber } });
+          this.logger.log(`Migrated @lid customer ${lidCustomer.id} to phone ${phoneNumber}`);
+        } else if (realCustomer.id !== lidCustomer.id) {
+          await this.mergeCustomerInto(lidCustomer.id, realCustomer.id);
         }
       }
     }
-    return synced;
+  }
+
+  async syncContacts(accountId: string, contacts: ContactLike[] = []) {
+    // Normalize device-suffix before the isDirectChatJid filter — same as syncOneContact does.
+    const valid = contacts.filter(c => {
+      const raw = c.jid ?? c.id;
+      if (!raw) return false;
+      const jid = raw.replace(/^(\d+):\d+(@\S+)$/, '$1$2');
+      return isDirectChatJid(jid);
+    });
+    const BATCH = 10;
+    for (let i = 0; i < valid.length; i += BATCH) {
+      await Promise.allSettled(
+        valid.slice(i, i + BATCH).map(c =>
+          this.syncOneContact(accountId, c).catch(err =>
+            this.logger.warn(`Contact sync failed for ${c.jid ?? c.id}: ${err}`),
+          ),
+        ),
+      );
+    }
+    return valid.length;
+  }
+
+  /**
+   * Backfill profile-photo URLs for contacts that don't have one yet.
+   * WA rate-limits this, so we fetch 1 per 1.5 s and cap at maxFetch per run.
+   * Pass a fetchPhoto function that calls sock.profilePictureUrl(jid, 'image').
+   */
+  async backfillAvatars(
+    accountId: string,
+    fetchPhoto: (jid: string) => Promise<string | null | undefined>,
+    maxFetch = 100,
+  ): Promise<void> {
+    const contacts = await this.prisma.whatsappContact.findMany({
+      where: { whatsappAccountId: accountId, avatarUrl: null },
+      select: { jid: true, customerId: true },
+      take: maxFetch,
+      orderBy: { lastSyncedAt: 'desc' },
+    });
+    this.logger.log(`Avatar backfill: ${contacts.length} contacts for account ${accountId}`);
+    for (const c of contacts) {
+      await new Promise(r => setTimeout(r, 1500));
+      const url = await fetchPhoto(c.jid).catch(() => null);
+      if (!url) continue;
+      await this.prisma.whatsappContact.updateMany({
+        where: { whatsappAccountId: accountId, jid: c.jid },
+        data: { avatarUrl: url },
+      });
+      if (c.customerId) {
+        await this.prisma.customer.updateMany({
+          where: { id: c.customerId, avatarUrl: null },
+          data: { avatarUrl: url },
+        });
+      }
+    }
+    this.logger.log(`Avatar backfill done for account ${accountId}`);
+  }
+
+  /**
+   * Fill in customer.name for customers whose name is null but whose linked
+   * whatsappContact has a name/notify/verifiedName. Runs after history sync.
+   */
+  async backfillNames(accountId: string): Promise<void> {
+    const contacts = await this.prisma.whatsappContact.findMany({
+      where: {
+        whatsappAccountId: accountId,
+        customerId: { not: null },
+        OR: [
+          { name: { not: null } },
+          { notify: { not: null } },
+          { verifiedName: { not: null } },
+        ],
+      },
+      select: { customerId: true, name: true, notify: true, verifiedName: true },
+    });
+    const toUpdate = contacts
+      .map(c => ({
+        id: c.customerId as string,
+        name: c.name ?? c.notify ?? c.verifiedName ?? null,
+      }))
+      .filter(c => c.name);
+    if (!toUpdate.length) return;
+    let filled = 0;
+    await Promise.allSettled(
+      toUpdate.map(async c => {
+        const updated = await this.prisma.customer.updateMany({
+          where: { id: c.id, name: null },
+          data: { name: c.name },
+        });
+        if (updated.count > 0) filled++;
+      }),
+    );
+    this.logger.log(`Name backfill: ${filled}/${toUpdate.length} customers updated for account ${accountId}`);
   }
 
   async list(params: {

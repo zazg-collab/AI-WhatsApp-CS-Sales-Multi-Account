@@ -1,4 +1,4 @@
-import { Image as ImageIcon, Video, FileText } from '@phosphor-icons/react';
+import { Image as ImageIcon, Video, FileText, Tag } from '@/components/ui/core-essential-icons';
 import { resolveMediaUrl } from '@/lib/api';
 import { useT, type Dict } from '@/lib/i18n';
 import type { Message } from '../inbox.types';
@@ -67,7 +67,8 @@ export function MediaContent({ message: m }: { message: Message }) {
     }
     return (
       <span className="flex items-center gap-1.5 italic opacity-80">
-        🏷️ {m.content ?? 'sticker'}
+        <Tag className="h-4 w-4 shrink-0" aria-hidden="true" />
+        {m.content ?? 'sticker'}
       </span>
     );
   }

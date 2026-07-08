@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
+import { FilmSlate, ArrowUUpLeft } from '@/components/ui/core-essential-icons';
 import type { ConvDetail } from '../inbox.types';
 
 interface TakeoverCardProps {
@@ -20,8 +21,9 @@ export function TakeoverCard({ conversation, onRelease, loading = false }: Takeo
   return (
     <div className="border-b border-orange-200 bg-orange-50 p-4 dark:border-orange-900/30 dark:bg-orange-900/20">
       <div className="mb-3 flex items-center gap-2">
-        <span className="text-xs font-medium text-orange-700 dark:text-orange-400">
-          🎬 Admin Takeover
+        <span className="flex items-center gap-1 text-xs font-medium text-orange-700 dark:text-orange-400">
+          <FilmSlate className="h-3.5 w-3.5" aria-hidden="true" />
+          Admin Takeover
         </span>
       </div>
 
@@ -48,9 +50,9 @@ export function TakeoverCard({ conversation, onRelease, loading = false }: Takeo
         size="sm"
         onClick={onRelease}
         disabled={loading}
-        className="w-full"
+        className="flex w-full items-center justify-center gap-1"
       >
-        ↩️ Return to AI
+        <ArrowUUpLeft className="h-3.5 w-3.5" aria-hidden="true" /> Return to AI
       </Button>
     </div>
   );

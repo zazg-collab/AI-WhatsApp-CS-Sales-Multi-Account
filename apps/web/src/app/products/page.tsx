@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Cube, UploadSimple, ArrowsClockwise, Trash, Plus, MagnifyingGlass, Package, Warning } from '@phosphor-icons/react';
+import { Cube, UploadSimple, ArrowsClockwise, Trash, Plus, MagnifyingGlass, Package, Warning } from '@/components/ui/core-essential-icons';
 import { api, uploadFile, hasRole } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';

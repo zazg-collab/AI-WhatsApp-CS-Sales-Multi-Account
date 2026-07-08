@@ -40,7 +40,7 @@ const accountRoom = (accountId: string) => `account:${accountId}`;
  *   wa:qr         { accountId, qr }            // qr is a data-URL PNG
  *   message:new   { conversationId, message }
  *   message:draft { conversationId, message }
- *   hermes:alert  { conversationId, review }
+ *   sentinel:alert  { conversationId, review }
  */
 @WebSocketGateway({
   cors: {

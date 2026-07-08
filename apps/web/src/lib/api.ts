@@ -117,10 +117,17 @@ export async function api<T>(
     },
   });
   if (!res.ok) {
+    if (res.status === 401 && token) {
+      // ponytail: only redirect when a real session expired, not on login failures (no token yet)
+      clearToken();
+      window.location.href = '/login';
+    }
     const body = await res.json().catch(() => ({}));
     const err = new Error(body.message ?? `Request failed: ${res.status}`) as Error & { status?: number };
     err.status = res.status;
     throw err;
   }
-  return res.json() as Promise<T>;
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }

@@ -21,7 +21,7 @@ function makeService(overrides: { responseMinutes?: number } = {}) {
     getRepeatableJobs: jest.fn().mockResolvedValue([]),
     removeRepeatableByKey: jest.fn().mockResolvedValue(undefined),
   };
-  const service = new SlaService(prisma, events, notifications, settings, config, queue);
+  const service = new SlaService(prisma, events, notifications, settings, undefined, config, queue);
   return { service, prisma, events, notifications, queue };
 }
 

@@ -9,7 +9,7 @@ export function normalizePhone(input: string): string {
   return digits;
 }
 
-/** Convert a phone number (digits only) to a WhatsApp JID. */
+/** Convert a phone number (digits only) to a Baileys direct-chat JID. */
 export function phoneToJid(phone: string): string {
   if (phone.includes('@')) return phone;
   const digits = phone.replace(/\D/g, '');
@@ -23,7 +23,13 @@ export function jidToPhone(jid: string): string {
 }
 
 export function isDirectChatJid(jid: string): boolean {
-  return jid.endsWith('@s.whatsapp.net') || jid.endsWith('@lid');
+  // @c.us is WAHA's standard; @s.whatsapp.net appears in some engines' internal
+  // fields; @lid is the privacy identifier — accept all on input. Require at
+  // least one digit before the suffix: malformed jids like bare "@c.us" (no
+  // number part, seen from some WAHA chat-overview entries) must NOT pass —
+  // they produce an empty phoneNumber, a phantom customer, and a broken
+  // chatId on send.
+  return /^\d+@(c\.us|s\.whatsapp\.net|lid)$/.test(jid);
 }
 
 export function isGroupJid(jid: string): boolean {

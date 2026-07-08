@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { type Icon as PhosphorIcon } from '@phosphor-icons/react';
+import { type Icon as PhosphorIcon } from '@/components/ui/core-essential-icons';
 import { Card } from './Card';
 import { Button } from './Button';
 import { cn } from '@/lib/cn';

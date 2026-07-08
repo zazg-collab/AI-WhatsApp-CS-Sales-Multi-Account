@@ -1,12 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import { ShieldStar, CheckCircle } from '@phosphor-icons/react';
+import { ShieldStar, CheckCircle } from '@/components/ui/core-essential-icons';
 import { Badge } from '@/components/ui/Badge';
 import type { TFunction } from '@/lib/i18n';
 
 /**
- * Real, in-code preview of a Hermes review decision (PRD Hermes Decision Output).
+ * Real, in-code preview of a Sentinel review decision (PRD Hermes Decision Output).
  * Replaces the earlier fake "video" frame: this shows the actual feature, in the
  * app's own components, instead of implying a video that does not exist.
  */

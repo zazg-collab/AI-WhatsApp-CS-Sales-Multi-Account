@@ -6,7 +6,7 @@ import {
   XCircle,
   CheckCircle,
   type Icon,
-} from '@phosphor-icons/react';
+} from '@/components/ui/core-essential-icons';
 import { Badge } from './Badge';
 
 /**
@@ -16,7 +16,7 @@ import { Badge } from './Badge';
  */
 export type StatusKind =
   | 'ai-generated'
-  | 'hermes-reviewed'
+  | 'sentinel-reviewed'
   | 'needs-review'
   | 'human-takeover'
   | 'sending-blocked'
@@ -26,9 +26,9 @@ const map: Record<
   StatusKind,
   { label: string; icon: Icon; tone: 'hermes' | 'accent' | 'review' | 'danger' | 'success' | 'neutral' }
 > = {
-  // AI presence is informational → blue (accent); supervisor review → teal (hermes).
+  // AI presence is informational → blue (accent); supervisor review → teal (sentinel).
   'ai-generated': { label: 'AI generated', icon: ArrowsSplit, tone: 'accent' },
-  'hermes-reviewed': { label: 'Hermes reviewed', icon: ShieldStar, tone: 'hermes' },
+  'sentinel-reviewed': { label: 'Sentinel reviewed', icon: ShieldStar, tone: 'hermes' },
   'needs-review': { label: 'Needs review', icon: Warning, tone: 'review' },
   'human-takeover': { label: 'Human takeover', icon: Hand, tone: 'neutral' },
   'sending-blocked': { label: 'Sending blocked', icon: XCircle, tone: 'danger' },

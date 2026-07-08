@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { ChartLineUp, TrendUp } from '@phosphor-icons/react';
+import { ChartLineUp, TrendUp } from '@/components/ui/core-essential-icons';
 import { cn } from '@/lib/cn';
 import type { TFunction } from '@/lib/i18n';
 

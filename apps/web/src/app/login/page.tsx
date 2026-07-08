@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldStar, ClockCounterClockwise, ArrowsSplit, UsersThree } from '@phosphor-icons/react';
+import { ShieldStar, ClockCounterClockwise, ArrowsSplit, UsersThree } from '@/components/ui/core-essential-icons';
 import { api, setToken } from '@/lib/api';
 import { useT, type Dict } from '@/lib/i18n';
 

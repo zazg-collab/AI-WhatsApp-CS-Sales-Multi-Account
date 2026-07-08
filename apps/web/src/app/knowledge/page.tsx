@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { UploadSimple, Link, Plus, Books, PencilSimple, Trash, X } from '@/components/ui/core-essential-icons';
+import { UploadSimple, Link, Plus, Books, PencilSimple, Trash } from '@/components/ui/core-essential-icons';
 import { api, uploadFile } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';

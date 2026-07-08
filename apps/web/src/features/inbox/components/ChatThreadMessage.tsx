@@ -8,10 +8,11 @@ import {
   Trash,
   Star,
   Smiley,
-} from '@phosphor-icons/react';
+} from '@/components/ui/core-essential-icons';
 import { useT, type Dict } from '@/lib/i18n';
 import { cn } from '@/lib/cn';
 import { Popover } from '@/components/ui/Popover';
+import { Avatar } from '@/components/ui/Avatar';
 import { MediaContent } from './MediaContent';
 import { StatusTick } from './StatusTick';
 import type { Message } from '../inbox.types';
@@ -33,6 +34,8 @@ const dict: Dict = {
   forwardInvalid: { id: 'Masukkan nomor yang valid (mis. 628123456789).', en: 'Enter a valid number (e.g. 628123456789).' },
   edit: { id: 'Edit', en: 'Edit' },
   retract: { id: 'Tarik pesan', en: 'Retract' },
+  draftBadge: { id: 'Draft', en: 'Draft' },
+  draftNotSent: { id: 'Belum terkirim — menunggu persetujuan', en: 'Not sent yet — awaiting approval' },
 };
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -40,6 +43,7 @@ const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 interface ChatThreadMessageProps {
   message: Message;
   isCustomer: boolean;
+  isGroup?: boolean;
   hoveredId: string | null;
   onHoverEnter: (id: string) => void;
   onHoverExit: () => void;
@@ -49,11 +53,24 @@ interface ChatThreadMessageProps {
   onDelete?: () => void;
   onStar?: (starred: boolean) => void;
   onForward?: (toPhone: string) => Promise<boolean>;
+  onJumpToMessage?: (messageId: string) => void;
+}
+
+// Stable color per sender name so each group member gets a consistent hue
+const GROUP_COLORS = [
+  'text-pink-600','text-purple-600','text-blue-600','text-teal-600',
+  'text-orange-600','text-rose-600','text-indigo-600','text-cyan-600',
+];
+function senderColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return GROUP_COLORS[h % GROUP_COLORS.length];
 }
 
 function ChatThreadMessageImpl({
   message: m,
   isCustomer,
+  isGroup = false,
   hoveredId,
   onHoverEnter,
   onHoverExit,
@@ -63,6 +80,7 @@ function ChatThreadMessageImpl({
   onDelete,
   onStar,
   onForward,
+  onJumpToMessage,
 }: ChatThreadMessageProps) {
   const t = useT(dict);
   const [showReactions, setShowReactions] = useState(false);
@@ -73,6 +91,9 @@ function ChatThreadMessageImpl({
 
   const isDeleted = m.deletedAt !== null && m.deletedAt !== undefined;
   const isEdited = m.editedAt && m.editedAt !== m.createdAt;
+  // An unsent AI reply held for approval — render it distinctly so it is never
+  // mistaken for a message already delivered to the customer.
+  const isDraft = !isCustomer && m.aiGenerated && m.status === 'pending';
   const canModify = !isCustomer && !isDeleted; // can edit/retract own (admin/ai) messages
   const showActions = hoveredId === m.id && !isDeleted;
 
@@ -89,6 +110,15 @@ function ChatThreadMessageImpl({
       onMouseEnter={() => onHoverEnter(m.id)}
       onMouseLeave={onHoverExit}
     >
+      {/* Small per-sender avatar on incoming group messages, like WhatsApp */}
+      {isGroup && isCustomer && (
+        <Avatar
+          name={m.senderName}
+          phone={m.senderName || m.id}
+          className="h-6 w-6 self-end rounded-full text-[10px] font-semibold"
+        />
+      )}
+
       {/* Actions toolbar (hover) */}
       {showActions && (
         <div
@@ -240,17 +270,53 @@ function ChatThreadMessageImpl({
       <div
         className={cn(
           'relative max-w-[80%] min-w-0 rounded-lg px-3 py-2 text-sm break-words lg:max-w-md 2xl:max-w-xl',
-          isCustomer
-            ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
-            : 'bg-hermes-50 text-gray-900 dark:bg-hermes-900/30 dark:text-gray-100',
+          isDraft
+            ? 'border border-dashed border-yellow-400 bg-yellow-50 text-gray-900 dark:border-yellow-500/50 dark:bg-yellow-900/20 dark:text-gray-100'
+            : isCustomer
+              ? 'rounded-tl-none bg-white text-gray-900 shadow-sm dark:bg-[#202c33] dark:text-gray-100'
+              : 'rounded-tr-none bg-[#d9fdd3] text-gray-900 shadow-sm dark:bg-[#005c4b] dark:text-gray-100',
         )}
       >
-        {/* Quoted message preview */}
+        {/* WA-style bubble tail — small notch on the corner nearest the sender */}
+        {!isDraft && (
+          <span
+            aria-hidden="true"
+            className={cn(
+              'absolute top-0 h-2.5 w-2.5',
+              isCustomer
+                ? "-left-[5px] bg-white [clip-path:polygon(100%_0,100%_100%,0_0)] dark:bg-[#202c33]"
+                : "-right-[5px] bg-[#d9fdd3] [clip-path:polygon(0_0,0_100%,100%_0)] dark:bg-[#005c4b]",
+            )}
+          />
+        )}
+
+        {/* Group sender name inside the bubble (like WhatsApp) */}
+        {isGroup && isCustomer && m.senderName && (
+          <span className={cn('mb-0.5 block text-[12px] font-semibold', senderColor(m.senderName))}>
+            {m.senderName}
+          </span>
+        )}
+
+        {/* Draft badge — this reply has not been sent yet */}
+        {isDraft && (
+          <div className="mb-1.5 flex items-center gap-1.5">
+            <span className="rounded bg-yellow-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-yellow-800 dark:bg-yellow-500/30 dark:text-yellow-200">
+              {t('draftBadge')}
+            </span>
+            <span className="text-[10px] text-yellow-700 dark:text-yellow-300">{t('draftNotSent')}</span>
+          </div>
+        )}
+
+        {/* Quoted message preview — tap to jump to the original, like WhatsApp */}
         {m.quotedMessage && (
-          <div className="mb-2 border-l-2 border-gray-300 pl-2 text-xs italic text-gray-600 dark:text-gray-400">
+          <button
+            type="button"
+            onClick={() => onJumpToMessage?.(m.quotedMessage!.id)}
+            className="mb-2 block w-full border-l-2 border-gray-300 pl-2 text-left text-xs italic text-gray-600 hover:opacity-80 dark:text-gray-400"
+          >
             <div>{t('quotedMessage')}</div>
             <div className="mt-0.5 line-clamp-2">{m.quotedMessage.content || `[${m.quotedMessage.messageType}]`}</div>
-          </div>
+          </button>
         )}
 
         {/* Message content */}
@@ -265,11 +331,13 @@ function ChatThreadMessageImpl({
           <p className="mt-1 text-xs italic opacity-70">{t('edited')}</p>
         )}
 
-        {/* Delivery status tick (admin messages only) */}
-        {!isCustomer && (
-          <div className="mt-1 flex items-center justify-end gap-1">
-            <span className="text-[11px] text-gray-500">{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <StatusTick status={m.status} />
+        {/* Timestamp + delivery tick row — always shown, tick only for outbound */}
+        {!isDraft && (
+          <div className={`mt-1 flex items-center gap-1 ${isCustomer ? 'justify-start' : 'justify-end'}`}>
+            <span className="text-[11px] text-gray-400 dark:text-gray-500">
+              {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {!isCustomer && <StatusTick status={m.status} />}
           </div>
         )}
       </div>

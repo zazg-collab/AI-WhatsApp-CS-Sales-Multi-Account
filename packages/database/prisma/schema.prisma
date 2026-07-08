@@ -89,7 +89,7 @@ enum SenderType {
   admin
   ai
   system
-  hermes
+  sentinel
 }
 
 enum MessageType {
@@ -112,7 +112,7 @@ enum MessageStatus {
   failed
 }
 
-enum HermesDecision {
+enum SentinelDecision {
   approve
   draft
   block
@@ -210,6 +210,7 @@ model WhatsappAccount {
   customers     Customer[]
   conversations Conversation[]
   contacts      WhatsappContact[]
+  channels      WaChannel[]
   campaigns     Campaign[]
   quickReplies  QuickReply[]
 
@@ -235,7 +236,7 @@ model Bot {
   knowledgeBase KnowledgeBase?   @relation(fields: [knowledgeBaseId], references: [id])
   accounts      WhatsappAccount[]
   conversations Conversation[]
-  hermesReviews HermesReview[]
+  sentinelReviews SentinelReview[]
   learningProposals LearningProposal[]
 
   @@map("bots")
@@ -320,7 +321,7 @@ model Customer {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  sourceAccount WhatsappAccount? @relation(fields: [sourceAccountId], references: [id])
+  sourceAccount WhatsappAccount? @relation(fields: [sourceAccountId], references: [id], onDelete: Cascade)
   assignedAdmin User?            @relation("CustomerAdmin", fields: [assignedAdminId], references: [id])
   conversations      Conversation[]
   followUps          FollowUp[]
@@ -362,6 +363,27 @@ model WhatsappContact {
   @@map("whatsapp_contacts")
 }
 
+// Local mirror of channels (newsletters) created/followed via this account.
+// ponytail: Baileys has no bulk "list subscribed newsletters" call, only
+// per-jid lookups — so we track membership locally instead of asking Baileys
+// to enumerate. createChannel/followChannel write here; listChannels reads it.
+model WaChannel {
+  id              String   @id @default(uuid())
+  whatsappAccountId String @map("whatsapp_account_id")
+  channelId       String   @map("channel_id")
+  name            String?
+  description     String?
+  isFollowing     Boolean  @default(true) @map("is_following")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([whatsappAccountId, channelId])
+  @@index([whatsappAccountId])
+  @@map("wa_channels")
+}
+
 model Conversation {
   id                String         @id @default(uuid())
   customerId        String         @map("customer_id")
@@ -378,11 +400,17 @@ model Conversation {
   csatScore         Int?           @map("csat_score")
   csatRequestedAt   DateTime?      @map("csat_requested_at")
   csatRespondedAt   DateTime?      @map("csat_responded_at")
-  /// When Hermes auto-learn last mined this conversation (idempotency guard).
+  /// When Sentinel auto-learn last mined this conversation (idempotency guard).
   learnedAt         DateTime?      @map("learned_at")
   assignedAdminId   String?        @map("assigned_admin_id")
   lastMessage       String?        @map("last_message")
   lastMessageAt     DateTime?      @map("last_message_at")
+  firstResponseAt   DateTime?      @map("first_response_at")
+  resolvedAt        DateTime?      @map("resolved_at")
+  reopenCount       Int            @default(0) @map("reopen_count")
+  sentimentLabel    String?        @map("sentiment_label")
+  sentimentScore    Int?           @map("sentiment_score")
+  sentimentAt       DateTime?      @map("sentiment_at")
   chatJid           String?        @map("chat_jid")
   isGroup           Boolean        @default(false) @map("is_group")
   groupSubject      String?        @map("group_subject")
@@ -405,7 +433,7 @@ model Conversation {
   bot             Bot?            @relation(fields: [botId], references: [id])
   assignedAdmin   User?           @relation("ConversationAdmin", fields: [assignedAdminId], references: [id])
   messages        Message[]
-  hermesReviews   HermesReview[]
+  sentinelReviews SentinelReview[]
   followUps       FollowUp[]
   campaignRecipients CampaignRecipient[]
 
@@ -428,7 +456,7 @@ model Message {
   mediaUrl       String?       @map("media_url")
   status         MessageStatus @default(pending)
   aiGenerated    Boolean       @default(false) @map("ai_generated")
-  hermesReviewId String?       @unique @map("hermes_review_id")
+  sentinelReviewId String?       @unique @map("sentinel_review_id")
   externalId     String?       @map("external_id")
   quotedMessageId String?      @map("quoted_message_id")
   reactions      Json?         // { "👍": ["628.."], ... } emoji → reactor jids
@@ -439,10 +467,11 @@ model Message {
   receiptDetails Json?         @map("receipt_details")
   rawWaPayload   Json?         @map("raw_wa_payload")
   waMessageType  String?       @map("wa_message_type")
+  senderName     String?       @map("sender_name")
   createdAt      DateTime      @default(now()) @map("created_at")
 
   conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  hermesReview HermesReview? @relation(fields: [hermesReviewId], references: [id])
+  sentinelReview SentinelReview? @relation(fields: [sentinelReviewId], references: [id])
   quotedMessage Message?     @relation("MessageQuote", fields: [quotedMessageId], references: [id], onDelete: SetNull)
   quotedBy      Message[]    @relation("MessageQuote")
 
@@ -451,7 +480,7 @@ model Message {
   @@map("messages")
 }
 
-model HermesReview {
+model SentinelReview {
   id              String         @id @default(uuid())
   messageId       String?        @map("message_id")
   conversationId  String         @map("conversation_id")
@@ -459,10 +488,10 @@ model HermesReview {
   confidenceScore Int            @map("confidence_score")
   riskScore       Int            @map("risk_score")
   riskLevel       RiskLevel      @map("risk_level")
-  decision        HermesDecision
+  decision        SentinelDecision
   reason          String?
   recommendation  String?
-  // Short hash of the Hermes system prompt that produced this review. Lets you
+  // Short hash of the Sentinel system prompt that produced this review. Lets you
   // group reviews by prompt version to see if a prompt edit shifted decisions.
   promptVersion   String?        @map("prompt_version")
   createdAt       DateTime       @default(now()) @map("created_at")
@@ -472,7 +501,7 @@ model HermesReview {
   message      Message?
 
   @@index([conversationId])
-  @@map("hermes_reviews")
+  @@map("sentinel_reviews")
 }
 
 model FollowUp {
@@ -606,7 +635,7 @@ model LearningProposal {
   id               String    @id @default(uuid())
   botId            String?   @map("bot_id")
   customerId       String?   @map("customer_id")
-  /// Conversation this proposal was mined from (Hermes auto-learn on resolve).
+  /// Conversation this proposal was mined from (Sentinel auto-learn on resolve).
   conversationId   String?   @map("conversation_id")
   type             String
   status           String    @default("pending")
@@ -712,4 +741,15 @@ model ProductSource {
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
   @@map("product_sources")
+}
+
+model WebhookEndpoint {
+  id        String   @id @default(uuid())
+  url       String
+  secret    String   // HMAC-SHA256 signing key
+  events    String[] @default([])
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("webhook_endpoints")
 }

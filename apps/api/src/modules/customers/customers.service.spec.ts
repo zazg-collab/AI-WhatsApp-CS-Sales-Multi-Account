@@ -19,7 +19,7 @@ describe('CustomersService', () => {
       user: { findUnique: jest.fn() },
       conversation: { findMany: jest.fn().mockResolvedValue([]) },
       message: { findMany: jest.fn().mockResolvedValue([]) },
-      hermesReview: { findMany: jest.fn().mockResolvedValue([]) },
+      sentinelReview: { findMany: jest.fn().mockResolvedValue([]) },
       followUp: { findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn((ps: any[]) => Promise.all(ps)),
     };
@@ -92,7 +92,7 @@ describe('CustomersService', () => {
       prisma.message.findMany.mockResolvedValue([
         { createdAt: new Date('2024-01-01') },
       ]);
-      prisma.hermesReview.findMany.mockResolvedValue([
+      prisma.sentinelReview.findMany.mockResolvedValue([
         { createdAt: new Date('2024-03-01') },
       ]);
       prisma.followUp.findMany.mockResolvedValue([
@@ -100,7 +100,7 @@ describe('CustomersService', () => {
       ]);
       const events = await service.timeline('c1');
       expect(events.map((e) => e.type)).toEqual([
-        'hermes_review',
+        'sentinel_review',
         'follow_up',
         'message',
       ]);

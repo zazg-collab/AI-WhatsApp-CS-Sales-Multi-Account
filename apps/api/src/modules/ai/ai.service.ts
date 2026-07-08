@@ -1,5 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { LeadStage } from '@hermes/database';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { MetricsService } from '../../common/metrics/metrics.service';
@@ -19,9 +20,13 @@ import {
   SENTIMENT_NO_MESSAGES,
   SUMMARIZE_SYSTEM,
   SUMMARIZE_USER,
+  SEGMENTED_REPLY_SYSTEM,
+  SEGMENTED_REPLY_LIST,
+  mediaPlaceholder,
   FALLBACK_PHRASE,
   stripDataFences,
 } from '../../i18n/bot-prompts';
+import type { BotLang } from '../../i18n/bot-prompts';
 
 /** All fallback-phrase variants (all languages) — marks an AI "punt to admin". */
 const FALLBACK_MARKERS = Object.values(FALLBACK_PHRASE) as string[];
@@ -90,6 +95,7 @@ export class AiService {
     private readonly prompts: PromptBuilderService,
     private readonly notifications: NotificationsService,
     private readonly cache: AiCacheService,
+    @Optional() private readonly webhooks?: WebhooksService,
     @Optional() private readonly metrics?: MetricsService,
   ) {}
 
@@ -170,6 +176,66 @@ export class AiService {
     return { text, model: resolvedModel };
   }
 
+  /**
+   * Generate a SEGMENTED reply for a burst of customer messages: the model
+   * groups the burst into topics and returns one reply per topic, each tagged
+   * with the burst message it answers. Used when several distinct-topic
+   * messages arrived together so each topic gets its own (quoted) draft —
+   * harder to mis-answer, and a human can approve each independently.
+   *
+   * Degrades gracefully: any parse failure (or a single-topic result) yields a
+   * single segment carrying the whole reply with no quote target.
+   */
+  async generateSegmentedReply(
+    conversationId: string,
+    burst: Array<{ index: number; content: string | null; messageType: string }>,
+  ): Promise<Array<{ answersIndex: number | null; text: string }>> {
+    const lang = await this.botLang(conversationId);
+    const base = await this.prompts.buildForConversation(conversationId);
+
+    const lines = burst.map((m) => {
+      const body = m.content?.trim() || mediaPlaceholder(lang as BotLang, m.messageType);
+      return `${m.index}. ${body}`;
+    });
+    const messages: ChatMessage[] = [
+      ...base,
+      { role: 'system', content: t(SEGMENTED_REPLY_SYSTEM, lang) },
+      { role: 'user', content: t(SEGMENTED_REPLY_LIST, lang)(lines) },
+    ];
+
+    let raw: string;
+    try {
+      raw = await this.provider.chat(messages, { maxTokens: 700, json: true });
+    } catch (err) {
+      this.logger.warn(`Segmented reply generation failed: ${err}`);
+      const { text } = await this.generateReply(conversationId);
+      return [{ answersIndex: null, text }];
+    }
+
+    const validIndexes = new Set(burst.map((m) => m.index));
+    try {
+      const json = JSON.parse(this.extractJson(raw)) as {
+        segments?: Array<{ menjawab?: unknown; balasan?: unknown }>;
+      };
+      const segments = (json.segments ?? [])
+        .map((s) => {
+          const text = stripDataFences(String(s.balasan ?? '')).trim();
+          const idx = Number(s.menjawab);
+          const answersIndex = Number.isInteger(idx) && validIndexes.has(idx) ? idx : null;
+          return { answersIndex, text };
+        })
+        .filter((s) => s.text.length > 0);
+      if (segments.length === 0) throw new Error('no usable segments');
+      return segments;
+    } catch (err) {
+      this.logger.warn(`Segmented reply parse failed (${err}); falling back to single reply`);
+      const text = stripDataFences(raw).trim();
+      if (text) return [{ answersIndex: null, text }];
+      const single = await this.generateReply(conversationId);
+      return [{ answersIndex: null, text: single.text }];
+    }
+  }
+
   /** Resolve bot language for a conversation (defaults to 'id'). */
   private async botLang(conversationId: string): Promise<string> {
     const row = await this.prisma.conversation.findUnique({
@@ -211,7 +277,19 @@ export class AiService {
       maxTokens: 200,
     });
 
-    return this.parseSentiment(raw);
+    const result = this.parseSentiment(raw);
+
+    // Persist so we can build trend charts over time (fire-and-forget)
+    this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: {
+        sentimentLabel: result.sentiment,
+        sentimentScore: result.score,
+        sentimentAt: new Date(),
+      } as any,
+    }).catch(() => {});
+
+    return result;
   }
 
   private parseSentiment(raw: string): SentimentResult {
@@ -315,6 +393,14 @@ export class AiService {
       this.notifications.send(
         `🔥 Hot Lead (${result.score})\n${customer.name ?? customer.phoneNumber}\n${result.reasons.slice(0, 3).join(', ')}`,
       );
+      this.webhooks?.deliver('lead.hot', {
+        customerId: customer.id,
+        customerName: customer.name,
+        phoneNumber: customer.phoneNumber,
+        leadScore: result.score,
+        leadStage: result.stage,
+        reasons: result.reasons,
+      }).catch(() => undefined);
     }
 
     return result;

@@ -1,6 +1,6 @@
 'use client';
 
-import { Translate } from '@phosphor-icons/react';
+import { Translate } from '@/components/ui/core-essential-icons';
 import { useLang } from '@/lib/i18n';
 
 /**

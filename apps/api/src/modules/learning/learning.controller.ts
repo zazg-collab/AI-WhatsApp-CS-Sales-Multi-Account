@@ -7,7 +7,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
@@ -57,6 +57,9 @@ export class LearningController {
     return this.learning.getProposal(id);
   }
 
+  // Integration note: API-only. The /learning page approves/rejects proposals;
+  // inline pre-approval edit has no frontend caller yet.
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Edit a pending proposal before approving' })
   @Roles('owner')
   @Post('proposals/:id/edit')

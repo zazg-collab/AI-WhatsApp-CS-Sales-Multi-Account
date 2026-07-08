@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { UserPlus, PhoneCall, MagnifyingGlass, AddressBook } from '@phosphor-icons/react';
+import { UserPlus, PhoneCall, MagnifyingGlass, AddressBook } from '@/components/ui/core-essential-icons';
 import { useT, type Dict } from '@/lib/i18n';
 import Link from 'next/link';
 import { cn } from '@/lib/cn';
@@ -12,10 +12,15 @@ import type { ConvSummary, WaAccount } from '../inbox.types';
 
 const dict: Dict = {
   searchPlaceholder: { id: 'Cari percakapan...', en: 'Search conversations...' },
+  ariaFilterConversations: { id: 'Saring percakapan', en: 'Filter conversations' },
   filterAll: { id: 'Semua', en: 'All' },
   filterAttention: { id: 'Perlu tindakan', en: 'Needs action' },
   filterSla: { id: 'SLA berisiko', en: 'SLA at risk' },
   filterUnassigned: { id: 'Belum ditugaskan', en: 'Unassigned' },
+  filterAllAccounts: { id: 'Semua akun', en: 'All accounts' },
+  ariaFilterAccount: { id: 'Saring berdasarkan akun', en: 'Filter by account' },
+  hideGroups: { id: 'Sembunyikan grup', en: 'Hide groups' },
+  clearSearch: { id: 'Hapus pencarian', en: 'Clear search' },
   startChat: { id: 'Mulai Chat Baru', en: 'Start New Chat' },
   pickSenderAccount: { id: 'Pilih akun pengirim', en: 'Pick sender account' },
   pickSenderAccountLabel: { id: 'Pilih akun WhatsApp untuk mengirim pesan', en: 'Choose WhatsApp account to send from' },
@@ -50,6 +55,12 @@ interface ConversationListProps {
   /** Controlled search box — the page debounces this into a server-side query. */
   searchValue?: string;
   onSearchChange?: (q: string) => void;
+  /** Server-side: scope the list to one WhatsApp account ('' = all). */
+  accountFilter?: string;
+  onAccountFilterChange?: (accountId: string) => void;
+  /** Server-side: drop @g.us group chats from the list. */
+  excludeGroups?: boolean;
+  onExcludeGroupsChange?: (exclude: boolean) => void;
 }
 
 const filters = [
@@ -73,6 +84,10 @@ export function ConversationList({
   onFilterChange,
   searchValue = '',
   onSearchChange,
+  accountFilter = '',
+  onAccountFilterChange,
+  excludeGroups = false,
+  onExcludeGroupsChange,
 }: ConversationListProps) {
   const t = useT(dict);
   const [startAccountId, setStartAccountId] = useState('');
@@ -149,15 +164,25 @@ export function ConversationList({
       {/* Search bar */}
       <div className="flex h-14 items-center gap-2 border-b border-gray-100 px-3 dark:border-gray-800">
         <div className="relative flex-1">
-          {/* Search icon would go here */}
+          <MagnifyingGlass className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
           <input
             type="search"
             value={searchValue}
             onChange={(e) => onSearchChange?.(e.target.value)}
             placeholder={t('searchPlaceholder')}
             aria-label={t('searchPlaceholder')}
-            className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-3 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+            className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-8 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           />
+          {searchValue && (
+            <button
+              type="button"
+              onClick={() => onSearchChange?.('')}
+              aria-label={t('clearSearch')}
+              className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-gray-700"
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
@@ -166,7 +191,7 @@ export function ConversationList({
       <select
         value={filter}
         onChange={(e) => onFilterChange?.(e.target.value as any)}
-        aria-label="Filter conversations"
+        aria-label={t('ariaFilterConversations')}
         className="md:hidden h-9 w-full border-b border-gray-100 bg-gray-50 px-3 text-xs text-gray-700 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-200"
       >
         {filters.map((f) => (
@@ -176,8 +201,8 @@ export function ConversationList({
         ))}
       </select>
 
-      {/* Desktop pills (md and up) */}
-      <div className="hidden md:flex scrollbar-thin gap-1 overflow-x-auto border-b border-gray-100 px-2 py-2 dark:border-gray-800">
+      {/* Desktop toolbar: filter pills + account scope + group visibility, one row (md and up) */}
+      <div className="hidden md:flex scrollbar-thin items-center gap-1.5 overflow-x-auto border-b border-gray-100 px-2 py-2 dark:border-gray-800">
         {filters.map((f) => (
           <button
             key={f.key}
@@ -192,6 +217,53 @@ export function ConversationList({
             {t(f.label)}
           </button>
         ))}
+        <div className="mx-1 h-5 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+        <select
+          value={accountFilter}
+          onChange={(e) => onAccountFilterChange?.(e.target.value)}
+          aria-label={t('ariaFilterAccount')}
+          className="h-7 max-w-[9.5rem] shrink-0 rounded border border-gray-200 bg-gray-50 px-1.5 text-[11px] text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+        >
+          <option value="">{t('filterAllAccounts')}</option>
+          {accounts.map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.accountName}
+            </option>
+          ))}
+        </select>
+        <label className="flex shrink-0 items-center gap-1 text-[11px] text-gray-600 dark:text-gray-300">
+          <input
+            type="checkbox"
+            checked={excludeGroups}
+            onChange={(e) => onExcludeGroupsChange?.(e.target.checked)}
+          />
+          {t('hideGroups')}
+        </label>
+      </div>
+
+      {/* Account scope + group visibility (mobile, below the filter dropdown) */}
+      <div className="flex md:hidden items-center gap-2 border-b border-gray-100 px-3 py-2 dark:border-gray-800">
+        <select
+          value={accountFilter}
+          onChange={(e) => onAccountFilterChange?.(e.target.value)}
+          aria-label={t('ariaFilterAccount')}
+          className="h-8 flex-1 rounded border border-gray-200 bg-gray-50 px-2 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+        >
+          <option value="">{t('filterAllAccounts')}</option>
+          {accounts.map((account) => (
+            <option key={account.id} value={account.id}>
+              {account.accountName} ({account.phoneNumber})
+            </option>
+          ))}
+        </select>
+        <label className="flex shrink-0 items-center gap-1.5 text-[11px] text-gray-600 dark:text-gray-300">
+          <input
+            type="checkbox"
+            checked={excludeGroups}
+            onChange={(e) => onExcludeGroupsChange?.(e.target.checked)}
+          />
+          {t('hideGroups')}
+        </label>
       </div>
 
       {/* Start new chat form */}

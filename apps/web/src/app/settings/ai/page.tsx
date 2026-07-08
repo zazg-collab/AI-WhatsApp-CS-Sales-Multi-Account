@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ArrowsClockwise, Cpu, FloppyDisk, ShieldWarning, ChatCircle, Bell, Clock, MegaphoneSimple, type Icon } from '@phosphor-icons/react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowsClockwise, Cpu, FloppyDisk, ShieldWarning, ChatCircle, Bell, Clock, MegaphoneSimple, type Icon } from '@/components/ui/core-essential-icons';
 import { api, hasRole } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -30,10 +30,10 @@ const dict: Dict = {
   apiKeySet: { id: 'Tersimpan — kosongkan untuk tidak mengubah', en: 'Stored — leave blank to keep unchanged' },
   apiKeyEmpty: { id: 'Belum diatur', en: 'Not set' },
   model: { id: 'Model default', en: 'Default model' },
-  hermesModel: { id: 'Model supervisor Hermes', en: 'Hermes supervisor model' },
-  hermesModelHint: {
-    id: 'Dipakai Hermes untuk review/ask/insight. Kosongkan untuk pakai model default. Disarankan model yang lebih kuat dari bot CS.',
-    en: 'Used by Hermes for review/ask/insight. Leave empty to reuse the default model. A stronger model than the CS bot is recommended.',
+  sentinelModel: { id: 'Model supervisor Sentinel', en: 'Sentinel supervisor model' },
+  sentinelModelHint: {
+    id: 'Dipakai Sentinel untuk review/ask/insight. Kosongkan untuk pakai model default. Disarankan model yang lebih kuat dari bot CS.',
+    en: 'Used by Sentinel for review/ask/insight. Leave empty to reuse the default model. A stronger model than the CS bot is recommended.',
   },
   loadModels: { id: 'Muat daftar model', en: 'Load model list' },
   temperature: { id: 'Temperature (0–2)', en: 'Temperature (0–2)' },
@@ -55,27 +55,45 @@ const dict: Dict = {
   notifyHint: { id: 'mis. "telegram", "slack:#alerts", "whatsapp". Kosongkan untuk menonaktifkan.', en: 'e.g. "telegram", "slack:#alerts", "whatsapp". Empty disables it.' },
   slaMinutes: { id: 'Ambang SLA balasan (menit)', en: 'SLA response threshold (minutes)' },
   slaHint: { id: 'Chat pelanggan yang belum dibalas melebihi ini ditandai melanggar SLA.', en: 'Customer chats unanswered beyond this are flagged as SLA breaches.' },
-  // Hermes
-  tabHermes: { id: 'Hermes Supervisor', en: 'Hermes Supervisor' },
-  hermesComingSoon: {
-    id: 'Ambang keyakinan, keyword berisiko, dan mode review saat ini ditentukan di kode (rules.engine.ts), bukan lewat pengaturan. Konfigurasi UI akan ditambahkan di iterasi berikutnya.',
-    en: 'Confidence thresholds, risk keywords, and review mode are currently fixed in code (rules.engine.ts), not configurable here. UI configuration is planned for a future iteration.',
+  // Sentinel
+  tabSentinel: { id: 'Sentinel Supervisor', en: 'Sentinel Supervisor' },
+  sentinelIntro: {
+    id: 'Ambang keyakinan dan keyword berisiko di bawah ini melengkapi rules.engine.ts (legal/refund/komplain tetap hardcode sebagai pengaman dasar).',
+    en: 'The thresholds and risk keywords below layer on top of rules.engine.ts (the legal/refund/complaint rules stay hardcoded as a baseline safety net).',
   },
+  autoSendMin: { id: 'Ambang auto-send (confidence ≥)', en: 'Auto-send threshold (confidence ≥)' },
+  autoSendMinHint: { id: 'Di atas ambang ini, balasan AI terkirim otomatis tanpa review admin.', en: 'Above this threshold, AI replies auto-send without admin review.' },
+  draftMin: { id: 'Ambang draft (confidence ≥)', en: 'Draft threshold (confidence ≥)' },
+  draftMinHint: { id: 'Di bawah ambang ini, balasan diblokir dan butuh admin. Di antara draft dan auto-send, balasan ditahan sebagai draft.', en: 'Below this threshold, replies are blocked and need an admin. Between draft and auto-send, replies are held as a draft.' },
+  riskKeywords: { id: 'Keyword berisiko tambahan', en: 'Additional risk keywords' },
+  riskKeywordsHint: { id: 'Dipisah koma. Cocok (case-insensitive) memaksa takeover_required. Mis. "DP, transfer manual"', en: 'Comma-separated. A case-insensitive match forces takeover_required. e.g. "DP, manual transfer"' },
+  defaultAiMode: { id: 'Mode AI default akun baru', en: 'Default AI mode for new accounts' },
+  defaultAiModeHint: { id: 'Dipakai saat menambah akun WhatsApp baru, kecuali diubah manual per-akun.', en: 'Used when adding a new WhatsApp account, unless changed manually per account.' },
+  modeOff: { id: 'AI mati (manual)', en: 'AI off (manual)' },
+  modeDraft: { id: 'AI draft (admin kirim)', en: 'AI draft (admin sends)' },
+  modeSupervised: { id: 'AI supervised (Sentinel review)', en: 'AI supervised (Sentinel reviews)' },
+  modeOn: { id: 'AI aktif (auto-reply)', en: 'AI on (auto-reply)' },
   // Campaign
   tabCampaign: { id: 'Keamanan Campaign', en: 'Campaign Safety' },
-  campaignComingSoon: {
-    id: 'Approval, rate limit, dan opt-out campaign sudah diatur per-campaign di halaman Campaigns. Pengaturan global belum tersedia di sini.',
-    en: 'Campaign approval, rate limiting, and opt-out are already configured per-campaign on the Campaigns page. Global settings here are not available yet.',
+  campaignIntro: {
+    id: 'Default global untuk campaign baru. Rate limit & jeda tetap bisa di-override per-campaign di halaman Campaigns.',
+    en: 'Global defaults for new campaigns. Rate limit & delay can still be overridden per campaign on the Campaigns page.',
   },
+  defaultRateLimit: { id: 'Rate limit default (pesan/menit)', en: 'Default rate limit (messages/minute)' },
+  defaultRateLimitHint: { id: 'Dipakai saat campaign baru dibuat tanpa rate limit kustom.', en: 'Used when a new campaign is created without a custom rate limit.' },
+  requireApproval: { id: 'Wajib approval sebelum kirim', en: 'Require approval before sending' },
+  requireApprovalHint: { id: 'Saat aktif, campaign perlu disetujui reviewer lain (bukan pembuatnya) sebelum bisa dijalankan. Saat nonaktif, pembuat bisa langsung jalankan campaign sendiri.', en: 'When on, a campaign needs approval from a different reviewer (not its creator) before it can run. When off, the creator can start the campaign themselves.' },
 };
 
-type Tab = 'ai' | 'wa' | 'notif' | 'hermes' | 'campaign';
+type Tab = 'ai' | 'wa' | 'notif' | 'sentinel' | 'campaign';
 
 interface SettingsShape {
-  ai: { baseUrl: string; model: string; hermesModel: string; temperature: number; timeoutMs: number; apiKeySet: boolean };
+  ai: { baseUrl: string; model: string; sentinelModel: string; temperature: number; timeoutMs: number; apiKeySet: boolean };
   wa: { humanDelayMinMs: number; humanDelayMaxMs: number; typingPerCharMs: number; typingMinMs: number; typingMaxMs: number };
   notifications: { hermesNotifyTarget: string };
   sla: { responseMinutes: number };
+  sentinel: { autoSendConfidenceMin: number; draftConfidenceMin: number; riskKeywords: string; defaultAiMode: string };
+  campaign: { defaultRateLimitPerMinute: number; requireApproval: boolean };
 }
 
 const fieldCls =
@@ -102,6 +120,13 @@ export default function SettingsPage() {
       .catch((err) => setError(err instanceof Error ? err.message : t('loadError')));
   }, [t]);
 
+  // Auto-load the full model list once instead of requiring a manual click —
+  // loadModels() already fetches the provider's complete /models response.
+  useEffect(() => {
+    if (data && models.length === 0 && !loadingModels) loadModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
   function patch<K extends keyof SettingsShape>(cat: K, key: keyof SettingsShape[K], value: unknown) {
     setData((prev) => (prev ? { ...prev, [cat]: { ...prev[cat], [key]: value } } : prev));
     setSavedMsg(null);
@@ -125,8 +150,9 @@ export default function SettingsPage() {
     setModelsMsg(null);
     try {
       const list = await api<string[]>('/ai/models');
-      setModels(list);
-      if (list.length === 0) setModelsMsg(t('noModels'));
+      const arr = Array.isArray(list) ? list : [];
+      setModels(arr);
+      if (arr.length === 0) setModelsMsg(t('noModels'));
     } catch {
       setModelsMsg(t('noModels'));
     } finally {
@@ -145,7 +171,7 @@ export default function SettingsPage() {
         payload.ai = {
           baseUrl: data.ai.baseUrl,
           model: data.ai.model,
-          hermesModel: data.ai.hermesModel ?? '',
+          sentinelModel: data.ai.sentinelModel ?? '',
           temperature: Number(data.ai.temperature),
           timeoutMs: Number(data.ai.timeoutMs),
           ...(apiKeyInput.trim() ? { apiKey: apiKeyInput.trim() } : {}),
@@ -165,9 +191,25 @@ export default function SettingsPage() {
           typingMinMs: Number(data.wa.typingMinMs),
           typingMaxMs: Number(data.wa.typingMaxMs),
         };
-      } else {
+      } else if (tab === 'notif') {
         payload.notifications = { hermesNotifyTarget: data.notifications.hermesNotifyTarget };
         payload.sla = { responseMinutes: Number(data.sla.responseMinutes) };
+      } else if (tab === 'sentinel') {
+        if (Number(data.sentinel.draftConfidenceMin) >= Number(data.sentinel.autoSendConfidenceMin)) {
+          setError(t('delayRangeError'));
+          return;
+        }
+        payload.sentinel = {
+          autoSendConfidenceMin: Number(data.sentinel.autoSendConfidenceMin),
+          draftConfidenceMin: Number(data.sentinel.draftConfidenceMin),
+          riskKeywords: data.sentinel.riskKeywords,
+          defaultAiMode: data.sentinel.defaultAiMode,
+        };
+      } else if (tab === 'campaign') {
+        payload.campaign = {
+          defaultRateLimitPerMinute: Number(data.campaign.defaultRateLimitPerMinute),
+          requireApproval: data.campaign.requireApproval,
+        };
       }
       const updated = await api<SettingsShape>('/settings', { method: 'PUT', body: JSON.stringify(payload) });
       setData(updated);
@@ -184,8 +226,8 @@ export default function SettingsPage() {
     { key: 'ai', label: t('tabAi'), icon: Cpu },
     { key: 'wa', label: t('tabWa'), icon: ChatCircle },
     { key: 'notif', label: t('tabNotif'), icon: Bell },
-    { key: 'hermes', label: t('tabHermes'), icon: ShieldWarning },
-    { key: 'campaign', label: t('tabCampaign'), icon: Bell },
+    { key: 'sentinel', label: t('tabSentinel'), icon: ShieldWarning },
+    { key: 'campaign', label: t('tabCampaign'), icon: MegaphoneSimple },
   ];
 
   return (
@@ -258,11 +300,8 @@ export default function SettingsPage() {
                 </Field>
                 <Field label={t('model')}>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <input className={fieldCls} disabled={!canEdit} list="ai-models" value={data.ai.model}
-                      onChange={(e) => patch('ai', 'model', e.target.value)} />
-                    <datalist id="ai-models">
-                      {models.map((m) => <option key={m} value={m} />)}
-                    </datalist>
+                    <ModelSelect className="flex-1" disabled={!canEdit} value={data.ai.model} options={models}
+                      onChange={(v) => patch('ai', 'model', v)} />
                     <Button variant="outline" size="sm" onClick={loadModels} disabled={loadingModels} className="shrink-0">
                       <ArrowsClockwise className={cn('h-4 w-4', loadingModels && 'animate-spin')} aria-hidden="true" />
                       {t('loadModels')}
@@ -270,12 +309,10 @@ export default function SettingsPage() {
                   </div>
                   {modelsMsg && <p className="mt-1 text-xs text-gray-400">{modelsMsg}</p>}
                 </Field>
-                <Field label={t('hermesModel')}>
-                  <input className={fieldCls} disabled={!canEdit} list="ai-models"
-                    value={data.ai.hermesModel ?? ''}
-                    placeholder={data.ai.model}
-                    onChange={(e) => patch('ai', 'hermesModel', e.target.value)} />
-                  <p className="mt-1 text-xs text-gray-400">{t('hermesModelHint')}</p>
+                <Field label={t('sentinelModel')}>
+                  <ModelSelect disabled={!canEdit} value={data.ai.sentinelModel ?? ''} options={models}
+                    placeholder={data.ai.model} onChange={(v) => patch('ai', 'sentinelModel', v)} />
+                  <p className="mt-1 text-xs text-gray-400">{t('sentinelModelHint')}</p>
                 </Field>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Field label={t('temperature')}>
@@ -335,23 +372,57 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {tab === 'hermes' && (
-              <div className="space-y-4 py-4 text-center">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-review-50 dark:bg-review-900/20 mx-auto">
-                  <ShieldWarning className="h-6 w-6 text-review-600" aria-hidden="true" />
+            {tab === 'sentinel' && (
+              <div className="space-y-4">
+                <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('sentinelIntro')}</p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label={t('autoSendMin')} hint={t('autoSendMinHint')}>
+                    <input type="number" min="50" max="100" className={fieldCls} disabled={!canEdit}
+                      value={data.sentinel.autoSendConfidenceMin}
+                      onChange={(e) => patch('sentinel', 'autoSendConfidenceMin', e.target.value)} />
+                  </Field>
+                  <Field label={t('draftMin')} hint={t('draftMinHint')}>
+                    <input type="number" min="0" max="99" className={fieldCls} disabled={!canEdit}
+                      value={data.sentinel.draftConfidenceMin}
+                      onChange={(e) => patch('sentinel', 'draftConfidenceMin', e.target.value)} />
+                  </Field>
                 </div>
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('tabHermes')}</p>
-                <p className="mx-auto max-w-md text-xs text-gray-500 dark:text-gray-400">{t('hermesComingSoon')}</p>
+                <Field label={t('riskKeywords')} hint={t('riskKeywordsHint')}>
+                  <input className={fieldCls} disabled={!canEdit} placeholder="DP, transfer manual"
+                    value={data.sentinel.riskKeywords}
+                    onChange={(e) => patch('sentinel', 'riskKeywords', e.target.value)} />
+                </Field>
+                <Field label={t('defaultAiMode')} hint={t('defaultAiModeHint')}>
+                  <select className={fieldCls} disabled={!canEdit}
+                    value={data.sentinel.defaultAiMode}
+                    onChange={(e) => patch('sentinel', 'defaultAiMode', e.target.value)}>
+                    <option value="ai_off">{t('modeOff')}</option>
+                    <option value="ai_draft">{t('modeDraft')}</option>
+                    <option value="ai_supervised">{t('modeSupervised')}</option>
+                    <option value="ai_on">{t('modeOn')}</option>
+                  </select>
+                </Field>
               </div>
             )}
 
             {tab === 'campaign' && (
-              <div className="space-y-4 py-4 text-center">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-hermes-50 dark:bg-hermes-900/20 mx-auto">
-                  <MegaphoneSimple className="h-6 w-6 text-hermes-600" aria-hidden="true" />
-                </div>
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('tabCampaign')}</p>
-                <p className="mx-auto max-w-md text-xs text-gray-500 dark:text-gray-400">{t('campaignComingSoon')}</p>
+              <div className="space-y-4">
+                <p className="text-[13px] text-gray-500 dark:text-gray-400">{t('campaignIntro')}</p>
+                <Field label={t('defaultRateLimit')} hint={t('defaultRateLimitHint')}>
+                  <input type="number" min="1" max="60" className={fieldCls} disabled={!canEdit}
+                    value={data.campaign.defaultRateLimitPerMinute}
+                    onChange={(e) => patch('campaign', 'defaultRateLimitPerMinute', e.target.value)} />
+                </Field>
+                <label className="flex items-start gap-2">
+                  <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-gray-300 text-hermes-600 focus:ring-hermes-400 disabled:opacity-50"
+                    disabled={!canEdit}
+                    checked={data.campaign.requireApproval}
+                    onChange={(e) => patch('campaign', 'requireApproval', e.target.checked)} />
+                  <span>
+                    <span className="block text-[13px] font-medium text-gray-700 dark:text-gray-200">{t('requireApproval')}</span>
+                    <span className="mt-0.5 block text-xs text-gray-400">{t('requireApprovalHint')}</span>
+                  </span>
+                </label>
               </div>
             )}
 
@@ -368,6 +439,69 @@ export default function SettingsPage() {
         )}
       </div>
     </AppLayout>
+  );
+}
+
+/** Searchable model picker — replaces the native <input list=datalist>, whose
+ * popup can render outside the viewport and isn't stylable. Stays freeform
+ * (typing a model id not in `options` is allowed). */
+function ModelSelect({
+  value,
+  onChange,
+  options,
+  disabled,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  disabled?: boolean;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, []);
+
+  const safeOptions = Array.isArray(options) ? options : [];
+  const filtered = value
+    ? safeOptions.filter((m) => m.toLowerCase().includes(value.toLowerCase()))
+    : safeOptions;
+
+  return (
+    <div ref={rootRef} className={cn('relative', className)}>
+      <input
+        className={fieldCls}
+        disabled={disabled}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+      />
+      {open && !disabled && filtered.length > 0 && (
+        <ul className="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+          {filtered.map((m) => (
+            <li key={m}>
+              <button
+                type="button"
+                className="block w-full truncate px-3 py-1.5 text-left text-[13px] text-gray-700 hover:bg-hermes-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                onClick={() => { onChange(m); setOpen(false); }}
+              >
+                {m}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

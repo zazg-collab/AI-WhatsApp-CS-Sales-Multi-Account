@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/Badge';
 import { StatusLabel, type StatusKind } from '@/components/ui/StatusLabel';
 import { Avatar } from '@/components/ui/Avatar';
 import { WhatsAppMark } from '@/components/WhatsAppMark';
+import { PushPin, BellSlash } from '@/components/ui/core-essential-icons';
 import { cn } from '@/lib/cn';
 import { contactDisplayName } from '@/lib/contact';
 import { useT, type Dict } from '@/lib/i18n';
@@ -12,6 +13,7 @@ import type { ConvSummary } from '../inbox.types';
 const dict: Dict = {
   noMessagesYet: { id: 'Belum ada pesan', en: 'No messages yet' },
   hiddenContact: { id: 'Kontak tersembunyi', en: 'Hidden contact' },
+  you: { id: 'Kamu', en: 'You' },
 };
 
 interface ConversationListItemProps {
@@ -26,9 +28,11 @@ export function ConversationListItem({
   onClick,
 }: ConversationListItemProps) {
   const t = useT(dict);
+  const isUnread = !!c.unreadCount && c.unreadCount > 0;
+  const displayName = c.customer.waName ?? c.customer.name;
   const name = c.isGroup
-    ? c.groupSubject || c.customer.name || c.customer.phoneNumber
-    : contactDisplayName(c.customer.name, c.customer.phoneNumber, t('hiddenContact'));
+    ? c.groupSubject || displayName || c.customer.phoneNumber
+    : contactDisplayName(displayName, c.customer.phoneNumber, t('hiddenContact'));
 
   const status: StatusKind = (() => {
     if (c.aiMode === 'ai_paused') return 'sending-blocked';
@@ -42,14 +46,17 @@ export function ConversationListItem({
     if (!isoDate) return '';
     const date = new Date(isoDate);
     const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const mins = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    if (mins < 1) return 'now';
-    if (mins < 60) return `${mins}m`;
-    if (hours < 24) return `${hours}h`;
-    return `${days}d`;
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+    const weekStart = new Date(todayStart.getTime() - 6 * 86400000);
+    if (date >= todayStart) {
+      return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+    if (date >= yesterdayStart) return 'Kemarin';
+    if (date >= weekStart) {
+      return date.toLocaleDateString('id-ID', { weekday: 'short' });
+    }
+    return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
   };
 
   return (
@@ -71,7 +78,7 @@ export function ConversationListItem({
       >
         <span className="relative shrink-0">
           <Avatar
-            name={c.customer.name}
+            name={displayName}
             phone={c.customer.phoneNumber}
             avatarUrl={c.customer.avatarUrl}
             isGroup={c.isGroup}
@@ -90,21 +97,37 @@ export function ConversationListItem({
             <span className="truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">
               {name}
             </span>
-            <span className="shrink-0 text-[11px] tabular-nums text-gray-400">
+            <span className={cn(
+              'shrink-0 text-[11px] tabular-nums',
+              isUnread ? 'font-semibold text-channel-600 dark:text-channel-500' : 'text-gray-400',
+            )}>
               {relTime(c.lastMessageAt)}
             </span>
           </div>
-          <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
-            {c.lastMessage ?? t('noMessagesYet')}
+          <p className={cn(
+            'mt-0.5 truncate text-xs',
+            isUnread ? 'font-medium text-gray-800 dark:text-gray-100' : 'text-gray-500 dark:text-gray-400',
+          )}>
+            {c.lastMessage
+              ? (c.isGroup && c.lastSenderName && c.lastSenderType === 'customer'
+                  ? <><span className="font-medium text-gray-600 dark:text-gray-300">{c.lastSenderName}: </span>{c.lastMessage}</>
+                  : c.lastSenderType && c.lastSenderType !== 'customer'
+                  ? <><span className="font-medium text-gray-600 dark:text-gray-300">{t('you')}: </span>{c.lastMessage}</>
+                  : c.lastMessage)
+              : t('noMessagesYet')}
           </p>
           <div className="mt-1.5 flex items-center justify-between gap-2">
             <StatusLabel kind={status} />
-            {c.isGroup && <Badge tone="neutral">Group</Badge>}
-            {!!c.unreadCount && c.unreadCount > 0 && (
-              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-hermes-600 px-1 text-[10px] font-semibold text-white">
-                {c.unreadCount}
-              </span>
-            )}
+            <span className="flex items-center gap-1">
+              {c.isPinned && <PushPin className="h-3 w-3 text-gray-400" aria-label="Pinned" />}
+              {c.isMuted && <BellSlash className="h-3 w-3 text-gray-400" aria-label="Muted" />}
+              {c.isGroup && <Badge tone="neutral">Group</Badge>}
+              {!!c.unreadCount && c.unreadCount > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-hermes-600 px-1 text-[10px] font-semibold text-white">
+                  {c.unreadCount}
+                </span>
+              )}
+            </span>
           </div>
         </div>
       </button>

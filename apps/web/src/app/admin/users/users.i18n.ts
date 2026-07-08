@@ -9,6 +9,7 @@ export const dict: Dict = {
   saving: { id: 'Menyimpan…', en: 'Saving…' },
   roleLabel: { id: 'Role', en: 'Role' },
   emailLabel: { id: 'Email', en: 'Email' },
+  nameOptionalPlaceholder: { id: 'John Doe', en: 'John Doe' },
   errEmailPasswordRequired: { id: 'Email dan password wajib diisi', en: 'Email and password are required' },
   errCreateUser: { id: 'Gagal membuat pengguna', en: 'Failed to create user' },
   createUserTitle: { id: 'Tambah pengguna', en: 'Add user' },

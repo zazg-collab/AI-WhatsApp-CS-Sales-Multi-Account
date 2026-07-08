@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Logger,
   Param,
   Patch,
   Post,
@@ -16,6 +17,8 @@ import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import { WaService } from './wa.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ContactSyncService } from './contact-sync.service';
+import { SettingsService } from '../settings/settings.service';
+import { AiMode } from '@hermes/database';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { logAudit } from '../../common/audit.util';
@@ -26,10 +29,12 @@ import { logAudit } from '../../common/audit.util';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('wa/accounts')
 export class WaController {
+  private readonly logger = new Logger(WaController.name);
   constructor(
     private readonly wa: WaService,
     private readonly prisma: PrismaService,
     private readonly contacts: ContactSyncService,
+    private readonly settings: SettingsService,
   ) {}
 
   @ApiOperation({ summary: 'List all WhatsApp accounts' })
@@ -48,14 +53,19 @@ export class WaController {
   @Post()
   async create(@Body() dto: CreateAccountDto, @CurrentUser() user: AuthUser) {
     const { assignedBotId: _assignedBotId, assignedAdminId: _assignedAdminId, ...rest } = dto;
+    const sentinelConfig = await this.settings.sentinel();
     const account = await this.prisma.whatsappAccount.create({
       data: {
         ...rest,
         accountName: rest.accountName ?? 'New Account',
-        phoneNumber: rest.phoneNumber ?? '000000000000',
+        phoneNumber: rest.phoneNumber ?? `pending-${crypto.randomUUID().slice(0, 8)}`,
+        aiMode: sentinelConfig.defaultAiMode as AiMode,
       },
     });
-    await this.wa.startSession(account.id);
+    // ponytail: fire-and-forget — WAHA down should not orphan the DB record
+    this.wa.startSession(account.id).catch((err) =>
+      this.logger.warn(`startSession failed for ${account.id}: ${err.message}`),
+    );
     await logAudit(this.prisma, {
       userId: user.id,
       action: 'account_create',
@@ -69,12 +79,9 @@ export class WaController {
   @ApiOperation({ summary: 'Get QR code for a WhatsApp account' })
   @Roles('viewer')
   @Get(':id/qr')
-  async qr(@Param('id') id: string) {
-    const [{ qr, status }, connected] = await Promise.all([
-      this.wa.getQr(id),
-      this.wa.isConnected(id),
-    ]);
-    return { qr, connected, status };
+  qr(@Param('id') id: string) {
+    const { qr, status } = this.wa.getQr(id);
+    return { qr, connected: this.wa.isConnected(id), status };
   }
 
   @ApiOperation({ summary: 'Get auto-populated metadata (phone, name) after successful scan' })
@@ -94,11 +101,13 @@ export class WaController {
     const account = await this.prisma.whatsappAccount.findUnique({
       where: { id },
     });
-    const { status } = await this.wa.getHealth(id);
+    const { liveSocket, reconnectAttempts, historySync } = this.wa.getHealth(id);
     return {
       accountId: id,
       dbStatus: account?.sessionStatus ?? null,
-      wahaStatus: status,
+      liveSocket,
+      reconnectAttempts,
+      historySync,
     };
   }
 

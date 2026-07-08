@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { DownloadSimple, Pulse } from '@phosphor-icons/react';
+import { DownloadSimple, Pulse } from '@/components/ui/core-essential-icons';
 import { downloadFile } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -21,8 +21,12 @@ const MODE_LABEL_KEY: Record<string, string> = {
 interface Summary {
   totalConversations: number; activeConversations: number; aiOnConversations: number;
   pendingFollowUps: number; messagesLast24h: number; avgResponseTime: number;
+  avgResolutionSeconds: number | null; totalReopened7d: number;
   topAccounts: { id: string; name: string; messageCount: number }[];
 }
+interface SentimentTrendItem { day: string; avg_score: number; positive: number; neutral: number; negative: number; }
+interface FrtByAccountItem { accountId: string; accountName: string; avg_seconds: number; sample: number; }
+interface ReopenRateItem { accountId: string; accountName: string; total: number; reopened: number; rate: number; }
 interface LeadFunnelItem { stage: string; count: number; }
 interface MessageVolumeItem { date: string; count: number; }
 interface AiModeItem { mode: string; count: number; percentage: number; }
@@ -44,6 +48,9 @@ export default function AnalyticsPage() {
   const { data: leadFunnel } = useApiQuery<LeadFunnelItem[]>('/dashboard/lead-funnel');
   const { data: messageVolume } = useApiQuery<MessageVolumeItem[]>(`/dashboard/message-volume?days=${daysRange}`, [daysRange]);
   const { data: aiModeBreakdown } = useApiQuery<AiModeItem[]>('/dashboard/ai-mode-breakdown');
+  const { data: sentimentTrend } = useApiQuery<{ trend: SentimentTrendItem[] }>(`/dashboard/sentiment-trend?days=${daysRange}`, [daysRange]);
+  const { data: frtByAccount } = useApiQuery<{ accounts: FrtByAccountItem[] }>(`/dashboard/frt-by-account?days=${daysRange}`, [daysRange]);
+  const { data: reopenRate } = useApiQuery<{ accounts: ReopenRateItem[] }>(`/dashboard/reopen-rate?days=${daysRange}`, [daysRange]);
 
   const error = !summary && !(leadFunnel?.length) && !(messageVolume?.length) && !(aiModeBreakdown?.length) ? t('errLoad') : null;
 
@@ -116,13 +123,24 @@ export default function AnalyticsPage() {
         ) : (
           <>
             {summary && (
-              <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
                 <SummaryCard label={t('totalConversations')} value={summary.totalConversations} />
                 <SummaryCard label={t('waitingAdmin')} value={summary.activeConversations} tone="text-review-600" />
                 <SummaryCard label={t('aiActive')} value={summary.aiOnConversations} tone="text-channel-700" />
                 <SummaryCard label={t('pendingFollowUps')} value={summary.pendingFollowUps} tone="text-review-600" />
                 <SummaryCard label={t('messages24h')} value={summary.messagesLast24h} tone="text-hermes-600" />
                 <SummaryCard label={t('avgResponseTime')} value={summary.avgResponseTime} formatted={formatResponseTime(summary.avgResponseTime)} tone="text-hermes-600" />
+                <SummaryCard
+                  label="Avg. Resolusi"
+                  value={summary.avgResolutionSeconds ?? 0}
+                  formatted={summary.avgResolutionSeconds ? formatResponseTime(summary.avgResolutionSeconds) : '–'}
+                  tone="text-channel-700"
+                />
+                <SummaryCard
+                  label="Reopen 7h"
+                  value={summary.totalReopened7d}
+                  tone={summary.totalReopened7d > 0 ? 'text-review-600' : 'text-gray-500'}
+                />
               </div>
             )}
 
@@ -226,6 +244,86 @@ export default function AnalyticsPage() {
                       <span className="tabular-nums text-gray-500 dark:text-gray-400">{t('messagesUnit', { n: acc.messageCount })}</span>
                     </div>
                   ))}
+                </div>
+              </Panel>
+            )}
+
+            {/* First Response Time per account */}
+            {frtByAccount?.accounts && frtByAccount.accounts.length > 0 && (
+              <Panel title="First Response Time per Akun">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-gray-500 dark:text-gray-400">
+                      <th className="pb-2 font-medium">Akun</th>
+                      <th className="pb-2 font-medium text-right">Avg. FRT</th>
+                      <th className="pb-2 font-medium text-right">Sampel</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {frtByAccount.accounts.map(a => (
+                      <tr key={a.accountId}>
+                        <td className="py-2 text-gray-900 dark:text-gray-100">{a.accountName}</td>
+                        <td className="py-2 text-right tabular-nums">{formatResponseTime(a.avg_seconds)}</td>
+                        <td className="py-2 text-right tabular-nums text-gray-500">{a.sample}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Panel>
+            )}
+
+            {/* Reopen rate per account */}
+            {reopenRate?.accounts && reopenRate.accounts.length > 0 && (
+              <Panel title="Reopen Rate per Akun">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-gray-500 dark:text-gray-400">
+                      <th className="pb-2 font-medium">Akun</th>
+                      <th className="pb-2 font-medium text-right">Total Selesai</th>
+                      <th className="pb-2 font-medium text-right">Reopen</th>
+                      <th className="pb-2 font-medium text-right">Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {reopenRate.accounts.map(a => (
+                      <tr key={a.accountId}>
+                        <td className="py-2 text-gray-900 dark:text-gray-100">{a.accountName}</td>
+                        <td className="py-2 text-right tabular-nums text-gray-500">{a.total}</td>
+                        <td className="py-2 text-right tabular-nums">{a.reopened}</td>
+                        <td className={`py-2 text-right tabular-nums font-medium ${a.rate > 20 ? 'text-danger-600' : a.rate > 10 ? 'text-review-600' : 'text-channel-700'}`}>{a.rate}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Panel>
+            )}
+
+            {/* Sentiment trend */}
+            {sentimentTrend?.trend && sentimentTrend.trend.length > 0 && (
+              <Panel title="Tren Sentimen Customer">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-gray-500 dark:text-gray-400">
+                        <th className="pb-2 font-medium">Tanggal</th>
+                        <th className="pb-2 font-medium text-right">Avg. Skor</th>
+                        <th className="pb-2 font-medium text-right text-channel-700">Positif</th>
+                        <th className="pb-2 font-medium text-right text-gray-500">Netral</th>
+                        <th className="pb-2 font-medium text-right text-danger-600">Negatif</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                      {sentimentTrend.trend.map(row => (
+                        <tr key={row.day}>
+                          <td className="py-2 text-gray-900 dark:text-gray-100">{row.day}</td>
+                          <td className={`py-2 text-right tabular-nums font-medium ${row.avg_score >= 60 ? 'text-channel-700' : row.avg_score >= 40 ? 'text-gray-600' : 'text-danger-600'}`}>{row.avg_score}</td>
+                          <td className="py-2 text-right tabular-nums text-channel-700">{row.positive}</td>
+                          <td className="py-2 text-right tabular-nums text-gray-500">{row.neutral}</td>
+                          <td className="py-2 text-right tabular-nums text-danger-600">{row.negative}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </Panel>
             )}

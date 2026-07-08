@@ -121,15 +121,17 @@ export class WaService implements OnModuleInit {
       logger,
       printQRInTerminal: false,
       syncFullHistory: this.syncFullHistory,
-      // macOS platform is required by Baileys/WhatsApp's server to grant a full
-      // history sync — 'Chrome'/Ubuntu identity was observed getting only a
-      // capped `RECENT` snapshot instead of `FULL`/`INITIAL_BOOTSTRAP`.
-      // WA_BROWSER_NAME/VERSION let ops rotate away from Baileys' literal
-      // default tuple ('Mac OS','Desktop','14.4.1') if WhatsApp starts
-      // fingerprinting/blocking that exact signature (see WhiskeySockets/Baileys
-      // #2370, #2658 — server-side registration rejection tied to browser id).
+      // macOS platform is normally required by Baileys/WhatsApp's server to
+      // grant a full history sync — 'Chrome'/Ubuntu identity was observed
+      // getting only a capped `RECENT` snapshot instead of
+      // `FULL`/`INITIAL_BOOTSTRAP`. WA_BROWSER_PLATFORM/NAME/VERSION let ops
+      // rotate away from Baileys' literal default tuple
+      // ('Mac OS','Desktop','14.4.1') if WhatsApp starts fingerprinting/
+      // blocking that exact signature, or rejecting the post-scan pairing
+      // handshake for a given platform combo (see WhiskeySockets/Baileys
+      // #2370, #2381, #2658 — server-side registration/pairing rejection).
       browser: [
-        'Mac OS',
+        process.env.WA_BROWSER_PLATFORM || 'Mac OS',
         process.env.WA_BROWSER_NAME || 'Safari',
         process.env.WA_BROWSER_VERSION || '17.4.1',
       ],

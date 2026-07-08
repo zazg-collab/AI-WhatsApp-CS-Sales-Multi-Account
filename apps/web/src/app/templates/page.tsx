@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, PencilSimple, Trash, ChatText, MagnifyingGlass, Warning } from '@phosphor-icons/react';
+import { Plus, PencilSimple, Trash, ChatText, MagnifyingGlass, Warning } from '@/components/ui/core-essential-icons';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';

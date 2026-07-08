@@ -1,6 +1,6 @@
 import { LearningMinerService } from './learning-miner.service';
 
-describe('LearningMinerService.mineConversation (Hermes auto-learn)', () => {
+describe('LearningMinerService.mineConversation (Sentinel auto-learn)', () => {
   let prisma: any;
   let provider: any;
   let service: LearningMinerService;

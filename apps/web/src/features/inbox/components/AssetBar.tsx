@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Popover, useSinglePopover } from '@/components/ui/Popover';
+import { Lightbulb, X, Folder } from '@/components/ui/core-essential-icons';
+import { useT } from '@/lib/i18n';
+import { dict } from '@/app/inbox/inbox.i18n';
 
 export interface Asset {
   id: string;
@@ -28,6 +31,7 @@ interface AssetBarProps {
  * library picker to send any active asset. Sits above the composer.
  */
 export function AssetBar({ assets, suggestions, onSendAsset, onDismiss, disabled = false }: AssetBarProps) {
+  const t = useT(dict);
   const { isOpen, toggle, close } = useSinglePopover<'library'>();
   const [sendingId, setSendingId] = useState<string | null>(null);
 
@@ -48,7 +52,7 @@ export function AssetBar({ assets, suggestions, onSendAsset, onDismiss, disabled
       {/* Suggestions */}
       <div className="scrollbar-thin flex flex-1 items-center gap-2 overflow-x-auto">
         {suggestions.length === 0 ? (
-          <span className="text-xs text-gray-400">No asset suggestions</span>
+          <span className="text-xs text-gray-400">{t('noAssetSuggestions')}</span>
         ) : (
           suggestions.map((s) => (
             <div
@@ -56,21 +60,23 @@ export function AssetBar({ assets, suggestions, onSendAsset, onDismiss, disabled
               className="flex shrink-0 items-center gap-1.5 rounded-full border border-hermes-200 bg-white py-1 pl-2.5 pr-1 text-xs dark:border-hermes-900/30 dark:bg-gray-800"
               title={s.reason}
             >
-              <span className="font-medium text-gray-800 dark:text-gray-100">💡 {s.title}</span>
+              <span className="flex items-center gap-1 font-medium text-gray-800 dark:text-gray-100">
+                <Lightbulb className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{s.title}
+              </span>
               <button
                 onClick={() => send(s.id)}
                 disabled={disabled || sendingId === s.id}
                 className="rounded-full bg-hermes-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-hermes-700 disabled:opacity-50"
               >
-                {sendingId === s.id ? '…' : 'Send'}
+                {sendingId === s.id ? '…' : t('send')}
               </button>
               <button
                 onClick={() => onDismiss?.(s.id)}
                 disabled={disabled}
-                aria-label="Dismiss suggestion"
+                aria-label={t('ariaDismissSuggestion')}
                 className="px-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
               >
-                ✕
+                <X className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
             </div>
           ))
@@ -80,8 +86,8 @@ export function AssetBar({ assets, suggestions, onSendAsset, onDismiss, disabled
       {/* Library picker */}
       {assets.length > 0 && (
         <div className="relative shrink-0">
-          <Button variant="ghost" size="sm" disabled={disabled} onClick={() => toggle('library')}>
-            📁 Library
+          <Button variant="ghost" size="sm" disabled={disabled} onClick={() => toggle('library')} className="flex items-center gap-1">
+            <Folder className="h-3.5 w-3.5" aria-hidden="true" />Library
           </Button>
           <Popover open={isOpen('library')} onClose={() => close()} align="right" side="top">
             <div className="max-h-72 w-64 space-y-0.5 overflow-y-auto p-1.5">

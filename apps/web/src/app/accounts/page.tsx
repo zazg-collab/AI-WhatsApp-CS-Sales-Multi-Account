@@ -10,8 +10,9 @@ import {
   QrCode,
   ArrowCounterClockwise,
   Trash,
+  PencilSimple,
   Pulse,
-} from '@phosphor-icons/react';
+} from '@/components/ui/core-essential-icons';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -63,6 +64,40 @@ function QrFreshness({ receivedAt, t, onRefresh }: { receivedAt: number; t: Retu
         >
           {t('qrRefresh')}
         </button>
+      )}
+    </div>
+  );
+}
+
+// Scan-step placeholder while waiting for the QR/connection. The QR arrives via
+// socket; if it doesn't (WAHA down, dropped socket) the user was previously
+// stuck on an infinite spinner with only "Cancel". After a grace period we
+// surface a recovery action so the flow is never a dead end.
+function ScanWaiting({ t, onRetry }: { t: ReturnType<typeof useT>; onRetry?: () => void }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const stalled = elapsed >= 15;
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-gray-300 px-8 py-10 dark:border-gray-700">
+      <QrCode className="h-10 w-10 text-gray-300" aria-hidden="true" />
+      {stalled ? (
+        <>
+          <p className="text-center text-[13px] text-gray-600 dark:text-gray-300">{t('qrStalled')}</p>
+          {onRetry && (
+            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+              <ArrowCounterClockwise className="h-3.5 w-3.5" aria-hidden="true" />
+              {t('qrRefresh')}
+            </Button>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="text-center text-[13px] text-gray-500">{t('waitingQr')}</p>
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-hermes-400 border-t-transparent" aria-hidden="true" />
+        </>
       )}
     </div>
   );
@@ -156,21 +191,24 @@ export default function AccountsPage() {
   const { lang } = useLang();
   const {
     visibleAccounts, accounts, qr, qrReceivedAt, pairingCode, pairingMode, copiedAccountId,
-    loading, error, health, restarting, deleting,
+    loading, error, health, historySync, restarting, deleting,
     confirmDelete, setConfirmDelete,
     confirmRestart, setConfirmRestart,
     actionError, setActionError,
-    statusFilter, setStatusFilter, requestingCode,
+    statusFilter, setStatusFilter, searchQuery, setSearchQuery, requestingCode,
     addModalOpen, addStep,
     addName, setAddName, addPhone, setAddPhone,
     addCodePhone, setAddCodePhone,
     addError, addCreating, addedAccountId,
     addConnectMethod,
     addAutoDetected, addSaving,
-    canScan, canEditHours, canDelete,
+    canScan, canEditHours, canDelete, canEditProfile,
     load, openAddModal, closeAddModal,
     startQrFlow, chooseCodeMethod, submitCodePhone, confirmAndSave,
     restartAccount, requestPairingCode, deleteAccount, copyPairingCode,
+    openProfileModal, closeProfileModal, saveProfile,
+    profileModal, profileForm, setProfileForm, profileLoading, profileSaving,
+    profileSaved, profileAutoDetected, profilePicture, profileError,
     setPairingMode,
     t,
   } = useAccounts();
@@ -196,11 +234,19 @@ export default function AccountsPage() {
       <div className="scrollbar-thin mx-auto w-full max-w-3xl flex-1 overflow-y-auto p-5">
 
         {accounts.length > 1 && (
-          <div className="mb-3 flex items-center gap-2">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className={inputClass + ' flex-1 min-w-[160px]'}
+              aria-label={t('searchPlaceholder')}
+            />
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className={inputClass + ' w-48'}
+              className={inputClass + ' w-44'}
               aria-label={t('filterAll')}
             >
               <option value="">{t('filterAll')}</option>
@@ -241,6 +287,13 @@ export default function AccountsPage() {
             <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('noAccounts')}</p>
             <p className="mt-1 max-w-xs text-xs text-gray-500 dark:text-gray-400">{t('noAccountsHint')}</p>
           </Card>
+        ) : visibleAccounts.length === 0 ? (
+          <Card className="flex flex-col items-center justify-center py-12 text-center">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{t('noMatch')}</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => { setSearchQuery(''); setStatusFilter(''); }}>
+              {t('clearFilters')}
+            </Button>
+          </Card>
         ) : (
           <ul className="space-y-3">
             {visibleAccounts.map((a) => (
@@ -266,6 +319,17 @@ export default function AccountsPage() {
                         )}
                         <SessionStatusBadge status={a.sessionStatus} lang={lang} label={getSessionLabel(a.sessionStatus, lang)} />
                       </div>
+                      {historySync[a.id] && historySync[a.id].status === 'syncing' && (
+                        <p className="flex items-center gap-1 text-[11px] text-hermes-500">
+                          <Pulse className="h-3 w-3 animate-pulse" aria-hidden="true" />
+                          {t('historySyncing', { count: String(historySync[a.id].messages) })}
+                        </p>
+                      )}
+                      {historySync[a.id] && historySync[a.id].status === 'completed' && (
+                        <p className="text-[11px] text-gray-400">
+                          {t('historySynced', { count: String(historySync[a.id].messages) })}
+                        </p>
+                      )}
                       {getStatusHint(a.sessionStatus, t) && (
                         <p className="text-[11px] text-gray-500 dark:text-gray-400 text-right max-w-xs">
                           {getStatusHint(a.sessionStatus, t)}
@@ -279,6 +343,12 @@ export default function AccountsPage() {
                       <ArrowCounterClockwise className="h-3.5 w-3.5" aria-hidden="true" />
                       {restarting === a.id ? t('restarting') : t('restart')}
                     </Button>
+                    {canEditProfile && a.sessionStatus === 'connected' && (
+                      <Button type="button" variant="outline" size="sm" onClick={() => openProfileModal({ id: a.id, accountName: a.accountName })}>
+                        <PencilSimple className="h-3.5 w-3.5" aria-hidden="true" />
+                        {t('editProfile')}
+                      </Button>
+                    )}
                     {canDelete && (
                       <Button type="button" variant="outline" size="sm" className="border-danger-200 text-danger-600 hover:bg-danger-50 dark:border-danger-800 dark:text-danger-400" onClick={() => setConfirmDelete({ id: a.id, accountName: a.accountName, conversationCount: a._count?.conversations ?? 0 })} disabled={deleting === a.id}>
                         <Trash className="h-3.5 w-3.5" aria-hidden="true" />
@@ -401,6 +471,50 @@ export default function AccountsPage() {
         }
       >{null}</Modal>
 
+      {/* Edit WhatsApp profile — action-first: opens, fetches the live profile, pre-fills */}
+      <Modal
+        open={!!profileModal}
+        onClose={closeProfileModal}
+        title={t('profileTitle')}
+        description={t('profileSubtitle')}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={closeProfileModal}>{t('cancel')}</Button>
+            <Button size="sm" disabled={profileSaving || profileLoading || !profileForm.name.trim()} onClick={saveProfile}>
+              {profileSaved ? t('profileSaved') : profileSaving ? t('saving') : t('save')}
+            </Button>
+          </>
+        }
+      >
+        {profileLoading ? (
+          <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">{t('profileLoading')}</p>
+        ) : (
+          <div className="space-y-3">
+            {profilePicture && (
+              <img src={profilePicture} alt="" className="h-16 w-16 rounded-full object-cover" />
+            )}
+            {profileAutoDetected && (
+              <p className="text-[11px] text-hermes-600 dark:text-hermes-400">{t('profileAutoDetected')}</p>
+            )}
+            <Field
+              label={t('profileName')}
+              value={profileForm.name}
+              onChange={(e) => setProfileForm((p) => ({ ...p, name: e.target.value }))}
+              maxLength={100}
+            />
+            <Field
+              label={t('profileStatus')}
+              value={profileForm.status}
+              onChange={(e) => setProfileForm((p) => ({ ...p, status: e.target.value }))}
+              placeholder={t('profileStatusPlaceholder')}
+              maxLength={280}
+            />
+            {profileError && <p className="text-xs text-danger-600 dark:text-danger-400">{profileError}</p>}
+          </div>
+        )}
+      </Modal>
+
       {/* Add account modal — scan-first: name + number auto-fill from the device */}
       <Modal
         open={addModalOpen}
@@ -431,7 +545,7 @@ export default function AccountsPage() {
           ) : (
             <>
               <Button variant="outline" size="sm" onClick={closeAddModal}>{t('cancel')}</Button>
-              <Button size="sm" disabled={addSaving || !addName.trim() || !addPhone.trim()} onClick={confirmAndSave}>
+              <Button size="sm" disabled={addSaving || !addName.trim() || !/^\d{8,15}$/.test(addPhone.trim())} onClick={confirmAndSave}>
                 {addSaving ? t('savingAccount') : t('saveAccount')}
               </Button>
             </>
@@ -486,16 +600,15 @@ export default function AccountsPage() {
                 {qrReceivedAt[addedAccountId] && <QrFreshness receivedAt={qrReceivedAt[addedAccountId]} t={t} onRefresh={addedAccountId ? () => restartAccount(addedAccountId) : undefined} />}
               </>
             ) : (
-              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-gray-300 px-8 py-10 dark:border-gray-700">
-                <QrCode className="h-10 w-10 text-gray-300" aria-hidden="true" />
-                <p className="text-center text-[13px] text-gray-500">{t('waitingQr')}</p>
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-hermes-400 border-t-transparent" aria-hidden="true" />
+              <ScanWaiting t={t} onRetry={addedAccountId ? () => restartAccount(addedAccountId) : undefined} />
+            )}
+            {/* Single liveness indicator — the QR box no longer double-spins. */}
+            {(addConnectMethod !== 'qr' || (addedAccountId && qr[addedAccountId])) && (
+              <div className="mt-1 flex items-center gap-2 text-[12px] text-hermes-600 dark:text-hermes-400">
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-hermes-400 border-t-transparent" aria-hidden="true" />
+                <span>{t('detectingDevice')}</span>
               </div>
             )}
-            <div className="mt-1 flex items-center gap-2 text-[12px] text-hermes-600 dark:text-hermes-400">
-              <div className="h-3 w-3 animate-spin rounded-full border-2 border-hermes-400 border-t-transparent" aria-hidden="true" />
-              <span>{t('detectingDevice')}</span>
-            </div>
             <p className="text-center text-[11px] text-gray-400">{t('detectingDeviceHint')}</p>
           </div>
         ) : (
@@ -519,7 +632,9 @@ export default function AccountsPage() {
                 {addAutoDetected && <Badge tone="hermes">{t('autoDetected')}</Badge>}
               </div>
               <input type="tel" value={addPhone} onChange={(e) => setAddPhone(e.target.value.replace(/[^\d]/g, ''))} placeholder={t('phonePlaceholder')} className={`w-full ${inputClass}`} />
-              <p className="mt-1 text-[11px] text-gray-400">{t('phoneHint')}</p>
+              {addPhone.trim() && !/^\d{8,15}$/.test(addPhone.trim())
+                ? <p className="mt-1 text-[11px] text-danger-500">{t('phoneInvalid')}</p>
+                : <p className="mt-1 text-[11px] text-gray-400">{t('phoneHint')}</p>}
             </div>
           </div>
         )}

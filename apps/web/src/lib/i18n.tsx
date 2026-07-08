@@ -43,7 +43,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   // Hydrate from storage after mount to avoid SSR mismatch.
   React.useEffect(() => {
-    setLangState(readStoredLang());
+    const stored = readStoredLang();
+    if (stored !== lang) setLangState(stored);
   }, []);
 
   React.useEffect(() => {

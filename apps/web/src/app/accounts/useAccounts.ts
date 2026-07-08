@@ -42,13 +42,25 @@ export function useAccounts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<Record<string, { liveSocket: boolean; reconnectAttempts: number }>>({});
+  const [historySync, setHistorySync] = useState<Record<string, { status: 'idle' | 'syncing' | 'completed'; messages: number; contacts: number }>>({});
   const [restarting, setRestarting] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; accountName: string; conversationCount: number } | null>(null);
   const [confirmRestart, setConfirmRestart] = useState<{ id: string; accountName: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [requestingCode, setRequestingCode] = useState<Record<string, boolean>>({});
+
+  // Edit-profile modal (action-first: fetch current WhatsApp profile, pre-fill).
+  const [profileModal, setProfileModal] = useState<{ id: string; accountName: string } | null>(null);
+  const [profileForm, setProfileForm] = useState<{ name: string; status: string }>({ name: '', status: '' });
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [profileAutoDetected, setProfileAutoDetected] = useState(false);
+  const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   // Add-account modal (scan-first flow)
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -70,6 +82,7 @@ export function useAccounts() {
   const canScan = hasRole('admin');
   const canEditHours = hasRole('supervisor');
   const canDelete = hasRole('supervisor');
+  const canEditProfile = hasRole('admin');
 
   // Mirror addedAccountId into a ref so the socket handler reads the current
   // value without re-subscribing on every change.
@@ -108,14 +121,24 @@ export function useAccounts() {
       const items = await api<Account[]>('/wa/accounts');
       setAccounts(items);
       const healthResults = await Promise.allSettled(
-        items.map((a) => api<{ liveSocket: boolean; reconnectAttempts: number }>(`/wa/accounts/${a.id}/health`)),
+        items.map((a) => api<{
+          liveSocket: boolean;
+          reconnectAttempts: number;
+          dbStatus: string | null;
+          historySync: { status: 'idle' | 'syncing' | 'completed'; messages: number; contacts: number } | null;
+        }>(`/wa/accounts/${a.id}/health`)),
       );
       const healthMap: Record<string, { liveSocket: boolean; reconnectAttempts: number }> = {};
+      const syncMap: Record<string, { status: 'idle' | 'syncing' | 'completed'; messages: number; contacts: number }> = {};
       items.forEach((a, i) => {
         const r = healthResults[i];
-        if (r.status === 'fulfilled') healthMap[a.id] = r.value;
+        if (r.status === 'fulfilled') {
+          healthMap[a.id] = { liveSocket: r.value.liveSocket, reconnectAttempts: r.value.reconnectAttempts };
+          if (r.value.historySync) syncMap[a.id] = r.value.historySync;
+        }
       });
       setHealth(healthMap);
+      setHistorySync((prev) => ({ ...prev, ...syncMap }));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('loadFailed'));
     } finally {
@@ -141,13 +164,18 @@ export function useAccounts() {
         fetchMetadataAndConfirm(sid);
       }
     };
+    const onHistorySync = (payload: { accountId: string; status: 'idle' | 'syncing' | 'completed'; messages: number; contacts: number }) => {
+      setHistorySync((prev) => ({ ...prev, [payload.accountId]: payload }));
+    };
     socket.on('wa:qr', onQr);
     socket.on('wa:pairing-code', onPairingCode);
     socket.on('wa:status', onStatus);
+    socket.on('wa:history-sync', onHistorySync);
     return () => {
       socket.off('wa:qr', onQr);
       socket.off('wa:pairing-code', onPairingCode);
       socket.off('wa:status', onStatus);
+      socket.off('wa:history-sync', onHistorySync);
     };
   }, [load, fetchMetadataAndConfirm]);
 
@@ -274,6 +302,49 @@ export function useAccounts() {
     }
   };
 
+  // Action-first: open the modal, then fetch the live WhatsApp profile and
+  // pre-fill name/status (editable). The user edits only what's wrong.
+  const openProfileModal = async (account: { id: string; accountName: string }) => {
+    setProfileModal(account);
+    setProfileForm({ name: '', status: '' });
+    setProfilePicture(null);
+    setProfileAutoDetected(false);
+    setProfileSaved(false);
+    setProfileError(null);
+    setProfileLoading(true);
+    try {
+      const p = await api<{ name?: string; status?: string; picture?: string } | null>(`/wa/accounts/${account.id}/profile`);
+      setProfileForm({ name: p?.name ?? account.accountName, status: p?.status ?? '' });
+      setProfilePicture(p?.picture ?? null);
+      setProfileAutoDetected(Boolean(p?.name || p?.status));
+    } catch {
+      // Connected but profile unreadable — let the user fill it manually.
+      setProfileForm({ name: account.accountName, status: '' });
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const closeProfileModal = () => setProfileModal(null);
+
+  const saveProfile = async () => {
+    if (!profileModal) return;
+    setProfileSaving(true);
+    setProfileError(null);
+    try {
+      await api(`/wa/accounts/${profileModal.id}/profile`, {
+        method: 'PUT',
+        body: JSON.stringify({ name: profileForm.name.trim(), status: profileForm.status.trim() }),
+      });
+      setProfileSaved(true);
+      setTimeout(() => setProfileModal(null), 900);
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : t('profileSaveFailed'));
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   const deleteAccount = async (id: string) => {
     setDeleting(id);
     setActionError(null);
@@ -295,16 +366,20 @@ export function useAccounts() {
 
   const visibleAccounts = accounts
     .filter((a) => !statusFilter || a.sessionStatus === statusFilter)
+    .filter((a) => !searchQuery || a.accountName.toLowerCase().includes(searchQuery.toLowerCase()) || a.phoneNumber.includes(searchQuery))
     .sort((a, b) => (STATUS_PRIORITY[a.sessionStatus] ?? 7) - (STATUS_PRIORITY[b.sessionStatus] ?? 7));
 
   return {
     // state
     accounts, visibleAccounts, qr, qrReceivedAt, pairingCode, pairingMode, copiedAccountId,
-    loading, error, health, restarting, deleting,
+    loading, error, health, historySync, restarting, deleting,
     confirmDelete, setConfirmDelete,
     confirmRestart, setConfirmRestart,
     actionError, setActionError,
-    statusFilter, setStatusFilter, requestingCode,
+    statusFilter, setStatusFilter, searchQuery, setSearchQuery, requestingCode,
+    // edit-profile modal state
+    profileModal, profileForm, setProfileForm, profileLoading, profileSaving,
+    profileSaved, profileAutoDetected, profilePicture, profileError,
     // add-modal state
     addModalOpen, addStep, setAddStep,
     addName, setAddName, addPhone, setAddPhone,
@@ -314,11 +389,12 @@ export function useAccounts() {
     addRequestingCode, addConnected,
     addAutoDetected, addSaving,
     // role flags
-    canScan, canEditHours, canDelete,
+    canScan, canEditHours, canDelete, canEditProfile,
     // actions
     load, openAddModal, closeAddModal,
     startQrFlow, chooseCodeMethod, submitCodePhone, confirmAndSave,
     restartAccount, requestPairingCode, deleteAccount, copyPairingCode,
+    openProfileModal, closeProfileModal, saveProfile,
     setPairingMode,
     t,
   };

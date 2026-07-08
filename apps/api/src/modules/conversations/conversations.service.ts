@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AiMode,
@@ -11,6 +11,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { WaService } from '../wa/wa.service';
 import { LearningMinerService } from '../learning/learning-miner.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { logAudit } from '../../common/audit.util';
 import { allowedAccountIds, accountFilter, assertConversationScope, type ScopedUser } from '../../common/account-scope.util';
 import { MAX_EXPORT_ROWS } from '../../common/export-limits';
@@ -29,6 +30,7 @@ interface ListFilters {
   label?: string;
   search?: string;
   needsAttention?: boolean;
+  excludeGroups?: boolean;
   page?: number;
   limit?: number;
   user?: ScopedUser;
@@ -46,11 +48,12 @@ export class ConversationsService {
     private readonly wa: WaService,
     private readonly events: EventsGateway,
     private readonly learningMiner: LearningMinerService,
+    @Optional() private readonly webhooks: WebhooksService | undefined,
     config: ConfigService,
   ) {
     this.csatEnabled = String(config.get('CSAT_ENABLED') ?? '').toLowerCase() === 'true';
     this.csatMessage = config.get<string>('CSAT_MESSAGE') || DEFAULT_CSAT_MESSAGE;
-    // Opt-in: Hermes mines a conversation for KB/customer-memory proposals when
+    // Opt-in: Sentinel mines a conversation for KB/customer-memory proposals when
     // it is resolved. All proposals stay pending (human-reviewed). Default off.
     this.autoLearnEnabled = String(config.get('AI_AUTOLEARN') ?? '').toLowerCase() === 'true';
   }
@@ -69,11 +72,23 @@ export class ConversationsService {
     return { count };
   }
 
+  private waName(contacts: { name: string | null; notify: string | null; verifiedName: string | null }[]): string | null {
+    const c = contacts?.[0];
+    return c?.name ?? c?.notify ?? c?.verifiedName ?? null;
+  }
+
   async get(id: string, messageLimit = 100, user?: ScopedUser) {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: {
-        customer: true,
+        customer: {
+          include: {
+            whatsappContacts: {
+              select: { name: true, notify: true, verifiedName: true, avatarUrl: true },
+              take: 1,
+            },
+          },
+        },
         whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true, sessionStatus: true } },
         bot: {
           select: {
@@ -84,7 +99,7 @@ export class ConversationsService {
           },
         },
         assignedAdmin: { select: { id: true, name: true } },
-        hermesReviews: {
+        sentinelReviews: {
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
@@ -97,7 +112,15 @@ export class ConversationsService {
     }
 
     const { messages, hasMore, oldestCursor } = await this.getMessages(id, { limit: messageLimit });
-    return { ...conversation, messages, hasMoreMessages: hasMore, oldestCursor };
+    const wac = conversation.customer.whatsappContacts?.[0];
+    const waName = this.waName(conversation.customer.whatsappContacts ?? []);
+    const customer = {
+      ...conversation.customer,
+      whatsappContacts: undefined,
+      waName,
+      avatarUrl: conversation.customer.avatarUrl ?? wac?.avatarUrl ?? null,
+    };
+    return { ...conversation, customer, messages, hasMoreMessages: hasMore, oldestCursor };
   }
 
   async getMessages(id: string, opts: { before?: string; limit?: number } = {}, user?: ScopedUser) {
@@ -221,11 +244,17 @@ export class ConversationsService {
     if (!conversation) throw new NotFoundException('Conversation not found');
 
     const justResolved = status === ConversationStatus.resolved && conversation.status !== ConversationStatus.resolved;
-    const data: Prisma.ConversationUpdateInput = { status };
-    if (justResolved && this.csatEnabled) {
-      data.csatRequestedAt = new Date();
-      data.csatRespondedAt = null;
-      data.csatScore = null;
+    const data: Prisma.ConversationUpdateInput & Record<string, any> = { status };
+    if (justResolved) {
+      (data as any).resolvedAt = new Date();
+      if (this.csatEnabled) {
+        data.csatRequestedAt = new Date();
+        data.csatRespondedAt = null;
+        data.csatScore = null;
+      }
+    }
+    if (status !== ConversationStatus.resolved) {
+      (data as any).resolvedAt = null;
     }
 
     const updated = await this.prisma.conversation.update({
@@ -237,13 +266,22 @@ export class ConversationsService {
       },
     });
 
-    // Hermes auto-learn (P1): on first resolve, mine this conversation for KB /
+    // Sentinel auto-learn (P1): on first resolve, mine this conversation for KB /
     // customer-memory proposals. Fire-and-forget — never blocks the resolve;
     // idempotent via conversation.learnedAt; opt-in via AI_AUTOLEARN.
     if (justResolved && this.autoLearnEnabled) {
       this.learningMiner
         .mineConversation(id)
         .catch(() => undefined);
+    }
+
+    if (justResolved) {
+      this.webhooks?.deliver('conversation.resolved', {
+        conversationId: id,
+        customerId: updated.customer ? (updated as { customer?: { phoneNumber: string } }).customer?.phoneNumber : undefined,
+        whatsappAccountId: updated.whatsappAccountId,
+        resolvedBy: actorId,
+      }).catch(() => undefined);
     }
 
     if (justResolved && this.csatEnabled) {
@@ -369,7 +407,7 @@ export class ConversationsService {
   }
 
   private async runList(filters: ListFilters) {
-    const { accountId, aiMode, status, assignedAdminId, label, search, needsAttention, page = 1, limit = 50, user } = filters;
+    const { accountId, aiMode, status, assignedAdminId, label, search, needsAttention, excludeGroups, page = 1, limit = 50, user } = filters;
     const where: Prisma.ConversationWhereInput = {};
 
     const scope = await allowedAccountIds(this.prisma, user);
@@ -379,6 +417,7 @@ export class ConversationsService {
     if (status) where.status = status;
     if (assignedAdminId) where.assignedAdminId = assignedAdminId;
     if (label) where.labels = { has: label };
+    if (excludeGroups) where.chatJid = { not: { endsWith: '@g.us' } };
     if (needsAttention) {
       where.OR = [
         { takeoverStatus: TakeoverStatus.waiting_admin },
@@ -411,18 +450,36 @@ export class ConversationsService {
       this.prisma.conversation.count({ where }),
       this.prisma.conversation.findMany({
         where,
-        orderBy: { lastMessageAt: 'desc' },
+        orderBy: [{ isPinned: 'desc' }, { lastMessageAt: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
         include: {
-          customer: { select: { id: true, name: true, phoneNumber: true, leadScore: true, leadStage: true, tags: true, avatarUrl: true } },
+          customer: {
+            select: {
+              id: true, name: true, phoneNumber: true, leadScore: true, leadStage: true, tags: true, avatarUrl: true,
+              whatsappContacts: { select: { name: true, notify: true, verifiedName: true, avatarUrl: true }, take: 1 },
+            },
+          },
           whatsappAccount: { select: { id: true, accountName: true, phoneNumber: true, sessionStatus: true } },
           assignedAdmin: { select: { id: true, name: true } },
-          messages: { orderBy: { createdAt: 'desc' }, take: 1, select: { content: true, senderType: true, createdAt: true, status: true } },
+          messages: { orderBy: { createdAt: 'desc' }, take: 1, select: { content: true, senderType: true, senderName: true, createdAt: true, status: true, externalId: true } as any },
         },
       }),
     ]);
 
-    return { total, page, limit, items };
+    const mapped = items.map(conv => {
+      const { whatsappContacts, ...rest } = conv.customer;
+      const waName = this.waName(whatsappContacts ?? []);
+      const wac = whatsappContacts?.[0];
+      const lastMsg = conv.messages?.[0];
+      return {
+        ...conv,
+        customer: { ...rest, waName, avatarUrl: rest.avatarUrl ?? wac?.avatarUrl ?? null },
+        lastSenderType: lastMsg?.senderType ?? null,
+        lastSenderName: (lastMsg as any)?.senderName ?? null,
+      };
+    });
+
+    return { total, page, limit, items: mapped };
   }
 }

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ShieldStar, ArrowRight, List, X } from '@phosphor-icons/react';
+import { ShieldStar, ArrowRight, List, X } from '@/components/ui/core-essential-icons';
 import { useT } from '@/lib/i18n';
 import { useLang } from '@/lib/i18n';
 import { landingDict } from '../landing.i18n';

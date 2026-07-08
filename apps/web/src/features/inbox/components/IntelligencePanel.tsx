@@ -1,9 +1,12 @@
 'use client';
 
 import { cn } from '@/lib/cn';
+import { X } from '@/components/ui/core-essential-icons';
+import { useT } from '@/lib/i18n';
+import { dict } from '@/app/inbox/inbox.i18n';
 import {
   CustomerCard,
-  HermesReviewCard,
+  SentinelReviewCard,
   DraftControls,
   AiModeControl,
   WorkflowStatus,
@@ -20,16 +23,16 @@ import type { AdminUser, ConvDetail, Message } from '../inbox.types';
 
 interface IntelligencePanelProps {
   conversation: ConvDetail | null;
-  draftMessage?: Message | null;
+  draftMessages?: Message[];
   bots?: Array<{ id: string; botName: string; persona?: { name: string } | null }>;
-  onApproveDraft?: () => Promise<void>;
-  onBlockDraft?: () => Promise<void>;
+  onApproveDraft?: (id: string) => Promise<void>;
+  onBlockDraft?: (id: string) => Promise<void>;
   onReturnToAi?: () => Promise<void>;
   onSetAiMode?: (mode: string) => Promise<void>;
   onSetStatus?: (status: string) => Promise<void>;
   onSetBot?: (botId: string | null) => Promise<void>;
   onUpdateNotes?: (notes: string) => Promise<void>;
-  onEditDraft?: () => void;
+  onEditDraft?: (id: string) => void;
   onSuggestBot?: () => Promise<void>;
   botSuggestion?: { botId: string; botName: string; personaName: string | null; reason: string } | null;
   admins?: AdminUser[];
@@ -51,7 +54,7 @@ interface IntelligencePanelProps {
  *
  * Responsibilities:
  * - Display customer CRM context (name, phone, avatar, lead score, tags, notes)
- * - Show Hermes AI review (decision, confidence, risk, recommendation)
+ * - Show Sentinel AI review (decision, confidence, risk, recommendation)
  * - Draft approval/blocking controls
  * - AI mode toggle (on/off/draft/supervised/paused)
  * - Bot selection dropdown
@@ -66,7 +69,7 @@ interface IntelligencePanelProps {
  */
 export function IntelligencePanel({
   conversation,
-  draftMessage,
+  draftMessages = [],
   bots = [],
   onApproveDraft,
   onBlockDraft,
@@ -90,6 +93,7 @@ export function IntelligencePanel({
   open = false,
   onClose,
 }: IntelligencePanelProps) {
+  const t = useT(dict);
   if (!conversation) {
     return (
       <aside className="shrink-0 flex-col border-l border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900 hidden xl:flex">
@@ -126,20 +130,20 @@ export function IntelligencePanel({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close details"
+            aria-label={t('ariaCloseDetails')}
             className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800"
           >
-            ✕
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       {/* key by conversation id so stateful children (notes editor, etc.) reset on switch */}
       <div key={conversation.id} className="scrollbar-thin flex-1 overflow-y-auto">
         <CustomerCard conversation={conversation} />
 
-        <HermesReviewCard conversation={conversation} />
+        <SentinelReviewCard conversation={conversation} />
 
         <DraftControls
-          draftMessage={draftMessage || null}
+          draftMessages={draftMessages}
           approving={approvingDraft}
           blocking={blockingDraft}
           onApprove={onApproveDraft}

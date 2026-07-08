@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { SettingsService } from '../settings/settings.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 import { isWithinBusinessHours } from '../../common/business-hours.util';
 
 /**
@@ -29,6 +30,7 @@ export class SlaService implements OnModuleInit {
     private readonly events: EventsGateway,
     private readonly notifications: NotificationsService,
     private readonly settings: SettingsService,
+    @Optional() private readonly webhooks: WebhooksService | undefined,
     config: ConfigService,
     @InjectQueue('sla') private readonly slaQueue: Queue,
   ) {
@@ -193,7 +195,62 @@ export class SlaService implements OnModuleInit {
     if (newlyBreached.length || cleared) {
       this.logger.log(`SLA scan: ${newlyBreached.length} breached, ${cleared} cleared`);
     }
-    return { breached: newlyBreached.length, cleared };
+
+    // ── Auto-close idle conversations ────────────────────────────────────────
+    // Conversations where WE replied last (admin/ai/bot/system) and the
+    // customer hasn't responded for idleCloseDays days → resolve them.
+    const { idleCloseDays } = await this.settings.sla();
+    const idleCutoff = new Date(Date.now() - idleCloseDays * 24 * 60 * 60 * 1000);
+    let autoClosed = 0;
+    let idleCursor: string | undefined;
+    const idleAccountGroups = new Map<string, number>();
+
+    for (;;) {
+      const idleBatch = await this.prisma.conversation.findMany({
+        where: {
+          status: { not: ConversationStatus.resolved },
+          lastMessageAt: { lt: idleCutoff },
+          messages: {
+            none: { senderType: SenderType.customer, createdAt: { gte: idleCutoff } },
+          },
+        },
+        orderBy: { id: 'asc' },
+        take: BATCH,
+        ...(idleCursor ? { cursor: { id: idleCursor }, skip: 1 } : {}),
+        select: { id: true, whatsappAccountId: true },
+      });
+      if (!idleBatch.length) break;
+
+      await this.prisma.conversation.updateMany({
+        where: { id: { in: idleBatch.map((c) => c.id) } },
+        data: { status: ConversationStatus.resolved, resolvedAt: new Date() } as any,
+      });
+
+      for (const c of idleBatch) {
+        this.events.emitToAccount(c.whatsappAccountId, 'conversation:auto-closed', {
+          conversationId: c.id,
+        });
+        this.webhooks?.deliver('conversation.auto_closed', {
+          conversationId: c.id,
+          whatsappAccountId: c.whatsappAccountId,
+          idleCloseDays,
+        }).catch(() => undefined);
+        idleAccountGroups.set(c.whatsappAccountId, (idleAccountGroups.get(c.whatsappAccountId) ?? 0) + 1);
+      }
+
+      autoClosed += idleBatch.length;
+      if (idleBatch.length < BATCH) break;
+      idleCursor = idleBatch[idleBatch.length - 1].id;
+    }
+
+    if (autoClosed > 0) {
+      this.logger.log(`SLA scan: ${autoClosed} idle conversations auto-closed (>${idleCloseDays}d)`);
+      this.notifications
+        .send(`🔒 ${autoClosed} percakapan idle ditutup otomatis (tidak ada balasan pelanggan > ${idleCloseDays} hari)`)
+        .catch(() => undefined);
+    }
+
+    return { breached: newlyBreached.length, cleared, autoClosed };
   }
 
   private positiveInt(value: unknown, fallback: number): number {

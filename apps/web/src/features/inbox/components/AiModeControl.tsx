@@ -20,7 +20,7 @@ const aiModeDescription: Record<string, string> = {
   ai_on: 'Replies automatically',
   ai_off: 'Manual replies only',
   ai_draft: 'AI drafts, you approve',
-  ai_supervised: 'Hermes reviews first',
+  ai_supervised: 'Sentinel reviews first',
   ai_paused: 'Paused due to risk',
 };
 

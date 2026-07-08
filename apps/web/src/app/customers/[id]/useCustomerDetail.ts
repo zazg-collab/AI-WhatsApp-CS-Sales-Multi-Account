@@ -10,7 +10,7 @@ export type LeadStage = 'cold' | 'warm' | 'hot' | 'very_hot';
 
 /** Unified timeline event (matches CustomersService.timeline). */
 export interface TimelineEvent {
-  type: 'message' | 'hermes_review' | 'follow_up';
+  type: 'message' | 'sentinel_review' | 'follow_up';
   at: string;
   data: Record<string, unknown>;
 }

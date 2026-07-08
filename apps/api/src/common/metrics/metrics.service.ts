@@ -68,9 +68,9 @@ export class MetricsService {
     registers: [this.registry],
   });
 
-  readonly hermesReviews = new Counter({
-    name: 'hermes_reviews_total',
-    help: 'Hermes supervisor decisions',
+  readonly sentinelReviews = new Counter({
+    name: 'sentinel_reviews_total',
+    help: 'Sentinel supervisor decisions',
     labelNames: ['decision'] as const,
     registers: [this.registry],
   });

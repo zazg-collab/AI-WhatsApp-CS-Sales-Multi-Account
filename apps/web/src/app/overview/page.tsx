@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import {
-  ShieldStar, Warning, XCircle, PlugsConnected, Clock, ArrowUpRight, ChartLineUp, Hand,
+  ShieldStar, Warning, XCircle, PlugsConnected, Clock, ArrowUpRight, ChartLineUp, Hand, Check,
   type Icon as PhosphorIcon,
-} from '@phosphor-icons/react';
+} from '@/components/ui/core-essential-icons';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -48,7 +48,7 @@ function SetupChecklist() {
         {steps.map((s) => (
           <li key={s.n} className="flex items-start gap-3">
             <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${s.done ? 'bg-channel-500 text-white' : 'bg-hermes-600 text-white'}`}>
-              {s.done ? '✓' : s.n}
+              {s.done ? <Check className="h-3 w-3" aria-hidden="true" /> : s.n}
             </span>
             <div className="flex-1">
               {s.done
@@ -75,8 +75,8 @@ export default function OverviewPage() {
   const queues: {
     key: string; label: string; count: number; hint: string; href: string; icon: PhosphorIcon; tone: QueueTone;
   }[] = [
-    { key: 'reviews', label: t('q_reviews'), count: pendingReviews, hint: t('q_reviews_h'), href: '/hermes', icon: ShieldStar, tone: 'review' },
-    { key: 'risk', label: t('q_risk'), count: highRisk, hint: t('q_risk_h'), href: '/hermes', icon: Warning, tone: 'danger' },
+    { key: 'reviews', label: t('q_reviews'), count: pendingReviews, hint: t('q_reviews_h'), href: '/sentinel', icon: ShieldStar, tone: 'review' },
+    { key: 'risk', label: t('q_risk'), count: highRisk, hint: t('q_risk_h'), href: '/sentinel', icon: Warning, tone: 'danger' },
     { key: 'failed', label: t('q_failed'), count: failed, hint: t('q_failed_h'), href: '/inbox', icon: XCircle, tone: 'danger' },
     { key: 'disconnected', label: t('q_disc'), count: disconnected, hint: t('q_disc_h'), href: '/accounts', icon: PlugsConnected, tone: 'danger' },
     { key: 'sla', label: t('q_sla'), count: slaRisk, hint: t('q_sla_h'), href: '/inbox', icon: Clock, tone: 'review' },
@@ -157,11 +157,12 @@ export default function OverviewPage() {
                       const state = deriveState(c);
                       const meta = stateMeta[state];
                       const Icon = meta.icon;
-                      const name = c.customer.name || c.customer.phoneNumber;
+                      const displayName = c.customer.waName ?? c.customer.name;
+                      const name = displayName || c.customer.phoneNumber;
                       return (
                         <li key={c.id}>
                           <Link href={`/inbox?conversation=${c.id}`} className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40">
-                            <Avatar name={c.customer.name} phone={c.customer.phoneNumber} avatarUrl={c.customer.avatarUrl} className="h-9 w-9" />
+                            <Avatar name={displayName} phone={c.customer.phoneNumber} avatarUrl={c.customer.avatarUrl} className="h-9 w-9" />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="truncate text-[13px] font-semibold text-gray-900 dark:text-gray-100">{name}</p>

@@ -1,6 +1,8 @@
 import type { Dict } from '@/lib/i18n';
 
 export const dict: Dict = {
+  title: { id: 'Pelanggan', en: 'Contacts' },
+  searchPlaceholder: { id: 'Cari nama atau nomor…', en: 'Search name or number…' },
   subtitle: {
     id: 'Atur massal stage lead, tag, admin penanggung jawab, dan catatan internal CRM',
     en: 'Bulk-manage lead stages, tags, the assigned admin, and internal CRM notes',
@@ -26,7 +28,7 @@ export const dict: Dict = {
   detailTimeline: { id: 'Linimasa', en: 'Timeline' },
   detailNoTimeline: { id: 'Belum ada aktivitas.', en: 'No activity yet.' },
   detailEvtMessage: { id: 'Pesan', en: 'Message' },
-  detailEvtReview: { id: 'Review Hermes', en: 'Hermes review' },
+  detailEvtReview: { id: 'Review Sentinel', en: 'Sentinel review' },
   detailEvtFollowUp: { id: 'Follow-up', en: 'Follow-up' },
   detailCampaigns: { id: 'Campaign', en: 'Campaigns' },
   detailOptedOut: { id: 'Dikecualikan dari campaign', en: 'Excluded from campaigns' },

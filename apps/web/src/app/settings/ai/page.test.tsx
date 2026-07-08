@@ -24,31 +24,40 @@ describe('AiSettingsPage', () => {
   beforeEach(() => apiMock.mockReset());
 
   it('renders settings from /settings', async () => {
-    apiMock.mockResolvedValueOnce(settings);
+    apiMock.mockImplementation((path: string) =>
+      path === '/settings' ? Promise.resolve(settings) : Promise.resolve([]),
+    );
     render(<AiSettingsPage />);
     // baseUrl and model are editable inputs, not static text.
     expect(await screen.findByDisplayValue('http://x/v1')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Hermes-4-70B')).toBeInTheDocument();
   });
 
-  it('loads models into the datalist on button click', async () => {
-    apiMock.mockResolvedValueOnce(settings);
-    const { container } = render(<AiSettingsPage />);
-    await screen.findByDisplayValue('http://x/v1');
+  it('auto-loads the model list and shows it in the model dropdown', async () => {
+    apiMock.mockImplementation((path: string) => {
+      if (path === '/settings') return Promise.resolve(settings);
+      if (path === '/ai/models') return Promise.resolve(['model-a', 'model-b']);
+      return Promise.resolve([]);
+    });
+    render(<AiSettingsPage />);
+    const modelInput = await screen.findByDisplayValue('Hermes-4-70B');
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith('/ai/models'));
 
-    apiMock.mockResolvedValueOnce(['model-a', 'model-b']);
-    await userEvent.click(screen.getByRole('button', { name: /Load model list/ }));
-    await waitFor(() => expect(container.querySelector('option[value="model-a"]')).toBeTruthy());
-    expect(container.querySelector('option[value="model-b"]')).toBeTruthy();
+    // The dropdown filters by the field's current text, so clear it first to
+    // see the full loaded list rather than filtering against the old value.
+    await userEvent.clear(modelInput);
+    expect(await screen.findByText('model-a')).toBeInTheDocument();
+    expect(screen.getByText('model-b')).toBeInTheDocument();
   });
 
   it('shows a message when model load fails', async () => {
-    apiMock.mockResolvedValueOnce(settings);
+    apiMock.mockImplementation((path: string) => {
+      if (path === '/settings') return Promise.resolve(settings);
+      if (path === '/ai/models') return Promise.reject(new Error('boom'));
+      return Promise.resolve([]);
+    });
     render(<AiSettingsPage />);
     await screen.findByDisplayValue('http://x/v1');
-
-    apiMock.mockRejectedValueOnce(new Error('boom'));
-    await userEvent.click(screen.getByRole('button', { name: /Load model list/ }));
     await waitFor(() => expect(screen.getByText(/No models found/)).toBeInTheDocument());
   });
 });

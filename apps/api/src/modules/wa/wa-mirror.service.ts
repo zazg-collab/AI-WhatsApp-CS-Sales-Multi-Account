@@ -5,11 +5,12 @@ import {
   MessageStatus,
   MessageType,
   SenderType,
+  Prisma,
 } from '@hermes/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { ContactSyncService } from './contact-sync.service';
-import { WahaClientService } from './waha-client.service';
+import { WaGatewayService } from './wa-gateway.service';
 import { jidToPhone, isGroupJid, isDirectChatJid } from './wa.util';
 
 type LongLike = { toString(): string };
@@ -33,7 +34,7 @@ export class WaMirrorService {
     private readonly prisma: PrismaService,
     private readonly events: EventsGateway,
     private readonly contactSync: ContactSyncService,
-    private readonly wahaClient: WahaClientService,
+    private readonly gateway: WaGatewayService,
   ) {}
 
   private longToNumber(value: number | LongLike | null | undefined): number | undefined {
@@ -67,7 +68,7 @@ export class WaMirrorService {
       .filter((p) => p.id)
       .map((p) => ({ jid: p.id, admin: p.admin ?? null }));
 
-    const customer = await this.prisma.customer.upsert({
+    const customerUpsertArgs = {
       where: { phoneNumber_sourceAccountId: { phoneNumber: jid, sourceAccountId: accountId } },
       update: { name: subject },
       create: {
@@ -76,7 +77,19 @@ export class WaMirrorService {
         sourceAccountId: accountId,
         assignedAdminId: account.assignedAdminId,
       },
-    });
+    };
+    let customer;
+    try {
+      customer = await this.prisma.customer.upsert(customerUpsertArgs);
+    } catch (err) {
+      // Same group can be touched by two concurrent history-sync/event paths
+      // racing on this upsert; retry once now that the winner's row exists.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        customer = await this.prisma.customer.upsert(customerUpsertArgs);
+      } else {
+        throw err;
+      }
+    }
 
     const existing = await this.prisma.conversation.findUnique({
       where: { whatsappAccountId_chatJid: { whatsappAccountId: accountId, chatJid: jid } },
@@ -110,7 +123,21 @@ export class WaMirrorService {
       });
     }
 
-    const conversation = await this.prisma.conversation.create({ data });
+    let conversation;
+    try {
+      conversation = await this.prisma.conversation.create({ data });
+    } catch (err) {
+      // Two concurrent group-metadata events for the same group can both miss
+      // the `existing` lookup above and race to create the conversation; the
+      // loser re-reads what the winner created instead of throwing.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        conversation = await this.prisma.conversation.findUniqueOrThrow({
+          where: { whatsappAccountId_chatJid: { whatsappAccountId: accountId, chatJid: jid } },
+        });
+      } else {
+        throw err;
+      }
+    }
     this.events.emitToAccount(accountId, 'conversation:updated', {
       conversationId: conversation.id,
       isGroup: true,
@@ -152,7 +179,7 @@ export class WaMirrorService {
   ) {
     if (!update.id || !isGroupJid(update.id)) return;
     let conversation = await this.ensureGroupConversation(accountId, { id: update.id });
-    const metadata = await this.wahaClient.getGroupInfo(accountId, update.id);
+    const metadata = await this.gateway.getGroupInfo(accountId, update.id);
     if (metadata) conversation = await this.ensureGroupConversation(accountId, metadata);
     const participants = update.participants ?? [];
     const count = participants.length;

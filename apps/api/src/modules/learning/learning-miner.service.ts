@@ -136,7 +136,7 @@ export class LearningMinerService {
   }
 
   /**
-   * Hermes auto-learn (P1): mine a SINGLE resolved conversation for knowledge
+   * Sentinel auto-learn (P1): mine a SINGLE resolved conversation for knowledge
    * gaps and durable customer facts, persisting them as pending proposals for
    * admin review. Idempotent via `conversation.learnedAt`. Gated by the caller
    * (AI_AUTOLEARN); fire-and-forget — never blocks the resolve action.
@@ -168,7 +168,7 @@ export class LearningMinerService {
 
     const knowledge = await this.proposeKnowledge(
       botId, lang, transcript,
-      'Hermes auto-learn: knowledge gap dari percakapan yang diselesaikan.',
+      'Sentinel auto-learn: knowledge gap dari percakapan yang diselesaikan.',
       conversationId,
     ).catch((e) => { this.logger.warn(`mineConversation knowledge failed: ${e}`); return { created: 0, skipped: 0 }; });
 

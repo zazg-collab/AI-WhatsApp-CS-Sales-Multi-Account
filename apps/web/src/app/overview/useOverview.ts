@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { useT } from '@/lib/i18n';
 import { dict } from './overview.i18n';
-import type { Icon as PhosphorIcon } from '@phosphor-icons/react';
+import type { Icon as PhosphorIcon } from '@/components/ui/core-essential-icons';
 
 export interface Summary {
   totalConversations: number;
@@ -40,7 +40,7 @@ export interface ConvSummary {
   slaBreachedAt?: string | null;
   lastMessage: string | null;
   lastMessageAt: string | null;
-  customer: { name: string | null; phoneNumber: string; avatarUrl?: string | null };
+  customer: { name: string | null; waName?: string | null; phoneNumber: string; avatarUrl?: string | null };
   whatsappAccount: { accountName: string };
   messages?: { status: string }[];
 }
@@ -93,8 +93,8 @@ export function useOverview() {
     try {
       const [s, r, a, acc, conv] = await Promise.all([
         api<Summary>('/dashboard/summary').catch((err) => { setSectionErrors((p) => ({ ...p, summary: err.message })); return null; }),
-        api<DailyReport>('/hermes/reports/daily').catch((err) => { setSectionErrors((p) => ({ ...p, report: err.message })); return null; }),
-        api<Alert[]>('/hermes/alerts').catch((err) => { setSectionErrors((p) => ({ ...p, alerts: err.message })); return []; }),
+        api<DailyReport>('/sentinel/reports/daily').catch((err) => { setSectionErrors((p) => ({ ...p, report: err.message })); return null; }),
+        api<Alert[]>('/sentinel/alerts').catch((err) => { setSectionErrors((p) => ({ ...p, alerts: err.message })); return []; }),
         api<WaAccount[]>('/wa/accounts').catch((err) => { setSectionErrors((p) => ({ ...p, accounts: err.message })); return []; }),
         api<{ items: ConvSummary[] }>('/conversations?needsAttention=true&limit=25')
           .then((d) => d.items)
@@ -120,14 +120,14 @@ export function useOverview() {
       if (timer) return;
       timer = setTimeout(() => { timer = null; load(); }, 1000);
     };
-    socket.on('hermes:alert', refresh);
+    socket.on('sentinel:alert', refresh);
     socket.on('conversation:updated', refresh);
     socket.on('conversation:sla-breach', refresh);
     socket.on('conversation:sla-cleared', refresh);
     socket.on('wa:status', refresh);
     return () => {
       if (timer) clearTimeout(timer);
-      socket.off('hermes:alert', refresh);
+      socket.off('sentinel:alert', refresh);
       socket.off('conversation:updated', refresh);
       socket.off('conversation:sla-breach', refresh);
       socket.off('conversation:sla-cleared', refresh);

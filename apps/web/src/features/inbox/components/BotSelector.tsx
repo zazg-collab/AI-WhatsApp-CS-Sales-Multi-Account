@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
+import { Lightbulb, CircleNotch } from '@/components/ui/core-essential-icons';
 import type { ConvDetail } from '../inbox.types';
 
 interface BotSuggestion {
@@ -88,8 +89,9 @@ export function BotSelector({
       {/* AI suggestion result */}
       {showSuggestion && suggestion && (
         <div className="mb-3 rounded-lg border border-hermes-200 bg-hermes-50 p-2.5 dark:border-hermes-900/30 dark:bg-hermes-900/20">
-          <p className="text-xs font-medium text-hermes-700 dark:text-hermes-300">
-            💡 Suggested: {suggestion.botName}
+          <p className="flex items-center gap-1 text-xs font-medium text-hermes-700 dark:text-hermes-300">
+            <Lightbulb className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            Suggested: {suggestion.botName}
             {suggestion.personaName ? ` (${suggestion.personaName})` : ''}
           </p>
           <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">{suggestion.reason}</p>
@@ -120,9 +122,13 @@ export function BotSelector({
         size="sm"
         onClick={handleSuggestBot}
         disabled={suggesting || loading}
-        className="w-full text-xs"
+        className="flex w-full items-center justify-center gap-1 text-xs"
       >
-        {suggesting ? '⏳ Analyzing…' : '💡 Suggest persona (AI)'}
+        {suggesting ? (
+          <><CircleNotch className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />Analyzing…</>
+        ) : (
+          <><Lightbulb className="h-3.5 w-3.5" aria-hidden="true" />Suggest persona (AI)</>
+        )}
       </Button>
     </div>
   );

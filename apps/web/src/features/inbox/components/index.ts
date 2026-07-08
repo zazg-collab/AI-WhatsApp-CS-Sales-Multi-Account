@@ -9,7 +9,7 @@ export { ChatComposer } from './ChatComposer';
 export { AssetBar } from './AssetBar';
 export { IntelligencePanel } from './IntelligencePanel';
 export { CustomerCard } from './CustomerCard';
-export { HermesReviewCard } from './HermesReviewCard';
+export { SentinelReviewCard } from './SentinelReviewCard';
 export { DraftControls } from './DraftControls';
 export { AiModeControl } from './AiModeControl';
 export { WorkflowStatus } from './WorkflowStatus';

@@ -75,7 +75,7 @@ describe('ConversationsService', () => {
     storage = { save: jest.fn().mockResolvedValue({ key: 'k.png', url: '/media/k.png' }), read: jest.fn() };
     config = { get: jest.fn((k: string) => (k === 'CSAT_ENABLED' ? 'true' : undefined)) };
     learningMiner = { mineConversation: jest.fn().mockResolvedValue({ knowledge: 0, customerMemory: 0, skipped: 0 }) };
-    service = new ConversationsService(prisma, wa, events, learningMiner, config);
+    service = new ConversationsService(prisma, wa, events, learningMiner, undefined, config);
     messaging = new ConversationMessagingService(prisma, wa, events, storage);
     chatOps = new ConversationChatOpsService(prisma, wa, events);
   });
@@ -328,7 +328,7 @@ describe('ConversationsService', () => {
       const claim = prisma.message.updateMany.mock.calls[0][0];
       expect(claim.where).toEqual({ id: 'd1', status: 'pending' });
       expect(claim.data.status).toBe('sent');
-      expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'draft text');
+      expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'draft text', undefined);
       const update = prisma.message.update.mock.calls[0][0];
       expect(update.where).toEqual({ id: 'd1' });
       expect(update.data.externalId).toBe('ext1');
@@ -340,7 +340,19 @@ describe('ConversationsService', () => {
       });
       prisma.message.findFirst.mockResolvedValue({ id: 'd1', content: 'old', status: 'pending' });
       await messaging.approveDraft('c1', 'd1', 'admin', 'edited reply');
-      expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'edited reply');
+      expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'edited reply', undefined);
+    });
+    it('sends with the quote when the draft answers a specific message (segmented burst draft)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
+      });
+      prisma.message.findFirst
+        .mockResolvedValueOnce({ id: 'd1', content: 'jawab', status: 'pending', quotedMessageId: 'q1' })
+        .mockResolvedValueOnce({ externalId: 'src-ext', content: 'harga berapa?', senderType: 'customer' });
+      await messaging.approveDraft('c1', 'd1', 'admin');
+      expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'jawab', {
+        externalId: 'src-ext', content: 'harga berapa?', fromMe: false,
+      });
     });
     it('never double-sends when a concurrent approve already claimed the draft (A2)', async () => {
       prisma.conversation.findUnique.mockResolvedValue({

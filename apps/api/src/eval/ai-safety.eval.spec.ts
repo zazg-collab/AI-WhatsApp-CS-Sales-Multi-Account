@@ -1,9 +1,9 @@
-import { HermesDecision } from '@hermes/database';
+import { SentinelDecision } from '@hermes/database';
 import {
   evaluateRules,
   decisionFromConfidence,
   mostRestrictive,
-} from '../modules/hermes/rules.engine';
+} from '../modules/sentinel/rules.engine';
 import { fenceData, stripDataFences } from '../i18n/bot-prompts';
 import {
   RULE_CASES,
@@ -53,8 +53,8 @@ describe('AI safety eval gate', () => {
   describe('most-restrictive merge — a rule must override a permissive LLM', () => {
     it('refund rule overrides an LLM "approve"', () => {
       const ruleHit = evaluateRules('saya minta refund');
-      const merged = mostRestrictive(HermesDecision.approve, ruleHit!.decision);
-      expect(merged).toBe(HermesDecision.takeover_required);
+      const merged = mostRestrictive(SentinelDecision.approve, ruleHit!.decision);
+      expect(merged).toBe(SentinelDecision.takeover_required);
     });
 
     it('legal rule overrides even a high-confidence approve', () => {
@@ -63,7 +63,7 @@ describe('AI safety eval gate', () => {
         decisionFromConfidence(95), // approve
         ruleHit!.decision,
       );
-      expect(merged).toBe(HermesDecision.pause_ai);
+      expect(merged).toBe(SentinelDecision.pause_ai);
     });
   });
 

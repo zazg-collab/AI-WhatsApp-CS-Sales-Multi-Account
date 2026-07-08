@@ -59,11 +59,11 @@ export const dict: Dict = {
     en: 'AI OFF is dominant ({pct}%). Consider AI draft/supervised for warm/hot leads to free up admin time.',
   },
   aiModeActionPaused: {
-    id: '{count} percakapan dijeda AI karena risiko terdeteksi — tinjau di Hermes Review.',
-    en: '{count} conversations have AI paused due to detected risk — review them in Hermes Review.',
+    id: '{count} percakapan dijeda AI karena risiko terdeteksi — tinjau di Sentinel Review.',
+    en: '{count} conversations have AI paused due to detected risk — review them in Sentinel Review.',
   },
   aiModeActionSupervisedHealthy: {
-    id: 'Distribusi mode terlihat sehat. Pantau confidence score Hermes pada percakapan supervised.',
-    en: 'Mode distribution looks healthy. Keep an eye on Hermes confidence scores for supervised conversations.',
+    id: 'Distribusi mode terlihat sehat. Pantau Sentinel confidence score pada percakapan supervised.',
+    en: 'Mode distribution looks healthy. Keep an eye on Sentinel confidence scores for supervised conversations.',
   },
 };

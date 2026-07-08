@@ -3,7 +3,7 @@
 import {
   MegaphoneSimple, Eye, Plus, PaperPlaneTilt, CheckCircle,
   Pause, XCircle, ArrowCounterClockwise, X, Prohibit, ArrowCounterClockwise as ReverseIcon, Copy,
-} from '@phosphor-icons/react';
+} from '@/components/ui/core-essential-icons';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -52,7 +52,7 @@ export default function CampaignsPage() {
               <hr className="border-gray-100 dark:border-gray-800" />
               {/* Section 1: Target & Message */}
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">1 — {t('stepTarget')}</h3>
-              <Field label={t('nameLabel')} value={name} onChange={(e) => setName(e.target.value)} placeholder="Campaign name" />
+              <Field label={t('nameLabel')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('campaignNamePlaceholder')} />
               <SelectField label={t('senderAccountLabel')} value={whatsappAccountId} onChange={(e) => setWhatsappAccountId(e.target.value)}>
                 <option value="">{t('selectAccount')}</option>
                 {accounts.map((account) => {
@@ -67,7 +67,7 @@ export default function CampaignsPage() {
               </SelectField>
               {whatsappAccountId && !accounts.find(a => a.id === whatsappAccountId)?.sessionStatus?.includes('connected') && (
                 <div className="rounded-lg border border-danger-200 bg-danger-50 p-3 text-xs text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20 dark:text-danger-300">
-                  Account disconnected. <a href="/accounts" className="font-semibold underline">Reconnect in Accounts</a> before sending.
+                  {t('accountDisconnectedMsg')}<a href="/accounts" className="font-semibold underline">{t('reconnectLink')}</a>{t('accountDisconnectedHint')}
                 </div>
               )}
               <div>
@@ -77,7 +77,7 @@ export default function CampaignsPage() {
                   rows={4}
                   value={messageTemplate}
                   onChange={(e) => setMessageTemplate(e.target.value)}
-                  placeholder="Campaign message… use {{name}} / {{phone}} tokens"
+                  placeholder={t('messagePlaceholder')}
                   className="resize-none"
                 />
                 <div className="mt-1 flex justify-end">

@@ -228,7 +228,7 @@ If the seed command fails, try the direct path:
 
 ```bash
 docker compose exec api sh -c \
-  "cd /app/packages/database && npx ts-node prisma/seed.ts"
+  "cd /app/packages/database && node prisma/seed.js"
 ```
 
 ---

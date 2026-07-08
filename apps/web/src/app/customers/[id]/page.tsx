@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowLeft, ChatCircle, ShieldStar, BellRinging } from '@phosphor-icons/react';
+import { ArrowLeft, ChatCircle, ShieldStar, BellRinging } from '@/components/ui/core-essential-icons';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -15,14 +15,14 @@ import { useCustomerDetail, type LeadStage, type TimelineEvent } from './useCust
 
 const EVENT_META: Record<TimelineEvent['type'], { icon: typeof ChatCircle; labelKey: string }> = {
   message: { icon: ChatCircle, labelKey: 'detailEvtMessage' },
-  hermes_review: { icon: ShieldStar, labelKey: 'detailEvtReview' },
+  sentinel_review: { icon: ShieldStar, labelKey: 'detailEvtReview' },
   follow_up: { icon: BellRinging, labelKey: 'detailEvtFollowUp' },
 };
 
 function eventSummary(e: TimelineEvent): string {
   const d = e.data as Record<string, unknown>;
   if (e.type === 'message') return (d.content as string) || `[${(d.messageType as string) || 'media'}]`;
-  if (e.type === 'hermes_review') return `${d.decision ?? ''} · ${d.riskLevel ?? ''} — ${d.reason ?? ''}`;
+  if (e.type === 'sentinel_review') return `${d.decision ?? ''} · ${d.riskLevel ?? ''} — ${d.reason ?? ''}`;
   return `${d.status ?? ''} · ${(d.messageTemplate as string) || ''}`;
 }
 
@@ -67,9 +67,9 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
             <div className="space-y-5 md:col-span-1">
               <Card className="p-4">
                 <div className="mb-4 flex items-center gap-3">
-                  <Avatar name={customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-12 w-12 text-sm font-semibold" />
+                  <Avatar name={(customer as any).waName ?? customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-12 w-12 text-sm font-semibold" />
                   <div className="min-w-0">
-                    <div className="truncate font-semibold text-gray-900 dark:text-gray-100">{customer.name || t('noName')}</div>
+                    <div className="truncate font-semibold text-gray-900 dark:text-gray-100">{(customer as any).waName || customer.name || t('noName')}</div>
                     <div className="text-xs text-gray-400">{formatPhone(customer.phoneNumber, t('hiddenNumber'))}</div>
                   </div>
                 </div>

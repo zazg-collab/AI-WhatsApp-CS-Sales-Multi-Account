@@ -179,14 +179,13 @@ export class ConversationChatOpsService {
     return { success: true, blocked };
   }
 
+  // Mute is dashboard-only: WAHA has no chat-level mute endpoint on any engine
+  // (confirmed against the live API — 404, not an engine limitation), so this
+  // only suppresses notifications inside Hermes, it does not silence the
+  // customer's actual WhatsApp app.
   async setChatMuted(id: string, muted: boolean, adminId: string) {
     const conversation = await this.conversationRoute(id);
     const muteUntil = muted ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) : null;
-    await this.wa.setChatMuted(
-      conversation.whatsappAccountId,
-      conversation.customer.phoneNumber,
-      muted,
-    );
     await this.prisma.conversation.update({
       where: { id },
       data: { isMuted: muted, muteUntil },
@@ -258,13 +257,9 @@ export class ConversationChatOpsService {
     return { success: true, archived };
   }
 
+  // Pin is dashboard-only — see setChatMuted comment above for why.
   async setChatPinned(id: string, pinned: boolean, adminId: string) {
     const conversation = await this.conversationRoute(id);
-    await this.wa.setChatPinned(
-      conversation.whatsappAccountId,
-      conversation.customer.phoneNumber,
-      pinned,
-    );
     await this.prisma.conversation.update({ where: { id }, data: { isPinned: pinned } });
     this.events.emitToAccount(conversation.whatsappAccountId, 'conversation:updated', {
       conversationId: id,

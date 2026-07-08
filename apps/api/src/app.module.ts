@@ -2,6 +2,7 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -10,7 +11,7 @@ import { HealthController } from './health.controller';
 import { WaModule } from './modules/wa/wa.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { AiModule } from './modules/ai/ai.module';
-import { HermesModule } from './modules/hermes/hermes.module';
+import { SentinelModule } from './modules/sentinel/sentinel.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { BotsModule } from './modules/bots/bots.module';
@@ -21,6 +22,7 @@ import { UsersModule } from './modules/users/users.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { QuickRepliesModule } from './modules/quick-replies/quick-replies.module';
 import { SlaModule } from './modules/sla/sla.module';
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { LearningModule } from './modules/learning/learning.module';
 import { AssetsModule } from './modules/assets/assets.module';
@@ -38,6 +40,7 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     BullModule.forRootAsync({
       useFactory: (config: ConfigService) => ({
         connection: { url: config.get('REDIS_URL') },
@@ -65,7 +68,7 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
     WaModule,
     ConversationsModule,
     AiModule,
-    HermesModule,
+    SentinelModule,
     KnowledgeModule,
     CustomersModule,
     BotsModule,
@@ -76,6 +79,7 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
     CampaignsModule,
     QuickRepliesModule,
     SlaModule,
+    WebhooksModule,
     SettingsModule,
     LearningModule,
     AssetsModule,

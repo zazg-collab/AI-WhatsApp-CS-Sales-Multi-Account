@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -7,8 +8,11 @@ import {
   Post,
   Query,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { LeadStage } from '@hermes/database';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
@@ -26,6 +30,15 @@ import { csvRow } from '../../common/csv.util';
 @Controller('customers')
 export class CustomersController {
   constructor(private readonly customers: CustomersService) {}
+
+  @ApiOperation({ summary: 'Import customers from CSV (upsert by phone)' })
+  @Roles('owner', 'supervisor', 'admin')
+  @Post('import')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 2 * 1024 * 1024 } }))
+  async import(@UploadedFile() file: { buffer: Buffer; mimetype: string; originalname?: string } | undefined) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    return this.customers.importCsv(file.buffer);
+  }
 
   @ApiOperation({ summary: 'Export customers as CSV' })
   @Roles('viewer')

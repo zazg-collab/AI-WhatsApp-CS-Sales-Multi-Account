@@ -11,6 +11,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { allowedAccountIds, type ScopedUser } from '../../common/account-scope.util';
 import { AuditService } from '../audit/audit.service';
+import { SettingsService } from '../settings/settings.service';
 import { CreateCampaignDto, CampaignTargetFilterDto, UpdateCampaignDto } from './dto/campaigns.dto';
 
 const BLOCKED_TAGS = ['opt_out', 'blocked', 'do_not_contact'];
@@ -34,6 +35,7 @@ export class CampaignCrudService {
     readonly prisma: PrismaService,
     private readonly audit: AuditService,
     @InjectQueue('campaigns') readonly campaignsQueue: Queue,
+    private readonly settings: SettingsService,
     config: ConfigService,
   ) {
     this.maxRecipients = Number(config.get<string>('CAMPAIGN_MAX_RECIPIENTS') ?? DEFAULT_MAX_RECIPIENTS);
@@ -88,6 +90,7 @@ export class CampaignCrudService {
   async create(dto: CreateCampaignDto, userId: string) {
     this.assertDelayConfig(dto.humanDelayMinMs, dto.humanDelayMaxMs);
     await this.assertWhatsappAccount(dto.whatsappAccountId);
+    const campaignConfig = await this.settings.campaign();
     const campaign = await this.prisma.campaign.create({
       data: {
         name: dto.name.trim(),
@@ -97,7 +100,7 @@ export class CampaignCrudService {
         targetFilter: (dto.targetFilter ?? {}) as Prisma.InputJsonValue,
         createdById: userId,
         scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : undefined,
-        rateLimitPerMinute: dto.rateLimitPerMinute ?? 6,
+        rateLimitPerMinute: dto.rateLimitPerMinute ?? campaignConfig.defaultRateLimitPerMinute,
         humanDelayMinMs: dto.humanDelayMinMs ?? 5000,
         humanDelayMaxMs: dto.humanDelayMaxMs ?? 20000,
       },
@@ -137,15 +140,27 @@ export class CampaignCrudService {
     const { targets, skipped } = await this.buildTargets(campaign.whatsappAccountId, targetFilter);
     if (targets.length === 0) throw new BadRequestException('No eligible recipients for this campaign');
 
+    // When approval isn't required (Settings → Keamanan Campaign), skip
+    // pending_approval and let the creator go straight to approved/scheduled
+    // — campaign-queue.service.start() only accepts those statuses.
+    const campaignConfig = await this.settings.campaign();
+    const skipApproval = !campaignConfig.requireApproval;
+    const nextStatus = skipApproval
+      ? (campaign.scheduledAt != null && campaign.scheduledAt > new Date() ? CampaignStatus.scheduled : CampaignStatus.approved)
+      : CampaignStatus.pending_approval;
+
     await this.prisma.$transaction([
       this.prisma.campaignRecipient.deleteMany({ where: { campaignId: id } }),
       this.prisma.campaignRecipient.createMany({
         data: targets.map((t) => ({ campaignId: id, customerId: t.customerId, conversationId: t.conversationId, phoneNumber: t.phoneNumber, status: CampaignRecipientStatus.pending, idempotencyKey: `${id}:${t.customerId}` })),
         skipDuplicates: true,
       }),
-      this.prisma.campaign.update({ where: { id }, data: { status: CampaignStatus.pending_approval } }),
+      this.prisma.campaign.update({
+        where: { id },
+        data: { status: nextStatus, ...(skipApproval ? { approvedById: userId } : {}) },
+      }),
     ]);
-    await this.audit.log(userId, 'campaign_submitted', 'Campaign', id, { eligibleCount: targets.length, skipped });
+    await this.audit.log(userId, 'campaign_submitted', 'Campaign', id, { eligibleCount: targets.length, skipped, autoApproved: skipApproval });
     return this.get(id);
   }
 

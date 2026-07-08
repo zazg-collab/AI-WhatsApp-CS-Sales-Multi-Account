@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 import { BulkCustomerActionDto, UpdateCustomerDto } from './dto/customers.dto';
 import { allowedAccountIds, type ScopedUser } from '../../common/account-scope.util';
 import { MAX_EXPORT_ROWS } from '../../common/export-limits';
+import { parseCsvRow } from '../../common/csv.util';
 
 interface ListFilters {
   stage?: LeadStage;
@@ -61,33 +62,49 @@ export class CustomersService {
         orderBy: { lastMessageAt: 'desc' },
         include: {
           assignedAdmin: { select: { id: true, name: true, email: true } },
+          whatsappContacts: { select: { name: true, notify: true, verifiedName: true, avatarUrl: true }, take: 1 },
         },
         skip: (page - 1) * limit,
         take: limit,
       }),
     ]);
-    return { total, page, limit, items };
+    const mapped = items.map(({ whatsappContacts, ...c }) => {
+      const wac = whatsappContacts?.[0];
+      return {
+        ...c,
+        waName: wac?.name ?? wac?.notify ?? wac?.verifiedName ?? null,
+        avatarUrl: c.avatarUrl ?? wac?.avatarUrl ?? null,
+      };
+    });
+    return { total, page, limit, items: mapped };
   }
 
   async get(id: string, user?: ScopedUser) {
-    const customer = await this.prisma.customer.findUnique({
+    const raw = await this.prisma.customer.findUnique({
       where: { id },
       include: {
         assignedAdmin: { select: { id: true, name: true } },
         sourceAccount: { select: { id: true, accountName: true } },
+        whatsappContacts: { select: { name: true, notify: true, verifiedName: true, avatarUrl: true }, take: 1 },
       },
     });
-    if (!customer) throw new NotFoundException('Customer not found');
+    if (!raw) throw new NotFoundException('Customer not found');
     const scope = await allowedAccountIds(this.prisma, user);
     if (
       scope !== null &&
-      customer.sourceAccountId !== null &&
-      !scope.includes(customer.sourceAccountId) &&
-      customer.assignedAdminId !== user?.id
+      raw.sourceAccountId !== null &&
+      !scope.includes(raw.sourceAccountId) &&
+      raw.assignedAdminId !== user?.id
     ) {
       throw new NotFoundException('Customer not found');
     }
-    return customer;
+    const { whatsappContacts, ...customer } = raw;
+    const wac = whatsappContacts?.[0];
+    return {
+      ...customer,
+      waName: wac?.name ?? wac?.notify ?? wac?.verifiedName ?? null,
+      avatarUrl: customer.avatarUrl ?? wac?.avatarUrl ?? null,
+    };
   }
 
   update(id: string, dto: UpdateCustomerDto) {
@@ -198,7 +215,7 @@ export class CustomersService {
   }
 
   /**
-   * Unified customer timeline (PRD 14.7): messages, Hermes reviews and
+   * Unified customer timeline (PRD 14.7): messages, Sentinel reviews and
    * follow-ups merged into one reverse-chronological feed.
    */
   async timeline(id: string) {
@@ -214,7 +231,7 @@ export class CustomersService {
         orderBy: { createdAt: 'desc' },
         take: 100,
       }),
-      this.prisma.hermesReview.findMany({
+      this.prisma.sentinelReview.findMany({
         where: { conversationId: { in: conversationIds } },
         orderBy: { createdAt: 'desc' },
         take: 50,
@@ -233,7 +250,7 @@ export class CustomersService {
         data: m,
       })),
       ...reviews.map((r) => ({
-        type: 'hermes_review' as const,
+        type: 'sentinel_review' as const,
         at: r.createdAt,
         data: r,
       })),
@@ -266,5 +283,53 @@ export class CustomersService {
     if (mode === 'replace') return tags;
     if (mode === 'remove') return currentTags.filter((tag) => !tags.includes(tag));
     return this.normalizeTags([...currentTags, ...tags]);
+  }
+
+  async importCsv(buffer: Buffer): Promise<{ created: number; updated: number; skipped: number; errors: string[] }> {
+    const MAX_IMPORT = 1000;
+    const VALID_STAGES = new Set<string>(Object.values(LeadStage));
+    const lines = buffer.toString('utf-8').replace(/\r/g, '').split('\n').filter(Boolean);
+    if (lines.length < 2) throw new BadRequestException('CSV must have a header row and at least one data row');
+    if (lines.length - 1 > MAX_IMPORT) throw new BadRequestException(`Import limit is ${MAX_IMPORT} rows`);
+
+    const header = parseCsvRow(lines[0]).map((h) => h.toLowerCase().trim());
+    const col = (name: string) => header.indexOf(name);
+    const phoneIdx = col('phone') !== -1 ? col('phone') : col('phonenumber');
+    if (phoneIdx === -1) throw new BadRequestException('CSV must have a "phone" column');
+
+    let created = 0, updated = 0, skipped = 0;
+    const errors: string[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const fields = parseCsvRow(lines[i]);
+      const phone = fields[phoneIdx]?.trim();
+      if (!phone) { skipped++; continue; }
+
+      const name = col('name') !== -1 ? fields[col('name')]?.trim() || null : null;
+      const notes = col('notes') !== -1 ? fields[col('notes')]?.trim() || null : null;
+      const rawStage = col('leadstage') !== -1 ? fields[col('leadstage')]?.trim().toLowerCase() : undefined;
+      const leadStage = rawStage && VALID_STAGES.has(rawStage) ? (rawStage as LeadStage) : undefined;
+      const tagsRaw = col('tags') !== -1 ? fields[col('tags')]?.trim() : '';
+      const tags = tagsRaw ? this.normalizeTags(tagsRaw.split(';').map((t) => t.trim()).filter(Boolean)) : undefined;
+
+      try {
+        const existing = await this.prisma.customer.findFirst({ where: { phoneNumber: phone }, select: { id: true } });
+        if (existing) {
+          await this.prisma.customer.update({
+            where: { id: existing.id },
+            data: { ...(name ? { name } : {}), ...(notes ? { notes } : {}), ...(leadStage ? { leadStage } : {}), ...(tags ? { tags } : {}) },
+          });
+          updated++;
+        } else {
+          await this.prisma.customer.create({ data: { phoneNumber: phone, name, notes, ...(leadStage ? { leadStage } : {}), ...(tags ? { tags } : {}) } });
+          created++;
+        }
+      } catch {
+        errors.push(`Row ${i + 1}: failed to upsert phone=${phone}`);
+      }
+    }
+
+    this.logger.log(`CSV import: ${created} created, ${updated} updated, ${skipped} skipped, ${errors.length} errors`);
+    return { created, updated, skipped, errors };
   }
 }

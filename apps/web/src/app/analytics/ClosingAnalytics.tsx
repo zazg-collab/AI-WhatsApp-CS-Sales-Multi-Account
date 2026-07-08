@@ -1,6 +1,7 @@
 'use client';
 
 import { Card } from '@/components/ui/Card';
+import { Star } from '@/components/ui/core-essential-icons';
 import { useApiQuery } from '@/lib/hooks/useApiQuery';
 import type { FunnelConversion, BotAttributionResult, WinLoss } from './closing.types';
 
@@ -170,8 +171,8 @@ function BotAttributionPanel({ data }: { data: BotAttributionResult }) {
                 </td>
                 <td className="py-2 text-right tabular-nums">
                   {bot.avgCsat !== null ? (
-                    <span className={bot.avgCsat >= 4 ? 'text-channel-600 font-semibold' : bot.avgCsat < 3 ? 'text-danger-500' : 'text-gray-600'}>
-                      {bot.avgCsat} ★
+                    <span className={`inline-flex items-center gap-0.5 ${bot.avgCsat >= 4 ? 'text-channel-600 font-semibold' : bot.avgCsat < 3 ? 'text-danger-500' : 'text-gray-600'}`}>
+                      {bot.avgCsat} <Star className="h-3 w-3" aria-hidden="true" />
                     </span>
                   ) : (
                     <span className="text-gray-300">–</span>

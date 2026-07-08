@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { X } from '@phosphor-icons/react';
+import { X } from '@/components/ui/core-essential-icons';
 import { cn } from '@/lib/cn';
 
 export interface ModalProps {

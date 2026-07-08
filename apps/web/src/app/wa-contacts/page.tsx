@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowsClockwise, MagnifyingGlass, DeviceMobile } from '@phosphor-icons/react';
+import { ArrowsClockwise, MagnifyingGlass, DeviceMobile, UserPlus, CheckCircle } from '@/components/ui/core-essential-icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { api } from '@/lib/api';
@@ -85,6 +85,8 @@ export default function WhatsappContactsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [addedIds, setAddedIds] = useState<Record<string, boolean>>({});
+  const [addingIds, setAddingIds] = useState<Record<string, boolean>>({});
 
   const selectedAccount = useMemo(
     () => accounts.find((account) => account.id === accountId) ?? null,
@@ -136,6 +138,26 @@ export default function WhatsappContactsPage() {
   useEffect(() => {
     loadContacts();
   }, [loadContacts]);
+
+  async function handleAddToWa(contact: WhatsappContact) {
+    const phone = contact.phoneNumber?.replace(/\D/g, '');
+    if (!phone || !accountId) return;
+    const fullName = displayName(contact);
+    const firstName = fullName.split(' ')[0] ?? fullName;
+    setAddingIds((prev) => ({ ...prev, [contact.id]: true }));
+    try {
+      await api(`/wa/accounts/${accountId}/contacts`, {
+        method: 'POST',
+        body: JSON.stringify({ phone, fullName, firstName }),
+      });
+      setAddedIds((prev) => ({ ...prev, [contact.id]: true }));
+      setTimeout(() => setAddedIds((prev) => ({ ...prev, [contact.id]: false })), 2000);
+    } catch {
+      // silently ignore — duplicate or unsupported; UI stays neutral
+    } finally {
+      setAddingIds((prev) => ({ ...prev, [contact.id]: false }));
+    }
+  }
 
   return (
     <AppLayout>
@@ -212,6 +234,7 @@ export default function WhatsappContactsPage() {
                         <th className="px-4 py-3">{t('colCrm')}</th>
                         <th className="px-4 py-3">{t('colBio')}</th>
                         <th className="px-4 py-3">{t('colSync')}</th>
+                        <th className="px-4 py-3" />
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-800 dark:bg-gray-900">
@@ -277,6 +300,26 @@ export default function WhatsappContactsPage() {
                             <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
                               {new Date(contact.lastSyncedAt).toLocaleString('id-ID')}
                             </td>
+                            <td className="px-4 py-3">
+                              {contact.phoneNumber && !isLid(contact.jid) && (
+                                <button
+                                  type="button"
+                                  title="Add to WhatsApp contacts"
+                                  disabled={addingIds[contact.id]}
+                                  onClick={() => handleAddToWa(contact)}
+                                  className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50"
+                                  style={addedIds[contact.id]
+                                    ? { color: '#16a34a', background: '#f0fdf4' }
+                                    : { color: '#7c3aed', background: '#f5f3ff' }}
+                                >
+                                  {addedIds[contact.id] ? (
+                                    <><CheckCircle className="h-3.5 w-3.5" aria-hidden="true" />Added</>
+                                  ) : (
+                                    <><UserPlus className="h-3.5 w-3.5" aria-hidden="true" />Add</>
+                                  )}
+                                </button>
+                              )}
+                            </td>
                           </tr>
                         ))
                       )}
@@ -313,8 +356,27 @@ export default function WhatsappContactsPage() {
                           ) : (
                             <div className="mt-1.5 text-xs text-gray-400">{t('notLinked')}</div>
                           )}
-                          <div className="mt-1.5 text-[11px] text-gray-400">
-                            {t('colSync')}: {new Date(contact.lastSyncedAt).toLocaleDateString('id-ID')}
+                          <div className="mt-1.5 flex items-center gap-3">
+                            <span className="text-[11px] text-gray-400">
+                              {t('colSync')}: {new Date(contact.lastSyncedAt).toLocaleDateString('id-ID')}
+                            </span>
+                            {contact.phoneNumber && !isLid(contact.jid) && (
+                              <button
+                                type="button"
+                                disabled={addingIds[contact.id]}
+                                onClick={() => handleAddToWa(contact)}
+                                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50"
+                                style={addedIds[contact.id]
+                                  ? { color: '#16a34a', background: '#f0fdf4' }
+                                  : { color: '#7c3aed', background: '#f5f3ff' }}
+                              >
+                                {addedIds[contact.id] ? (
+                                  <><CheckCircle className="h-3 w-3" aria-hidden="true" />Added ✓</>
+                                ) : (
+                                  <><UserPlus className="h-3 w-3" aria-hidden="true" />Add to WA</>
+                                )}
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>

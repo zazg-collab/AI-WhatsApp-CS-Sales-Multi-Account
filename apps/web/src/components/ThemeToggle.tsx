@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Sun, Moon } from '@phosphor-icons/react';
+import { Sun, Moon } from '@/components/ui/core-essential-icons';
 import { useT, type Dict } from '@/lib/i18n';
 
 const THEME_KEY = 'hermes_theme';

@@ -8,6 +8,7 @@ import { ContactSyncService } from './contact-sync.service';
 import { logAudit } from '../../common/audit.util';
 import { isGroupJid, isOptOutMessage, jidToPhone } from './wa.util';
 import { MetricsService } from '../../common/metrics/metrics.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
 
 interface IncomingMessage {
   accountId: string;
@@ -50,6 +51,7 @@ export class MessageIngestService {
     private readonly autoAssign: AutoAssignService,
     private readonly contactSync: ContactSyncService,
     config: ConfigService,
+    @Optional() private readonly webhooks?: WebhooksService,
     @Optional() private readonly metrics?: MetricsService,
   ) {
     const h = Number(config.get('CSAT_WINDOW_HOURS'));
@@ -67,7 +69,10 @@ export class MessageIngestService {
     // the message key (senderPn); fall back to the contact-sync mapping table.
     if (!groupChat && phone.endsWith('@lid')) {
       const fromKey = msg.senderPn ? jidToPhone(msg.senderPn) : '';
-      if (fromKey && !fromKey.endsWith('@lid')) {
+      // WAHA's WebJS engine sometimes puts a bare direction marker ("out"/"in")
+      // in the participant field instead of a real JID — guard against
+      // treating that as a phone number (it has no digits at all).
+      if (fromKey && /^\d+$/.test(fromKey) && !fromKey.endsWith('@lid')) {
         phone = fromKey;
         // Persist the lid → phone mapping so later lookups (and the WA Contacts
         // page) resolve without needing the key again.
@@ -90,7 +95,7 @@ export class MessageIngestService {
       return;
     }
 
-    const customer = await this.prisma.customer.upsert({
+    const customerUpsertArgs = {
       where: {
         phoneNumber_sourceAccountId: {
           phoneNumber: phone,
@@ -108,7 +113,22 @@ export class MessageIngestService {
         assignedAdminId: account.assignedAdminId,
         lastMessageAt: occurredAt,
       },
-    });
+    };
+    let customer;
+    try {
+      customer = await this.prisma.customer.upsert(customerUpsertArgs);
+    } catch (err) {
+      // History sync ingests messages in parallel batches — two messages for
+      // the SAME phone number can both miss the row and race to insert it.
+      // Prisma's upsert isn't a single atomic statement, so the loser still
+      // throws P2002 instead of falling into its own update branch; retrying
+      // once now finds the winner's row and takes the update path normally.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        customer = await this.prisma.customer.upsert(customerUpsertArgs);
+      } else {
+        throw err;
+      }
+    }
 
     let conversation = await this.prisma.conversation.findFirst({
       where: groupChat
@@ -122,18 +142,35 @@ export class MessageIngestService {
       // configured strategy (round-robin / least-busy). No-op when disabled.
       const assignedAdminId =
         account.assignedAdminId ?? (await this.autoAssign.pickAdmin(account.id));
-      conversation = await this.prisma.conversation.create({
-        data: {
-          customerId: customer.id,
-          whatsappAccountId: account.id,
-          botId: account.assignedBotId,
-          aiMode: groupChat ? AiMode.ai_off : account.aiMode,
-          assignedAdminId,
-          chatJid: msg.remoteJid,
-          isGroup: groupChat,
-          groupSubject: groupChat ? msg.pushName ?? null : null,
-        },
-      });
+      try {
+        conversation = await this.prisma.conversation.create({
+          data: {
+            customerId: customer.id,
+            whatsappAccountId: account.id,
+            botId: account.assignedBotId,
+            aiMode: groupChat ? AiMode.ai_off : account.aiMode,
+            assignedAdminId,
+            chatJid: msg.remoteJid,
+            isGroup: groupChat,
+            groupSubject: groupChat ? msg.pushName ?? null : null,
+          },
+        });
+      } catch (err) {
+        // History sync ingests messages in parallel batches — two messages for
+        // the SAME chat can both miss the findFirst above and race to create
+        // the conversation. The loser just re-reads what the winner created
+        // instead of dropping the message (this used to silently lose most of
+        // a chat's history-synced messages on every reconnect).
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          conversation = await this.prisma.conversation.findFirstOrThrow({
+            where: groupChat
+              ? { whatsappAccountId: account.id, chatJid: msg.remoteJid }
+              : { customerId: customer.id, whatsappAccountId: account.id },
+          });
+        } else {
+          throw err;
+        }
+      }
     } else if (!fromMe && this.autoAssign.enabled && !conversation.assignedAdminId) {
       // Existing chat that nobody owns yet → assign on this inbound.
       const adminId = await this.autoAssign.pickAdmin(account.id);
@@ -215,7 +252,9 @@ export class MessageIngestService {
           quotedMessageId,
           status: fromMe ? MessageStatus.sent : MessageStatus.delivered,
           createdAt: occurredAt,
-        },
+          // Store sender display name for group messages so bubbles can show who sent it.
+          senderName: msg.pushName ?? null,
+        } as any,
         include: {
           quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } },
         },
@@ -234,7 +273,8 @@ export class MessageIngestService {
       throw err;
     }
 
-    const conversationData: Prisma.ConversationUpdateInput = {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const conversationData: Prisma.ConversationUpdateInput & Record<string, any> = {};
     const shouldRefreshLastMessage =
       !conversation.lastMessageAt || occurredAt >= conversation.lastMessageAt;
     if (shouldRefreshLastMessage) {
@@ -244,6 +284,25 @@ export class MessageIngestService {
     if (!fromMe && !msg.suppressAutomation) {
       conversationData.unreadCount = { increment: 1 };
     }
+
+    // Auto-reopen: customer message on a resolved conversation reopens it and
+    // increments reopenCount so quality metrics track failed resolutions.
+    const isReopening =
+      !fromMe &&
+      !msg.suppressAutomation &&
+      conversation.status === 'resolved';
+    if (isReopening) {
+      conversationData.status = 'open';
+      conversationData.reopenCount = { increment: 1 };
+      conversationData.resolvedAt = null;
+      this.logger.log(`Conversation ${conversation.id} reopened by customer message`);
+    }
+
+    // Record first admin/AI response time (only set once, never overwritten).
+    if (fromMe && !msg.suppressAutomation && !(conversation as any).firstResponseAt) {
+      conversationData.firstResponseAt = occurredAt;
+    }
+
     if (Object.keys(conversationData).length > 0) {
       await this.prisma.conversation.update({
         where: { id: conversation.id },
@@ -251,6 +310,7 @@ export class MessageIngestService {
       });
       this.events.emitToAccount(account.id, 'conversation:updated', {
         conversationId: conversation.id,
+        ...(isReopening ? { status: 'open', reopened: true } : {}),
         ...('lastMessage' in conversationData ? { lastMessage: msg.text, lastMessageAt: occurredAt } : {}),
         ...(!fromMe && !msg.suppressAutomation ? { unreadCountDelta: 1 } : {}),
       });
@@ -262,6 +322,16 @@ export class MessageIngestService {
     });
     if (ingestStartedAt !== null) {
       this.metrics?.messageIngestDuration.observe((Date.now() - ingestStartedAt) / 1000);
+    }
+
+    if (!fromMe && msg.text) {
+      this.webhooks?.deliver('message.customer', {
+        conversationId: conversation.id,
+        customerId: customer.id,
+        customerPhone: customer.phoneNumber,
+        whatsappAccountId: conversation.whatsappAccountId,
+        text: msg.text.slice(0, 500),
+      }).catch(() => undefined);
     }
 
     let csatCaptured = false;

@@ -21,8 +21,8 @@ export const landingDict: Dict = {
     en: 'Run every WhatsApp Sales & CS account from one dashboard.',
   },
   heroSub: {
-    id: 'AI membalas otomatis, Hermes meninjau setiap pesan berisiko sebelum terkirim, dan tim Anda bisa ambil alih kapan saja.',
-    en: 'AI replies automatically, Hermes reviews every risky message before it sends, and your team can take over anytime.',
+    id: 'AI membalas otomatis, Sentinel meninjau setiap pesan berisiko sebelum terkirim, dan tim Anda bisa ambil alih kapan saja.',
+    en: 'AI replies automatically, Sentinel reviews every risky message before it sends, and your team can take over anytime.',
   },
   heroCta: { id: 'Masuk ke dashboard', en: 'Go to the dashboard' },
   heroSecondary: { id: 'Lihat cara kerjanya', en: 'See how it works' },
@@ -36,7 +36,7 @@ export const landingDict: Dict = {
   pvCustomer: { id: 'Rina · Lead panas', en: 'Rina · Hot lead' },
   pvMsgCustomer: { id: 'Kak, kalau bayar DP hari ini bisa dikirim besok?', en: 'Hi, if I pay the deposit today can it ship tomorrow?' },
   pvMsgAi: { id: 'Bisa kak. DP 30% mengunci slot pengiriman besok. Saya kirim detailnya ya.', en: 'Yes. A 30% deposit locks tomorrow’s shipping slot. I’ll send the details.' },
-  pvReviewing: { id: 'Hermes meninjau balasan', en: 'Hermes reviewing reply' },
+  pvReviewing: { id: 'Sentinel meninjau balasan', en: 'Sentinel reviewing reply' },
   pvApproved: { id: 'Disetujui · risiko rendah', en: 'Approved · low risk' },
   pvNav: { id: 'Percakapan', en: 'Conversations' },
   pvLive: { id: 'Langsung', en: 'Live' },
@@ -52,24 +52,24 @@ export const landingDict: Dict = {
   // Stats band (factual product/architecture figures, not adoption claims)
   stat1Label: { id: 'mode AI per percakapan', en: 'AI modes per conversation' },
   stat2Label: { id: 'keputusan tercatat & bisa diaudit', en: 'of decisions logged and auditable' },
-  stat3Label: { id: 'lapisan kendali: AI + Hermes', en: 'control layers: AI plus Hermes' },
+  stat3Label: { id: 'lapisan kendali: AI + Sentinel', en: 'control layers: AI plus Sentinel' },
   stat4Label: { id: 'bahasa didukung, bisa diperluas', en: 'languages supported, extensible' },
 
   // Integrations
   intLabel: { id: 'Bekerja dengan tools yang sudah Anda pakai', en: 'Works with the tools you already use' },
 
   // Supervisor (mock video) section
-  supEyebrow: { id: 'Hermes Supervisor', en: 'Hermes Supervisor' },
+  supEyebrow: { id: 'Sentinel Supervisor', en: 'Sentinel Supervisor' },
   supTitle: { id: 'Lapisan kendali di atas setiap bot.', en: 'A control layer above every bot.' },
   supBody: {
-    id: 'Hermes membaca konteks percakapan, memberi skor kepercayaan dan risiko, lalu memutuskan: kirim, jadikan draft, atau minta admin ambil alih. Aturan deterministik menangkap kata kunci sensitif, LLM menilai sisanya.',
-    en: 'Hermes reads conversation context, scores confidence and risk, then decides: send, hold as a draft, or ask an admin to take over. Deterministic rules catch sensitive keywords, the LLM judges the rest.',
+    id: 'Sentinel membaca konteks percakapan, memberi skor kepercayaan dan risiko, lalu memutuskan: kirim, jadikan draft, atau minta admin ambil alih. Aturan deterministik menangkap kata kunci sensitif, LLM menilai sisanya.',
+    en: 'Sentinel reads conversation context, scores confidence and risk, then decides: send, hold as a draft, or ask an admin to take over. Deterministic rules catch sensitive keywords, the LLM judges the rest.',
   },
   supPoint1: { id: 'Skor kepercayaan & risiko per balasan', en: 'Confidence and risk score per reply' },
   supPoint2: { id: 'Gerbang pra-kirim untuk chat sensitif', en: 'Pre-send gate for sensitive chats' },
   supPoint3: { id: 'Audit pasca-kirim untuk chat rutin', en: 'Post-send audit for routine chats' },
   supDemo: { id: 'Lihat demo langsung lewat WhatsApp', en: 'See it live on WhatsApp' },
-  revHeader: { id: 'Tinjauan Hermes', en: 'Hermes review' },
+  revHeader: { id: 'Tinjauan Sentinel', en: 'Sentinel review' },
   revApprove: { id: 'Setujui', en: 'Approve' },
   revDraftLabel: { id: 'Draf AI', en: 'AI draft' },
   revConfidence: { id: 'Kepercayaan', en: 'Confidence' },
@@ -107,7 +107,7 @@ export const landingDict: Dict = {
   cap5Title: { id: 'Analitik closing', en: 'Closing analytics' },
   cap5Body: { id: 'Funnel konversi, atribusi per bot, dan rincian menang/kalah.', en: 'Conversion funnel, per-bot attribution, and win/loss breakdown.' },
   cap6Title: { id: 'Jejak audit penuh', en: 'Full audit trail' },
-  cap6Body: { id: 'Setiap kirim, takeover, dan keputusan Hermes tercatat dan bisa diekspor.', en: 'Every send, takeover, and Hermes decision is logged and exportable.' },
+  cap6Body: { id: 'Setiap kirim, takeover, dan keputusan Sentinel tercatat dan bisa diekspor.', en: 'Every send, takeover, and Sentinel decision is logged and exportable.' },
 
   // How it works
   howEyebrow: { id: 'Mulai dalam tiga langkah', en: 'Live in three steps' },
@@ -117,17 +117,17 @@ export const landingDict: Dict = {
   how2Title: { id: 'Latih persona', en: 'Train the persona' },
   how2Body: { id: 'Atur Soul/persona dan basis pengetahuan produk. AI menjawab sesuai brand Anda.', en: 'Set the Soul/persona and product knowledge base. AI answers on-brand.' },
   how3Title: { id: 'Awasi & skalakan', en: 'Supervise and scale' },
-  how3Body: { id: 'Pilih mode AI per percakapan dan biarkan Hermes menjaga kualitas.', en: 'Pick an AI mode per conversation and let Hermes guard quality.' },
+  how3Body: { id: 'Pilih mode AI per percakapan dan biarkan Sentinel menjaga kualitas.', en: 'Pick an AI mode per conversation and let Sentinel guard quality.' },
 
   // AI modes
   modeEyebrow: { id: 'Kendali per percakapan', en: 'Per-conversation control' },
   modeTitle: { id: 'Lima mode, dari penuh otomatis sampai manual.', en: 'Five modes, from fully automatic to manual.' },
   modeOnTitle: { id: 'AI ON', en: 'AI ON' },
-  modeOnBody: { id: 'Bot membalas otomatis, Hermes mengaudit setelah kirim.', en: 'Bot replies automatically, Hermes audits after sending.' },
+  modeOnBody: { id: 'Bot membalas otomatis, Sentinel mengaudit setelah kirim.', en: 'Bot replies automatically, Sentinel audits after sending.' },
   modeDraftTitle: { id: 'AI DRAFT', en: 'AI DRAFT' },
   modeDraftBody: { id: 'Bot menyiapkan draft, admin yang mengirim.', en: 'Bot drafts the reply, an admin sends it.' },
   modeSupTitle: { id: 'AI SUPERVISED', en: 'AI SUPERVISED' },
-  modeSupBody: { id: 'Hermes meninjau sebelum pesan terkirim.', en: 'Hermes reviews before the message goes out.' },
+  modeSupBody: { id: 'Sentinel meninjau sebelum pesan terkirim.', en: 'Sentinel reviews before the message goes out.' },
   modeOffTitle: { id: 'AI OFF', en: 'AI OFF' },
   modeOffBody: { id: 'Semua balasan ditangani manual oleh tim.', en: 'Every reply is handled manually by the team.' },
   modePausedTitle: { id: 'AI PAUSED', en: 'AI PAUSED' },
@@ -157,7 +157,7 @@ export const landingDict: Dict = {
   faq1Q: { id: 'Apakah akun WhatsApp saya aman dari blokir?', en: 'Will my WhatsApp accounts stay safe from bans?' },
   faq1A: { id: 'Setiap kirim memakai jeda manusiawi dan rate limit per akun, sesi tersimpan dengan reconnect otomatis, dan tidak ada pengiriman gaya broadcast. Campaign selalu lewat antrian terkontrol dengan persetujuan.', en: 'Every send uses human-like delays and per-account rate limits, sessions persist with auto-reconnect, and there are no broadcast-style blasts. Campaigns always run through a controlled, approved queue.' },
   faq2Q: { id: 'Bagaimana kalau AI salah kirim ke pelanggan?', en: 'What if the AI sends the wrong thing to a customer?' },
-  faq2A: { id: 'Untuk chat sensitif, Hermes meninjau balasan sebelum terkirim dan bisa menahannya jadi draft, memblokir, atau meminta admin ambil alih. Saat risiko terdeteksi, AI berhenti otomatis.', en: 'For sensitive chats, Hermes reviews the reply before it sends and can hold it as a draft, block it, or hand off to an admin. When risk is detected, the AI pauses automatically.' },
+  faq2A: { id: 'Untuk chat sensitif, Sentinel meninjau balasan sebelum terkirim dan bisa menahannya jadi draft, memblokir, atau meminta admin ambil alih. Saat risiko terdeteksi, AI berhenti otomatis.', en: 'For sensitive chats, Sentinel reviews the reply before it sends and can hold it as a draft, block it, or hand off to an admin. When risk is detected, the AI pauses automatically.' },
   faq3Q: { id: 'Model AI apa yang dipakai, dan bisa diganti?', en: 'Which AI model does it use, and can I change it?' },
   faq3A: { id: 'Mesin AI kompatibel dengan endpoint OpenAI mana pun. Default-nya Hermes dari Nous Research, dan Anda bisa pindah ke model lain lewat konfigurasi tanpa mengubah kode.', en: 'The AI engine works with any OpenAI-compatible endpoint. It defaults to Nous Research Hermes, and you can switch to another model through configuration with no code change.' },
   faq4Q: { id: 'Bisa untuk banyak admin dengan peran berbeda?', en: 'Does it support multiple admins with different roles?' },

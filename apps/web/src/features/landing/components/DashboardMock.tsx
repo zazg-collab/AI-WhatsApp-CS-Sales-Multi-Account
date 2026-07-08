@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { ShieldStar, CheckCircle, TrendUp } from '@phosphor-icons/react';
+import { ShieldStar, CheckCircle, TrendUp } from '@/components/ui/core-essential-icons';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/cn';
 import type { TFunction } from '@/lib/i18n';

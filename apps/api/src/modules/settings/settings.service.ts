@@ -7,6 +7,8 @@ import {
   WaSettings,
   NotificationSettings,
   SlaSettings,
+  SentinelSettings,
+  CampaignSettings,
 } from './settings.types';
 
 /**
@@ -39,7 +41,7 @@ export class SettingsService {
         baseUrl: (this.config.get<string>('AI_BASE_URL') ?? 'https://api.openai.com/v1').replace(/\/$/, ''),
         apiKey: this.config.get<string>('AI_API_KEY') ?? '',
         model: this.config.get<string>('AI_MODEL') ?? 'gpt-4o-mini',
-        hermesModel: this.config.get<string>('HERMES_MODEL') ?? '',
+        sentinelModel: this.config.get<string>('SENTINEL_MODEL') ?? this.config.get<string>('HERMES_MODEL') ?? '',
         temperature: this.num(this.config.get('AI_TEMPERATURE'), 0.6),
         timeoutMs: this.num(this.config.get('AI_TIMEOUT_MS'), 30_000),
         embedModel: this.config.get<string>('AI_EMBED_MODEL') ?? '',
@@ -57,6 +59,17 @@ export class SettingsService {
       },
       sla: {
         responseMinutes: this.num(this.config.get('SLA_RESPONSE_MINUTES'), 15),
+        idleCloseDays: this.num(this.config.get('IDLE_CLOSE_DAYS'), 3),
+      },
+      sentinel: {
+        autoSendConfidenceMin: this.num(this.config.get('SENTINEL_AUTO_SEND_MIN'), 90),
+        draftConfidenceMin: this.num(this.config.get('SENTINEL_DRAFT_MIN'), 50),
+        riskKeywords: this.config.get<string>('SENTINEL_RISK_KEYWORDS') ?? '',
+        defaultAiMode: (this.config.get<string>('SENTINEL_DEFAULT_AI_MODE') as SentinelSettings['defaultAiMode']) ?? 'ai_draft',
+      },
+      campaign: {
+        defaultRateLimitPerMinute: this.num(this.config.get('CAMPAIGN_DEFAULT_RATE_LIMIT'), 6),
+        requireApproval: (this.config.get<string>('CAMPAIGN_REQUIRE_APPROVAL') ?? 'true') !== 'false',
       },
     };
   }
@@ -91,6 +104,12 @@ export class SettingsService {
   }
   async sla(): Promise<SlaSettings> {
     return (await this.getAll()).sla;
+  }
+  async sentinel(): Promise<SentinelSettings> {
+    return (await this.getAll()).sentinel;
+  }
+  async campaign(): Promise<CampaignSettings> {
+    return (await this.getAll()).campaign;
   }
 
   /** Persist a category's values (partial merge) and invalidate the cache. */

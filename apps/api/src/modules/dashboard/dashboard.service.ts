@@ -43,7 +43,21 @@ export class DashboardService {
       this.calculateResponseMetrics(yesterday),
     ]);
 
-    const topAccounts = await this.getTopAccounts(7);
+    const [topAccounts, reopenStats, resolutionStats] = await Promise.all([
+      this.getTopAccounts(7),
+      // Conversations reopened in last 7 days
+      this.prisma.conversation.aggregate({
+        _sum: { reopenCount: true },
+        where: { updatedAt: { gte: new Date(now.getTime() - 7 * 86400000) } },
+      } as any),
+      // Avg resolution time from stored fields (accurate, no message scan)
+      this.prisma.$queryRaw<{ avg_seconds: number }[]>`
+        SELECT EXTRACT(EPOCH FROM AVG(resolved_at - created_at))::int AS avg_seconds
+        FROM conversations
+        WHERE resolved_at IS NOT NULL
+          AND created_at >= ${new Date(now.getTime() - 7 * 86400000)}
+      `,
+    ]);
 
     return {
       totalConversations,
@@ -53,6 +67,8 @@ export class DashboardService {
       leadsToday: { hot: hotLeadsToday, warm: warmLeadsToday, cold: coldLeadsToday },
       messagesLast24h,
       avgResponseTime: responseMetrics.avgSeconds,
+      avgResolutionSeconds: resolutionStats[0]?.avg_seconds ?? null,
+      totalReopened7d: (reopenStats as any)?._sum?.reopenCount ?? 0,
       topAccounts,
     };
   }
@@ -174,17 +190,17 @@ export class DashboardService {
   async getAiQuality(days: number) {
     const since = this.daysAgo(this.normalizeDays(days));
     const [reviews, decisions, riskLevels, fallbackCount, aiMessages] = await Promise.all([
-      this.prisma.hermesReview.aggregate({
+      this.prisma.sentinelReview.aggregate({
         where: { createdAt: { gte: since } },
         _avg: { confidenceScore: true, riskScore: true },
         _count: { _all: true },
       }),
-      this.prisma.hermesReview.groupBy({
+      this.prisma.sentinelReview.groupBy({
         by: ['decision'],
         where: { createdAt: { gte: since } },
         _count: { _all: true },
       }),
-      this.prisma.hermesReview.groupBy({
+      this.prisma.sentinelReview.groupBy({
         by: ['riskLevel'],
         where: { createdAt: { gte: since } },
         _count: { _all: true },
@@ -336,7 +352,7 @@ export class DashboardService {
           entry.total += seconds;
           entry.count += 1;
         }
-        // Any agent reply (admin or ai) closes the burst; system/hermes ignored.
+        // Any agent reply (admin or ai) closes the burst; system/sentinel ignored.
         if (message.senderType === SenderType.admin || message.senderType === SenderType.ai) {
           askedAt = null;
         }
@@ -406,7 +422,7 @@ export class DashboardService {
             askedAt = null;
           }
         }
-        // system/hermes messages don't close a pending customer question
+        // system/sentinel messages don't close a pending customer question
       }
     }
 
@@ -418,6 +434,73 @@ export class DashboardService {
       ? Math.round(responseSeconds[Math.floor((responseSeconds.length - 1) * 0.95)])
       : 0;
     return { avgSeconds, p95Seconds, sampleSize: responseSeconds.length };
+  }
+
+  /** Sentiment trend: daily avg score + label distribution over last N days. */
+  async getSentimentTrend(days: number) {
+    const safeDays = this.normalizeDays(days);
+    const rows = await this.prisma.$queryRaw<
+      { day: string; avg_score: number; positive: number; neutral: number; negative: number }[]
+    >`
+      SELECT
+        TO_CHAR(sentiment_at, 'YYYY-MM-DD') AS day,
+        ROUND(AVG(sentiment_score))::int     AS avg_score,
+        COUNT(*) FILTER (WHERE sentiment_label = 'positive')::int AS positive,
+        COUNT(*) FILTER (WHERE sentiment_label = 'neutral')::int  AS neutral,
+        COUNT(*) FILTER (WHERE sentiment_label = 'negative')::int AS negative
+      FROM conversations
+      WHERE sentiment_at >= ${this.daysAgo(safeDays)}
+        AND sentiment_score IS NOT NULL
+      GROUP BY day
+      ORDER BY day ASC
+    `;
+    return { days: safeDays, trend: rows };
+  }
+
+  /** First Response Time per WhatsApp account (not just per admin). */
+  async getFrtByAccount(days: number) {
+    const safeDays = this.normalizeDays(days);
+    const since = this.daysAgo(safeDays);
+    const rows = await this.prisma.$queryRaw<
+      { accountId: string; accountName: string; avg_seconds: number; sample: number }[]
+    >`
+      SELECT
+        wa.id            AS "accountId",
+        wa.account_name  AS "accountName",
+        ROUND(AVG(EXTRACT(EPOCH FROM (m.created_at - c.created_at))))::int AS avg_seconds,
+        COUNT(*)::int AS sample
+      FROM conversations c
+      JOIN whatsapp_accounts wa ON wa.id = c.whatsapp_account_id
+      JOIN messages m ON m.conversation_id = c.id
+      WHERE c.first_response_at IS NOT NULL
+        AND c.created_at >= ${since}
+        AND m.created_at = c.first_response_at
+      GROUP BY wa.id, wa.account_name
+      ORDER BY avg_seconds ASC
+    `;
+    return { days: safeDays, accounts: rows };
+  }
+
+  /** Reopen rate — % of resolved conversations that were reopened, per account. */
+  async getReopenRate(days: number) {
+    const safeDays = this.normalizeDays(days);
+    const since = this.daysAgo(safeDays);
+    const rows = await this.prisma.$queryRaw<
+      { accountId: string; accountName: string; total: number; reopened: number; rate: number }[]
+    >`
+      SELECT
+        wa.id           AS "accountId",
+        wa.account_name AS "accountName",
+        COUNT(*)::int                                               AS total,
+        COUNT(*) FILTER (WHERE c.reopen_count > 0)::int            AS reopened,
+        ROUND(100.0 * COUNT(*) FILTER (WHERE c.reopen_count > 0) / NULLIF(COUNT(*),0))::int AS rate
+      FROM conversations c
+      JOIN whatsapp_accounts wa ON wa.id = c.whatsapp_account_id
+      WHERE c.resolved_at >= ${since}
+      GROUP BY wa.id, wa.account_name
+      ORDER BY rate DESC
+    `;
+    return { days: safeDays, accounts: rows };
   }
 
   private daysAgo(days: number) {

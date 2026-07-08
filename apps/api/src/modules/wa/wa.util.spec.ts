@@ -2,7 +2,7 @@ import { phoneToJid, jidToPhone, humanDelay, isDirectChatJid, isGroupJid, isSupp
 
 describe('wa.util', () => {
   describe('phoneToJid', () => {
-    it('strips non-digits and appends suffix', () => {
+    it('strips non-digits and appends the Baileys @s.whatsapp.net suffix', () => {
       expect(phoneToJid('+62 812-3456-7890')).toBe('6281234567890@s.whatsapp.net');
     });
     it('handles already-clean digits', () => {
@@ -26,7 +26,8 @@ describe('wa.util', () => {
   });
 
   describe('isDirectChatJid', () => {
-    it('accepts 1-on-1 chats', () => {
+    it('accepts 1-on-1 chats (@c.us and legacy @s.whatsapp.net)', () => {
+      expect(isDirectChatJid('6281234567890@c.us')).toBe(true);
       expect(isDirectChatJid('6281234567890@s.whatsapp.net')).toBe(true);
     });
     it('accepts WhatsApp LID 1-on-1 chats from multi-device sync', () => {

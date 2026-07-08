@@ -21,7 +21,7 @@ interface UseInboxSocketParams {
 
 /**
  * All live Socket.IO wiring for the inbox: incoming/draft/status/edit/delete/
- * reaction message events, conversation/SLA/Hermes/account refresh triggers,
+ * reaction message events, conversation/SLA/Sentinel/account refresh triggers,
  * and customer typing presence. Extracted from useInbox so the realtime
  * reconciliation logic lives in one focused place. Behaviour is unchanged —
  * the effect mounts once and patches `conv`/list via the passed setters/refs.
@@ -135,6 +135,14 @@ export function useInboxSocket({
 
     const onConvUpdate = () => { scheduleListReload(); scheduleConvReload(); };
 
+    const onWaStatus = () => {
+      // wa:status triggers history sync on the backend (fire-and-forget).
+      // Wait longer than default 500ms so sync has time to complete before we refetch conversations.
+      if (listTimer) clearTimeout(listTimer);
+      listTimer = setTimeout(() => loadListRef.current(), 3000);
+      scheduleConvReload();
+    };
+
     const onPresence = ({ phone, typing }: { accountId: string; phone: string; typing: boolean }) => {
       setTypingCustomer((prev) => {
         const next = typing
@@ -157,11 +165,10 @@ export function useInboxSocket({
     socket.on('conversation:updated', onConvUpdate);
     socket.on('conversation:sla-breach', onConvUpdate);
     socket.on('conversation:sla-cleared', onConvUpdate);
-    socket.on('hermes:alert', onConvUpdate);
+    socket.on('sentinel:alert', onConvUpdate);
     socket.on('customer:avatar', onConvUpdate);
-    // Account connect/disconnect → refresh the open conversation so the header
-    // status and composer block reflect the new sessionStatus live.
-    socket.on('wa:status', onConvUpdate);
+    // Account connect/disconnect → history sync starts on backend. Wait 3s for it to complete before refreshing conversations.
+    socket.on('wa:status', onWaStatus);
     socket.on('wa:presence', onPresence);
 
     return () => {
@@ -178,9 +185,9 @@ export function useInboxSocket({
       socket.off('conversation:updated', onConvUpdate);
       socket.off('conversation:sla-breach', onConvUpdate);
       socket.off('conversation:sla-cleared', onConvUpdate);
-      socket.off('hermes:alert', onConvUpdate);
+      socket.off('sentinel:alert', onConvUpdate);
       socket.off('customer:avatar', onConvUpdate);
-      socket.off('wa:status', onConvUpdate);
+      socket.off('wa:status', onWaStatus);
       socket.off('wa:presence', onPresence);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

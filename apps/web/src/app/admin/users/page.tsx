@@ -1,6 +1,6 @@
 'use client';
 
-import { Plus, PencilSimple, Trash, UsersThree, ShieldWarning } from '@phosphor-icons/react';
+import { Plus, PencilSimple, Trash, UsersThree, ShieldWarning } from '@/components/ui/core-essential-icons';
 import { Avatar } from '@/components/ui/Avatar';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
@@ -55,7 +55,7 @@ function CreateUserModal({ onClose, onSuccess, isLoading }: { onClose: () => voi
     >
       {error && <FormError message={error} />}
       <form id="create-user-form" onSubmit={handleSubmit} className="space-y-3">
-        <Field label={t('nameOptionalLabel')} value={name} onChange={(e) => setName(e.target.value)} placeholder="John Doe" />
+        <Field label={t('nameOptionalLabel')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('nameOptionalPlaceholder')} />
         <Field label={t('emailLabel')} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="user@example.com" />
         <Field label={t('passwordLabel')} type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('passwordPlaceholder')} hint={t('passwordHint')} />
         <SelectField label={t('roleLabel')} value={role} onChange={(e) => setRole(e.target.value as typeof role)}><RoleOptions /></SelectField>

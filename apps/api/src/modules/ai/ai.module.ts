@@ -7,9 +7,10 @@ import { AiCacheService } from './ai-cache.service';
 import { EmbeddingService } from './embedding.service';
 import { KnowledgeIndexService } from './knowledge-index.service';
 import { ProductsModule } from '../products/products.module';
+import { WebhooksModule } from '../webhooks/webhooks.module';
 
 @Module({
-  imports: [ProductsModule],
+  imports: [ProductsModule, WebhooksModule],
   controllers: [AiController],
   providers: [
     AiService,

@@ -12,6 +12,8 @@ import {
   CONTEXT_TRIM_NOTE,
   KNOWLEDGE_EMPTY_NOTE,
   KNOWLEDGE_SECTION_LABEL,
+  MEDIA_EMPTY_NOTE,
+  MEDIA_SECTION_LABEL,
   PERSONA_SECTION_LABEL,
   PRODUCT_AVAILABLE,
   PRODUCT_OUT_OF_STOCK,
@@ -128,6 +130,16 @@ export class PromptBuilderService {
         ].join('\n')
       : null;
 
+    // So rule 12 ("only mention media that's actually available") is grounded
+    // in real data, not just a promise the model might ignore.
+    const mediaList = await this.loadActiveMedia();
+    const mediaBlock = [
+      t(MEDIA_SECTION_LABEL, lang),
+      mediaList.length
+        ? mediaList.map((m) => `• ${m.title} (${m.purpose}${m.kind ? `, ${m.kind}` : ''})`).join('\n')
+        : t(MEDIA_EMPTY_NOTE, lang),
+    ].join('\n');
+
     // The LARGE shared block (persona + knowledge + rules [+ stock]) leads the
     // prompt. When no product matched it is byte-identical across conversations
     // of a bot — the cacheable prefix providers reuse at ~10% cost; the small
@@ -146,6 +158,8 @@ export class PromptBuilderService {
       '',
       t(BASE_RULES, lang),
       ...(productBlock ? ['', productBlock] : []),
+      '',
+      mediaBlock,
     ].join('\n');
 
     // Customer memory (incl. aiMemory mined from chats) is injection-prone too —
@@ -203,6 +217,47 @@ export class PromptBuilderService {
       { role: 'system', content: customerSystem },
       ...history,
     ];
+  }
+
+  /**
+   * The same knowledge + live-product text injected into the prompt for this
+   * conversation, returned standalone so a deterministic groundedness check
+   * (Sentinel's checkPriceGrounding) can verify a draft against the actual
+   * data the bot was given — not just trust the LLM's "don't fabricate" rule.
+   */
+  async getGroundingText(conversationId: string): Promise<string> {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: {
+        bot: { select: { knowledgeBaseId: true } },
+        messages: { orderBy: { createdAt: 'desc' }, take: 3 },
+      },
+    });
+    if (!conversation) return '';
+
+    const query = conversation.messages
+      .filter((m) => m.senderType === SenderType.customer && m.content)
+      .map((m) => m.content as string)
+      .join(' ');
+
+    const knowledge = await this.loadKnowledge(conversation.bot?.knowledgeBaseId ?? null, query);
+    const products = query ? await this.products.relevantForQuery(query) : [];
+    const productText = products
+      .map((p) => `${p.name} ${p.price ?? ''} ${p.stock}`)
+      .join('\n');
+
+    return `${knowledge}\n${productText}`;
+  }
+
+  /** Active asset titles the bot may honestly reference (rule 12). Global,
+   *  not per-bot — assets aren't scoped to a bot in the data model. */
+  private async loadActiveMedia(): Promise<Array<{ title: string; purpose: string; kind: string }>> {
+    return this.prisma.asset.findMany({
+      where: { status: 'active' },
+      select: { title: true, purpose: true, kind: true },
+      take: 30,
+      orderBy: { updatedAt: 'desc' },
+    });
   }
 
   private async loadKnowledge(

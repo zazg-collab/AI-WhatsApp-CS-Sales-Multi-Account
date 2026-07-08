@@ -45,6 +45,8 @@ export class SettingsController {
     if (dto.wa) await this.settings.updateCategory('wa', dto.wa);
     if (dto.notifications) await this.settings.updateCategory('notifications', dto.notifications);
     if (dto.sla) await this.settings.updateCategory('sla', dto.sla);
+    if (dto.sentinel) await this.settings.updateCategory('sentinel', dto.sentinel);
+    if (dto.campaign) await this.settings.updateCategory('campaign', dto.campaign);
 
     await logAudit(this.prisma, {
       userId: user.id,

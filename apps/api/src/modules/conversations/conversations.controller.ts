@@ -84,6 +84,7 @@ export class ConversationsController {
     @Query('label') label?: string,
     @Query('search') search?: string,
     @Query('needsAttention') needsAttention?: string,
+    @Query('excludeGroups') excludeGroups?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -98,6 +99,7 @@ export class ConversationsController {
       label,
       search,
       needsAttention: needsAttention === 'true',
+      excludeGroups: excludeGroups === 'true',
       page: page ? parseInt(page, 10) : 1,
       limit: limit ? parseInt(limit, 10) : 50,
       user,

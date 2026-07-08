@@ -12,9 +12,10 @@ export interface WaAccount {
 
 export interface Message {
   id: string;
-  senderType: 'customer' | 'admin' | 'ai' | 'system' | 'hermes';
+  senderType: 'customer' | 'admin' | 'ai' | 'system' | 'sentinel';
   content: string | null;
   messageType: string;
+  senderName?: string | null;
   status: string;
   aiGenerated: boolean;
   createdAt: string;
@@ -26,7 +27,7 @@ export interface Message {
   isStarred?: boolean;
 }
 
-export interface HermesReview {
+export interface SentinelReview {
   id: string;
   decision: string;
   confidenceScore: number;
@@ -44,10 +45,14 @@ export interface ConvSummary {
   slaBreachedAt?: string | null;
   lastMessage: string | null;
   lastMessageAt: string | null;
+  lastSenderType?: string | null;
   unreadCount?: number;
+  isPinned?: boolean;
+  isMuted?: boolean;
   isGroup?: boolean;
   groupSubject?: string | null;
-  customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[]; avatarUrl?: string | null };
+  lastSenderName?: string | null;
+  customer: { id: string; name: string | null; waName?: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[]; avatarUrl?: string | null };
   whatsappAccount: { id: string; accountName: string; phoneNumber: string };
   assignedAdmin?: AdminUser | null;
   messages?: { status: string }[];
@@ -66,13 +71,18 @@ export interface ConvDetail {
   isGroup?: boolean;
   groupSubject?: string | null;
   groupParticipants?: Array<{ jid: string; admin?: string | null }> | null;
-  customer: { id: string; name: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[]; notes: string | null; avatarUrl?: string | null };
+  customer: { id: string; name: string | null; waName?: string | null; phoneNumber: string; leadScore: number; leadStage: string; tags: string[]; notes: string | null; avatarUrl?: string | null };
   whatsappAccount: WaAccount;
   bot: { id: string; botName: string; persona?: { id: string; name: string } | null } | null;
   assignedAdmin?: AdminUser | null;
   labels?: string[];
+  firstResponseAt?: string | null;
+  resolvedAt?: string | null;
+  reopenCount?: number;
+  sentimentLabel?: string | null;
+  sentimentScore?: number | null;
   messages: Message[];
-  hermesReviews: HermesReview[];
+  sentinelReviews: SentinelReview[];
 }
 
 export type Filter = 'all' | 'attention' | 'sla' | 'unassigned';

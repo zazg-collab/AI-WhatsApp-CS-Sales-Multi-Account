@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CaretLeft, CaretRight, ClockCounterClockwise, XCircle, Copy, Check, Warning, Trash, ShieldWarning } from '@phosphor-icons/react';
+import { CaretLeft, CaretRight, ClockCounterClockwise, XCircle, Copy, Check, Warning, Trash, ShieldWarning } from '@/components/ui/core-essential-icons';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -24,9 +24,10 @@ function classifyRisk(action: string): RiskLevel {
 }
 
 function RiskBadge({ action }: { action: string }) {
+  const t = useT(dict);
   const risk = classifyRisk(action);
-  if (risk === 'high') return <Badge tone="danger" className="ml-1 shrink-0"><Warning className="h-2.5 w-2.5" aria-hidden="true" /><span className="sr-only">High risk</span></Badge>;
-  if (risk === 'medium') return <Badge tone="review" className="ml-1 shrink-0"><ShieldWarning className="h-2.5 w-2.5" aria-hidden="true" /><span className="sr-only">Medium risk</span></Badge>;
+  if (risk === 'high') return <Badge tone="danger" className="ml-1 shrink-0"><Warning className="h-2.5 w-2.5" aria-hidden="true" /><span className="sr-only">{t('riskHigh')}</span></Badge>;
+  if (risk === 'medium') return <Badge tone="review" className="ml-1 shrink-0"><ShieldWarning className="h-2.5 w-2.5" aria-hidden="true" /><span className="sr-only">{t('riskMedium')} risk</span></Badge>;
   return null;
 }
 

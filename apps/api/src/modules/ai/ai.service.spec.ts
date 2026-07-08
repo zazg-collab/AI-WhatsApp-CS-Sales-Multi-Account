@@ -75,6 +75,36 @@ describe('AiService', () => {
     });
   });
 
+  describe('generateSegmentedReply', () => {
+    const burst = [
+      { index: 1, content: 'harga berapa?', messageType: 'text' },
+      { index: 2, content: 'stok L ada?', messageType: 'text' },
+    ];
+
+    it('parses per-topic segments and maps the answered message index', async () => {
+      provider.chat.mockResolvedValue(
+        '{"segments":[{"menjawab":1,"balasan":"Harganya 50rb"},{"menjawab":2,"balasan":"Stok L ada"}]}',
+      );
+      const r = await service.generateSegmentedReply('c1', burst);
+      expect(r).toEqual([
+        { answersIndex: 1, text: 'Harganya 50rb' },
+        { answersIndex: 2, text: 'Stok L ada' },
+      ]);
+    });
+
+    it('nulls out an index that is not in the burst', async () => {
+      provider.chat.mockResolvedValue('{"segments":[{"menjawab":9,"balasan":"halo"}]}');
+      const r = await service.generateSegmentedReply('c1', burst);
+      expect(r).toEqual([{ answersIndex: null, text: 'halo' }]);
+    });
+
+    it('falls back to a single segment when output is not the expected JSON', async () => {
+      provider.chat.mockResolvedValue('Baik kak, harganya 50rb dan stok L masih ada.');
+      const r = await service.generateSegmentedReply('c1', burst);
+      expect(r).toEqual([{ answersIndex: null, text: 'Baik kak, harganya 50rb dan stok L masih ada.' }]);
+    });
+  });
+
   describe('summarizeChat', () => {
     it('returns summary from provider', async () => {
       prompts.buildForConversation.mockResolvedValue([

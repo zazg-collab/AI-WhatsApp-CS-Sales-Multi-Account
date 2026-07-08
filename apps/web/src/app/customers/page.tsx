@@ -1,7 +1,8 @@
 'use client';
 
+import { useRef } from 'react';
 import Link from 'next/link';
-import { MagnifyingGlass, ArrowsClockwise, AddressBook } from '@phosphor-icons/react';
+import { MagnifyingGlass, ArrowsClockwise, AddressBook } from '@/components/ui/core-essential-icons';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -24,14 +25,15 @@ export default function CustomersPage() {
     loading, submitting, toast, setToast,
     page, setPage, total,
     canBulkEdit,
-    loadCustomers, toggleCustomer, toggleAllVisible, applyBulkAction,
+    loadCustomers, toggleCustomer, toggleAllVisible, applyBulkAction, importCsv,
   } = useCustomers();
 
   const selectedCount = [...selectedSet].length;
+  const importRef = useRef<HTMLInputElement>(null);
 
   return (
     <AppLayout>
-      <PageHeader title="Contacts" subtitle={t('subtitle')}>
+      <PageHeader title={t('title')} subtitle={t('subtitle')}>
         <Badge tone="neutral">{t('loadedCount', { n: customers.length })}</Badge>
       </PageHeader>
 
@@ -40,10 +42,10 @@ export default function CustomersPage() {
       <div className="flex flex-1 flex-col overflow-y-auto md:overflow-hidden">
         {/* Filters */}
         <section className="border-b border-gray-200 bg-white px-5 py-3 dark:border-gray-800 dark:bg-gray-900">
-          <div className="grid gap-2 lg:grid-cols-[1fr_180px_180px_auto]">
+          <div className="grid gap-2 lg:grid-cols-[1fr_180px_180px_auto_auto]">
             <div className="relative">
               <MagnifyingGlass className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" aria-hidden="true" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or number…" aria-label={t('searchAria')} className={`${inputClass} w-full pl-8`} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('searchPlaceholder')} aria-label={t('searchAria')} className={`${inputClass} w-full pl-8`} />
             </div>
             <select value={stageFilter} onChange={(e) => setStageFilter(e.target.value)} aria-label={t('stageFilterAria')} className={inputClass}>
               <option value="">{t('allStages')}</option>
@@ -53,6 +55,15 @@ export default function CustomersPage() {
             <Button variant="outline" size="md" onClick={loadCustomers}>
               <ArrowsClockwise className="h-4 w-4" aria-hidden="true" />{t('reload')}
             </Button>
+            {canBulkEdit && (
+              <>
+                <input ref={importRef} type="file" accept=".csv" className="hidden" aria-hidden="true"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) { importCsv(f); e.target.value = ''; } }} />
+                <Button variant="outline" size="md" onClick={() => importRef.current?.click()} disabled={submitting}>
+                  Import CSV
+                </Button>
+              </>
+            )}
           </div>
         </section>
 
@@ -139,13 +150,13 @@ export default function CustomersPage() {
                     {customers.map((customer) => (
                       <tr key={customer.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40">
                         <td className="px-4 py-3">
-                          <input type="checkbox" checked={selectedSet.has(customer.id)} onChange={() => toggleCustomer(customer.id)} aria-label={t('selectRow', { name: customer.name || customer.phoneNumber })} className="accent-hermes-600" />
+                          <input type="checkbox" checked={selectedSet.has(customer.id)} onChange={() => toggleCustomer(customer.id)} aria-label={t('selectRow', { name: customer.waName || customer.name || customer.phoneNumber })} className="accent-hermes-600" />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">
-                            <Avatar name={customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-8 w-8 text-[11px] font-semibold" />
+                            <Avatar name={customer.waName ?? customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-8 w-8 text-[11px] font-semibold" />
                             <div className="min-w-0">
-                              <Link href={`/customers/${customer.id}`} className="block truncate font-medium text-gray-900 hover:text-hermes-600 hover:underline dark:text-gray-100 dark:hover:text-hermes-400">{customer.name || t('noName')}</Link>
+                              <Link href={`/customers/${customer.id}`} className="block truncate font-medium text-gray-900 hover:text-hermes-600 hover:underline dark:text-gray-100 dark:hover:text-hermes-400">{customer.waName || customer.name || t('noName')}</Link>
                               <div className="text-xs text-gray-400">{formatPhone(customer.phoneNumber, t('hiddenNumber'))}</div>
                             </div>
                           </div>
@@ -184,11 +195,11 @@ export default function CustomersPage() {
                 <div className="divide-y divide-gray-100 dark:divide-gray-800">
                   {customers.map((customer) => (
                     <label key={customer.id} className="flex items-start gap-3 px-4 py-3 active:bg-gray-50 dark:active:bg-gray-800/40">
-                      <input type="checkbox" checked={selectedSet.has(customer.id)} onChange={() => toggleCustomer(customer.id)} aria-label={t('selectRow', { name: customer.name || customer.phoneNumber })} className="mt-1 accent-hermes-600" />
-                      <Avatar name={customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-9 w-9 shrink-0 text-[11px] font-semibold" />
+                      <input type="checkbox" checked={selectedSet.has(customer.id)} onChange={() => toggleCustomer(customer.id)} aria-label={t('selectRow', { name: customer.waName || customer.name || customer.phoneNumber })} className="mt-1 accent-hermes-600" />
+                      <Avatar name={customer.waName ?? customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-9 w-9 shrink-0 text-[11px] font-semibold" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="truncate font-medium text-gray-900 dark:text-gray-100">{customer.name || t('noName')}</span>
+                          <span className="truncate font-medium text-gray-900 dark:text-gray-100">{customer.waName || customer.name || t('noName')}</span>
                           <Badge tone={stageTone[customer.leadStage]}>{t(stageLabelKey[customer.leadStage])}</Badge>
                         </div>
                         <div className="text-xs text-gray-400">{formatPhone(customer.phoneNumber, t('hiddenNumber'))} · {t('score', { n: customer.leadScore })}</div>

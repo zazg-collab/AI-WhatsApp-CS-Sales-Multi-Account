@@ -4,7 +4,7 @@ describe('AgentService', () => {
   let service: AgentService;
   let prisma: any;
   let dashboard: any;
-  let hermes: any;
+  let sentinel: any;
 
   beforeEach(() => {
     prisma = {
@@ -16,12 +16,12 @@ describe('AgentService', () => {
       getPerformanceOverview: jest.fn().mockResolvedValue({ rangeDays: 7 }),
       getLeadFunnel: jest.fn().mockResolvedValue([{ stage: 'hot', count: 2 }]),
     };
-    hermes = {
+    sentinel = {
       dailyReport: jest.fn().mockResolvedValue({ reviews: 0 }),
       knowledgeGaps: jest.fn().mockResolvedValue([]),
       alerts: jest.fn().mockResolvedValue([]),
     };
-    service = new AgentService(prisma, dashboard, hermes);
+    service = new AgentService(prisma, dashboard, sentinel);
   });
 
   it('assembles a consolidated read-only report and clamps days', async () => {
@@ -31,7 +31,7 @@ describe('AgentService', () => {
     expect(r.summary).toEqual({ totalConversations: 3 });
     expect(r.leadFunnel).toEqual([{ stage: 'hot', count: 2 }]);
     expect(dashboard.getPerformanceOverview).toHaveBeenCalledWith(90);
-    expect(hermes.knowledgeGaps).toHaveBeenCalledWith(20);
+    expect(sentinel.knowledgeGaps).toHaveBeenCalledWith(20);
   });
 
   it('defaults to 7 days when given a non-finite value', async () => {

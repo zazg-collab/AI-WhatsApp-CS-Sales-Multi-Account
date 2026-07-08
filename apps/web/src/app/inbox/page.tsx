@@ -29,6 +29,7 @@ function InboxInner() {
   const searchParams = useSearchParams();
   const {
     list, activeId, setActiveId, conv, filter, setFilter, search, setSearch,
+    accountFilter, setAccountFilter, excludeGroups, setExcludeGroups,
     composer, setComposer, busy,
     admins, accounts, bots, assets, assetSuggestions,
     quickReplies, followUps,
@@ -48,9 +49,12 @@ function InboxInner() {
     setContactBlocked, setChatMuted, setChatArchived, setChatPinned,
     setMessageStarred, forwardMessage, setDisappearing, saveLabels,
     validateNumber, startConversation, searchContacts, assignAdmin, updateNotes, handleMediaFile,
+    msgSearch, msgSearchResults, msgSearching, searchMessages,
+    hasMoreMessages, loadingOlderMessages, loadOlderMessages,
   } = useInbox(searchParams.get('conversation'));
 
-  const draftMessage = conv?.messages?.find((m) => m.senderType === 'ai' && m.status === 'pending') || null;
+  // A burst reply produces several pending drafts (one per topic); show them all.
+  const draftMessages = conv?.messages?.filter((m) => m.senderType === 'ai' && m.status === 'pending') ?? [];
   const { containerRef, widths, startDrag } = useResizablePanels(showRightPanel);
 
   return (
@@ -80,6 +84,10 @@ function InboxInner() {
             onFilterChange={setFilter}
             searchValue={search}
             onSearchChange={setSearch}
+            accountFilter={accountFilter}
+            onAccountFilterChange={setAccountFilter}
+            excludeGroups={excludeGroups}
+            onExcludeGroupsChange={setExcludeGroups}
           />
         </div>
 
@@ -143,6 +151,13 @@ function InboxInner() {
             onEditMessage={editSentMessage}
             onStarMessage={setMessageStarred}
             onForwardMessage={forwardMessage}
+            msgSearch={msgSearch}
+            msgSearchResults={msgSearchResults}
+            msgSearching={msgSearching}
+            onSearchMessages={searchMessages}
+            hasMoreMessages={hasMoreMessages}
+            loadingOlderMessages={loadingOlderMessages}
+            onLoadOlderMessages={loadOlderMessages}
           />
         </div>
 
@@ -157,25 +172,25 @@ function InboxInner() {
           </div>
         )}
 
-        {/* Panel 3: CRM + Hermes intelligence */}
+        {/* Panel 3: CRM + Sentinel intelligence */}
         <div
           style={showRightPanel ? { width: widths.intel, minWidth: widths.intel, flexShrink: 0 } : { width: 0, minWidth: 0, overflow: 'hidden', flexShrink: 0 }}
           className="contents xl:flex xl:flex-col xl:min-h-0 xl:py-2 xl:transition-[width] xl:duration-200"
         >
           <IntelligencePanel
             conversation={conv}
-            draftMessage={draftMessage}
+            draftMessages={draftMessages}
             bots={bots}
             approvingDraft={busy}
             blockingDraft={busy}
             loadingControls={busy}
-            onApproveDraft={async () => { if (draftMessage) approveDraft(draftMessage.id); }}
-            onBlockDraft={async () => { if (draftMessage) blockDraftWithConfirm(draftMessage.id); }}
+            onApproveDraft={async (id) => { approveDraft(id); }}
+            onBlockDraft={async (id) => { blockDraftWithConfirm(id); }}
             onReturnToAi={async () => returnToAi()}
             onSetAiMode={async (mode) => setAiMode(mode)}
             onSetStatus={async (status) => setWorkflowStatus(status)}
             onSetBot={async (botId) => setBot(botId || '')}
-            onEditDraft={() => { if (draftMessage) editDraft(draftMessage); }}
+            onEditDraft={(id) => { const d = draftMessages.find((m) => m.id === id); if (d) editDraft(d); }}
             onUpdateNotes={updateNotes}
             onSuggestBot={suggestBot}
             botSuggestion={botSuggestion}

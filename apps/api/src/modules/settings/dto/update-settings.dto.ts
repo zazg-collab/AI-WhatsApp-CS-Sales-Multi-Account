@@ -3,6 +3,8 @@ import {
   IsOptional,
   IsString,
   IsNumber,
+  IsBoolean,
+  IsIn,
   Min,
   Max,
   ValidateNested,
@@ -19,9 +21,9 @@ class AiSettingsDto {
   @IsOptional() @IsString()
   model?: string;
 
-  // Hermes supervisor model. Empty string = fall back to `model`.
+  // Sentinel supervisor model. Empty string = fall back to `model`.
   @IsOptional() @IsString()
-  hermesModel?: string;
+  sentinelModel?: string;
 
   @IsOptional() @IsNumber() @Min(0) @Max(2)
   temperature?: number;
@@ -55,6 +57,32 @@ class NotificationSettingsDto {
 class SlaSettingsDto {
   @IsOptional() @IsNumber() @Min(1) @Max(1440)
   responseMinutes?: number;
+
+  @IsOptional() @IsNumber() @Min(1) @Max(90)
+  idleCloseDays?: number;
+}
+
+class SentinelSettingsDto {
+  @IsOptional() @IsNumber() @Min(50) @Max(100)
+  autoSendConfidenceMin?: number;
+
+  @IsOptional() @IsNumber() @Min(0) @Max(99)
+  draftConfidenceMin?: number;
+
+  // Comma-separated, free text — matched case-insensitively in rules.engine.
+  @IsOptional() @IsString()
+  riskKeywords?: string;
+
+  @IsOptional() @IsIn(['ai_off', 'ai_draft', 'ai_supervised', 'ai_on'])
+  defaultAiMode?: 'ai_off' | 'ai_draft' | 'ai_supervised' | 'ai_on';
+}
+
+class CampaignSettingsDto {
+  @IsOptional() @IsNumber() @Min(1) @Max(60)
+  defaultRateLimitPerMinute?: number;
+
+  @IsOptional() @IsBoolean()
+  requireApproval?: boolean;
 }
 
 export class UpdateSettingsDto {
@@ -69,4 +97,10 @@ export class UpdateSettingsDto {
 
   @IsOptional() @ValidateNested() @Type(() => SlaSettingsDto)
   sla?: SlaSettingsDto;
+
+  @IsOptional() @ValidateNested() @Type(() => SentinelSettingsDto)
+  sentinel?: SentinelSettingsDto;
+
+  @IsOptional() @ValidateNested() @Type(() => CampaignSettingsDto)
+  campaign?: CampaignSettingsDto;
 }

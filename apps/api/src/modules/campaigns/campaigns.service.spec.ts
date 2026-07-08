@@ -49,7 +49,8 @@ describe('CampaignsService', () => {
     events = { emit: jest.fn(), emitToAccount: jest.fn() };
     queue = { add: jest.fn().mockResolvedValue({}), getJob: jest.fn() };
     const config = { get: jest.fn().mockReturnValue(undefined) };
-    const crud = new CampaignCrudService(prisma, audit, queue, config as any);
+    const settings = { campaign: jest.fn().mockResolvedValue({ defaultRateLimitPerMinute: 6, requireApproval: true }) };
+    const crud = new CampaignCrudService(prisma, audit, queue, settings as any, config as any);
     queueSvc = new CampaignQueueService(crud, audit);
     const sendSvc = new CampaignSendService(crud, wa, storage, events, audit);
     service = new CampaignsService(crud, queueSvc, sendSvc);
@@ -145,7 +146,8 @@ describe('CampaignsService', () => {
     });
     it('enforces the env-configured daily send cap (M8)', async () => {
       const config = { get: (k: string) => (k === 'CAMPAIGN_MAX_DAILY_SENDS' ? '2' : undefined) };
-      const cappedCrud = new CampaignCrudService(prisma, audit, queue, config as any);
+      const settings = { campaign: jest.fn().mockResolvedValue({ defaultRateLimitPerMinute: 6, requireApproval: true }) };
+      const cappedCrud = new CampaignCrudService(prisma, audit, queue, settings as any, config as any);
       const cappedQueue = new CampaignQueueService(cappedCrud, audit);
       const cappedSend = new CampaignSendService(cappedCrud, wa, storage, events, audit);
       const capped = new CampaignsService(cappedCrud, cappedQueue, cappedSend);

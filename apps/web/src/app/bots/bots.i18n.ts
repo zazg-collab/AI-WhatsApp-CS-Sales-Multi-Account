@@ -40,7 +40,7 @@ export const dict: Dict = {
   aiModeHelpOn: { id: '⚠ Bot membalas pelanggan OTOMATIS tanpa persetujuan admin. Pastikan persona & knowledge sudah benar sebelum mengaktifkan.', en: '⚠ Bot replies to customers AUTOMATICALLY without admin approval. Make sure the persona & knowledge are correct before enabling.' },
   aiModeHelpOff: { id: 'Bot tidak membalas. Semua balasan dikirim manual oleh admin.', en: 'Bot does not reply. All replies are sent manually by an admin.' },
   aiModeHelpDraft: { id: 'Bot menyiapkan draf balasan; admin meninjau lalu mengirim.', en: 'Bot prepares a draft reply; an admin reviews then sends.' },
-  aiModeHelpSupervised: { id: 'Hermes meninjau setiap balasan sebelum dikirim ke pelanggan.', en: 'Hermes reviews every reply before it is sent to the customer.' },
+  aiModeHelpSupervised: { id: 'Sentinel meninjau setiap balasan sebelum dikirim ke pelanggan.', en: 'Sentinel reviews every reply before it is sent to the customer.' },
   activateTitle: { id: 'Aktifkan balasan otomatis?', en: 'Enable automatic replies?' },
   activateBody: { id: 'Bot "{name}" akan membalas pelanggan secara otomatis tanpa persetujuan admin. Lanjutkan?', en: 'Bot "{name}" will reply to customers automatically without admin approval. Continue?' },
   activateConfirm: { id: 'Ya, aktifkan otomatis', en: 'Yes, enable automatic' },

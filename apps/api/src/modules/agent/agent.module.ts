@@ -3,14 +3,14 @@ import { AgentController } from './agent.controller';
 import { AgentService } from './agent.service';
 import { ApiKeyGuard } from '../../common/api-key.guard';
 import { DashboardModule } from '../dashboard/dashboard.module';
-import { HermesModule } from '../hermes/hermes.module';
+import { SentinelModule } from '../sentinel/sentinel.module';
 
 /**
  * External supervisor-agent API: read-only CRM reports for the Hermes Agent
  * gateway, authenticated by API key (see ApiKeyGuard).
  */
 @Module({
-  imports: [DashboardModule, HermesModule],
+  imports: [DashboardModule, SentinelModule],
   controllers: [AgentController],
   providers: [AgentService, ApiKeyGuard],
 })

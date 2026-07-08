@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { FileText, Image as ImageIcon, Video, UploadSimple, Trash, PencilSimple, Link as LinkIcon } from '@phosphor-icons/react';
+import { FileText, Image as ImageIcon, Video, UploadSimple, Trash, PencilSimple, Link as LinkIcon } from '@/components/ui/core-essential-icons';
 import { api, uploadFile, resolveMediaUrl, hasRole } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';

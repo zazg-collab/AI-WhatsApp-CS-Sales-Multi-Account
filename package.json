@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Hermes AI Sales & Customer Service Control Center",
+  "license": "MIT",
+  "author": "filmdown526-ux",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account.git"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
