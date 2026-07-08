@@ -21,7 +21,7 @@ const MODE_LABEL_KEY: Record<string, string> = {
 interface Summary {
   totalConversations: number; activeConversations: number; aiOnConversations: number;
   pendingFollowUps: number; messagesLast24h: number; avgResponseTime: number;
-  avgResolutionSeconds: number | null; totalReopened7d: number;
+  avgResolutionSeconds: number | null; totalReopened: number; reopenWindowDays: number;
   topAccounts: { id: string; name: string; messageCount: number }[];
 }
 interface SentimentTrendItem { day: string; avg_score: number; positive: number; neutral: number; negative: number; }
@@ -44,7 +44,7 @@ export default function AnalyticsPage() {
   const t = useT(dict);
   const [daysRange, setDaysRange] = useState(7);
 
-  const { data: summary, loading } = useApiQuery<Summary>('/dashboard/summary');
+  const { data: summary, loading } = useApiQuery<Summary>(`/dashboard/summary?days=${daysRange}`, [daysRange]);
   const { data: leadFunnel } = useApiQuery<LeadFunnelItem[]>('/dashboard/lead-funnel');
   const { data: messageVolume } = useApiQuery<MessageVolumeItem[]>(`/dashboard/message-volume?days=${daysRange}`, [daysRange]);
   const { data: aiModeBreakdown } = useApiQuery<AiModeItem[]>('/dashboard/ai-mode-breakdown');
@@ -137,9 +137,9 @@ export default function AnalyticsPage() {
                   tone="text-channel-700"
                 />
                 <SummaryCard
-                  label={t('reopen7d')}
-                  value={summary.totalReopened7d}
-                  tone={summary.totalReopened7d > 0 ? 'text-review-600' : 'text-gray-500'}
+                  label={t('reopenRange', { days: String(summary.reopenWindowDays) })}
+                  value={summary.totalReopened}
+                  tone={summary.totalReopened > 0 ? 'text-review-600' : 'text-gray-500'}
                 />
               </div>
             )}

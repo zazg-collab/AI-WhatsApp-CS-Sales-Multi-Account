@@ -67,7 +67,7 @@ export const dict: Dict = {
     en: 'Mode distribution looks healthy. Keep an eye on Sentinel confidence scores for supervised conversations.',
   },
   avgResolution: { id: 'Avg. Resolusi', en: 'Avg. Resolution' },
-  reopen7d: { id: 'Reopen 7h', en: 'Reopen 7d' },
+  reopenRange: { id: 'Reopen {days}h', en: 'Reopen {days}d' },
   legend: { id: 'Legenda', en: 'Legend' },
   frtByAccount: { id: 'First Response Time per Akun', en: 'First Response Time per account' },
   colAccount: { id: 'Akun', en: 'Account' },

@@ -17,8 +17,8 @@ export class DashboardController {
 
   @ApiOperation({ summary: 'Get dashboard summary stats' })
   @Get('summary')
-  getSummary() {
-    return this.dashboardService.getSummary();
+  getSummary(@Query('days') days = '7') {
+    return this.dashboardService.getSummary(parseInt(days, 10));
   }
 
   @ApiOperation({ summary: 'Get lead funnel breakdown' })

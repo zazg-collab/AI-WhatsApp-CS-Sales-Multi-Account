@@ -11,9 +11,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getSummary() {
+  async getSummary(reopenWindowDays = 7) {
     const now = new Date();
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const safeReopenDays = Number.isFinite(reopenWindowDays) ? Math.min(Math.max(reopenWindowDays, 1), 90) : 7;
+    const reopenSince = new Date(now.getTime() - safeReopenDays * 86400000);
 
     const [
       totalConversations,
@@ -45,10 +47,10 @@ export class DashboardService {
 
     const [topAccounts, reopenStats, resolutionStats] = await Promise.all([
       this.getTopAccounts(7),
-      // Conversations reopened in last 7 days
+      // Conversations reopened in the selected window (default 7 days).
       this.prisma.conversation.aggregate({
         _sum: { reopenCount: true },
-        where: { updatedAt: { gte: new Date(now.getTime() - 7 * 86400000) } },
+        where: { updatedAt: { gte: reopenSince } },
       } as any),
       // Avg resolution time from stored fields (accurate, no message scan)
       this.prisma.$queryRaw<{ avg_seconds: number }[]>`
@@ -68,7 +70,8 @@ export class DashboardService {
       messagesLast24h,
       avgResponseTime: responseMetrics.avgSeconds,
       avgResolutionSeconds: resolutionStats[0]?.avg_seconds ?? null,
-      totalReopened7d: (reopenStats as any)?._sum?.reopenCount ?? 0,
+      totalReopened: (reopenStats as any)?._sum?.reopenCount ?? 0,
+      reopenWindowDays: safeReopenDays,
       topAccounts,
     };
   }

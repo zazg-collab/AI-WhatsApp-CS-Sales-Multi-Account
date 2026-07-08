@@ -16,6 +16,8 @@ const summary = {
   messagesLast24h: 42,
   avgResponseTime: 12,
   topAccounts: [{ id: 'a1', name: 'Sales', messageCount: 5 }],
+  totalReopened: 0,
+  reopenWindowDays: 7,
 };
 
 describe('AnalyticsPage', () => {
@@ -23,7 +25,7 @@ describe('AnalyticsPage', () => {
 
   it('renders summary data', async () => {
     apiMock.mockImplementation((path: string = '') => {
-      if (path === '/dashboard/summary') return Promise.resolve(summary);
+      if (path.startsWith('/dashboard/summary')) return Promise.resolve(summary);
       if (path === '/dashboard/lead-funnel') return Promise.resolve([{ stage: 'hot', count: 5 }]);
       if (path.startsWith('/dashboard/message-volume')) return Promise.resolve([{ date: '2026-06-01', count: 7 }]);
       if (path === '/dashboard/ai-mode-breakdown') return Promise.resolve([{ mode: 'ai_on', count: 3, percentage: 50 }]);
@@ -36,7 +38,7 @@ describe('AnalyticsPage', () => {
 
   it('renders even when api fails', async () => {
     apiMock.mockImplementation((path: string = '') =>
-      path === '/dashboard/summary' ? Promise.reject(new Error('nope')) : Promise.resolve([]),
+      path.startsWith('/dashboard/summary') ? Promise.reject(new Error('nope')) : Promise.resolve([]),
     );
     render(<AnalyticsPage />);
     expect(await screen.findByRole('heading', { name: 'Analytics' })).toBeInTheDocument();

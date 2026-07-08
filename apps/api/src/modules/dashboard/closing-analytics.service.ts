@@ -31,7 +31,8 @@ export class ClosingAnalyticsService {
     const since = this.daysAgo(days);
 
     const [stageCounts, stageTransitions, totalCustomers, closingCustomers] = await Promise.all([
-      // Current population snapshot.
+      // Current population snapshot (all-time) — used only for the funnel bar sizes,
+      // never mixed into a rate with a time-windowed numerator.
       this.prisma.customer.groupBy({ by: ['leadStage'], _count: { _all: true } }),
 
       // Stage-transition events logged by AiService (may be empty on a fresh instance).
@@ -46,8 +47,12 @@ export class ClosingAnalyticsService {
       this.prisma.customer.count({ where: { leadStage: { in: CLOSING_STAGES } } }),
     ]);
 
-    // Build per-stage resolved-conversation count.
-    const resolvedCountByStage = await this.resolvedPerStage(since);
+    // Both counts below are scoped to the same `since` window, so the resulting
+    // rate compares apples to apples (unlike resolved-in-window / all-time population).
+    const [resolvedCountByStage, activeCountByStage] = await Promise.all([
+      this.resolvedPerStage(since),
+      this.activePerStage(since),
+    ]);
 
     // Stage snapshot sorted cold → very_hot.
     const stages = Object.values(LeadStage)
@@ -55,12 +60,14 @@ export class ClosingAnalyticsService {
       .map((stage) => {
         const pop = stageCounts.find((s) => s.leadStage === stage)?._count._all ?? 0;
         const resolved = resolvedCountByStage[stage] ?? 0;
+        const active = activeCountByStage[stage] ?? 0;
         return {
           stage,
           population: pop,
           resolvedConversations: resolved,
-          // Conversion rate = resolved / conversations at this stage (win proxy).
-          conversionRate: pop > 0 ? Math.round((resolved / pop) * 100) : 0,
+          // Conversion rate = resolved / active conversations at this stage, both
+          // scoped to the same `days` window (win proxy for the selected period).
+          conversionRate: active > 0 ? Math.round((resolved / active) * 100) : 0,
         };
       });
 
@@ -247,25 +254,32 @@ export class ClosingAnalyticsService {
   // ── helpers ────────────────────────────────────────────────────────────────
 
   private async resolvedPerStage(since: Date): Promise<Partial<Record<LeadStage, number>>> {
-    const rows = await this.prisma.conversation.groupBy({
-      by: ['status'],
-      where: { status: 'resolved', updatedAt: { gte: since } },
-      _count: { _all: true },
-    });
-    // We need to group by customer.leadStage; groupBy across relations isn't
-    // directly supported by Prisma, so we do a lightweight findMany.
+    // groupBy across relations (conversation -> customer.leadStage) isn't
+    // directly supported by Prisma, so we group in JS via a lightweight findMany.
     const resolved = await this.prisma.conversation.findMany({
       where: { status: 'resolved', updatedAt: { gte: since } },
       select: { customer: { select: { leadStage: true } } },
       take: 10000,
     });
+    return this.countByStage(resolved);
+  }
+
+  /** Conversations touched in the window, grouped by the customer's current stage. */
+  private async activePerStage(since: Date): Promise<Partial<Record<LeadStage, number>>> {
+    const active = await this.prisma.conversation.findMany({
+      where: { updatedAt: { gte: since } },
+      select: { customer: { select: { leadStage: true } } },
+      take: 10000,
+    });
+    return this.countByStage(active);
+  }
+
+  private countByStage(rows: { customer: { leadStage: LeadStage } }[]): Partial<Record<LeadStage, number>> {
     const out: Partial<Record<LeadStage, number>> = {};
-    for (const c of resolved) {
-      const s = c.customer.leadStage as LeadStage;
+    for (const row of rows) {
+      const s = row.customer.leadStage;
       out[s] = (out[s] ?? 0) + 1;
     }
-    // Suppress unused rows warning (rows was already used structurally above).
-    void rows;
     return out;
   }
 
