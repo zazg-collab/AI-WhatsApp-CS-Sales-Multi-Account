@@ -58,9 +58,9 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-[100dvh] overflow-hidden bg-gray-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
-      <section className="hidden w-[46%] flex-col justify-between border-r border-gray-800 bg-gray-950 p-10 text-white lg:flex">
+      <section className="hidden w-[46%] flex-col justify-between border-r border-gray-200 bg-white p-10 text-gray-900 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100 lg:flex">
         <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded bg-sentinel-700 text-white">
+          <span className="flex h-10 w-10 items-center justify-center rounded bg-sentinel-600 text-white">
             <ShieldStar className="h-5 w-5" aria-hidden="true" />
           </span>
           <div>
@@ -71,27 +71,27 @@ export default function LoginPage() {
 
         <div className="max-w-md space-y-7">
           <div className="space-y-4">
-            <p className="inline-flex rounded border border-sentinel-400/30 bg-sentinel-950 px-2.5 py-1 text-xs font-semibold text-sentinel-200">
+            <p className="inline-flex rounded border border-sentinel-200 bg-sentinel-50 px-2.5 py-1 text-xs font-semibold text-sentinel-700 dark:border-sentinel-700/40 dark:bg-sentinel-900/30 dark:text-sentinel-300">
               {t('badge')}
             </p>
-            <h1 className="text-4xl font-semibold leading-tight tracking-[-0.04em] text-white">
+            <h1 className="text-4xl font-semibold leading-tight tracking-[-0.04em] text-gray-900 dark:text-white">
               {t('headline')}
             </h1>
-            <p className="max-w-sm text-sm leading-6 text-gray-400">
+            <p className="max-w-sm text-sm leading-6 text-gray-500 dark:text-gray-400">
               {t('sub')}
             </p>
           </div>
           <ul className="grid gap-2">
             {features.map(({ icon: Icon, text }) => (
-              <li key={text} className="flex items-center gap-3 rounded border border-gray-800 bg-gray-900/70 px-3 py-2.5 text-[13px] text-gray-300">
-                <Icon className="h-4 w-4 text-sentinel-300" aria-hidden="true" />
+              <li key={text} className="flex items-center gap-3 rounded border border-gray-200 bg-gray-50 px-3 py-2.5 text-[13px] text-gray-600 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-300">
+                <Icon className="h-4 w-4 text-sentinel-600 dark:text-sentinel-300" aria-hidden="true" />
                 {text}
               </li>
             ))}
           </ul>
         </div>
 
-        <p className="text-[11px] text-gray-500">{t('footer')}</p>
+        <p className="text-[11px] text-gray-400 dark:text-gray-500">{t('footer')}</p>
       </section>
 
       <section className="flex flex-1 items-center justify-center bg-gray-50 px-6 dark:bg-gray-950">

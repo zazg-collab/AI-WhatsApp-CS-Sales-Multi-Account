@@ -59,12 +59,13 @@ const integrations = [
 function IntegrationLogo({ slug, name }: { slug: string; name: string }) {
   return (
     <span
-      className="inline-flex items-center opacity-50 grayscale transition duration-200 hover:opacity-100 hover:grayscale-0"
+      className="inline-flex items-center opacity-80 transition duration-200 hover:opacity-100"
       title={name}
     >
-      {/* Real brand marks via Simple Icons CDN, tinted for the light canvas. */}
+      {/* Real brand marks via Simple Icons CDN, already tinted flat gray — no
+          extra CSS grayscale filter needed, that just doubled the wash-out. */}
       <img
-        src={`https://cdn.simpleicons.org/${slug}/64748b`}
+        src={`https://cdn.simpleicons.org/${slug}/475569`}
         alt={name}
         width={28}
         height={28}
@@ -463,7 +464,16 @@ export function Landing() {
                     <p className="mt-4 text-[13px] font-medium text-sentinel-50/90">{t('ctaReassure')}</p>
                     <p className="mx-auto mt-2 max-w-md text-[11.5px] leading-5 text-sentinel-50/70">{t('ctaTerms')}</p>
                   </>
-                ) : null}
+                ) : (
+                  // No WhatsApp contact configured (NEXT_PUBLIC_CONTACT_WHATSAPP unset) —
+                  // never leave the closing CTA band with no action at all.
+                  <Link
+                    href="/login"
+                    className="mt-8 inline-flex h-11 items-center gap-2 rounded bg-white px-6 text-sm font-semibold text-sentinel-700 transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    {t('navSignIn')}
+                  </Link>
+                )}
               </div>
             </Reveal>
           </div>
