@@ -13,12 +13,14 @@ describe('AiService', () => {
   beforeEach(() => {
     prisma = {
       conversation: {
-        findUnique: jest.fn().mockResolvedValue({ customerId: 'cust1', bot: { language: 'id' } }),
+        findUnique: jest.fn().mockResolvedValue({ customerId: 'cust1', bot: { language: 'id' }, whatsappAccountId: 'a1' }),
+        update: jest.fn().mockReturnValue({ catch: jest.fn() }),
       },
       customer: {
         findUnique: jest.fn().mockResolvedValue({ leadStage: 'cold' }),
         update: jest.fn(),
       },
+      whatsappAccount: { findMany: jest.fn().mockResolvedValue([]) },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
     provider = {
@@ -38,7 +40,8 @@ describe('AiService', () => {
       aiRequests: { inc: jest.fn() },
       aiRequestDuration: { startTimer: jest.fn().mockReturnValue(jest.fn()) },
     };
-    service = new AiService(prisma, provider, prompts, notifications, cache, metrics as any);
+    const webhooks = { deliver: jest.fn().mockResolvedValue(undefined) };
+    service = new AiService(prisma, provider, prompts, notifications, cache, webhooks as any, metrics as any);
   });
 
   it('listModels + config delegate to provider', () => {
@@ -148,6 +151,14 @@ describe('AiService', () => {
       // null for both botLang call and the leadScore getConversation call
       prisma.conversation.findUnique.mockResolvedValue(null);
       await expect(service.leadScore('c1')).rejects.toThrow('Conversation not found');
+    });
+
+    it('rejects an admin scoped to a different account (broken-access-control regression)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1' });
+      prisma.whatsappAccount.findMany.mockResolvedValue([{ id: 'a2' }]);
+      const scopedAdmin = { id: 'admin1', role: 'admin' };
+      await expect(service.leadScore('c1', scopedAdmin as never)).rejects.toThrow();
+      expect(provider.chat).not.toHaveBeenCalled();
     });
 
     it('parses plain JSON and persists', async () => {

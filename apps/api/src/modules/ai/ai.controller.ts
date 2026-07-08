@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
+import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import { AiService } from './ai.service';
 import { ConversationRefDto } from './dto/ai-request.dto';
 
@@ -30,15 +31,15 @@ export class AiController {
   @ApiOperation({ summary: 'Summarize conversation chat history' })
   @Roles('admin', 'supervisor', 'owner')
   @Post('summarize-chat')
-  async summarize(@Body() dto: ConversationRefDto) {
-    return { summary: await this.ai.summarizeChat(dto.conversationId) };
+  async summarize(@Body() dto: ConversationRefDto, @CurrentUser() user: AuthUser) {
+    return { summary: await this.ai.summarizeChat(dto.conversationId, user) };
   }
 
   @ApiOperation({ summary: 'Score a lead based on conversation' })
   @Roles('admin', 'supervisor', 'owner')
   @Post('lead-score')
-  leadScore(@Body() dto: ConversationRefDto) {
-    return this.ai.leadScore(dto.conversationId);
+  leadScore(@Body() dto: ConversationRefDto, @CurrentUser() user: AuthUser) {
+    return this.ai.leadScore(dto.conversationId, user);
   }
 
   // Integration note: API-only. Sentiment is computed inline during reply
@@ -47,8 +48,8 @@ export class AiController {
   @ApiOperation({ summary: 'Analyze customer sentiment for a conversation' })
   @Roles('admin', 'supervisor', 'owner')
   @Post('sentiment')
-  sentiment(@Body() dto: ConversationRefDto) {
-    return this.ai.analyzeSentiment(dto.conversationId);
+  sentiment(@Body() dto: ConversationRefDto, @CurrentUser() user: AuthUser) {
+    return this.ai.analyzeSentiment(dto.conversationId, user);
   }
 
   // Integration note: API-only diagnostics — not surfaced in the UI yet.

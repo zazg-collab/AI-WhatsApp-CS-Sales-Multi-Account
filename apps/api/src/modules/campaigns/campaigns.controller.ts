@@ -23,15 +23,15 @@ export class CampaignsController {
   @ApiOperation({ summary: 'Preview campaign recipients before sending' })
   @Post('preview')
   @Roles('owner', 'supervisor', 'admin')
-  preview(@Body() dto: PreviewCampaignDto) {
-    return this.campaigns.preview(dto.whatsappAccountId, dto.targetFilter ?? {});
+  preview(@Body() dto: PreviewCampaignDto, @CurrentUser() user: AuthUser) {
+    return this.campaigns.preview(dto.whatsappAccountId, dto.targetFilter ?? {}, user);
   }
 
   @ApiOperation({ summary: 'Create a new campaign draft' })
   @Post()
   @Roles('owner', 'supervisor', 'admin')
   create(@Body() dto: CreateCampaignDto, @CurrentUser() user: AuthUser) {
-    return this.campaigns.create(dto, user.id);
+    return this.campaigns.create(dto, user.id, user);
   }
 
   @ApiOperation({ summary: 'Get a campaign by ID' })
@@ -45,14 +45,14 @@ export class CampaignsController {
   @Patch(':id')
   @Roles('owner', 'supervisor', 'admin')
   update(@Param('id') id: string, @Body() dto: UpdateCampaignDto, @CurrentUser() user: AuthUser) {
-    return this.campaigns.update(id, dto, user.id);
+    return this.campaigns.update(id, dto, user.id, user);
   }
 
   @ApiOperation({ summary: 'Submit campaign for approval' })
   @Post(':id/submit')
   @Roles('owner', 'supervisor', 'admin')
   submit(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.campaigns.submit(id, user.id);
+    return this.campaigns.submit(id, user.id, user);
   }
 
   @ApiOperation({ summary: 'Approve a campaign (owner/supervisor)' })
@@ -94,21 +94,21 @@ export class CampaignsController {
   @Post(':id/duplicate')
   @Roles('owner', 'supervisor', 'admin')
   duplicate(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.campaigns.duplicate(id, user.id);
+    return this.campaigns.duplicate(id, user.id, user);
   }
 
   @ApiOperation({ summary: 'Manually mark a customer as opted out of campaigns' })
   @Post('opt-out')
   @Roles('owner', 'supervisor', 'admin')
   optOut(@Body() dto: OptOutDto, @CurrentUser() user: AuthUser) {
-    return this.campaigns.optOut(dto.customerId, user.id);
+    return this.campaigns.optOut(dto.customerId, user.id, user);
   }
 
   @ApiOperation({ summary: 'Reverse a customer opt-out' })
   @Post('opt-in')
   @Roles('owner', 'supervisor', 'admin')
   optIn(@Body() dto: OptOutDto, @CurrentUser() user: AuthUser) {
-    return this.campaigns.optIn(dto.customerId, user.id);
+    return this.campaigns.optIn(dto.customerId, user.id, user);
   }
 
   @ApiOperation({ summary: 'List opted-out customers (paginated)' })

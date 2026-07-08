@@ -9,7 +9,7 @@ import {
   TakeoverStatus,
 } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
-import { allowedAccountIds, type ScopedUser } from '../../common/account-scope.util';
+import { allowedAccountIds, canAccessAccount, type ScopedUser } from '../../common/account-scope.util';
 import { AuditService } from '../audit/audit.service';
 import { SettingsService } from '../settings/settings.service';
 import { CreateCampaignDto, CampaignTargetFilterDto, UpdateCampaignDto } from './dto/campaigns.dto';
@@ -81,15 +81,15 @@ export class CampaignCrudService {
     return { ...campaign, recipientStats: stats[id] ?? {} };
   }
 
-  async preview(whatsappAccountId: string, targetFilter: CampaignTargetFilterDto) {
-    await this.assertWhatsappAccount(whatsappAccountId);
+  async preview(whatsappAccountId: string, targetFilter: CampaignTargetFilterDto, user?: ScopedUser) {
+    await this.assertWhatsappAccount(whatsappAccountId, user);
     const { targets, skipped } = await this.buildTargets(whatsappAccountId, targetFilter);
     return { eligibleCount: targets.length, skipped, sample: targets.slice(0, 25) };
   }
 
-  async create(dto: CreateCampaignDto, userId: string) {
+  async create(dto: CreateCampaignDto, userId: string, user?: ScopedUser) {
     this.assertDelayConfig(dto.humanDelayMinMs, dto.humanDelayMaxMs);
-    await this.assertWhatsappAccount(dto.whatsappAccountId);
+    await this.assertWhatsappAccount(dto.whatsappAccountId, user);
     const campaignConfig = await this.settings.campaign();
     const campaign = await this.prisma.campaign.create({
       data: {
@@ -109,8 +109,8 @@ export class CampaignCrudService {
     return campaign;
   }
 
-  async update(id: string, dto: UpdateCampaignDto, userId: string) {
-    const existing = await this.findCampaign(id);
+  async update(id: string, dto: UpdateCampaignDto, userId: string, user?: ScopedUser) {
+    const existing = await this.assertCampaignScope(id, user);
     if (!([CampaignStatus.draft, CampaignStatus.pending_approval] as CampaignStatus[]).includes(existing.status)) {
       throw new BadRequestException('Only draft or pending approval campaigns can be edited');
     }
@@ -131,8 +131,8 @@ export class CampaignCrudService {
     return campaign;
   }
 
-  async submit(id: string, userId: string) {
-    const campaign = await this.findCampaign(id);
+  async submit(id: string, userId: string, user?: ScopedUser) {
+    const campaign = await this.assertCampaignScope(id, user);
     if (!([CampaignStatus.draft, CampaignStatus.pending_approval] as CampaignStatus[]).includes(campaign.status)) {
       throw new BadRequestException('Only draft campaigns can be submitted');
     }
@@ -206,8 +206,8 @@ export class CampaignCrudService {
     return campaign;
   }
 
-  async duplicate(id: string, userId: string) {
-    const source = await this.findCampaign(id);
+  async duplicate(id: string, userId: string, user?: ScopedUser) {
+    const source = await this.assertCampaignScope(id, user);
     const copy = await this.prisma.campaign.create({
       data: { name: `${source.name} (copy)`, messageTemplate: source.messageTemplate, whatsappAccountId: source.whatsappAccountId, targetFilter: (source.targetFilter ?? {}) as Prisma.InputJsonValue, createdById: userId, rateLimitPerMinute: source.rateLimitPerMinute, humanDelayMinMs: source.humanDelayMinMs, humanDelayMaxMs: source.humanDelayMaxMs, status: CampaignStatus.draft },
     });
@@ -215,17 +215,15 @@ export class CampaignCrudService {
     return copy;
   }
 
-  async optOut(customerId: string, userId: string) {
-    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
-    if (!customer) throw new NotFoundException('Customer not found');
+  async optOut(customerId: string, userId: string, user?: ScopedUser) {
+    await this.assertCustomerScope(customerId, user);
     const updated = await this.prisma.customer.update({ where: { id: customerId }, data: { optedOut: true, optedOutAt: new Date() } });
     await this.audit.log(userId, 'customer_opted_out', 'Customer', customerId, {});
     return updated;
   }
 
-  async optIn(customerId: string, userId: string) {
-    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
-    if (!customer) throw new NotFoundException('Customer not found');
+  async optIn(customerId: string, userId: string, user?: ScopedUser) {
+    await this.assertCustomerScope(customerId, user);
     const updated = await this.prisma.customer.update({ where: { id: customerId }, data: { optedOut: false, optedOutAt: null } });
     await this.audit.log(userId, 'customer_opted_in', 'Customer', customerId, {});
     return updated;
@@ -296,10 +294,41 @@ export class CampaignCrudService {
     return campaign;
   }
 
-  async assertWhatsappAccount(id: string) {
+  async assertWhatsappAccount(id: string, user?: ScopedUser) {
     const account = await this.prisma.whatsappAccount.findUnique({ where: { id } });
     if (!account) throw new NotFoundException('WhatsApp account not found');
+    if (!(await canAccessAccount(this.prisma, id, user))) {
+      throw new NotFoundException('WhatsApp account not found');
+    }
     return account;
+  }
+
+  /** Loads a campaign and 404s (not-found, not-403 — consistent with the rest
+   *  of the app) if it's outside the caller's account scope. */
+  async assertCampaignScope(id: string, user?: ScopedUser) {
+    const campaign = await this.findCampaign(id);
+    const scope = await allowedAccountIds(this.prisma, user);
+    if (scope !== null && !scope.includes(campaign.whatsappAccountId)) {
+      throw new NotFoundException('Campaign not found');
+    }
+    return campaign;
+  }
+
+  /** Same "not found across the boundary" treatment for a customer touched by
+   *  an account-scoped action (opt-out/opt-in) — mirrors CustomersService.get(). */
+  async assertCustomerScope(customerId: string, user?: ScopedUser) {
+    const customer = await this.prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) throw new NotFoundException('Customer not found');
+    const scope = await allowedAccountIds(this.prisma, user);
+    if (
+      scope !== null &&
+      customer.sourceAccountId !== null &&
+      !scope.includes(customer.sourceAccountId) &&
+      customer.assignedAdminId !== user?.id
+    ) {
+      throw new NotFoundException('Customer not found');
+    }
+    return customer;
   }
 
   assertDelayConfig(min?: number, max?: number) {

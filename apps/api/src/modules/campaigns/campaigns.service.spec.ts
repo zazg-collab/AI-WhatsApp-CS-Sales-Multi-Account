@@ -39,8 +39,8 @@ describe('CampaignsService', () => {
         deleteMany: jest.fn(),
         createMany: jest.fn(),
       },
-      customer: { findMany: jest.fn().mockResolvedValue([]) },
-      whatsappAccount: { findUnique: jest.fn() },
+      customer: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn(), update: jest.fn() },
+      whatsappAccount: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
       $transaction: jest.fn((ps: any[]) => Promise.all(ps)),
     };
     audit = { log: jest.fn().mockResolvedValue({}) };
@@ -340,6 +340,32 @@ describe('CampaignsService', () => {
       expect(r.eligibleCount).toBe(1);
       expect(r.skipped.optOut).toBe(1);
       expect(r.skipped.invalidPhone).toBe(1);
+    });
+    it('rejects an admin scoped to a different account (broken-access-control regression)', async () => {
+      prisma.whatsappAccount.findUnique.mockResolvedValue({ id: 'a1' });
+      prisma.whatsappAccount.findMany.mockResolvedValue([{ id: 'a2' }]);
+      const scopedAdmin = { id: 'admin1', role: 'admin' };
+      await expect(service.preview('a1', {} as any, scopedAdmin as never)).rejects.toThrow(NotFoundException);
+      expect(prisma.customer.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('update/submit/duplicate/optOut scope', () => {
+    it('update rejects an admin scoped to a different account', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({ id: 'cmp1', status: 'draft', whatsappAccountId: 'a1' });
+      prisma.whatsappAccount.findMany.mockResolvedValue([{ id: 'a2' }]);
+      const scopedAdmin = { id: 'admin1', role: 'admin' };
+      await expect(
+        service.update('cmp1', {} as any, 'admin1', scopedAdmin as never),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.campaign.update).not.toHaveBeenCalled();
+    });
+    it('optOut rejects an admin scoped to a different account', async () => {
+      prisma.customer.findUnique.mockResolvedValue({ id: 'cust1', sourceAccountId: 'a1', assignedAdminId: null });
+      prisma.whatsappAccount.findMany.mockResolvedValue([{ id: 'a2' }]);
+      const scopedAdmin = { id: 'admin1', role: 'admin' };
+      await expect(service.optOut('cust1', 'admin1', scopedAdmin as never)).rejects.toThrow(NotFoundException);
+      expect(prisma.customer.update).not.toHaveBeenCalled();
     });
   });
 });

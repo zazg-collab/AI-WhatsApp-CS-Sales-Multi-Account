@@ -20,17 +20,17 @@ export class CampaignsService {
 
   list(status?: string, user?: ScopedUser) { return this.crud.list(status, user); }
   get(id: string, user?: ScopedUser) { return this.crud.get(id, user); }
-  preview(whatsappAccountId: string, targetFilter: CampaignTargetFilterDto) { return this.crud.preview(whatsappAccountId, targetFilter); }
-  create(dto: CreateCampaignDto, userId: string) { return this.crud.create(dto, userId); }
-  update(id: string, dto: UpdateCampaignDto, userId: string) { return this.crud.update(id, dto, userId); }
-  submit(id: string, userId: string) { return this.crud.submit(id, userId); }
+  preview(whatsappAccountId: string, targetFilter: CampaignTargetFilterDto, user?: ScopedUser) { return this.crud.preview(whatsappAccountId, targetFilter, user); }
+  create(dto: CreateCampaignDto, userId: string, user?: ScopedUser) { return this.crud.create(dto, userId, user); }
+  update(id: string, dto: UpdateCampaignDto, userId: string, user?: ScopedUser) { return this.crud.update(id, dto, userId, user); }
+  submit(id: string, userId: string, user?: ScopedUser) { return this.crud.submit(id, userId, user); }
   approve(id: string, userId: string) { return this.crud.approve(id, userId); }
   pause(id: string, userId: string) { return this.crud.pause(id, userId); }
   cancel(id: string, userId: string) { return this.crud.cancel(id, userId); }
   retryFailed(id: string, userId: string) { return this.crud.retryFailed(id, userId); }
-  duplicate(id: string, userId: string) { return this.crud.duplicate(id, userId); }
-  optOut(customerId: string, userId: string) { return this.crud.optOut(customerId, userId); }
-  optIn(customerId: string, userId: string) { return this.crud.optIn(customerId, userId); }
+  duplicate(id: string, userId: string, user?: ScopedUser) { return this.crud.duplicate(id, userId, user); }
+  optOut(customerId: string, userId: string, user?: ScopedUser) { return this.crud.optOut(customerId, userId, user); }
+  optIn(customerId: string, userId: string, user?: ScopedUser) { return this.crud.optIn(customerId, userId, user); }
   listOptedOut(page?: number, pageSize?: number) { return this.crud.listOptedOut(page, pageSize); }
 
   start(id: string, userId?: string) {

@@ -42,8 +42,9 @@ describe('AiController', () => {
   it('delegates all', async () => {
     c.config();
     c.models();
-    expect(await c.summarize({ conversationId: 'c1' } as any)).toEqual({ summary: 's' });
-    c.leadScore({ conversationId: 'c1' } as any);
+    const u = { id: 'u1' } as any;
+    expect(await c.summarize({ conversationId: 'c1' } as any, u)).toEqual({ summary: 's' });
+    c.leadScore({ conversationId: 'c1' } as any, u);
     expect(ai.config).toHaveBeenCalled();
   });
 });
@@ -101,10 +102,10 @@ describe('CampaignsController', () => {
   const c = new CampaignsController(svc);
   const u = { id: 'u1' } as any;
   it('delegates', () => {
-    c.list(u, 'draft'); c.preview({ whatsappAccountId: 'a1' } as any); c.create({} as any, u); c.get('cmp1', u);
+    c.list(u, 'draft'); c.preview({ whatsappAccountId: 'a1' } as any, u); c.create({} as any, u); c.get('cmp1', u);
     c.update('cmp1', {} as any, u); c.submit('cmp1', u); c.approve('cmp1', u);
     c.start('cmp1', u); c.pause('cmp1', u); c.cancel('cmp1', u); c.retryFailed('cmp1', u);
-    expect(svc.preview).toHaveBeenCalledWith('a1', {});
+    expect(svc.preview).toHaveBeenCalledWith('a1', {}, u);
     expect(svc.start).toHaveBeenCalledWith('cmp1', 'u1');
   });
 });

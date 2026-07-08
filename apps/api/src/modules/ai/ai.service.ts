@@ -2,6 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { LeadStage } from '@sentinel/database';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertConversationScope, type ScopedUser } from '../../common/account-scope.util';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { MetricsService } from '../../common/metrics/metrics.service';
 import {
@@ -249,7 +250,8 @@ export class AiService {
    * Analyze customer sentiment from the most recent customer messages.
    * Returns a structured result; never throws on parse failure.
    */
-  async analyzeSentiment(conversationId: string): Promise<SentimentResult> {
+  async analyzeSentiment(conversationId: string, user?: ScopedUser): Promise<SentimentResult> {
+    await assertConversationScope(this.prisma, conversationId, user);
     const [lang, history] = await Promise.all([
       this.botLang(conversationId),
       this.prompts.buildForConversation(conversationId, 30),
@@ -311,7 +313,8 @@ export class AiService {
     }
   }
 
-  async summarizeChat(conversationId: string): Promise<string> {
+  async summarizeChat(conversationId: string, user?: ScopedUser): Promise<string> {
+    await assertConversationScope(this.prisma, conversationId, user);
     const [lang, history] = await Promise.all([
       this.botLang(conversationId),
       this.prompts.buildForConversation(conversationId, 60),
@@ -328,7 +331,8 @@ export class AiService {
    * Score the conversation as a sales lead (PRD 7.7) and persist the result
    * on the customer record.
    */
-  async leadScore(conversationId: string): Promise<LeadScoreResult> {
+  async leadScore(conversationId: string, user?: ScopedUser): Promise<LeadScoreResult> {
+    await assertConversationScope(this.prisma, conversationId, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       select: { customerId: true },
