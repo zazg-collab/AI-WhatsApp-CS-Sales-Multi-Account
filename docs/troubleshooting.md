@@ -26,7 +26,7 @@ no workaround — Postgres and Redis are required services (see
   already-applied migration file, or the local DB was migrated by an older
   branch. Do not run `prisma migrate reset` against a database with real
   data. For a throwaway local DB it's safe: `npx prisma migrate reset
-  --workspace=@hermes/database` then re-run `db:migrate` + `db:seed`.
+  --workspace=@sentinel/database` then re-run `db:migrate` + `db:seed`.
 - **`relation already exists`** — a previous partial migration run left the
   schema half-applied. Same fix as above for a local/throwaway DB; for a
   shared DB, inspect `_prisma_migrations` and fix manually rather than reset.

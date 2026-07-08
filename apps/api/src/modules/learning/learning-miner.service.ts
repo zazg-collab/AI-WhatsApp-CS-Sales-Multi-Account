@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SenderType } from '@hermes/database';
+import { SenderType } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AiProviderService, ChatMessage } from '../ai/ai-provider.service';
 import { logAudit } from '../../common/audit.util';

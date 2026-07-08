@@ -42,7 +42,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
       />
 
       <div className="scrollbar-thin mx-auto w-full max-w-4xl flex-1 overflow-y-auto p-5">
-        <Link href="/customers" className="mb-4 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-hermes-600 dark:text-gray-400">
+        <Link href="/customers" className="mb-4 inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-sentinel-600 dark:text-gray-400">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />{t('detailBack')}
         </Link>
 
@@ -84,7 +84,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                         disabled={savingStage}
                         onChange={(e) => setLeadStage(e.target.value as LeadStage)}
                         aria-label={t('detailLeadStage')}
-                        className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-900 outline-none focus:border-hermes-400 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                        className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-900 outline-none focus:border-sentinel-400 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                       >
                         {stages.map((s) => <option key={s.value} value={s.value}>{t(s.labelKey)}</option>)}
                       </select>
@@ -141,7 +141,7 @@ export default function CustomerDetailPage({ params }: { params: { id: string } 
                   onChange={(e) => setNote(e.target.value)}
                   placeholder={t('detailNotePlaceholder')}
                   rows={2}
-                  className="mb-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                  className="mb-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-sentinel-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                 />
                 <Button size="sm" onClick={addNote} disabled={savingNote || !note.trim()}>{t('detailAddNote')}</Button>
               </Card>

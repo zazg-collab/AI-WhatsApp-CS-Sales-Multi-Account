@@ -63,7 +63,7 @@ export function ConversationListItem({
     <li className="relative">
       {isActive && (
         <span
-          className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-r-full bg-hermes-500"
+          className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-r-full bg-sentinel-500"
           aria-hidden="true"
         />
       )}
@@ -72,7 +72,7 @@ export function ConversationListItem({
         className={cn(
           'flex w-full gap-3 border-b border-gray-100 px-3 py-3 text-left transition-colors dark:border-gray-800',
           isActive
-            ? 'bg-hermes-50 dark:bg-hermes-900/20'
+            ? 'bg-sentinel-50 dark:bg-sentinel-900/20'
             : 'hover:bg-gray-50 dark:hover:bg-gray-800/50',
         )}
       >
@@ -123,7 +123,7 @@ export function ConversationListItem({
               {c.isMuted && <BellSlash className="h-3 w-3 text-gray-400" aria-label="Muted" />}
               {c.isGroup && <Badge tone="neutral">Group</Badge>}
               {!!c.unreadCount && c.unreadCount > 0 && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-hermes-600 px-1 text-[10px] font-semibold text-white">
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-sentinel-600 px-1 text-[10px] font-semibold text-white">
                   {c.unreadCount}
                 </span>
               )}

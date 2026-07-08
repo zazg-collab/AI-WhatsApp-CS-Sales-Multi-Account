@@ -47,16 +47,16 @@ jobs:
         run: npm run db:generate
 
       - name: Lint API
-        run: npm run lint --workspace=@hermes/api
+        run: npm run lint --workspace=@sentinel/api
 
       - name: Lint Web
-        run: npm run lint --workspace=@hermes/web
+        run: npm run lint --workspace=@sentinel/web
 
       - name: Build API
-        run: npm run build --workspace=@hermes/api
+        run: npm run build --workspace=@sentinel/api
 
       - name: Build Web
-        run: npm run build --workspace=@hermes/web
+        run: npm run build --workspace=@sentinel/web
 
   typecheck:
     name: TypeScript Check
@@ -108,13 +108,13 @@ jobs:
         run: npm test
 
       - name: API unit tests
-        run: npm run test --workspace=@hermes/api
+        run: npm run test --workspace=@sentinel/api
 
       - name: API e2e tests (security wiring)
-        run: npm run test:e2e --workspace=@hermes/api
+        run: npm run test:e2e --workspace=@sentinel/api
 
       - name: Web tests
-        run: npm run test --workspace=@hermes/web
+        run: npm run test --workspace=@sentinel/web
 
   migrations:
     name: Prisma Migrations
@@ -157,7 +157,7 @@ jobs:
       # "migration won't deploy" class of bug that unit tests (Prisma mocked)
       # can't see.
       - name: Apply migrations to a fresh database
-        run: npm run migrate:deploy --workspace=@hermes/database
+        run: npm run migrate:deploy --workspace=@sentinel/database
 
       # Fails if the schema and the applied migrations have drifted apart
       # (a migration is missing for a schema change). Blocking: this exact
@@ -188,4 +188,4 @@ jobs:
       # at the data layer — the one place a tenant-isolation leak would hide.
       # Skipped automatically when DATABASE_URL is unset (e.g. local runs).
       - name: Account-scope isolation tests (real Postgres)
-        run: npm run test:int --workspace=@hermes/api
+        run: npm run test:int --workspace=@sentinel/api

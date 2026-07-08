@@ -1,4 +1,4 @@
-import { SentinelDecision, RiskLevel } from '@hermes/database';
+import { SentinelDecision, RiskLevel } from '@sentinel/database';
 import {
   evaluateRules,
   decisionFromConfidence,

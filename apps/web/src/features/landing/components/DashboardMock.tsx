@@ -28,8 +28,8 @@ export function DashboardMock({ t }: { t: TFunction }) {
           <span className="h-2.5 w-2.5 rounded-full bg-gray-300 dark:bg-gray-700" />
         </div>
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500">
-          <ShieldStar className="h-3.5 w-3.5 text-hermes-600 dark:text-hermes-400" weight="fill" aria-hidden="true" />
-          Hermes Control Center
+          <ShieldStar className="h-3.5 w-3.5 text-sentinel-600 dark:text-sentinel-400" weight="fill" aria-hidden="true" />
+          Sentinel Control Center
         </div>
         <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-700/40">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse" aria-hidden="true" />
@@ -49,10 +49,10 @@ export function DashboardMock({ t }: { t: TFunction }) {
                 key={c.name}
                 className={cn(
                   'flex items-center gap-2 px-3 py-2.5',
-                  c.active && 'bg-white shadow-[inset_2px_0_0_0] shadow-hermes-600 dark:bg-gray-900',
+                  c.active && 'bg-white shadow-[inset_2px_0_0_0] shadow-sentinel-600 dark:bg-gray-900',
                 )}
               >
-                <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-hermes-700 text-[11px] font-semibold text-white">
+                <span className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sentinel-700 text-[11px] font-semibold text-white">
                   {c.initial}
                   <span className={cn('absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-gray-900', c.dot)} aria-hidden="true" />
                 </span>
@@ -69,7 +69,7 @@ export function DashboardMock({ t }: { t: TFunction }) {
         <div className="flex flex-col">
           <div className="flex items-center justify-between border-b border-gray-100 px-3.5 py-2.5 dark:border-gray-800">
             <div className="flex items-center gap-2">
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-hermes-700 text-[11px] font-semibold text-white">R</span>
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-sentinel-700 text-[11px] font-semibold text-white">R</span>
               <span className="text-[12.5px] font-semibold text-gray-900 dark:text-gray-100">Rina</span>
             </div>
             <Badge tone="danger">Hot</Badge>
@@ -83,7 +83,7 @@ export function DashboardMock({ t }: { t: TFunction }) {
             </div>
             <div className="flex justify-end">
               <div className="max-w-[86%] space-y-1">
-                <p className="rounded-xl rounded-br-sm bg-hermes-700 px-2.5 py-1.5 text-[12px] leading-5 text-white">
+                <p className="rounded-xl rounded-br-sm bg-sentinel-700 px-2.5 py-1.5 text-[12px] leading-5 text-white">
                   {t('pvMsgAi')}
                 </p>
                 <div className="flex justify-end">
@@ -95,7 +95,7 @@ export function DashboardMock({ t }: { t: TFunction }) {
 
           <div className="flex items-center justify-between gap-2 border-t border-gray-100 px-3.5 py-2.5 dark:border-gray-800">
             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-500">
-              <ShieldStar className="h-3.5 w-3.5 text-hermes-600 dark:text-hermes-400" aria-hidden="true" />
+              <ShieldStar className="h-3.5 w-3.5 text-sentinel-600 dark:text-sentinel-400" aria-hidden="true" />
               {t('pvReviewing')}
             </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-700/40">
@@ -129,7 +129,7 @@ export function DashboardMock({ t }: { t: TFunction }) {
             </div>
             <div className="flex items-center justify-between">
               <dt className="text-[11px] text-gray-500">{t('pvStage')}</dt>
-              <dd><Badge tone="hermes">{t('pvStageValue')}</Badge></dd>
+              <dd><Badge tone="sentinel">{t('pvStageValue')}</Badge></dd>
             </div>
           </dl>
 

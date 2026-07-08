@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
-import { LeadStage } from '@hermes/database';
+import { LeadStage } from '@sentinel/database';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import { Roles, RolesGuard } from '../../auth/roles';

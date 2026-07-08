@@ -12,7 +12,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
-import { AiMode } from '@hermes/database';
+import { AiMode } from '@sentinel/database';
 
 export class UpdateAccountDto {
   @IsOptional()

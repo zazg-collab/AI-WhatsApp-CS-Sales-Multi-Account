@@ -171,7 +171,7 @@ export const landingDict: Dict = {
   ctaTerms: { id: 'Syarat trial: pakai model AI Anda sendiri (BYOK), atau lewat kami tapi tagihan pemakaian AI tetap Anda tanggung.', en: 'Trial terms: bring your own AI model/key (BYOK), or route through us while you cover the AI usage bill.' },
 
   // Final CTA
-  ctaEarly: { id: 'Jadi salah satu tim pertama yang pakai Hermes', en: 'Be one of the first teams on Hermes' },
+  ctaEarly: { id: 'Jadi salah satu tim pertama yang pakai Sentinel', en: 'Be one of the first teams on Sentinel' },
   ctaTitle: { id: 'Siap mengendalikan operasi WhatsApp Anda?', en: 'Ready to take control of your WhatsApp operation?' },
   // Pratfall: own the newness instead of hiding it.
   ctaSub: { id: 'Kami masih baru, jadi kami buktikan langsung di akun Anda, bukan lewat logo pelanggan yang belum kami punya.', en: 'We are new, so we will prove it on your own accounts, not with customer logos we do not have yet.' },

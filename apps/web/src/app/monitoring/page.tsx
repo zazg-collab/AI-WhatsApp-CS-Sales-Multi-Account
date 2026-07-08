@@ -78,7 +78,7 @@ export default function MonitoringPage() {
       <PageHeader title={t('title')} subtitle={t('subtitle')}>
         <Link href="/analytics"><Button variant="outline" size="sm"><ChartLineUp className="h-4 w-4" aria-hidden="true" />{t('viewAnalytics')}</Button></Link>
         <label htmlFor="range-select" className="sr-only">{t('rangeLabel')}</label>
-        <select id="range-select" value={days} onChange={(e) => setDays(Number(e.target.value))} className="h-8 rounded-md border border-gray-300 bg-white px-2.5 text-[13px] text-gray-700 focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+        <select id="range-select" value={days} onChange={(e) => setDays(Number(e.target.value))} className="h-8 rounded-md border border-gray-300 bg-white px-2.5 text-[13px] text-gray-700 focus:border-sentinel-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
           <option value={7}>{t('range7')}</option>
           <option value={14}>{t('range14')}</option>
           <option value={30}>{t('range30')}</option>
@@ -120,7 +120,7 @@ export default function MonitoringPage() {
                   <div className="flex h-56 items-end gap-2">
                     {data.messageVolume.map((item) => (
                       <div key={item.date} className="flex flex-1 flex-col items-center gap-2">
-                        <div className="w-full rounded-t bg-hermes-600" style={{ height: `${Math.max(4, (item.count / maxVolume) * 190)}px` }} title={`${item.date}: ${item.count}`} />
+                        <div className="w-full rounded-t bg-sentinel-600" style={{ height: `${Math.max(4, (item.count / maxVolume) * 190)}px` }} title={`${item.date}: ${item.count}`} />
                         <span className="text-[10px] text-gray-400">{item.date.slice(5)}</span>
                       </div>
                     ))}

@@ -14,7 +14,7 @@ export function resolveMediaUrl(url: string | null | undefined): string | null {
   return null;
 }
 
-const TOKEN_KEY = 'hermes_token';
+const TOKEN_KEY = 'sentinel_token';
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;

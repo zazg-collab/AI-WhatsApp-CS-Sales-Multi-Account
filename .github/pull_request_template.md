@@ -13,7 +13,7 @@
 ## Checklist
 
 - [ ] `npm run lint` and `npx tsc --noEmit` pass (api + web)
-- [ ] Tests added/updated; `npm run test --workspace=@hermes/api` green
+- [ ] Tests added/updated; `npm run test --workspace=@sentinel/api` green
 - [ ] No secrets committed (`.env` stays ignored)
 - [ ] If schema changed: migration generated **and** `prisma migrate diff` shows no drift
 

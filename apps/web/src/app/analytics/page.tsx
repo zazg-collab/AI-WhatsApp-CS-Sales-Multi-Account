@@ -57,12 +57,12 @@ export default function AnalyticsPage() {
   const maxVolume = Math.max(...(messageVolume?.map((d) => d.count) ?? [1]), 1);
 
   const leadColors: Record<string, string> = {
-    cold: 'bg-hermes-400', warm: 'bg-review-500', hot: 'bg-review-600', very_hot: 'bg-danger-500',
+    cold: 'bg-sentinel-400', warm: 'bg-review-500', hot: 'bg-review-600', very_hot: 'bg-danger-500',
   };
   const leadColorLabels: Record<string, string> = { cold: 'Cold', warm: 'Warm', hot: 'Hot', very_hot: 'Very Hot' };
   const modeColors: Record<string, string> = {
     ai_on: 'bg-channel-500', ai_off: 'bg-gray-300 dark:bg-gray-600',
-    ai_draft: 'bg-review-500', ai_supervised: 'bg-hermes-500', ai_paused: 'bg-danger-500',
+    ai_draft: 'bg-review-500', ai_supervised: 'bg-sentinel-500', ai_paused: 'bg-danger-500',
   };
 
   const leadTotal = (leadFunnel ?? []).reduce((s, i) => s + i.count, 0);
@@ -105,7 +105,7 @@ export default function AnalyticsPage() {
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-gray-600 dark:text-gray-400">{t('filterDateRange')}</span>
             {[{ label: t('filter7d'), value: 7 }, { label: t('filter30d'), value: 30 }, { label: t('filter90d'), value: 90 }].map(({ label, value }) => (
-              <button key={value} onClick={() => setDaysRange(value)} className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${daysRange === value ? 'bg-hermes-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'}`}>{label}</button>
+              <button key={value} onClick={() => setDaysRange(value)} className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${daysRange === value ? 'bg-sentinel-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'}`}>{label}</button>
             ))}
           </div>
         </div>
@@ -128,8 +128,8 @@ export default function AnalyticsPage() {
                 <SummaryCard label={t('waitingAdmin')} value={summary.activeConversations} tone="text-review-600" />
                 <SummaryCard label={t('aiActive')} value={summary.aiOnConversations} tone="text-channel-700" />
                 <SummaryCard label={t('pendingFollowUps')} value={summary.pendingFollowUps} tone="text-review-600" />
-                <SummaryCard label={t('messages24h')} value={summary.messagesLast24h} tone="text-hermes-600" />
-                <SummaryCard label={t('avgResponseTime')} value={summary.avgResponseTime} formatted={formatResponseTime(summary.avgResponseTime)} tone="text-hermes-600" />
+                <SummaryCard label={t('messages24h')} value={summary.messagesLast24h} tone="text-sentinel-600" />
+                <SummaryCard label={t('avgResponseTime')} value={summary.avgResponseTime} formatted={formatResponseTime(summary.avgResponseTime)} tone="text-sentinel-600" />
                 <SummaryCard
                   label="Avg. Resolusi"
                   value={summary.avgResolutionSeconds ?? 0}
@@ -191,7 +191,7 @@ export default function AnalyticsPage() {
                       <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-700">
                         <p className="mb-2 text-[10px] font-semibold text-gray-500 dark:text-gray-400">Legend</p>
                         <div className="grid grid-cols-2 gap-2 text-[11px]">
-                          {[['bg-channel-500','AI ON'],['bg-gray-300 dark:bg-gray-600','AI OFF'],['bg-review-500','Draft'],['bg-hermes-500','Supervised'],['bg-danger-500','Paused']].map(([cls,label]) => (
+                          {[['bg-channel-500','AI ON'],['bg-gray-300 dark:bg-gray-600','AI OFF'],['bg-review-500','Draft'],['bg-sentinel-500','Supervised'],['bg-danger-500','Paused']].map(([cls,label]) => (
                             <div key={label} className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-sm ${cls}`} /><span className="text-gray-600 dark:text-gray-400">{label}</span></div>
                           ))}
                         </div>
@@ -224,7 +224,7 @@ export default function AnalyticsPage() {
                       <div key={item.date} className="flex flex-1 flex-col items-center gap-1">
                         <span className="text-xs tabular-nums text-gray-500">{item.count}</span>
                         <div className="flex w-full flex-col justify-end" style={{ height: '100px' }}>
-                          <div className="w-full rounded-t bg-hermes-600" style={{ height: `${Math.max(heightPct, item.count > 0 ? 4 : 0)}%` }} />
+                          <div className="w-full rounded-t bg-sentinel-600" style={{ height: `${Math.max(heightPct, item.count > 0 ? 4 : 0)}%` }} />
                         </div>
                         <span className="text-xs text-gray-400">{dayLabel}</span>
                       </div>

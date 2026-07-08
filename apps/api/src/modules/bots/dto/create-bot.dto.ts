@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { AiMode, BotStatus } from '@hermes/database';
+import { AiMode, BotStatus } from '@sentinel/database';
 
 export class CreateBotDto {
   @ApiProperty({ example: 'Sales Bot' })

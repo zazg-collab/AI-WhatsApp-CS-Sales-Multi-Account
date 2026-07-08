@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { ConfigService } from '@nestjs/config';
-import { ConversationStatus, SenderType } from '@hermes/database';
+import { ConversationStatus, SenderType } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { NotificationsService } from '../../notifications/notifications.service';

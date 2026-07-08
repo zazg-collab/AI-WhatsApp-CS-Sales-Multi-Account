@@ -46,7 +46,7 @@ interface ContactResponse {
 }
 
 const inputClass =
-  'h-9 rounded border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'h-9 rounded border border-gray-200 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-sentinel-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 const dict: Dict = {
   title: { id: 'WhatsApp Contact Book', en: 'WhatsApp Contact Book' },
@@ -283,7 +283,7 @@ export default function WhatsappContactsPage() {
                             <td className="px-4 py-3">
                               {contact.customer ? (
                                 <div className="flex flex-wrap items-center gap-1.5">
-                                  <Badge tone="hermes">{contact.customer.leadStage ?? t('noCrmName')}</Badge>
+                                  <Badge tone="sentinel">{contact.customer.leadStage ?? t('noCrmName')}</Badge>
                                   {contact.customer.tags.slice(0, 2).map((tag) => (
                                     <Badge key={tag} tone="neutral">
                                       {tag}
@@ -348,7 +348,7 @@ export default function WhatsappContactsPage() {
                           </div>
                           {contact.customer ? (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                              <Badge tone="hermes">{contact.customer.leadStage ?? t('noCrmName')}</Badge>
+                              <Badge tone="sentinel">{contact.customer.leadStage ?? t('noCrmName')}</Badge>
                               {contact.customer.tags.slice(0, 2).map((tag) => (
                                 <Badge key={tag} tone="neutral">{tag}</Badge>
                               ))}

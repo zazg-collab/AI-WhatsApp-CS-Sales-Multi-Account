@@ -1,4 +1,4 @@
-import { SentinelDecision, RiskLevel } from '@hermes/database';
+import { SentinelDecision, RiskLevel } from '@sentinel/database';
 import { FALLBACK_PHRASE } from '../../i18n/bot-prompts';
 
 const FALLBACK_MARKERS = Object.values(FALLBACK_PHRASE) as string[];

@@ -122,7 +122,7 @@ export default function WebhooksPage() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <Badge tone={ep.isActive ? 'hermes' : 'neutral'}>{ep.isActive ? 'Aktif' : 'Nonaktif'}</Badge>
+                    <Badge tone={ep.isActive ? 'sentinel' : 'neutral'}>{ep.isActive ? 'Aktif' : 'Nonaktif'}</Badge>
                     <span className="truncate text-sm font-mono text-gray-800 dark:text-gray-100">{ep.url}</span>
                   </div>
                   <div className="flex flex-wrap gap-1 mt-2">
@@ -157,14 +157,14 @@ export default function WebhooksPage() {
           <div>
             <label className="mb-1 block text-xs font-semibold text-gray-500 uppercase tracking-wider">Secret (HMAC key) *</label>
             <input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="string acak rahasia" className={inputCls} />
-            <p className="mt-1 text-[11px] text-gray-400">Header <code>X-Hermes-Signature: sha256=...</code> dikirim ke URL untuk verifikasi.</p>
+            <p className="mt-1 text-[11px] text-gray-400">Header <code>X-Sentinel-Signature: sha256=...</code> dikirim ke URL untuk verifikasi.</p>
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-gray-500 uppercase tracking-wider">Events *</label>
             <div className="grid grid-cols-2 gap-1.5">
               {allEvents.map((ev) => (
                 <label key={ev} className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-2 text-sm hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
-                  <input type="checkbox" checked={events.includes(ev)} onChange={() => toggleEvent(ev)} className="accent-hermes-600" />
+                  <input type="checkbox" checked={events.includes(ev)} onChange={() => toggleEvent(ev)} className="accent-sentinel-600" />
                   <span className="font-mono text-xs text-gray-700 dark:text-gray-200">{ev}</span>
                 </label>
               ))}

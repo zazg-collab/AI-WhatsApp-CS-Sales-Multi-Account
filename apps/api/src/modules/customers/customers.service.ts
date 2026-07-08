@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { LeadStage, Prisma } from '@hermes/database';
+import { LeadStage, Prisma } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BulkCustomerActionDto, UpdateCustomerDto } from './dto/customers.dto';

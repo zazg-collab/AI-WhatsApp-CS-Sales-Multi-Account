@@ -13,7 +13,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
-import { LeadStage } from '@hermes/database';
+import { LeadStage } from '@sentinel/database';
 
 export class CampaignTargetFilterDto {
   @IsOptional()

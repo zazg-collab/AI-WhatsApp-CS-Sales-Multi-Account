@@ -117,9 +117,9 @@ export default function CampaignsPage() {
               {whatsappAccountId && (
                 <div className="flex items-center gap-1.5 text-[12px] text-gray-500 dark:text-gray-400" aria-live="polite">
                   {counting ? (
-                    <><div className="h-3 w-3 animate-spin rounded-full border-2 border-hermes-400 border-t-transparent" aria-hidden="true" /><span>{t('countingRecipients')}</span></>
+                    <><div className="h-3 w-3 animate-spin rounded-full border-2 border-sentinel-400 border-t-transparent" aria-hidden="true" /><span>{t('countingRecipients')}</span></>
                   ) : liveCount != null ? (
-                    <span>≈ <span className="font-semibold text-hermes-600">{liveCount}</span> {t('eligibleRecipients')}</span>
+                    <span>≈ <span className="font-semibold text-sentinel-600">{liveCount}</span> {t('eligibleRecipients')}</span>
                   ) : null}
                 </div>
               )}
@@ -133,7 +133,7 @@ export default function CampaignsPage() {
               </div>
               {preview && (
                 <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                  <div><span className="font-semibold text-hermes-600">{preview.eligibleCount}</span> {t('eligibleRecipients')}</div>
+                  <div><span className="font-semibold text-sentinel-600">{preview.eligibleCount}</span> {t('eligibleRecipients')}</div>
                   <div className="mt-1 text-gray-400">
                     {t('skipped')} {Object.entries(preview.skipped).map(([key, value]) => `${key} ${value}`).join(', ') || t('none')}
                   </div>
@@ -152,7 +152,7 @@ export default function CampaignsPage() {
                   {canManage ? t('createDraftAbove') : t('waitingDraft')}
                 </p>
                 {canManage && (
-                  <p className="mt-3 text-[11px] font-mono text-hermes-500 dark:text-hermes-400">{t('approvalFlowNote')}</p>
+                  <p className="mt-3 text-[11px] font-mono text-sentinel-500 dark:text-sentinel-400">{t('approvalFlowNote')}</p>
                 )}
               </div>
             ) : (
@@ -164,7 +164,7 @@ export default function CampaignsPage() {
                     onClick={() => setSelectedId(campaign.id)}
                     className={`w-full rounded-lg border px-3 py-3 text-left transition-colors ${
                       isActive
-                        ? 'border-hermes-200 bg-hermes-50 dark:border-hermes-800 dark:bg-hermes-900/30'
+                        ? 'border-sentinel-200 bg-sentinel-50 dark:border-sentinel-800 dark:bg-sentinel-900/30'
                         : 'border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800'
                     }`}
                   >

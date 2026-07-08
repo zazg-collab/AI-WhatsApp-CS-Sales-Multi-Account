@@ -6,7 +6,7 @@ import {
   MessageType,
   SenderType,
   Prisma,
-} from '@hermes/database';
+} from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { ContactSyncService } from './contact-sync.service';

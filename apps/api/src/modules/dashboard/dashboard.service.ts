@@ -4,7 +4,7 @@ import {
   FollowUpStatus,
   LeadStage,
   SenderType,
-} from '@hermes/database';
+} from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@hermes/database';
+import { Prisma } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { isDirectChatJid, jidToPhone } from './wa.util';
 

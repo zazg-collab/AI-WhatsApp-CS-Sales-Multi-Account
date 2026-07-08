@@ -7,7 +7,7 @@ COPY apps/api/package*.json ./apps/api/
 RUN npm ci
 COPY . .
 RUN npm run db:generate
-RUN npm run build --workspace=@hermes/api
+RUN npm run build --workspace=@sentinel/api
 
 FROM node:20-slim AS runner
 WORKDIR /app

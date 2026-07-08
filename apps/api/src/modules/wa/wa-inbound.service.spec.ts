@@ -1,4 +1,4 @@
-import { AiMode, MessageStatus, MessageType, SenderType, TakeoverStatus } from '@hermes/database';
+import { AiMode, MessageStatus, MessageType, SenderType, TakeoverStatus } from '@sentinel/database';
 import { WaInboundService } from './wa-inbound.service';
 
 describe('WaInboundService auto-reply', () => {

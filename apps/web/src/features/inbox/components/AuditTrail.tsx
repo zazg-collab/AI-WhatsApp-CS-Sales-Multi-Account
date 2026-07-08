@@ -18,7 +18,7 @@ interface AuditEvent {
 function buildAudit(conv: ConvDetail): AuditEvent[] {
   const out: AuditEvent[] = [];
   const firstAi = conv.messages.find((m) => m.aiGenerated);
-  if (firstAi) out.push({ label: 'AI generated a reply', time: firstAi.createdAt, icon: ArrowsClockwise, tone: 'text-hermes-600' });
+  if (firstAi) out.push({ label: 'AI generated a reply', time: firstAi.createdAt, icon: ArrowsClockwise, tone: 'text-sentinel-600' });
   if (conv.sentinelReviews[0]) out.push({ label: `Sentinel ${conv.sentinelReviews[0].decision.replace('_', ' ')}`, time: null, icon: Shield, tone: 'text-review-600' });
   if (conv.takeoverStatus === 'admin_takeover') out.push({ label: 'Admin took over', time: null, icon: UserPlus, tone: 'text-gray-500' });
   if (conv.assignedAdmin) out.push({ label: `Assigned to ${conv.assignedAdmin.name}`, time: null, icon: UserPlus, tone: 'text-gray-500' });

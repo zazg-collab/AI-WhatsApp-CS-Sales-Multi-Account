@@ -49,7 +49,7 @@ export class WebhooksService {
         try {
           const res = await fetch(ep.url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Hermes-Signature': `sha256=${sig}`, 'X-Hermes-Event': event },
+            headers: { 'Content-Type': 'application/json', 'X-Sentinel-Signature': `sha256=${sig}`, 'X-Sentinel-Event': event },
             body,
             signal: AbortSignal.timeout(10_000),
           });

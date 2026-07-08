@@ -170,7 +170,7 @@ function BotModal({ bot, personas, knowledgeBases, accounts, onClose, onSaved, o
               <option value="">{t('choosePersona')}</option>
               {localPersonas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </SelectField>
-            <button type="button" onClick={() => setShowPersonaModal(true)} className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-hermes-700 hover:text-hermes-800">
+            <button type="button" onClick={() => setShowPersonaModal(true)} className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-sentinel-700 hover:text-sentinel-800">
               <Plus className="h-3.5 w-3.5" aria-hidden="true" />{t('createNewPersona')}
             </button>
           </div>
@@ -278,7 +278,7 @@ function BotCard({ bot, onEdit, onDelete }: { bot: Bot; onEdit: () => void; onDe
         </div>
       </div>
       <div className="mb-2 flex items-center gap-1.5 text-xs text-gray-500">
-        {t('defaultMode')}<Badge tone="hermes">{bot.defaultAiMode}</Badge>
+        {t('defaultMode')}<Badge tone="sentinel">{bot.defaultAiMode}</Badge>
       </div>
       {bot.accounts.length > 0 ? (
         <div>

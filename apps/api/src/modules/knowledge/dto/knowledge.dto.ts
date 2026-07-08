@@ -5,7 +5,7 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
-import { KnowledgeStatus } from '@hermes/database';
+import { KnowledgeStatus } from '@sentinel/database';
 
 export class CreateKnowledgeBaseDto {
   @IsString()

@@ -33,7 +33,7 @@ export default function Error({
         </pre>
         <button
           onClick={reset}
-          className="mt-5 rounded border border-hermes-800 bg-hermes-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-hermes-800"
+          className="mt-5 rounded border border-sentinel-800 bg-sentinel-700 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-sentinel-800"
         >
           {t('tryAgain')}
         </button>

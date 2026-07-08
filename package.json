@@ -1,5 +1,5 @@
 {
-  "name": "hermes-control-center",
+  "name": "sentinel-control-center",
   "version": "0.1.0",
   "private": true,
   "description": "Hermes AI Sales & Customer Service Control Center",
@@ -14,14 +14,14 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "npm run start:dev --workspace=@hermes/api",
-    "dev:web": "npm run dev --workspace=@hermes/web",
+    "dev:api": "npm run start:dev --workspace=@sentinel/api",
+    "dev:web": "npm run dev --workspace=@sentinel/web",
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "db:generate": "npm run generate --workspace=@hermes/database",
-    "db:migrate": "npm run migrate --workspace=@hermes/database",
-    "db:seed": "npm run seed --workspace=@hermes/database",
-    "kb:reindex": "npm run kb:reindex --workspace=@hermes/api",
+    "db:generate": "npm run generate --workspace=@sentinel/database",
+    "db:migrate": "npm run migrate --workspace=@sentinel/database",
+    "db:seed": "npm run seed --workspace=@sentinel/database",
+    "kb:reindex": "npm run kb:reindex --workspace=@sentinel/api",
     "test": "node scripts/qa-check.mjs"
   },
   "engines": {

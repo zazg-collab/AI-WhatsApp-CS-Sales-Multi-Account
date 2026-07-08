@@ -1,19 +1,19 @@
 import type { Config } from 'tailwindcss';
 
 /**
- * Hermes — SalesOps Premium / WhatsApp Sales Control Desk.
+ * Sentinel — SalesOps Premium / WhatsApp Sales Control Desk.
  *
  * Palette intent (see premium-salesops-uiux-theme skill):
  *  - clean white workspace on a soft slate background, subtle borders, minimal shadow
- *  - `hermes` teal  → primary actions, active nav, focus, "operate now" accent
+ *  - `sentinel` teal  → primary actions, active nav, focus, "operate now" accent
  *  - `accent` blue  → AI / informational presence (drafts, AI-generated, hints)
  *  - `channel` WhatsApp green → channel indicators + success states
  *  - `review` amber → review-required states
  *  - `danger` red → blocked / failed states
  *  - `critical` deep red → escalated / takeover-required states
  *
- * The `hermes` scale is intentionally named (not `teal`) so retinting it here
- * re-themes every existing `bg-hermes-*` / `text-hermes-*` usage at once with
+ * The `sentinel` scale is intentionally named (not `teal`) so retinting it here
+ * re-themes every existing `bg-sentinel-*` / `text-sentinel-*` usage at once with
  * no class renames. We also retint Tailwind's `gray` to a cool slate so every
  * `gray-*` usage shifts to the SalesOps neutral family in one place.
  */
@@ -39,7 +39,7 @@ const config: Config = {
         },
         // Teal — primary actions, active nav, focus. The SalesOps "operate" accent.
         // (Named `hermes`, not `teal`, so retinting re-themes the whole app.)
-        hermes: {
+        sentinel: {
           50: '#f0fdfa',
           100: '#ccfbf1',
           200: '#99f6e4',

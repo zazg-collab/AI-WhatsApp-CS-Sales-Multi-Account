@@ -1,5 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { AiMode, ConversationStatus, TakeoverStatus } from '@hermes/database';
+import { AiMode, ConversationStatus, TakeoverStatus } from '@sentinel/database';
 import { ConversationsService } from './conversations.service';
 import { ConversationMessagingService } from './conversation-messaging.service';
 import { ConversationChatOpsService } from './conversation-chat-ops.service';

@@ -31,14 +31,14 @@ describe('Sidebar', () => {
   });
 
   it('shows admin-level links for an admin but not supervisor-only links', () => {
-    window.localStorage.setItem('hermes_token', makeToken('admin'));
+    window.localStorage.setItem('sentinel_token', makeToken('admin'));
     render(<Sidebar />);
     expect(screen.getByText('Campaigns')).toBeInTheDocument(); // admin
     expect(screen.queryByText('Monitoring')).not.toBeInTheDocument(); // supervisor
   });
 
   it('shows all restricted links for an owner', () => {
-    window.localStorage.setItem('hermes_token', makeToken('owner'));
+    window.localStorage.setItem('sentinel_token', makeToken('owner'));
     render(<Sidebar />);
     expect(screen.getByText('Campaigns')).toBeInTheDocument();
     expect(screen.getByText('Monitoring')).toBeInTheDocument();
@@ -50,9 +50,9 @@ describe('Sidebar', () => {
     setPathname('/customers');
     render(<Sidebar />);
     const active = screen.getByText('Contacts').closest('a');
-    expect(active?.className).toContain('bg-hermes-50');
+    expect(active?.className).toContain('bg-sentinel-50');
     const inactive = screen.getByText('Overview').closest('a');
-    expect(inactive?.className).not.toContain('bg-hermes-50');
+    expect(inactive?.className).not.toContain('bg-sentinel-50');
   });
 
   it('logs out and navigates to the login page', async () => {
@@ -62,7 +62,7 @@ describe('Sidebar', () => {
   });
 
   it('treats a malformed token as no role', () => {
-    window.localStorage.setItem('hermes_token', 'not-a-jwt');
+    window.localStorage.setItem('sentinel_token', 'not-a-jwt');
     render(<Sidebar />);
     expect(screen.queryByText('Campaigns')).not.toBeInTheDocument();
   });

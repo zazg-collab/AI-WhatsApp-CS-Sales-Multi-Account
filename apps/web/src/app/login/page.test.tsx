@@ -20,7 +20,7 @@ describe('LoginPage', () => {
 
   it('renders the login form', () => {
     render(<LoginPage />);
-    expect(screen.getByText('Hermes Control Center')).toBeInTheDocument();
+    expect(screen.getByText('Sentinel Control Center')).toBeInTheDocument();
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
   });

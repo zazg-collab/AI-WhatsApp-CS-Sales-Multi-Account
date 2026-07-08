@@ -1,7 +1,7 @@
 /**
  * Backfill / rebuild semantic embeddings for all active knowledge items.
  *
- *   npm run kb:reindex --workspace=@hermes/api
+ *   npm run kb:reindex --workspace=@sentinel/api
  *
  * Safe to run repeatedly: KnowledgeIndexService skips items whose content hash
  * is unchanged. No-op (exits 0) when AI_EMBED_MODEL is not configured.

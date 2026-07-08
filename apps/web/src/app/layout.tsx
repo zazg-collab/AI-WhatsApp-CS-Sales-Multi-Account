@@ -5,8 +5,8 @@ import './globals.css';
 import { Providers } from '@/components/Providers';
 
 export const metadata: Metadata = {
-  title: 'Hermes · Supervised WhatsApp Sales & CS',
-  description: 'Run every WhatsApp Sales and CS account from one dashboard. AI replies automatically, Hermes reviews every risky message before it sends, and your team takes over anytime.',
+  title: 'Sentinel · Supervised WhatsApp Sales & CS',
+  description: 'Run every WhatsApp Sales and CS account from one dashboard. AI replies automatically, Sentinel reviews every risky message before it sends, and your team takes over anytime.',
 };
 
 export default function RootLayout({
@@ -21,7 +21,7 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{if(localStorage.getItem('hermes_theme')==='dark')document.documentElement.classList.add('dark');var l=localStorage.getItem('hermes_lang');document.documentElement.lang=(l==='id'||l==='en')?l:'en'}catch(e){}",
+              "try{if(localStorage.getItem('sentinel_theme')==='dark')document.documentElement.classList.add('dark');var l=localStorage.getItem('sentinel_lang');document.documentElement.lang=(l==='id'||l==='en')?l:'en'}catch(e){}",
           }}
         />
       </head>

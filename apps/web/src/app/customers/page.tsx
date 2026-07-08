@@ -14,7 +14,7 @@ import { formatPhone } from '@/lib/contact';
 import { useCustomers, stages, stageTone, stageLabelKey, PAGE_SIZE } from './useCustomers';
 
 const inputClass =
-  'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-sentinel-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 export default function CustomersPage() {
   const {
@@ -73,7 +73,7 @@ export default function CustomersPage() {
         {canBulkEdit && (
           <section className={`border-b border-gray-200 px-5 py-3 transition-colors dark:border-gray-800 ${selectedCount > 0 ? 'bg-gray-50 dark:bg-gray-950' : 'hidden bg-gray-50/50 md:block dark:bg-gray-950/50'}`}>
             <div className="mb-2 text-xs text-gray-500 dark:text-gray-400">
-              <span className={`font-semibold ${selectedCount > 0 ? 'text-hermes-600' : 'text-gray-400'}`}>{selectedCount}</span> {t('selectedCount')}
+              <span className={`font-semibold ${selectedCount > 0 ? 'text-sentinel-600' : 'text-gray-400'}`}>{selectedCount}</span> {t('selectedCount')}
               <span className="ml-2 text-gray-400">{t('bulkLimit')}</span>
             </div>
             <div className={`grid gap-2 xl:grid-cols-[150px_1fr_140px_220px_1fr_auto] ${selectedCount === 0 ? 'pointer-events-none opacity-50' : ''}`}>
@@ -137,7 +137,7 @@ export default function CustomersPage() {
                   <thead>
                     <tr className="border-b border-gray-100 text-left text-[11px] uppercase tracking-wider text-gray-400 dark:border-gray-800">
                       <th className="w-10 px-4 py-3">
-                        <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={t('selectAllAria')} className="accent-hermes-600" />
+                        <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={t('selectAllAria')} className="accent-sentinel-600" />
                       </th>
                       <th scope="col" className="px-4 py-3 font-medium">{t('colCustomer')}</th>
                       <th scope="col" className="px-4 py-3 font-medium">{t('colStage')}</th>
@@ -150,13 +150,13 @@ export default function CustomersPage() {
                     {customers.map((customer) => (
                       <tr key={customer.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 dark:border-gray-800/60 dark:hover:bg-gray-800/40">
                         <td className="px-4 py-3">
-                          <input type="checkbox" checked={selectedSet.has(customer.id)} onChange={() => toggleCustomer(customer.id)} aria-label={t('selectRow', { name: customer.waName || customer.name || customer.phoneNumber })} className="accent-hermes-600" />
+                          <input type="checkbox" checked={selectedSet.has(customer.id)} onChange={() => toggleCustomer(customer.id)} aria-label={t('selectRow', { name: customer.waName || customer.name || customer.phoneNumber })} className="accent-sentinel-600" />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">
                             <Avatar name={customer.waName ?? customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-8 w-8 text-[11px] font-semibold" />
                             <div className="min-w-0">
-                              <Link href={`/customers/${customer.id}`} className="block truncate font-medium text-gray-900 hover:text-hermes-600 hover:underline dark:text-gray-100 dark:hover:text-hermes-400">{customer.waName || customer.name || t('noName')}</Link>
+                              <Link href={`/customers/${customer.id}`} className="block truncate font-medium text-gray-900 hover:text-sentinel-600 hover:underline dark:text-gray-100 dark:hover:text-sentinel-400">{customer.waName || customer.name || t('noName')}</Link>
                               <div className="text-xs text-gray-400">{formatPhone(customer.phoneNumber, t('hiddenNumber'))}</div>
                             </div>
                           </div>
@@ -189,13 +189,13 @@ export default function CustomersPage() {
               {/* Mobile: card list */}
               <div className="md:hidden">
                 <label className="flex items-center gap-2 border-b border-gray-100 px-4 py-2.5 text-[13px] font-medium text-gray-600 dark:border-gray-800 dark:text-gray-300">
-                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={t('selectAllAria')} className="accent-hermes-600" />
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={t('selectAllAria')} className="accent-sentinel-600" />
                   {t('colCustomer')}
                 </label>
                 <div className="divide-y divide-gray-100 dark:divide-gray-800">
                   {customers.map((customer) => (
                     <label key={customer.id} className="flex items-start gap-3 px-4 py-3 active:bg-gray-50 dark:active:bg-gray-800/40">
-                      <input type="checkbox" checked={selectedSet.has(customer.id)} onChange={() => toggleCustomer(customer.id)} aria-label={t('selectRow', { name: customer.waName || customer.name || customer.phoneNumber })} className="mt-1 accent-hermes-600" />
+                      <input type="checkbox" checked={selectedSet.has(customer.id)} onChange={() => toggleCustomer(customer.id)} aria-label={t('selectRow', { name: customer.waName || customer.name || customer.phoneNumber })} className="mt-1 accent-sentinel-600" />
                       <Avatar name={customer.waName ?? customer.name} phone={customer.phoneNumber} avatarUrl={customer.avatarUrl} className="h-9 w-9 shrink-0 text-[11px] font-semibold" />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">

@@ -1,4 +1,4 @@
-import { Prisma } from '@hermes/database';
+import { Prisma } from '@sentinel/database';
 import { UpdateAccountDto } from './dto/update-account.dto';
 
 /**

@@ -115,7 +115,7 @@ export function Modal({
                       key={i}
                       className={cn(
                         'h-1.5 rounded-full transition-all',
-                        i + 1 === step ? 'w-5 bg-hermes-600' : i + 1 < step ? 'w-1.5 bg-hermes-400' : 'w-1.5 bg-gray-200 dark:bg-gray-700',
+                        i + 1 === step ? 'w-5 bg-sentinel-600' : i + 1 < step ? 'w-1.5 bg-sentinel-400' : 'w-1.5 bg-gray-200 dark:bg-gray-700',
                       )}
                     />
                   ))}

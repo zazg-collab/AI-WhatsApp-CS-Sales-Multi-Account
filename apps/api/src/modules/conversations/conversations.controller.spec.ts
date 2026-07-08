@@ -1,4 +1,4 @@
-import { AiMode, ConversationStatus } from '@hermes/database';
+import { AiMode, ConversationStatus } from '@sentinel/database';
 
 jest.mock('../wa/wa.service', () => ({ WaService: class {} }));
 

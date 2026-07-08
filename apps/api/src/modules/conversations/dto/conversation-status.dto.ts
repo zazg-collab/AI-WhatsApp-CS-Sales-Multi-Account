@@ -1,5 +1,5 @@
 import { IsEnum } from 'class-validator';
-import { ConversationStatus } from '@hermes/database';
+import { ConversationStatus } from '@sentinel/database';
 
 export class ConversationStatusDto {
   @IsEnum(ConversationStatus)

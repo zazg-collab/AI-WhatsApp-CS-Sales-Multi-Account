@@ -11,7 +11,7 @@ import { Field } from '@/components/ui/Field';
 import { api } from '@/lib/api';
 
 const textareaClass =
-  'w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-sentinel-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 interface WaAccount {
   id: string;
@@ -179,7 +179,7 @@ export default function StatusPage() {
 
       <div className="mx-auto w-full max-w-2xl flex-1 overflow-y-auto p-5 space-y-5">
         {/* Info notice */}
-        <div className="flex items-start gap-3 rounded-lg border border-hermes-200 bg-hermes-50 px-4 py-3 text-sm text-hermes-800 dark:border-hermes-700/40 dark:bg-hermes-900/20 dark:text-hermes-300">
+        <div className="flex items-start gap-3 rounded-lg border border-sentinel-200 bg-sentinel-50 px-4 py-3 text-sm text-sentinel-800 dark:border-sentinel-700/40 dark:bg-sentinel-900/20 dark:text-sentinel-300">
           <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <p>
             Status updates go to WhatsApp Stories. Target phones are optional — leave empty to
@@ -197,7 +197,7 @@ export default function StatusPage() {
           ) : accounts.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">
               No WhatsApp accounts found.{' '}
-              <a href="/accounts" className="text-hermes-600 underline dark:text-hermes-400">
+              <a href="/accounts" className="text-sentinel-600 underline dark:text-sentinel-400">
                 Add one
               </a>
               .
@@ -206,7 +206,7 @@ export default function StatusPage() {
             <select
               value={accountId}
               onChange={(e) => setAccountId(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-sentinel-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               aria-label="Select account"
             >
               {accounts.map((a) => (
@@ -223,7 +223,7 @@ export default function StatusPage() {
           <div className="grid gap-4 sm:grid-cols-3">
             {/* Text status */}
             <Card className="flex flex-col items-center gap-3 p-5 text-center">
-              <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-hermes-100 text-hermes-700 dark:bg-hermes-900/30 dark:text-hermes-400">
+              <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-sentinel-100 text-sentinel-700 dark:bg-sentinel-900/30 dark:text-sentinel-400">
                 <Plus className="h-5 w-5" aria-hidden="true" />
               </span>
               <div>
@@ -393,7 +393,7 @@ export default function StatusPage() {
               type="file"
               accept="image/*"
               onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-hermes-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-hermes-700 hover:file:bg-hermes-100 dark:text-gray-300 dark:file:bg-hermes-900/30 dark:file:text-hermes-300"
+              className="block w-full text-sm text-gray-700 file:mr-3 file:rounded file:border-0 file:bg-sentinel-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-sentinel-700 hover:file:bg-sentinel-100 dark:text-gray-300 dark:file:bg-sentinel-900/30 dark:file:text-sentinel-300"
             />
             {imageFile && (
               <p className="mt-1 text-[11px] text-gray-500">Selected: {imageFile.name}</p>

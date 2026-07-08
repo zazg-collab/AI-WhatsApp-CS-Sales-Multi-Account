@@ -18,9 +18,9 @@ function NavLangToggle() {
       aria-label={lang === 'id' ? 'Switch to English' : 'Ganti ke Bahasa Indonesia'}
       className="flex h-9 items-center gap-1 rounded-md px-2 text-[11px] font-semibold text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white"
     >
-      <span className={lang === 'id' ? 'text-hermes-600 dark:text-hermes-400' : ''}>ID</span>
+      <span className={lang === 'id' ? 'text-sentinel-600 dark:text-sentinel-400' : ''}>ID</span>
       <span className="text-gray-300 dark:text-gray-600">/</span>
-      <span className={lang === 'en' ? 'text-hermes-600 dark:text-hermes-400' : ''}>EN</span>
+      <span className={lang === 'en' ? 'text-sentinel-600 dark:text-sentinel-400' : ''}>EN</span>
     </button>
   );
 }
@@ -39,11 +39,11 @@ export function LandingNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur-md dark:border-gray-800 dark:bg-gray-950/85">
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-5 sm:px-6">
-        <Link href="/" className="flex items-center gap-2.5" aria-label="Hermes">
-          <span className="flex h-9 w-9 items-center justify-center rounded bg-hermes-600 text-white">
+        <Link href="/" className="flex items-center gap-2.5" aria-label="Sentinel">
+          <span className="flex h-9 w-9 items-center justify-center rounded bg-sentinel-600 text-white">
             <ShieldStar className="h-[18px] w-[18px]" aria-hidden="true" />
           </span>
-          <span className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">Hermes</span>
+          <span className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">Sentinel</span>
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">
@@ -62,7 +62,7 @@ export function LandingNav() {
           <NavLangToggle />
           <Link
             href="/login"
-            className="ml-1 hidden h-9 items-center gap-1.5 rounded border border-hermes-700 bg-hermes-600 px-3.5 text-[13px] font-semibold text-white transition-all hover:bg-hermes-500 active:scale-[0.97] sm:inline-flex"
+            className="ml-1 hidden h-9 items-center gap-1.5 rounded border border-sentinel-700 bg-sentinel-600 px-3.5 text-[13px] font-semibold text-white transition-all hover:bg-sentinel-500 active:scale-[0.97] sm:inline-flex"
           >
             {t('navSignIn')}
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -94,7 +94,7 @@ export function LandingNav() {
             ))}
             <Link
               href="/login"
-              className="mt-1 inline-flex h-10 items-center justify-center gap-1.5 rounded border border-hermes-700 bg-hermes-600 px-3.5 text-sm font-semibold text-white"
+              className="mt-1 inline-flex h-10 items-center justify-center gap-1.5 rounded border border-sentinel-700 bg-sentinel-600 px-3.5 text-sm font-semibold text-white"
             >
               {t('navSignIn')}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />

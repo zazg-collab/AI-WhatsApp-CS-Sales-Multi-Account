@@ -57,7 +57,7 @@ export function AssetBar({ assets, suggestions, onSendAsset, onDismiss, disabled
           suggestions.map((s) => (
             <div
               key={s.id}
-              className="flex shrink-0 items-center gap-1.5 rounded-full border border-hermes-200 bg-white py-1 pl-2.5 pr-1 text-xs dark:border-hermes-900/30 dark:bg-gray-800"
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-sentinel-200 bg-white py-1 pl-2.5 pr-1 text-xs dark:border-sentinel-900/30 dark:bg-gray-800"
               title={s.reason}
             >
               <span className="flex items-center gap-1 font-medium text-gray-800 dark:text-gray-100">
@@ -66,7 +66,7 @@ export function AssetBar({ assets, suggestions, onSendAsset, onDismiss, disabled
               <button
                 onClick={() => send(s.id)}
                 disabled={disabled || sendingId === s.id}
-                className="rounded-full bg-hermes-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-hermes-700 disabled:opacity-50"
+                className="rounded-full bg-sentinel-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-sentinel-700 disabled:opacity-50"
               >
                 {sendingId === s.id ? '…' : t('send')}
               </button>
@@ -102,7 +102,7 @@ export function AssetBar({ assets, suggestions, onSendAsset, onDismiss, disabled
                     <span className="block truncate font-medium text-gray-800 dark:text-gray-100">{a.title}</span>
                     <span className="block truncate text-xs text-gray-500 dark:text-gray-400">{a.kind} · {a.purpose}</span>
                   </span>
-                  <span className="shrink-0 text-[11px] font-semibold text-hermes-600">{sendingId === a.id ? '…' : 'Send'}</span>
+                  <span className="shrink-0 text-[11px] font-semibold text-sentinel-600">{sendingId === a.id ? '…' : 'Send'}</span>
                 </button>
               ))}
             </div>

@@ -269,7 +269,7 @@ Vercel should auto-detect Next.js. Ensure these settings:
 |---------|-------|
 | **Framework** | Next.js |
 | **Root Directory** | `./apps/web` |
-| **Build Command** | `npm run build --workspace=@hermes/web` |
+| **Build Command** | `npm run build --workspace=@sentinel/web` |
 | **Output Directory** | `.next` |
 | **Install Command** | `npm ci` |
 
@@ -316,7 +316,7 @@ The initial owner account must be created. You have two options:
 2. Click **"Deploy"** → **"Run Command"**.
 3. Enter:
    ```bash
-   npm run db:migrate --workspace=@hermes/database && npm run db:seed --workspace=@hermes/database
+   npm run db:migrate --workspace=@sentinel/database && npm run db:seed --workspace=@sentinel/database
    ```
 4. Click **"Run"** and wait for completion.
 5. Check the logs to confirm: `Seeded owner user: owner@hermes.local`.
@@ -330,8 +330,8 @@ The initial owner account must be created. You have two options:
    ```
 3. Inside the container:
    ```bash
-   npm run db:migrate --workspace=@hermes/database
-   npm run db:seed --workspace=@hermes/database
+   npm run db:migrate --workspace=@sentinel/database
+   npm run db:seed --workspace=@sentinel/database
    ```
 
 ### 4.3 Test Login
@@ -463,7 +463,7 @@ curl https://ai-whatsapp-api-prod.railway.app/api/v1/health/ready
    ```
 2. If not, re-run the seed:
    ```bash
-   npm run db:seed --workspace=@hermes/database
+   npm run db:seed --workspace=@sentinel/database
    ```
 3. Ensure `JWT_SECRET` is set and the same across deployments.
 4. Clear browser cookies and try again.
@@ -475,7 +475,7 @@ curl https://ai-whatsapp-api-prod.railway.app/api/v1/health/ready
 **Fix**:
 1. Verify `package.json` at repo root has `"workspaces"` defined.
 2. Ensure Vercel **Root Directory** is set to `./apps/web` (not the monorepo root).
-3. Verify **Build Command** is `npm run build --workspace=@hermes/web`.
+3. Verify **Build Command** is `npm run build --workspace=@sentinel/web`.
 
 ### WhatsApp Sessions Lost After Redeploy
 

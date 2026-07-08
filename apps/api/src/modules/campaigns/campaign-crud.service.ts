@@ -7,7 +7,7 @@ import {
   CampaignStatus,
   Prisma,
   TakeoverStatus,
-} from '@hermes/database';
+} from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { allowedAccountIds, type ScopedUser } from '../../common/account-scope.util';
 import { AuditService } from '../audit/audit.service';

@@ -7,7 +7,7 @@ import { dict } from './campaigns.i18n';
 
 type Role = 'owner' | 'supervisor' | 'admin' | 'viewer';
 type LeadStage = 'cold' | 'warm' | 'hot' | 'very_hot';
-type BadgeTone = 'neutral' | 'hermes' | 'channel' | 'review' | 'danger' | 'success';
+type BadgeTone = 'neutral' | 'sentinel' | 'channel' | 'review' | 'danger' | 'success';
 
 export interface Account {
   id: string;
@@ -46,8 +46,8 @@ export interface OptedOutCustomer {
 export const statusTone: Record<string, BadgeTone> = {
   draft: 'neutral',
   pending_approval: 'review',
-  approved: 'hermes',
-  scheduled: 'hermes',
+  approved: 'sentinel',
+  scheduled: 'sentinel',
   running: 'channel',
   paused: 'review',
   completed: 'success',
@@ -86,7 +86,7 @@ export function useCampaigns() {
   const [optedOutTotal, setOptedOutTotal] = useState(0);
   const [optOutLoading, setOptOutLoading] = useState(false);
 
-  const DRAFT_KEY = 'hermes_campaign_draft';
+  const DRAFT_KEY = 'sentinel_campaign_draft';
   const savedDraft = (() => {
     if (typeof window === 'undefined') return null;
     try { return JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null'); } catch { return null; }

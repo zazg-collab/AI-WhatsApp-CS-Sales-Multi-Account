@@ -98,7 +98,7 @@ const dict: Dict = {
 };
 
 const getTypeMeta = (t: ReturnType<typeof useT>) => ({
-  knowledge: { label: t('typeKnowledge'), icon: Books, tone: 'hermes' as const },
+  knowledge: { label: t('typeKnowledge'), icon: Books, tone: 'sentinel' as const },
   persona: { label: t('typePersona'), icon: User, tone: 'channel' as const },
   customer_memory: { label: t('typeCustomerMemory'), icon: Brain, tone: 'neutral' as const },
   playbook: { label: t('typePlaybook'), icon: Target, tone: 'review' as const },
@@ -239,7 +239,7 @@ export default function LearningPage() {
           </Card>
         )}
         {notice && (
-          <Card className="mb-4 border-hermes-200 bg-hermes-50 p-3 text-[13px] text-hermes-700 dark:border-hermes-700/40 dark:bg-hermes-900/20 dark:text-hermes-300">
+          <Card className="mb-4 border-sentinel-200 bg-sentinel-50 p-3 text-[13px] text-sentinel-700 dark:border-sentinel-700/40 dark:bg-sentinel-900/20 dark:text-sentinel-300">
             {notice}
           </Card>
         )}
@@ -255,7 +255,7 @@ export default function LearningPage() {
               className={cn(
                 'border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors',
                 tab === tb.key
-                  ? 'border-hermes-600 text-hermes-700 dark:text-hermes-300'
+                  ? 'border-sentinel-600 text-sentinel-700 dark:text-sentinel-300'
                   : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200',
               )}
             >
@@ -305,7 +305,7 @@ export default function LearningPage() {
                         <button
                           type="button"
                           onClick={() => setExpanded(open ? null : p.id)}
-                          className="mt-1.5 flex items-center gap-1 text-[12px] font-medium text-hermes-600 hover:underline dark:text-hermes-400"
+                          className="mt-1.5 flex items-center gap-1 text-[12px] font-medium text-sentinel-600 hover:underline dark:text-sentinel-400"
                         >
                           {open ? <CaretDown className="h-3.5 w-3.5" /> : <CaretRight className="h-3.5 w-3.5" />}
                           {open ? t('hide') : t('view')}
@@ -326,7 +326,7 @@ export default function LearningPage() {
                         </div>
                       )}
                       {p.status !== 'pending' && (
-                        <Badge tone={p.status === 'approved' ? 'hermes' : 'neutral'}>
+                        <Badge tone={p.status === 'approved' ? 'sentinel' : 'neutral'}>
                           {p.status === 'approved' ? t('statusApproved') : t('statusRejected')}
                         </Badge>
                       )}

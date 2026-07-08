@@ -20,10 +20,10 @@ export interface AuthUser {
   role: 'owner' | 'supervisor' | 'admin' | 'viewer';
 }
 
-export type BadgeTone = 'danger' | 'review' | 'hermes' | 'neutral' | 'success';
+export type BadgeTone = 'danger' | 'review' | 'sentinel' | 'neutral' | 'success';
 
 export const roleTone: Record<string, BadgeTone> = {
-  owner: 'danger', supervisor: 'review', admin: 'hermes', viewer: 'neutral',
+  owner: 'danger', supervisor: 'review', admin: 'sentinel', viewer: 'neutral',
 };
 
 export function getRoleFromToken(): AuthUser | null {

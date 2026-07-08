@@ -42,7 +42,7 @@ export const stages: { value: LeadStage; labelKey: string }[] = [
   { value: 'very_hot', labelKey: 'stageVeryHot' },
 ];
 
-export const stageTone: Record<LeadStage, 'hermes' | 'review' | 'danger' | 'neutral'> = {
+export const stageTone: Record<LeadStage, 'sentinel' | 'review' | 'danger' | 'neutral'> = {
   cold: 'neutral', warm: 'review', hot: 'review', very_hot: 'danger',
 };
 

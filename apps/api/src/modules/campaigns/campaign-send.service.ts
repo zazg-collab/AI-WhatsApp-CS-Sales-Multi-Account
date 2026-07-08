@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { CampaignRecipientStatus, CampaignStatus, MessageType, SenderType, TakeoverStatus } from '@hermes/database';
+import { CampaignRecipientStatus, CampaignStatus, MessageType, SenderType, TakeoverStatus } from '@sentinel/database';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { AuditService } from '../audit/audit.service';
 import { WaService } from '../wa/wa.service';

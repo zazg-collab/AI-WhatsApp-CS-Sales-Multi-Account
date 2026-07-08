@@ -1077,7 +1077,7 @@ import { WaInboundService } from './wa-inbound.service';
 import { WaMirrorService } from './wa-mirror.service';
 import { ContactSyncService } from './contact-sync.service';
 import { EventsGateway } from '../../realtime/events.gateway';
-import { SessionStatus } from '@hermes/database';
+import { SessionStatus } from '@sentinel/database';
 import { jidToPhone } from './wa.util';
 
 /** Maps WAHA session statuses to our SessionStatus enum */
@@ -1444,7 +1444,7 @@ Add:
 
 ```typescript
 import { WahaClientService } from './waha-client.service';
-import { SessionStatus } from '@hermes/database';
+import { SessionStatus } from '@sentinel/database';
 ```
 
 - [ ] **Step 2: Replace constructor**
@@ -1710,7 +1710,7 @@ cd apps/api && npm install
 - [ ] **Step 4: Full build**
 
 ```bash
-npm run build --workspace=@hermes/api
+npm run build --workspace=@sentinel/api
 ```
 
 Expected: clean build with zero errors.
@@ -1801,7 +1801,7 @@ git commit -m "feat(waha): migration complete — Baileys replaced by WAHA sidec
 - [ ] `WaRateLimiter` tests pass
 - [ ] `WahaClientService` tests pass
 - [ ] `npx tsc --noEmit` reports zero errors
-- [ ] `npm run build --workspace=@hermes/api` succeeds
+- [ ] `npm run build --workspace=@sentinel/api` succeeds
 - [ ] WAHA appears in `docker compose ps`
 - [ ] QR scan flow works end-to-end
 - [ ] Inbound message appears in DB within 2 seconds

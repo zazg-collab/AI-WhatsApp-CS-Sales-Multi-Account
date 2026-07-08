@@ -97,7 +97,7 @@ interface SettingsShape {
 }
 
 const fieldCls =
-  'h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-sentinel-400 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 export default function SettingsPage() {
   const t = useT(dict);
@@ -246,7 +246,7 @@ export default function SettingsPage() {
                 className={cn(
                   'flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-[13px] font-medium transition-colors',
                   tab === tb.key
-                    ? 'border-hermes-600 text-hermes-700 dark:text-hermes-300'
+                    ? 'border-sentinel-600 text-sentinel-700 dark:text-sentinel-300'
                     : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200',
                 )}
               >
@@ -414,7 +414,7 @@ export default function SettingsPage() {
                     onChange={(e) => patch('campaign', 'defaultRateLimitPerMinute', e.target.value)} />
                 </Field>
                 <label className="flex items-start gap-2">
-                  <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-gray-300 text-hermes-600 focus:ring-hermes-400 disabled:opacity-50"
+                  <input type="checkbox" className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sentinel-600 focus:ring-sentinel-400 disabled:opacity-50"
                     disabled={!canEdit}
                     checked={data.campaign.requireApproval}
                     onChange={(e) => patch('campaign', 'requireApproval', e.target.checked)} />
@@ -432,7 +432,7 @@ export default function SettingsPage() {
                   <FloppyDisk className="h-4 w-4" aria-hidden="true" />
                   {saving ? t('saving') : t('save')}
                 </Button>
-                {savedMsg && <span className="text-[13px] font-medium text-hermes-600">{savedMsg}</span>}
+                {savedMsg && <span className="text-[13px] font-medium text-sentinel-600">{savedMsg}</span>}
               </div>
             )}
           </Card>
@@ -492,7 +492,7 @@ function ModelSelect({
             <li key={m}>
               <button
                 type="button"
-                className="block w-full truncate px-3 py-1.5 text-left text-[13px] text-gray-700 hover:bg-hermes-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                className="block w-full truncate px-3 py-1.5 text-left text-[13px] text-gray-700 hover:bg-sentinel-50 dark:text-gray-200 dark:hover:bg-gray-700"
                 onClick={() => { onChange(m); setOpen(false); }}
               >
                 {m}

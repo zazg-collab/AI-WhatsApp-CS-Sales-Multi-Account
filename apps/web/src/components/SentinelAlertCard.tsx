@@ -83,7 +83,7 @@ export function SentinelAlertCard({
       </p>
       <Link
         href={`/inbox?conversation=${conversationId}`}
-        className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-hermes-50 px-2.5 py-1 text-[12px] font-semibold text-hermes-700 transition-colors hover:bg-hermes-100 dark:bg-hermes-900/30 dark:text-hermes-300 dark:hover:bg-hermes-900/50"
+        className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-sentinel-50 px-2.5 py-1 text-[12px] font-semibold text-sentinel-700 transition-colors hover:bg-sentinel-100 dark:bg-sentinel-900/30 dark:text-sentinel-300 dark:hover:bg-sentinel-900/50"
       >
         {t('openConversation')}
         <ArrowUpRight className="h-3 w-3" aria-hidden="true" />

@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional } from 'class-validator';
-import { AiMode, TakeoverStatus } from '@hermes/database';
+import { AiMode, TakeoverStatus } from '@sentinel/database';
 
 /**
  * A1: PATCH /conversations/:id must go through a class DTO — inline body types

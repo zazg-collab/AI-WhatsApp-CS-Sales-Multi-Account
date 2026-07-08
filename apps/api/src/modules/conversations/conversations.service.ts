@@ -6,7 +6,7 @@ import {
   Prisma,
   SenderType,
   TakeoverStatus,
-} from '@hermes/database';
+} from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { WaService } from '../wa/wa.service';

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AiMode, MessageType, SenderType, TakeoverStatus } from '@hermes/database';
+import { AiMode, MessageType, SenderType, TakeoverStatus } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MediaStorageService } from '../media/media-storage.service';
 import { WaService } from '../wa/wa.service';

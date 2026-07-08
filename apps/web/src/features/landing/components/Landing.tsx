@@ -35,13 +35,13 @@ import { SupervisorReviewMock } from './SupervisorReviewMock';
 // format, digits only) via NEXT_PUBLIC_CONTACT_WHATSAPP. Omit for no demo CTA.
 const WA_NUMBER = process.env.NEXT_PUBLIC_CONTACT_WHATSAPP;
 const WA_TEXT = WA_NUMBER
-  ? encodeURIComponent("Hi Hermes, I'd like a demo of the WhatsApp Sales & CS control center for my team.")
+  ? encodeURIComponent("Hi Sentinel, I'd like a demo of the WhatsApp Sales & CS control center for my team.")
   : '';
 const WHATSAPP_URL = WA_NUMBER ? `https://wa.me/${WA_NUMBER}?text=${WA_TEXT}` : '';
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-hermes-600 dark:text-hermes-400">
+    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sentinel-600 dark:text-sentinel-400">
       {children}
     </p>
   );
@@ -113,20 +113,20 @@ const faqs = [
 ] as const;
 
 // AI modes carry the product's semantic state colors — the same tokens used
-// throughout the app (hermes = active/primary, accent = AI/informational,
+// throughout the app (sentinel = active/primary, accent = AI/informational,
 // review = attention-needed, gray = idle).
 const modes = [
   { title: 'modeOnTitle', body: 'modeOnBody', ring: 'ring-emerald-300 dark:ring-emerald-500/40', dot: 'bg-emerald-500', label: 'text-emerald-700 dark:text-emerald-300' },
-  { title: 'modeSupTitle', body: 'modeSupBody', ring: 'ring-hermes-300 dark:ring-hermes-500/40', dot: 'bg-hermes-500', label: 'text-hermes-700 dark:text-hermes-300' },
+  { title: 'modeSupTitle', body: 'modeSupBody', ring: 'ring-sentinel-300 dark:ring-sentinel-500/40', dot: 'bg-sentinel-500', label: 'text-sentinel-700 dark:text-sentinel-300' },
   { title: 'modeDraftTitle', body: 'modeDraftBody', ring: 'ring-accent-300 dark:ring-accent-500/40', dot: 'bg-accent-500', label: 'text-accent-700 dark:text-accent-300' },
   { title: 'modePausedTitle', body: 'modePausedBody', ring: 'ring-review-200 dark:ring-review-500/40', dot: 'bg-review-500', label: 'text-review-700 dark:text-review-400' },
   { title: 'modeOffTitle', body: 'modeOffBody', ring: 'ring-gray-300 dark:ring-gray-600/60', dot: 'bg-gray-400', label: 'text-gray-600 dark:text-gray-300' },
 ] as const;
 
 const accentPill =
-  'inline-flex items-center gap-2 rounded-full bg-hermes-50 px-3 py-1 text-[13px] font-semibold text-hermes-700 ring-1 ring-hermes-200 dark:bg-hermes-900/30 dark:text-hermes-300 dark:ring-hermes-700/40';
+  'inline-flex items-center gap-2 rounded-full bg-sentinel-50 px-3 py-1 text-[13px] font-semibold text-sentinel-700 ring-1 ring-sentinel-200 dark:bg-sentinel-900/30 dark:text-sentinel-300 dark:ring-sentinel-700/40';
 const iconChip =
-  'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-hermes-50 text-hermes-600 ring-1 ring-hermes-200 dark:bg-hermes-900/30 dark:text-hermes-400 dark:ring-hermes-700/40';
+  'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sentinel-50 text-sentinel-600 ring-1 ring-sentinel-200 dark:bg-sentinel-900/30 dark:text-sentinel-400 dark:ring-sentinel-700/40';
 const sectionHeading = 'text-3xl font-semibold tracking-[-0.03em] text-gray-900 dark:text-white sm:text-4xl';
 const cardSurface = 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900';
 const sectionAlt = 'bg-gray-50 dark:bg-gray-950';
@@ -138,7 +138,7 @@ export function Landing() {
     <div className="h-[100dvh] overflow-y-auto overflow-x-hidden scroll-smooth bg-white text-gray-600 dark:bg-gray-950 dark:text-gray-300">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-hermes-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-sentinel-600 focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
       >
         {t('skipToContent')}
       </a>
@@ -163,7 +163,7 @@ export function Landing() {
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute -right-24 top-10 h-72 w-72 rounded-full bg-hermes-300/20 blur-3xl motion-safe:animate-pulse dark:bg-hermes-600/20"
+            className="pointer-events-none absolute -right-24 top-10 h-72 w-72 rounded-full bg-sentinel-300/20 blur-3xl motion-safe:animate-pulse dark:bg-sentinel-600/20"
           />
 
           <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:py-28">
@@ -204,7 +204,7 @@ export function Landing() {
               {/* Depth: a soft tinted panel sits behind the product mock. */}
               <div
                 aria-hidden="true"
-                className="absolute -right-3 -top-4 hidden h-[88%] w-[92%] rotate-2 rounded-2xl bg-gradient-to-br from-hermes-200/40 to-accent-200/30 blur-[2px] sm:block dark:from-hermes-700/30 dark:to-accent-800/20"
+                className="absolute -right-3 -top-4 hidden h-[88%] w-[92%] rotate-2 rounded-2xl bg-gradient-to-br from-sentinel-200/40 to-accent-200/30 blur-[2px] sm:block dark:from-sentinel-700/30 dark:to-accent-800/20"
               />
               <div className="relative">
                 <DashboardMock t={t} />
@@ -219,7 +219,7 @@ export function Landing() {
             <dl className="grid grid-cols-2 gap-x-6 gap-y-9 sm:grid-cols-4">
               {stats.map((s, i) => (
                 <Reveal key={s.label} delay={i * 70}>
-                  <dd className="font-mono text-4xl font-semibold tracking-tight text-hermes-600 dark:text-hermes-400 sm:text-[2.75rem]">
+                  <dd className="font-mono text-4xl font-semibold tracking-tight text-sentinel-600 dark:text-sentinel-400 sm:text-[2.75rem]">
                     {s.value}
                   </dd>
                   <dt className="mt-2 text-[13px] leading-5 text-gray-500 dark:text-gray-400">{t(s.label)}</dt>
@@ -286,7 +286,7 @@ export function Landing() {
               <ul className="mt-6 space-y-3">
                 {['supPoint1', 'supPoint2', 'supPoint3'].map((k) => (
                   <li key={k} className="flex items-start gap-3 text-[15px] text-gray-700 dark:text-gray-200">
-                    <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-hermes-500" weight="fill" aria-hidden="true" />
+                    <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-sentinel-500" weight="fill" aria-hidden="true" />
                     {t(k)}
                   </li>
                 ))}
@@ -324,7 +324,7 @@ export function Landing() {
                   as="article"
                   delay={(i % 3) * 80}
                   className={cn(
-                    'rounded-xl border p-6 transition-all duration-200 hover:-translate-y-0.5 hover:border-hermes-300 dark:hover:border-hermes-600/60',
+                    'rounded-xl border p-6 transition-all duration-200 hover:-translate-y-0.5 hover:border-sentinel-300 dark:hover:border-sentinel-600/60',
                     cardSurface,
                     c.wide && 'lg:col-span-2',
                   )}
@@ -356,7 +356,7 @@ export function Landing() {
               <ul className="mt-6 space-y-3">
                 {['anaPoint1', 'anaPoint2', 'anaPoint3'].map((k) => (
                   <li key={k} className="flex items-start gap-3 text-[15px] text-gray-700 dark:text-gray-200">
-                    <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-hermes-500" weight="fill" aria-hidden="true" />
+                    <CheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-sentinel-500" weight="fill" aria-hidden="true" />
                     {t(k)}
                   </li>
                 ))}
@@ -375,10 +375,10 @@ export function Landing() {
             {steps.map((s, i) => (
               <Reveal key={s.title} as="li" delay={i * 90} className="relative">
                 <div className="flex items-center gap-4">
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-hermes-600 text-white">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-sentinel-600 text-white">
                     <s.icon className="h-5 w-5" aria-hidden="true" />
                   </span>
-                  <span className="font-mono text-sm font-semibold text-hermes-600 dark:text-hermes-400">
+                  <span className="font-mono text-sm font-semibold text-sentinel-600 dark:text-sentinel-400">
                     {String(i + 1).padStart(2, '0')}
                   </span>
                 </div>
@@ -437,7 +437,7 @@ export function Landing() {
         {/* Final CTA band */}
         <section className="border-t border-gray-200 dark:border-gray-800">
           <div className="mx-auto max-w-6xl px-5 py-20 sm:px-6 lg:py-24">
-            <Reveal className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-hermes-600 to-hermes-800 px-8 py-14 text-center sm:px-12">
+            <Reveal className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-sentinel-600 to-sentinel-800 px-8 py-14 text-center sm:px-12">
               <div
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_80%_at_50%_0%,rgba(255,255,255,0.16),transparent_70%)]"
@@ -448,7 +448,7 @@ export function Landing() {
                   {t('ctaEarly')}
                 </p>
                 <h2 className="text-3xl font-semibold tracking-[-0.03em] text-white sm:text-4xl">{t('ctaTitle')}</h2>
-                <p className="mt-4 text-base leading-7 text-hermes-50/90">{t('ctaSub')}</p>
+                <p className="mt-4 text-base leading-7 text-sentinel-50/90">{t('ctaSub')}</p>
                 {WA_NUMBER ? (
                   <>
                     <a
@@ -460,8 +460,8 @@ export function Landing() {
                       <WhatsappLogo className="h-[18px] w-[18px]" weight="fill" aria-hidden="true" />
                       {t('ctaWhatsapp')}
                     </a>
-                    <p className="mt-4 text-[13px] font-medium text-hermes-50/90">{t('ctaReassure')}</p>
-                    <p className="mx-auto mt-2 max-w-md text-[11.5px] leading-5 text-hermes-50/70">{t('ctaTerms')}</p>
+                    <p className="mt-4 text-[13px] font-medium text-sentinel-50/90">{t('ctaReassure')}</p>
+                    <p className="mx-auto mt-2 max-w-md text-[11.5px] leading-5 text-sentinel-50/70">{t('ctaTerms')}</p>
                   </>
                 ) : null}
               </div>
@@ -475,13 +475,13 @@ export function Landing() {
         <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 sm:px-6 md:flex-row md:items-center md:justify-between">
           <div className="max-w-sm">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 items-center justify-center rounded bg-hermes-600 text-white">
+              <span className="flex h-8 w-8 items-center justify-center rounded bg-sentinel-600 text-white">
                 <ShieldStar className="h-4 w-4" aria-hidden="true" />
               </span>
-              <span className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">Hermes</span>
+              <span className="text-[15px] font-semibold tracking-tight text-gray-900 dark:text-white">Sentinel</span>
             </div>
             <p className="mt-3 text-[13px] leading-6 text-gray-500 dark:text-gray-400">{t('footTagline')}</p>
-            <p className="mt-3 border-l-2 border-hermes-300 pl-3 text-[13px] italic leading-6 text-gray-600 dark:border-hermes-500/40 dark:text-gray-300">
+            <p className="mt-3 border-l-2 border-sentinel-300 pl-3 text-[13px] italic leading-6 text-gray-600 dark:border-sentinel-500/40 dark:text-gray-300">
               {t('founderNote')}
             </p>
           </div>

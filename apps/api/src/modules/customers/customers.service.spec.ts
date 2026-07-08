@@ -1,5 +1,5 @@
 import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
-import { LeadStage } from '@hermes/database';
+import { LeadStage } from '@sentinel/database';
 import { CustomersService } from './customers.service';
 import { MAX_EXPORT_ROWS } from '../../common/export-limits';
 

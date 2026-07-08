@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { FollowUpStatus, LeadStage } from '@hermes/database';
+import { FollowUpStatus, LeadStage } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { SentinelService } from '../sentinel/sentinel.service';

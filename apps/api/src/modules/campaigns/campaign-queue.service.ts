@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
-import { CampaignRecipientStatus, CampaignStatus } from '@hermes/database';
+import { CampaignRecipientStatus, CampaignStatus } from '@sentinel/database';
 import { AuditService } from '../audit/audit.service';
 import { CampaignCrudService } from './campaign-crud.service';
 import { currentContext } from '../../common/request-context';

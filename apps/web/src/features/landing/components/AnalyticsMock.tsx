@@ -19,7 +19,7 @@ export function AnalyticsMock({ t }: { t: TFunction }) {
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-pop dark:border-gray-800 dark:bg-gray-900 sm:p-6">
       <div className="flex items-center justify-between">
         <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
-          <ChartLineUp className="h-4 w-4 text-hermes-600 dark:text-hermes-400" weight="bold" aria-hidden="true" />
+          <ChartLineUp className="h-4 w-4 text-sentinel-600 dark:text-sentinel-400" weight="bold" aria-hidden="true" />
           {t('anaChartTitle')}
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-700/40">
@@ -39,7 +39,7 @@ export function AnalyticsMock({ t }: { t: TFunction }) {
                   'absolute inset-y-0 left-0 rounded-md',
                   row.won
                     ? 'bg-gradient-to-r from-emerald-500 to-emerald-600'
-                    : 'bg-gradient-to-r from-hermes-400 to-hermes-600',
+                    : 'bg-gradient-to-r from-sentinel-400 to-sentinel-600',
                 )}
                 aria-hidden="true"
               />

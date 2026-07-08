@@ -83,12 +83,12 @@ export default function TemplatesPage() {
                 </Card>
               ) : (
                 visible.map((item) => (
-                  <Card key={item.id} className={`p-4 ${editingId === item.id ? 'ring-2 ring-hermes-400' : ''}`}>
+                  <Card key={item.id} className={`p-4 ${editingId === item.id ? 'ring-2 ring-sentinel-400' : ''}`}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium text-gray-900 dark:text-gray-100">{item.title}</span>
-                          {item.shortcut && <Badge tone="hermes">/{item.shortcut}</Badge>}
+                          {item.shortcut && <Badge tone="sentinel">/{item.shortcut}</Badge>}
                           <Badge tone="neutral">{item.whatsappAccount?.accountName ?? t('globalBadge')}</Badge>
                         </div>
                         <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-400">{item.content}</p>

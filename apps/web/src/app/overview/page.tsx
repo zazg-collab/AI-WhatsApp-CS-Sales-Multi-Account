@@ -41,19 +41,19 @@ function SetupChecklist() {
   ];
 
   return (
-    <Card className="border-hermes-200 bg-hermes-50/60 p-5 dark:border-hermes-700/40 dark:bg-hermes-900/10">
-      <p className="mb-1 text-[13px] font-bold text-hermes-700 dark:text-hermes-400">{t('setup_title')}</p>
-      <p className="mb-4 text-[12px] text-hermes-700/70 dark:text-hermes-400/70">{t('setup_subtitle')}</p>
+    <Card className="border-sentinel-200 bg-sentinel-50/60 p-5 dark:border-sentinel-700/40 dark:bg-sentinel-900/10">
+      <p className="mb-1 text-[13px] font-bold text-sentinel-700 dark:text-sentinel-400">{t('setup_title')}</p>
+      <p className="mb-4 text-[12px] text-sentinel-700/70 dark:text-sentinel-400/70">{t('setup_subtitle')}</p>
       <ol className="space-y-3">
         {steps.map((s) => (
           <li key={s.n} className="flex items-start gap-3">
-            <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${s.done ? 'bg-channel-500 text-white' : 'bg-hermes-600 text-white'}`}>
+            <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${s.done ? 'bg-channel-500 text-white' : 'bg-sentinel-600 text-white'}`}>
               {s.done ? <Check className="h-3 w-3" aria-hidden="true" /> : s.n}
             </span>
             <div className="flex-1">
               {s.done
                 ? <span className="text-[13px] font-semibold text-gray-400 line-through dark:text-gray-500">{s.label}</span>
-                : <Link href={s.href} className="text-[13px] font-semibold text-hermes-700 underline-offset-2 hover:underline dark:text-hermes-400">{s.label}</Link>}
+                : <Link href={s.href} className="text-[13px] font-semibold text-sentinel-700 underline-offset-2 hover:underline dark:text-sentinel-400">{s.label}</Link>}
               {!s.done && <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{s.hint}</p>}
             </div>
           </li>
@@ -137,7 +137,7 @@ export default function OverviewPage() {
               <Card>
                 <CardHeader>
                   <CardTitle id="attn-h">{t('needDecision')}</CardTitle>
-                  <Link href="/inbox" className="inline-flex items-center gap-1 rounded-lg bg-hermes-50 px-2.5 py-1 text-[12px] font-semibold text-hermes-700 hover:bg-hermes-100 dark:bg-hermes-900/30 dark:text-hermes-300 dark:hover:bg-hermes-900/50">
+                  <Link href="/inbox" className="inline-flex items-center gap-1 rounded-lg bg-sentinel-50 px-2.5 py-1 text-[12px] font-semibold text-sentinel-700 hover:bg-sentinel-100 dark:bg-sentinel-900/30 dark:text-sentinel-300 dark:hover:bg-sentinel-900/50">
                     {t('openInbox')}<ArrowUpRight className="h-3 w-3" aria-hidden="true" />
                   </Link>
                 </CardHeader>

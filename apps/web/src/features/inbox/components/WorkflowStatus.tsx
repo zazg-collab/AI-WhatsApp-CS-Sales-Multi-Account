@@ -40,7 +40,7 @@ export function WorkflowStatus({ conversation, onSetStatus, loading = false }: W
               className={cn(
                 'flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-100',
                 active
-                  ? 'border-hermes-600 bg-hermes-600 text-white'
+                  ? 'border-sentinel-600 bg-sentinel-600 text-white'
                   : 'border-gray-300 text-gray-600 hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800',
               )}
             >

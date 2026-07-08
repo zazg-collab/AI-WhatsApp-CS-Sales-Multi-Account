@@ -24,13 +24,13 @@ body {
   }
 
   :focus-visible {
-    outline: 2px solid theme('colors.hermes.500');
+    outline: 2px solid theme('colors.sentinel.500');
     outline-offset: 2px;
     border-radius: 4px;
   }
 
   ::selection {
-    background: theme('colors.hermes.600');
+    background: theme('colors.sentinel.600');
     color: #ffffff;
   }
 
@@ -76,8 +76,8 @@ body {
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  .text-gradient { color: theme('colors.hermes.700'); }
-  .dark .text-gradient { color: theme('colors.hermes.300'); }
+  .text-gradient { color: theme('colors.sentinel.700'); }
+  .dark .text-gradient { color: theme('colors.sentinel.300'); }
 
   /* Shimmer skeleton */
   .animate-shimmer {

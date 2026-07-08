@@ -50,8 +50,8 @@ Change the seeded password immediately after first login.
 
 ```bash
 npm run build
-npm run start:prod --workspace=@hermes/api
-npm run start --workspace=@hermes/web
+npm run start:prod --workspace=@sentinel/api
+npm run start --workspace=@sentinel/web
 ```
 
 Recommended process model:

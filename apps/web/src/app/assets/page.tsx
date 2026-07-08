@@ -67,7 +67,7 @@ interface Asset {
 }
 
 const getPurposeMeta = (t: ReturnType<typeof useT>) => ({
-  brochure: { label: t('purposeBrochure'), tone: 'hermes' as const },
+  brochure: { label: t('purposeBrochure'), tone: 'sentinel' as const },
   product: { label: t('purposeProduct'), tone: 'channel' as const },
   testimonial: { label: t('purposeTestimonial'), tone: 'review' as const },
 });
@@ -184,7 +184,7 @@ export default function AssetsPage() {
       <PageHeader title={t('title')} subtitle={t('subtitle')} />
       <div className="scrollbar-thin mx-auto w-full max-w-4xl flex-1 overflow-y-auto p-4 sm:p-5">
         {error && <Card className="mb-4 border-danger-200 bg-danger-50 p-3 text-[13px] text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20">{error}</Card>}
-        {notice && <Card className="mb-4 border-hermes-200 bg-hermes-50 p-3 text-[13px] text-hermes-700 dark:border-hermes-700/40 dark:bg-hermes-900/20">{notice}</Card>}
+        {notice && <Card className="mb-4 border-sentinel-200 bg-sentinel-50 p-3 text-[13px] text-sentinel-700 dark:border-sentinel-700/40 dark:bg-sentinel-900/20">{notice}</Card>}
 
         {canManage && (
           <Card className="mb-5 p-4">
@@ -192,7 +192,7 @@ export default function AssetsPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block text-[13px]">
                 <span className="mb-1 block text-gray-600 dark:text-gray-300">{t('fileLabel')}</span>
-                <input ref={fileRef} type="file" accept="image/*,video/*,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block w-full text-xs text-gray-600 file:mr-2 file:rounded file:border-0 file:bg-hermes-600 file:px-3 file:py-1.5 file:text-white" />
+                <input ref={fileRef} type="file" accept="image/*,video/*,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block w-full text-xs text-gray-600 file:mr-2 file:rounded file:border-0 file:bg-sentinel-600 file:px-3 file:py-1.5 file:text-white" />
               </label>
               <label className="block text-[13px]">
                 <span className="mb-1 block text-gray-600 dark:text-gray-300">{t('titleLabel')}</span>
@@ -236,7 +236,7 @@ export default function AssetsPage() {
 
         <div className="mb-3 flex gap-1">
           {(['all', 'brochure', 'product', 'testimonial'] as const).map((p) => (
-            <button key={p} onClick={() => setFilter(p)} className={cn('rounded px-2.5 py-1 text-xs font-medium', filter === p ? 'bg-hermes-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300')}>
+            <button key={p} onClick={() => setFilter(p)} className={cn('rounded px-2.5 py-1 text-xs font-medium', filter === p ? 'bg-sentinel-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300')}>
               {p === 'all' ? t('all') : purposeMeta[p].label}
             </button>
           ))}
@@ -276,14 +276,14 @@ export default function AssetsPage() {
                       )}
                       <div className="mt-1 flex flex-wrap items-center gap-1">
                         {a.status === 'draft' && <Badge tone="neutral" className="text-[10px]">draft</Badge>}
-                        {a.autoSend && <Badge tone="hermes" className="text-[10px]">auto-send</Badge>}
+                        {a.autoSend && <Badge tone="sentinel" className="text-[10px]">auto-send</Badge>}
                         {a.triggerKeywords.map((k) => (
                           <span key={k} className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">{k}</span>
                         ))}
                       </div>
                     </div>
                     {canManage && (
-                      <button type="button" onClick={() => setEditing(a)} title={t('edit')} className="shrink-0 self-start text-gray-400 hover:text-hermes-600">
+                      <button type="button" onClick={() => setEditing(a)} title={t('edit')} className="shrink-0 self-start text-gray-400 hover:text-sentinel-600">
                         <PencilSimple className="h-4 w-4" aria-hidden="true" />
                       </button>
                     )}

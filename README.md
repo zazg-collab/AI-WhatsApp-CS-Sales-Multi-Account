@@ -157,7 +157,7 @@ apps/
     src/components/    shared UI (AppLayout, Sidebar, ui/* primitives)
     src/lib/           api client (JWT), socket, i18n, hooks
 packages/
-  database/            Prisma schema + shared client (@hermes/database)
+  database/            Prisma schema + shared client (@sentinel/database)
 services/
   hermes-sidecar/      optional FastAPI wrapper around hermes-agent AIAgent
   hermes-agent-skills/ skill definition for the agent to pull CRM reports
@@ -286,8 +286,8 @@ npm run kb:reindex       # backfill knowledge-item embeddings (RAG)
 docker compose up -d     # local Postgres + Redis
 ```
 
-Build/test a single workspace: `npm run build --workspace=@hermes/api`,
-`npm run test --workspace=@hermes/api`, `npm run test --workspace=@hermes/web`.
+Build/test a single workspace: `npm run build --workspace=@sentinel/api`,
+`npm run test --workspace=@sentinel/api`, `npm run test --workspace=@sentinel/web`.
 
 ---
 
@@ -329,8 +329,8 @@ All tables use snake_case in the DB (`@map`/`@@map`) and camelCase in code.
 
 ## Testing & QA
 
-- Backend unit tests (Jest): `npm run test --workspace=@hermes/api`
-- Frontend tests (Vitest): `npm run test --workspace=@hermes/web`
+- Backend unit tests (Jest): `npm run test --workspace=@sentinel/api`
+- Frontend tests (Vitest): `npm run test --workspace=@sentinel/web`
 - Repo-level source QA: `npm run test` (`scripts/qa-check.mjs`)
 
 ---

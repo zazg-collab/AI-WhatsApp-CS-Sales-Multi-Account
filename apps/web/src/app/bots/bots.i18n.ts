@@ -26,7 +26,7 @@ export const dict: Dict = {
   botDesc: { id: 'Otak chatbot: persona, knowledge base, dan mode AI default.', en: 'Chatbot brain: persona, knowledge base, and default AI mode.' },
   saveBot: { id: 'Simpan bot', en: 'Save bot' },
   botNameLabel: { id: 'Nama bot', en: 'Bot name' },
-  botNamePlaceholder: { id: 'mis. Hermes Sales Bot', en: 'e.g. Hermes Sales Bot' },
+  botNamePlaceholder: { id: 'mis. Sentinel Sales Bot', en: 'e.g. Sentinel Sales Bot' },
   personaLabel: { id: 'Persona', en: 'Persona' },
   choosePersona: { id: 'Pilih persona…', en: 'Choose persona…' },
   createNewPersona: { id: 'Buat persona baru', en: 'Create new persona' },

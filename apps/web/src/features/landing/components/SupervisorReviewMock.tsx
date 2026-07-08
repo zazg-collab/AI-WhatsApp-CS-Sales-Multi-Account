@@ -15,7 +15,7 @@ export function SupervisorReviewMock({ t }: { t: TFunction }) {
     <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-pop dark:border-gray-800 dark:bg-gray-900">
       <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3.5 dark:border-gray-800">
         <span className="inline-flex items-center gap-2 text-[13px] font-semibold text-gray-900 dark:text-gray-100">
-          <ShieldStar className="h-4 w-4 text-hermes-600 dark:text-hermes-400" weight="fill" aria-hidden="true" />
+          <ShieldStar className="h-4 w-4 text-sentinel-600 dark:text-sentinel-400" weight="fill" aria-hidden="true" />
           {t('revHeader')}
         </span>
         <Badge tone="success">
@@ -36,10 +36,10 @@ export function SupervisorReviewMock({ t }: { t: TFunction }) {
           <div>
             <div className="flex items-baseline justify-between">
               <span className="text-[11px] font-medium text-gray-500">{t('revConfidence')}</span>
-              <span className="font-mono text-[13px] font-semibold text-hermes-700 dark:text-hermes-300">92</span>
+              <span className="font-mono text-[13px] font-semibold text-sentinel-700 dark:text-sentinel-300">92</span>
             </div>
             <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-800">
-              <span className="block h-full w-[92%] rounded-full bg-hermes-500" aria-hidden="true" />
+              <span className="block h-full w-[92%] rounded-full bg-sentinel-500" aria-hidden="true" />
             </div>
           </div>
           <div>

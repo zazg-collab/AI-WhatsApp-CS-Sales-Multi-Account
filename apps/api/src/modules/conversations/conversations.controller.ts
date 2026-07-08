@@ -21,7 +21,7 @@ import { ConversationStatusDto } from './dto/conversation-status.dto';
 import { AssignConversationDto } from './dto/assign-conversation.dto';
 import { LabelsDto } from './dto/labels.dto';
 import { UpdateConversationDto } from './dto/update-conversation.dto';
-import { AiMode, ConversationStatus } from '@hermes/database';
+import { AiMode, ConversationStatus } from '@sentinel/database';
 import { csvRow } from '../../common/csv.util';
 
 // PRD 14.3 — Conversations: reads, CSV export, and conversation-level state

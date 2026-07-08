@@ -98,8 +98,8 @@ bisa jalan, jadi dua itu harus siap duluan.
 8. **Jalankan migrasi database + seed akun owner** (baru sekali ini saja):
    buka tab **Shell** di service Render kamu (pojok atas), lalu ketik:
    ```bash
-   npm run db:migrate --workspace=@hermes/database
-   npm run db:seed --workspace=@hermes/database
+   npm run db:migrate --workspace=@sentinel/database
+   npm run db:seed --workspace=@sentinel/database
    ```
    Tekan Enter, tunggu sampai muncul `Seeded owner user: owner@hermes.local`.
 9. Uji API-nya hidup — buka di browser tab baru:

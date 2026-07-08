@@ -1,5 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
-import { LeadStage } from '@hermes/database';
+import { LeadStage } from '@sentinel/database';
 import { WebhooksService } from '../webhooks/webhooks.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';

@@ -221,7 +221,7 @@ docker compose exec api npx prisma migrate deploy \
 
 # Seed the initial owner account (owner@hermes.local / changeme123)
 docker compose exec api sh -c \
-  "cd /app && npm run db:seed --workspace=@hermes/database"
+  "cd /app && npm run db:seed --workspace=@sentinel/database"
 ```
 
 If the seed command fails, try the direct path:
@@ -556,7 +556,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 # 4. Migrate and seed
 docker compose exec api npx prisma migrate deploy --schema=packages/database/prisma/schema.prisma
-docker compose exec api sh -c "cd /app && npm run db:seed --workspace=@hermes/database"
+docker compose exec api sh -c "cd /app && npm run db:seed --workspace=@sentinel/database"
 
 # 5. Open http://YOUR_SERVER_IP — login with owner@hermes.local / changeme123
 ```

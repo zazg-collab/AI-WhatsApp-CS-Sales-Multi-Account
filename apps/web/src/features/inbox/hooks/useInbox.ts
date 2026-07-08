@@ -27,9 +27,9 @@ export function useInbox(initialConversationId: string | null) {
   // Remembered across visits — re-picking "Account X" + "hide groups" on every
   // reload is the kind of friction WA itself doesn't impose (its tabs persist too).
   const [accountFilter, setAccountFilter] = useState(() =>
-    typeof window === 'undefined' ? '' : localStorage.getItem('hermes:inbox:accountFilter') ?? '');
+    typeof window === 'undefined' ? '' : localStorage.getItem('sentinel:inbox:accountFilter') ?? '');
   const [excludeGroups, setExcludeGroups] = useState(() =>
-    typeof window === 'undefined' ? false : localStorage.getItem('hermes:inbox:excludeGroups') === 'true');
+    typeof window === 'undefined' ? false : localStorage.getItem('sentinel:inbox:excludeGroups') === 'true');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [composer, setComposer] = useState('');
@@ -100,11 +100,11 @@ export function useInbox(initialConversationId: string | null) {
   }, [activeId, conv?.messages?.length]);
 
   useEffect(() => {
-    localStorage.setItem('hermes:inbox:accountFilter', accountFilter);
+    localStorage.setItem('sentinel:inbox:accountFilter', accountFilter);
   }, [accountFilter]);
 
   useEffect(() => {
-    localStorage.setItem('hermes:inbox:excludeGroups', String(excludeGroups));
+    localStorage.setItem('sentinel:inbox:excludeGroups', String(excludeGroups));
   }, [excludeGroups]);
 
   // ── Conversation list ─────────────────────────────────────────────────────

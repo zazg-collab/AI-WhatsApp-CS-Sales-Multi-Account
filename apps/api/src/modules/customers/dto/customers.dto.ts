@@ -11,7 +11,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { LeadStage } from '@hermes/database';
+import { LeadStage } from '@sentinel/database';
 
 export class UpdateCustomerDto {
   @ApiPropertyOptional({ example: 'Budi Santoso' })

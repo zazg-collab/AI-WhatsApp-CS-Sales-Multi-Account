@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Sun, Moon } from '@/components/ui/core-essential-icons';
 import { useT, type Dict } from '@/lib/i18n';
 
-const THEME_KEY = 'hermes_theme';
+const THEME_KEY = 'sentinel_theme';
 
 const dict: Dict = {
   toLight: { id: 'Ganti ke tema terang', en: 'Switch to light theme' },

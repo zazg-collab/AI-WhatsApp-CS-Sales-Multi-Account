@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { AiMode, BotStatus } from '@hermes/database';
+import { AiMode, BotStatus } from '@sentinel/database';
 
 export class UpdateBotDto {
   @IsOptional()

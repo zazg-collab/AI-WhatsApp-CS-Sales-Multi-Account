@@ -6,7 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Prisma } from '@hermes/database';
+import { Prisma } from '@sentinel/database';
 import { Request, Response } from 'express';
 import { ErrorReporterService } from './error-reporter.service';
 

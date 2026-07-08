@@ -13,7 +13,7 @@ function initialsFor(name: string | null | undefined, phone: string): string {
 // Professional SalesOps palette — deterministic per contact so the same person
 // always gets the same color across the whole app.
 const PALETTES = [
-  'bg-hermes-100 text-hermes-700 dark:bg-hermes-900/50 dark:text-hermes-300',
+  'bg-sentinel-100 text-sentinel-700 dark:bg-sentinel-900/50 dark:text-sentinel-300',
   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
   'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',

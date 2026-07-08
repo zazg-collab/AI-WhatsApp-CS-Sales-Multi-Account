@@ -146,7 +146,7 @@ npm run build            # build all workspaces
 docker compose up -d     # local Postgres + Redis
 ```
 
-Build a single workspace: `npm run build --workspace=@hermes/api` (or `@hermes/web`).
+Build a single workspace: `npm run build --workspace=@sentinel/api` (or `@sentinel/web`).
 
 ## Repository Layout
 
@@ -171,7 +171,7 @@ apps/api/        NestJS backend. Global prefix /api/v1. Each feature lives in
 apps/web/        Next.js (App Router) + Tailwind. Routes under src/app/*.
                  src/lib/api.ts (JWT), src/lib/socket.ts (live).
 packages/database/  Prisma schema (all PRD tables) + shared client. Import
-                 from '@hermes/database'.
+                 from '@sentinel/database'.
 ```
 
 ### Conventions

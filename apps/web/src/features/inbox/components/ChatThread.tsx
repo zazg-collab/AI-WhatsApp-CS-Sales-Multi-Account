@@ -141,8 +141,8 @@ export function ChatThread({
     const el = timelineRef.current?.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    el.classList.add('bg-hermes-100/60', 'dark:bg-hermes-900/30');
-    setTimeout(() => el.classList.remove('bg-hermes-100/60', 'dark:bg-hermes-900/30'), 1200);
+    el.classList.add('bg-sentinel-100/60', 'dark:bg-sentinel-900/30');
+    setTimeout(() => el.classList.remove('bg-sentinel-100/60', 'dark:bg-sentinel-900/30'), 1200);
   };
 
   // Scroll to the latest message only when (a) the conversation switches, or
@@ -329,7 +329,7 @@ export function ChatThread({
           className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-gray-600 shadow-pop ring-1 ring-gray-200 transition-colors hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700 dark:hover:bg-gray-700"
         >
           {missedCount > 0 && (
-            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-hermes-600 px-1 text-[10px] font-semibold text-white">
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-sentinel-600 px-1 text-[10px] font-semibold text-white">
               {missedCount}
             </span>
           )}

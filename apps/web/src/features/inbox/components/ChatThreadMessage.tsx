@@ -226,7 +226,7 @@ function ChatThreadMessageImpl({
                     value={forwardPhone}
                     onChange={(e) => { setForwardPhone(e.target.value); if (forwardState === 'error') setForwardState('idle'); }}
                     placeholder={t('forwardPlaceholder')}
-                    className="w-52 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-900 outline-none focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                    className="w-52 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-gray-900 outline-none focus:border-sentinel-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
                     autoFocus
                   />
                   {forwardState === 'error' && (
@@ -237,7 +237,7 @@ function ChatThreadMessageImpl({
                   <button
                     type="submit"
                     disabled={!forwardPhone.trim() || forwardState === 'sending'}
-                    className="rounded-md bg-hermes-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-hermes-700 disabled:opacity-50"
+                    className="rounded-md bg-sentinel-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-sentinel-700 disabled:opacity-50"
                   >
                     {forwardState === 'sending' ? t('forwardSending') : t('forwardSend')}
                   </button>

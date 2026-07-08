@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { SenderType } from '@hermes/database';
+import { SenderType } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ChatMessage } from './ai-provider.service';
 import { ProductsService } from '../products/products.service';

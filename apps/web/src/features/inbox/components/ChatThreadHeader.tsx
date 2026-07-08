@@ -93,7 +93,7 @@ export function ChatThreadHeader({
           </p>
           <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
             {customerTyping ? (
-              <span className="font-medium text-hermes-600 dark:text-hermes-400">typing…</span>
+              <span className="font-medium text-sentinel-600 dark:text-sentinel-400">typing…</span>
             ) : (
               <>
                 <span

@@ -29,7 +29,7 @@ import { dict } from './accounts.i18n';
 const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
 const inputClass =
-  'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-sentinel-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 function getStatusHint(status: string, t: ReturnType<typeof useT>): string | undefined {
   const map: Record<string, string> = {
@@ -96,7 +96,7 @@ function ScanWaiting({ t, onRetry }: { t: ReturnType<typeof useT>; onRetry?: () 
       ) : (
         <>
           <p className="text-center text-[13px] text-gray-500">{t('waitingQr')}</p>
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-hermes-400 border-t-transparent" aria-hidden="true" />
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-sentinel-400 border-t-transparent" aria-hidden="true" />
         </>
       )}
     </div>
@@ -138,7 +138,7 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
     <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 text-xs font-medium text-hermes-600 hover:text-hermes-700"
+        className="flex items-center gap-1 text-xs font-medium text-sentinel-600 hover:text-sentinel-700"
       >
         {open ? <CaretDown className="h-3.5 w-3.5" aria-hidden="true" /> : <CaretRight className="h-3.5 w-3.5" aria-hidden="true" />}
         {t('businessHoursToggle')}
@@ -147,7 +147,7 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
       {open && (
         <div className="mt-3 space-y-3 text-sm">
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="accent-hermes-600" />
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="accent-sentinel-600" />
             <span className="text-gray-700 dark:text-gray-300">{t('enableBusinessHours')}</span>
           </label>
           <div className="flex flex-wrap items-center gap-2">
@@ -163,7 +163,7 @@ function BusinessHoursEditor({ account, onSaved }: { account: Account; onSaved: 
                 onClick={() => toggleDay(d)}
                 aria-pressed={days.includes(d)}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                  days.includes(d) ? 'bg-hermes-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
+                  days.includes(d) ? 'bg-sentinel-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
                 }`}
               >
                 {label}
@@ -320,7 +320,7 @@ export default function AccountsPage() {
                         <SessionStatusBadge status={a.sessionStatus} lang={lang} label={getSessionLabel(a.sessionStatus, lang)} />
                       </div>
                       {historySync[a.id] && historySync[a.id].status === 'syncing' && (
-                        <p className="flex items-center gap-1 text-[11px] text-hermes-500">
+                        <p className="flex items-center gap-1 text-[11px] text-sentinel-500">
                           <Pulse className="h-3 w-3 animate-pulse" aria-hidden="true" />
                           {t('historySyncing', { count: String(historySync[a.id].messages) })}
                         </p>
@@ -364,13 +364,13 @@ export default function AccountsPage() {
                           <div className="mb-3 flex gap-2">
                             {qr[a.id] && (
                               <button type="button" onClick={() => setPairingMode((prev) => ({ ...prev, [a.id]: 'qr' }))}
-                                className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${pairingMode[a.id] !== 'code' ? 'bg-hermes-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'}`}>
+                                className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${pairingMode[a.id] !== 'code' ? 'bg-sentinel-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'}`}>
                                 {t('switchToQr')}
                               </button>
                             )}
                             {pairingCode[a.id] && (
                               <button type="button" onClick={() => setPairingMode((prev) => ({ ...prev, [a.id]: 'code' }))}
-                                className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${pairingMode[a.id] === 'code' ? 'bg-hermes-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'}`}>
+                                className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${pairingMode[a.id] === 'code' ? 'bg-sentinel-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'}`}>
                                 {t('switchToPairingCode')}
                               </button>
                             )}
@@ -378,8 +378,8 @@ export default function AccountsPage() {
                         )}
 
                         {pairingMode[a.id] === 'code' && pairingCode[a.id] ? (
-                          <div className="rounded-lg border border-hermes-200 bg-hermes-50 p-4 dark:border-hermes-700/40 dark:bg-hermes-900/20">
-                            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-hermes-700 dark:text-hermes-400">{t('pairingCodeTitle')}</p>
+                          <div className="rounded-lg border border-sentinel-200 bg-sentinel-50 p-4 dark:border-sentinel-700/40 dark:bg-sentinel-900/20">
+                            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-sentinel-700 dark:text-sentinel-400">{t('pairingCodeTitle')}</p>
                             <ol className="mb-4 space-y-1 text-[12px] text-gray-600 dark:text-gray-300">
                               <li>{t('pairingCodeStep1')}</li>
                               <li>{t('pairingCodeStep2')}</li>
@@ -388,7 +388,7 @@ export default function AccountsPage() {
                             <p className="mb-3 select-all text-center text-[36px] font-mono font-bold tracking-[0.3em] text-gray-900 dark:text-gray-100">
                               {pairingCode[a.id].length === 8 ? `${pairingCode[a.id].slice(0, 4)}-${pairingCode[a.id].slice(4)}` : pairingCode[a.id]}
                             </p>
-                            <button type="button" onClick={() => copyPairingCode(a.id)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-hermes-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-hermes-700">
+                            <button type="button" onClick={() => copyPairingCode(a.id)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-sentinel-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-sentinel-700">
                               {copiedAccountId === a.id ? <><CheckCircle className="h-4 w-4" aria-hidden="true" />{t('codeCopied')}</> : <><QrCode className="h-4 w-4" aria-hidden="true" />{t('copyCode')}</>}
                             </button>
                           </div>
@@ -495,7 +495,7 @@ export default function AccountsPage() {
               <img src={profilePicture} alt="" className="h-16 w-16 rounded-full object-cover" />
             )}
             {profileAutoDetected && (
-              <p className="text-[11px] text-hermes-600 dark:text-hermes-400">{t('profileAutoDetected')}</p>
+              <p className="text-[11px] text-sentinel-600 dark:text-sentinel-400">{t('profileAutoDetected')}</p>
             )}
             <Field
               label={t('profileName')}
@@ -556,14 +556,14 @@ export default function AccountsPage() {
 
         {addStep === 'method' ? (
           <div className="space-y-3">
-            <button type="button" disabled={addCreating} onClick={startQrFlow} className="flex w-full items-start gap-3 rounded-xl border-2 border-gray-200 p-4 text-left transition-colors hover:border-hermes-400 hover:bg-hermes-50 disabled:cursor-wait disabled:opacity-60 dark:border-gray-700 dark:hover:border-hermes-500 dark:hover:bg-hermes-900/20">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-hermes-100 text-hermes-700 dark:bg-hermes-900/40"><QrCode className="h-5 w-5" aria-hidden="true" /></span>
+            <button type="button" disabled={addCreating} onClick={startQrFlow} className="flex w-full items-start gap-3 rounded-xl border-2 border-gray-200 p-4 text-left transition-colors hover:border-sentinel-400 hover:bg-sentinel-50 disabled:cursor-wait disabled:opacity-60 dark:border-gray-700 dark:hover:border-sentinel-500 dark:hover:bg-sentinel-900/20">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sentinel-100 text-sentinel-700 dark:bg-sentinel-900/40"><QrCode className="h-5 w-5" aria-hidden="true" /></span>
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('optionQr')}</p>
                 <p className="mt-0.5 text-[12px] text-gray-500 dark:text-gray-400">{t('optionQrDesc')}</p>
               </div>
             </button>
-            <button type="button" onClick={chooseCodeMethod} className="flex w-full items-start gap-3 rounded-xl border-2 border-gray-200 p-4 text-left transition-colors hover:border-hermes-400 hover:bg-hermes-50 dark:border-gray-700 dark:hover:border-hermes-500 dark:hover:bg-hermes-900/20">
+            <button type="button" onClick={chooseCodeMethod} className="flex w-full items-start gap-3 rounded-xl border-2 border-gray-200 p-4 text-left transition-colors hover:border-sentinel-400 hover:bg-sentinel-50 dark:border-gray-700 dark:hover:border-sentinel-500 dark:hover:bg-sentinel-900/20">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 dark:bg-gray-800"><DeviceMobile className="h-5 w-5" aria-hidden="true" /></span>
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('optionCode')}</p>
@@ -580,8 +580,8 @@ export default function AccountsPage() {
         ) : addStep === 'scan' ? (
           <div className="flex flex-col items-center gap-3">
             {addConnectMethod === 'code' && addedAccountId && pairingCode[addedAccountId] ? (
-              <div className="w-full rounded-xl border border-hermes-200 bg-hermes-50 p-4 dark:border-hermes-700/40 dark:bg-hermes-900/20">
-                <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-hermes-700 dark:text-hermes-400">{t('pairingCodeTitle')}</p>
+              <div className="w-full rounded-xl border border-sentinel-200 bg-sentinel-50 p-4 dark:border-sentinel-700/40 dark:bg-sentinel-900/20">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-sentinel-700 dark:text-sentinel-400">{t('pairingCodeTitle')}</p>
                 <ol className="mb-4 space-y-1.5 text-[12px] text-gray-600 dark:text-gray-300">
                   <li>{t('pairingCodeStep1')}</li>
                   <li>{t('pairingCodeStep2')}</li>
@@ -590,7 +590,7 @@ export default function AccountsPage() {
                 <p className="mb-3 select-all text-center text-[40px] font-mono font-bold tracking-[0.3em] text-gray-900 dark:text-gray-100">
                   {pairingCode[addedAccountId].length === 8 ? `${pairingCode[addedAccountId].slice(0, 4)}-${pairingCode[addedAccountId].slice(4)}` : pairingCode[addedAccountId]}
                 </p>
-                <button type="button" onClick={() => copyPairingCode(addedAccountId)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-hermes-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-hermes-700">
+                <button type="button" onClick={() => copyPairingCode(addedAccountId)} className="flex w-full items-center justify-center gap-2 rounded-lg bg-sentinel-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-sentinel-700">
                   {copiedAccountId === addedAccountId ? <><CheckCircle className="h-4 w-4" />{t('codeCopied')}</> : <><QrCode className="h-4 w-4" />{t('copyCode')}</>}
                 </button>
               </div>
@@ -604,8 +604,8 @@ export default function AccountsPage() {
             )}
             {/* Single liveness indicator — the QR box no longer double-spins. */}
             {(addConnectMethod !== 'qr' || (addedAccountId && qr[addedAccountId])) && (
-              <div className="mt-1 flex items-center gap-2 text-[12px] text-hermes-600 dark:text-hermes-400">
-                <div className="h-3 w-3 animate-spin rounded-full border-2 border-hermes-400 border-t-transparent" aria-hidden="true" />
+              <div className="mt-1 flex items-center gap-2 text-[12px] text-sentinel-600 dark:text-sentinel-400">
+                <div className="h-3 w-3 animate-spin rounded-full border-2 border-sentinel-400 border-t-transparent" aria-hidden="true" />
                 <span>{t('detectingDevice')}</span>
               </div>
             )}
@@ -621,7 +621,7 @@ export default function AccountsPage() {
             <div>
               <div className="mb-1 flex items-center gap-2">
                 <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-200">{t('nameLabel')} <span className="text-danger-500">*</span></label>
-                {addAutoDetected && <Badge tone="hermes">{t('autoDetected')}</Badge>}
+                {addAutoDetected && <Badge tone="sentinel">{t('autoDetected')}</Badge>}
               </div>
               <input autoFocus value={addName} onChange={(e) => setAddName(e.target.value)} placeholder={t('accountNamePlaceholder')} className={`w-full ${inputClass}`} />
               <p className="mt-1 text-[11px] text-gray-400">{t('nameHint')}</p>
@@ -629,7 +629,7 @@ export default function AccountsPage() {
             <div>
               <div className="mb-1 flex items-center gap-2">
                 <label className="block text-[13px] font-medium text-gray-700 dark:text-gray-200">{t('phoneLabel2')} <span className="text-danger-500">*</span></label>
-                {addAutoDetected && <Badge tone="hermes">{t('autoDetected')}</Badge>}
+                {addAutoDetected && <Badge tone="sentinel">{t('autoDetected')}</Badge>}
               </div>
               <input type="tel" value={addPhone} onChange={(e) => setAddPhone(e.target.value.replace(/[^\d]/g, ''))} placeholder={t('phonePlaceholder')} className={`w-full ${inputClass}`} />
               {addPhone.trim() && !/^\d{8,15}$/.test(addPhone.trim())

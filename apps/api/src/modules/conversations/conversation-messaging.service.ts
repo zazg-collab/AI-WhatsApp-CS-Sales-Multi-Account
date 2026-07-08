@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { MessageStatus, MessageType, SenderType } from '@hermes/database';
+import { MessageStatus, MessageType, SenderType } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { WaService } from '../wa/wa.service';

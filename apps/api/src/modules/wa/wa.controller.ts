@@ -18,7 +18,7 @@ import { WaService } from './wa.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ContactSyncService } from './contact-sync.service';
 import { SettingsService } from '../settings/settings.service';
-import { AiMode } from '@hermes/database';
+import { AiMode } from '@sentinel/database';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { logAudit } from '../../common/audit.util';

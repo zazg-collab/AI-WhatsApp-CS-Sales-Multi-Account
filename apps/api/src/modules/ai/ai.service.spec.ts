@@ -1,4 +1,4 @@
-import { LeadStage } from '@hermes/database';
+import { LeadStage } from '@sentinel/database';
 import { AiService, detectBuyingSignals } from './ai.service';
 
 describe('AiService', () => {

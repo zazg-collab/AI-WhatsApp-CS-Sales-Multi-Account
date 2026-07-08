@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/Modal';
 import { api } from '@/lib/api';
 
 const inputClass =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-sentinel-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 interface WaAccount {
   id: string;
@@ -217,7 +217,7 @@ export default function ChannelsPage() {
                     <Card key={id} className="flex flex-col gap-3 p-4">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          <Radio size={18} className="shrink-0 text-hermes-500" />
+                          <Radio size={18} className="shrink-0 text-sentinel-500" />
                           <div className="min-w-0">
                             <p className="truncate font-medium text-gray-900 dark:text-gray-100">{channelName(channel)}</p>
                             {count !== null && (
@@ -228,7 +228,7 @@ export default function ChannelsPage() {
                         <div className="flex shrink-0 items-center gap-1">
                           <button
                             title="View metadata"
-                            className="rounded p-1 text-gray-400 hover:text-hermes-500 dark:hover:text-hermes-400"
+                            className="rounded p-1 text-gray-400 hover:text-sentinel-500 dark:hover:text-sentinel-400"
                             onClick={() => openMetadata(channel)}
                           >
                             <Eye size={16} />
@@ -247,7 +247,7 @@ export default function ChannelsPage() {
                       {/* Actions */}
                       <div className="flex gap-2">
                         <button
-                          className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-hermes-50 hover:border-hermes-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 disabled:opacity-50"
+                          className="flex-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-sentinel-50 hover:border-sentinel-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 disabled:opacity-50"
                           disabled={actionInFlight === `follow:${id}`}
                           onClick={() => handleFollow(id, true)}
                         >

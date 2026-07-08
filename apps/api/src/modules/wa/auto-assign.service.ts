@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ConversationStatus } from '@hermes/database';
+import { ConversationStatus } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 
 type Strategy = 'off' | 'round_robin' | 'least_busy';

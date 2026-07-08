@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { LeadStage, SenderType } from '@hermes/database';
+import { LeadStage, SenderType } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 
 const STAGE_ORDER: Record<LeadStage, number> = {

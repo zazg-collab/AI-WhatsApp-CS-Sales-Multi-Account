@@ -250,12 +250,12 @@ export function Sidebar() {
       {/* Brand */}
       <div className="flex h-16 items-center justify-between gap-2.5 border-b border-gray-800 px-3 md:px-4">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-hermes-600 text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-sentinel-600 text-white shadow-[0_1px_2px_rgba(0,0,0,0.25)]">
             <ShieldStar className="h-[18px] w-[18px]" weight="duotone" aria-hidden="true" />
           </span>
           <span className="hidden min-w-0 lg:block">
             <span className="block truncate text-sm font-semibold tracking-tight text-gray-50">
-              Hermes AI
+              Sentinel AI
             </span>
             <span className="block truncate text-[11px] text-gray-400">{t('tagline')}</span>
           </span>
@@ -297,12 +297,12 @@ export function Sidebar() {
                       'group relative flex items-center gap-2.5 rounded px-2 py-2 text-[13px] font-medium transition-colors duration-150 md:justify-start md:px-2.5',
                       open ? 'justify-start' : 'justify-center',
                       isActive
-                        ? 'bg-hermes-500/15 text-hermes-200 ring-1 ring-hermes-500/20'
+                        ? 'bg-sentinel-500/15 text-sentinel-200 ring-1 ring-sentinel-500/20'
                         : 'text-gray-400 hover:bg-gray-800 hover:text-gray-50',
                     )}
                   >
                     {isActive && (
-                      <span className="absolute left-0 top-1/2 hidden h-5 w-0.5 -translate-y-1/2 rounded-full bg-hermes-500 lg:block" />
+                      <span className="absolute left-0 top-1/2 hidden h-5 w-0.5 -translate-y-1/2 rounded-full bg-sentinel-500 lg:block" />
                     )}
                     <span className="relative shrink-0">
                       <Icon
@@ -311,14 +311,14 @@ export function Sidebar() {
                         aria-hidden="true"
                       />
                       {item.href === '/inbox' && unread > 0 && !open && (
-                        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-hermes-600 px-1 text-[9px] font-semibold text-white md:hidden">
+                        <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-sentinel-600 px-1 text-[9px] font-semibold text-white md:hidden">
                           {unread > 9 ? '9+' : unread}
                         </span>
                       )}
                     </span>
                     <span className={cn('flex-1', labelCls)}>{item.label}</span>
                     {item.href === '/inbox' && unread > 0 && (
-                      <span className={cn('flex h-4 min-w-4 items-center justify-center rounded-full bg-hermes-600 px-1 text-[10px] font-semibold text-white', open ? 'flex' : 'hidden md:flex')}>
+                      <span className={cn('flex h-4 min-w-4 items-center justify-center rounded-full bg-sentinel-600 px-1 text-[10px] font-semibold text-white', open ? 'flex' : 'hidden md:flex')}>
                         {unread > 99 ? '99+' : unread}
                       </span>
                     )}

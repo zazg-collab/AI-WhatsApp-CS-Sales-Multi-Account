@@ -279,7 +279,7 @@ export default function ProductsPage() {
           </div>
         )}
         {error && <Card className="mb-4 border-danger-200 bg-danger-50 p-3 text-[13px] text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20"><button onClick={() => setError(null)} className="flex items-center justify-between w-full"><span>{error}</span><span className="ml-2">×</span></button></Card>}
-        {notice && <Card className="mb-4 border-hermes-200 bg-hermes-50 p-3 text-[13px] text-hermes-700 dark:border-hermes-700/40 dark:bg-hermes-900/20"><button onClick={() => setNotice(null)} className="flex items-center justify-between w-full"><span>{notice}</span><span className="ml-2">×</span></button></Card>}
+        {notice && <Card className="mb-4 border-sentinel-200 bg-sentinel-50 p-3 text-[13px] text-sentinel-700 dark:border-sentinel-700/40 dark:bg-sentinel-900/20"><button onClick={() => setNotice(null)} className="flex items-center justify-between w-full"><span>{notice}</span><span className="ml-2">×</span></button></Card>}
 
         {canManage && (
           <Card className="mb-5 p-4">
@@ -365,7 +365,7 @@ export default function ProductsPage() {
                     {sources.map((s) => (
                       <li key={s.id} className="flex items-center gap-2 rounded bg-gray-50 px-2.5 py-1.5 text-[12px] dark:bg-gray-800">
                         <span className="min-w-0 flex-1 truncate"><strong>{s.name}</strong> {s.lastResult && <span className="text-gray-400">· {s.lastResult}</span>}</span>
-                        <button type="button" onClick={() => syncSource(s.id)} disabled={busy} aria-label={t('syncNow')} title={t('syncNow')} className="text-hermes-600 hover:text-hermes-700"><ArrowsClockwise className="h-4 w-4" aria-hidden="true" /></button>
+                        <button type="button" onClick={() => syncSource(s.id)} disabled={busy} aria-label={t('syncNow')} title={t('syncNow')} className="text-sentinel-600 hover:text-sentinel-700"><ArrowsClockwise className="h-4 w-4" aria-hidden="true" /></button>
                         <button type="button" onClick={() => setDeletingSourceId(s.id)} aria-label={t('delete')} title={t('delete')} className="text-gray-400 hover:text-danger-600"><Trash className="h-4 w-4" aria-hidden="true" /></button>
                       </li>
                     ))}

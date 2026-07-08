@@ -33,7 +33,7 @@ export const dict: Dict = {
   m_ai: { id: 'Ditangani AI', en: 'Handled by AI' },
   m_resp: { id: 'Rata-rata respons', en: 'Avg response' },
   m_appr: { id: 'Approval Sentinel', en: 'Sentinel approval' },
-  setup_title: { id: '👋 Selamat datang! Mari setup Hermes', en: '👋 Welcome! Let\'s set up Hermes' },
+  setup_title: { id: '👋 Selamat datang! Mari setup Sentinel', en: '👋 Welcome! Let\'s set up Sentinel' },
   setup_subtitle: { id: 'Belum ada akun WhatsApp terhubung. Ikuti 3 langkah ini untuk mulai.', en: 'No WhatsApp account connected yet. Follow 3 steps to get started.' },
   setup_step1: { id: 'Tambah akun WhatsApp', en: 'Add a WhatsApp account' },
   setup_hint1: { id: 'Scan QR code untuk menghubungkan nomor WhatsApp pertama kamu.', en: 'Scan a QR to connect your first WhatsApp number.' },

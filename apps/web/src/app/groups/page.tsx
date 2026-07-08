@@ -22,7 +22,7 @@ import { Modal } from '@/components/ui/Modal';
 import { api } from '@/lib/api';
 
 const inputClass =
-  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
+  'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-sentinel-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100';
 
 interface WaAccount {
   id: string;
@@ -302,7 +302,7 @@ export default function GroupsPage() {
             <select
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-sentinel-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               aria-label="Select account"
             >
               {accounts.map((a) => (
@@ -345,7 +345,7 @@ export default function GroupsPage() {
                     {/* Group header */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-hermes-100 text-hermes-700 dark:bg-hermes-900/30 dark:text-hermes-400">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sentinel-100 text-sentinel-700 dark:bg-sentinel-900/30 dark:text-sentinel-400">
                           <UsersThree className="h-[18px] w-[18px]" aria-hidden="true" />
                         </span>
                         <div className="min-w-0">
@@ -532,7 +532,7 @@ export default function GroupsPage() {
               onChange={(e) => setCreateParticipants(e.target.value)}
               placeholder="628123456789, 628987654321"
               rows={3}
-              className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-sentinel-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
             />
             <p className="mt-1 text-[11px] text-gray-400">
               Enter phone numbers with country code, separated by commas.
@@ -617,7 +617,7 @@ export default function GroupsPage() {
               onChange={(e) => setEditDescription(e.target.value)}
               placeholder="Group description (optional)"
               rows={3}
-              className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              className="w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-sentinel-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
             />
           </div>
         </div>
@@ -638,7 +638,7 @@ export default function GroupsPage() {
       >
         {inviteModal && (
           <div className="space-y-3">
-            <div className="rounded-lg border border-hermes-200 bg-hermes-50 p-4 dark:border-hermes-700/40 dark:bg-hermes-900/20">
+            <div className="rounded-lg border border-sentinel-200 bg-sentinel-50 p-4 dark:border-sentinel-700/40 dark:bg-sentinel-900/20">
               <p className="select-all break-all text-center font-mono text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {inviteModal.code}
               </p>
@@ -646,7 +646,7 @@ export default function GroupsPage() {
             <button
               type="button"
               onClick={() => copyInviteCode(inviteModal.code)}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-hermes-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-hermes-700"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-sentinel-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-sentinel-700"
             >
               {copied ? (
                 <>

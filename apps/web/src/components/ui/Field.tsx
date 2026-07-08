@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn';
 
 const controlBase =
   'w-full rounded border border-gray-200 bg-gray-50 px-3 text-sm text-gray-900 outline-none transition-colors ' +
-  'placeholder:text-gray-400 focus:border-hermes-500 focus:bg-white focus:ring-2 focus:ring-hermes-500/20 ' +
+  'placeholder:text-gray-400 focus:border-sentinel-500 focus:bg-white focus:ring-2 focus:ring-sentinel-500/20 ' +
   'disabled:cursor-not-allowed disabled:opacity-60 ' +
   'dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:bg-gray-800';
 

@@ -1,5 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { CampaignStatus, CampaignRecipientStatus } from '@hermes/database';
+import { CampaignStatus, CampaignRecipientStatus } from '@sentinel/database';
 
 jest.mock('../wa/wa.service', () => ({ WaService: class {} }));
 

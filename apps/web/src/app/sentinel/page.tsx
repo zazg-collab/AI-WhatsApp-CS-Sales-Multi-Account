@@ -48,9 +48,9 @@ export default function SentinelPage() {
 
         <Card className="mb-5 p-4">
           <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
-            <ShieldStar className="h-4 w-4 text-hermes-600" aria-hidden="true" />
+            <ShieldStar className="h-4 w-4 text-sentinel-600" aria-hidden="true" />
             {t('askHermes')}
-            <Badge tone="hermes">{t('supervisorAssistant')}</Badge>
+            <Badge tone="sentinel">{t('supervisorAssistant')}</Badge>
           </h2>
           <div className="mb-3 max-h-64 space-y-3 overflow-y-auto">
             {chat.length === 0 && !asking && <p className="text-sm text-gray-400">{t('askPlaceholderHint')}</p>}
@@ -67,7 +67,7 @@ export default function SentinelPage() {
           </div>
           <div ref={liveRegionRef} aria-live="polite" aria-atomic="true" className="sr-only" />
           <form onSubmit={ask} className="flex gap-2">
-            <input value={question} onChange={(e) => setQuestion(e.target.value)} aria-label={t('askAria')} placeholder={t('askPlaceholder')} className="h-9 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-hermes-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
+            <input value={question} onChange={(e) => setQuestion(e.target.value)} aria-label={t('askAria')} placeholder={t('askPlaceholder')} className="h-9 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-sentinel-400 placeholder:text-gray-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100" />
             <Button type="submit" size="md" disabled={asking}><PaperPlaneTilt className="h-4 w-4" aria-hidden="true" />{t('ask')}</Button>
           </form>
         </Card>
@@ -75,7 +75,7 @@ export default function SentinelPage() {
         {!loadError && !loading && snapshot && (
           <Card className="mb-5 p-4">
             <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              <ShieldStar className="h-4 w-4 text-hermes-600" aria-hidden="true" />{t('botPerformance')}
+              <ShieldStar className="h-4 w-4 text-sentinel-600" aria-hidden="true" />{t('botPerformance')}
             </h2>
             <p className="mb-3 text-xs text-gray-400">{t('botPerfHint')}</p>
             {snapshot.bots.length === 0 ? (
@@ -112,7 +112,7 @@ export default function SentinelPage() {
                 value={selectedBotId}
                 onChange={(e) => loadInsight(e.target.value)}
                 aria-label={t('deepDive')}
-                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-hermes-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+                className="h-9 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none focus:border-sentinel-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
               >
                 <option value="">{t('deepDivePick')}</option>
                 {bots.map((b) => <option key={b.id} value={b.id}>{b.botName}</option>)}
@@ -135,7 +135,7 @@ export default function SentinelPage() {
         {!loadError && !loading && (
           <Card className="mb-5 p-4">
             <h2 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              <ChatCircle className="h-4 w-4 text-hermes-600" aria-hidden="true" />{t('knowledgeGaps')}
+              <ChatCircle className="h-4 w-4 text-sentinel-600" aria-hidden="true" />{t('knowledgeGaps')}
               <Badge tone={gaps.length > 0 ? 'review' : 'neutral'}>{gaps.length}</Badge>
             </h2>
             <p className="mb-3 text-xs text-gray-400">{t('knowledgeGapsHint')}</p>

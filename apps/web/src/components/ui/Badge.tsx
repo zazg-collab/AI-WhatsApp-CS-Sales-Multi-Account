@@ -1,13 +1,13 @@
 import * as React from 'react';
 import { cn } from '@/lib/cn';
 
-type Tone = 'neutral' | 'hermes' | 'accent' | 'channel' | 'review' | 'danger' | 'critical' | 'success';
+type Tone = 'neutral' | 'sentinel' | 'accent' | 'channel' | 'review' | 'danger' | 'critical' | 'success';
 
 const tones: Record<Tone, string> = {
   neutral:
     'bg-gray-100 text-gray-600 ring-1 ring-gray-200/80 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700',
-  hermes:
-    'bg-hermes-50 text-hermes-700 ring-1 ring-hermes-200 dark:bg-hermes-900/50 dark:text-hermes-300 dark:ring-hermes-700/50',
+  sentinel:
+    'bg-sentinel-50 text-sentinel-700 ring-1 ring-sentinel-200 dark:bg-sentinel-900/50 dark:text-sentinel-300 dark:ring-sentinel-700/50',
   accent:
     'bg-accent-50 text-accent-700 ring-1 ring-accent-200 dark:bg-accent-900/40 dark:text-accent-300 dark:ring-accent-700/40',
   channel:

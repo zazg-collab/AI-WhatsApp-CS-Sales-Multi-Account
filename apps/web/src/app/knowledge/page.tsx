@@ -180,9 +180,9 @@ export default function KnowledgePage() {
                 const isActive = selected === b.id;
                 return (
                   <li key={b.id} className="group relative">
-                    <button onClick={() => loadBase(b.id)} className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${isActive ? 'border-hermes-200 bg-hermes-50 text-hermes-700 dark:border-hermes-800 dark:bg-hermes-900/30 dark:text-hermes-200' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'}`}>
+                    <button onClick={() => loadBase(b.id)} className={`flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${isActive ? 'border-sentinel-200 bg-sentinel-50 text-sentinel-700 dark:border-sentinel-800 dark:bg-sentinel-900/30 dark:text-sentinel-200' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800'}`}>
                       <span className="truncate pr-8">{b.name}</span>
-                      <Badge tone={isActive ? 'hermes' : 'neutral'}>{b._count?.items ?? 0}</Badge>
+                      <Badge tone={isActive ? 'sentinel' : 'neutral'}>{b._count?.items ?? 0}</Badge>
                     </button>
                     <div className="absolute right-8 top-1/2 -translate-y-1/2 hidden gap-0.5 group-hover:flex">
                       <button onClick={(e) => { e.stopPropagation(); setRenameValue(b.name); setRenameBase(b); }} className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800" aria-label={t('renameBaseTitle')}><PencilSimple className="h-3 w-3" /></button>
@@ -204,7 +204,7 @@ export default function KnowledgePage() {
             <p className="mb-2 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t('importHint')}</p>
             <p className="mb-3 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{t('importHintPrefill')}</p>
             <div className="flex flex-wrap items-center gap-2">
-              <label className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-hermes-600 px-3.5 text-sm font-medium text-white hover:bg-hermes-700 ${ingesting ? 'opacity-50' : ''}`}>
+              <label className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-sentinel-600 px-3.5 text-sm font-medium text-white hover:bg-sentinel-700 ${ingesting ? 'opacity-50' : ''}`}>
                 <UploadSimple className="h-4 w-4" aria-hidden="true" />
                 {ingesting ? t('processing') : t('uploadFile')}
                 <input ref={fileRef} type="file" aria-label={t('uploadFileAria')} className="hidden" accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md,.html,.htm,.json" disabled={ingesting} onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }} />
@@ -220,7 +220,7 @@ export default function KnowledgePage() {
           <Card className="p-4">
             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
               {t('addItemHeading')}
-              {prefilled && <Badge tone="hermes">{t('autoParsed')}</Badge>}
+              {prefilled && <Badge tone="sentinel">{t('autoParsed')}</Badge>}
             </h2>
             {!selected && <p className="mb-2 text-[11px] text-gray-400">{t('willAutoCreateBase')}</p>}
             <form onSubmit={addItem} className="space-y-2">

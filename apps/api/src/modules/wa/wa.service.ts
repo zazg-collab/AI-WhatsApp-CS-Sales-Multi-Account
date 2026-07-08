@@ -21,7 +21,7 @@ import makeWASocket, {
   type proto,
   type WAMessage,
 } from '@whiskeysockets/baileys';
-import { SessionStatus } from '@hermes/database';
+import { SessionStatus } from '@sentinel/database';
 import { MetricsService } from '../../common/metrics/metrics.service';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { buildAccountUpdateData } from './account-update.util';

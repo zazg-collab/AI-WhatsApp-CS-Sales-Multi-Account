@@ -4,7 +4,7 @@ COPY package*.json ./
 COPY apps/web/package*.json ./apps/web/
 RUN npm ci
 COPY . .
-RUN npm run build --workspace=@hermes/web
+RUN npm run build --workspace=@sentinel/web
 
 FROM node:20-alpine AS runner
 WORKDIR /app

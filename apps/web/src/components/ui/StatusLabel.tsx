@@ -24,11 +24,11 @@ export type StatusKind =
 
 const map: Record<
   StatusKind,
-  { label: string; icon: Icon; tone: 'hermes' | 'accent' | 'review' | 'danger' | 'success' | 'neutral' }
+  { label: string; icon: Icon; tone: 'sentinel' | 'accent' | 'review' | 'danger' | 'success' | 'neutral' }
 > = {
   // AI presence is informational → blue (accent); supervisor review → teal (sentinel).
   'ai-generated': { label: 'AI generated', icon: ArrowsSplit, tone: 'accent' },
-  'sentinel-reviewed': { label: 'Sentinel reviewed', icon: ShieldStar, tone: 'hermes' },
+  'sentinel-reviewed': { label: 'Sentinel reviewed', icon: ShieldStar, tone: 'sentinel' },
   'needs-review': { label: 'Needs review', icon: Warning, tone: 'review' },
   'human-takeover': { label: 'Human takeover', icon: Hand, tone: 'neutral' },
   'sending-blocked': { label: 'Sending blocked', icon: XCircle, tone: 'danger' },

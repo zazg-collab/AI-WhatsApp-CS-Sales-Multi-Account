@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AiMode, MessageStatus, MessageType, SenderType, TakeoverStatus, Prisma } from '@hermes/database';
+import { AiMode, MessageStatus, MessageType, SenderType, TakeoverStatus, Prisma } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { AutoAssignService } from './auto-assign.service';

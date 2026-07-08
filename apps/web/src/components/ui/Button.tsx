@@ -6,7 +6,7 @@ type Size = 'sm' | 'md';
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-hermes-700 text-white hover:bg-hermes-800 border border-hermes-800 shadow-[0_1px_2px_rgba(30,41,59,0.08)]',
+    'bg-sentinel-700 text-white hover:bg-sentinel-800 border border-sentinel-800 shadow-[0_1px_2px_rgba(30,41,59,0.08)]',
   outline:
     'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-[0_1px_2px_rgba(15,23,42,0.05)] dark:bg-gray-900 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-800',
   ghost:
@@ -35,7 +35,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       type={type}
       className={cn(
         'inline-flex items-center justify-center whitespace-nowrap font-semibold transition-all duration-150',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hermes-400 focus-visible:ring-offset-1 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sentinel-400 focus-visible:ring-offset-1 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50',
         variants[variant],
         sizes[size],
         className,

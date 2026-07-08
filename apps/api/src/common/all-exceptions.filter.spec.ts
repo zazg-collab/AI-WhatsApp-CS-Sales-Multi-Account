@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { Prisma } from '@hermes/database';
+import { Prisma } from '@sentinel/database';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
 function makeHost() {

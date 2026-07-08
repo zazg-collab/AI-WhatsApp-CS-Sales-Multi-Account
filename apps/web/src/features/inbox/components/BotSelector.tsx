@@ -88,8 +88,8 @@ export function BotSelector({
 
       {/* AI suggestion result */}
       {showSuggestion && suggestion && (
-        <div className="mb-3 rounded-lg border border-hermes-200 bg-hermes-50 p-2.5 dark:border-hermes-900/30 dark:bg-hermes-900/20">
-          <p className="flex items-center gap-1 text-xs font-medium text-hermes-700 dark:text-hermes-300">
+        <div className="mb-3 rounded-lg border border-sentinel-200 bg-sentinel-50 p-2.5 dark:border-sentinel-900/30 dark:bg-sentinel-900/20">
+          <p className="flex items-center gap-1 text-xs font-medium text-sentinel-700 dark:text-sentinel-300">
             <Lightbulb className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             Suggested: {suggestion.botName}
             {suggestion.personaName ? ` (${suggestion.personaName})` : ''}

@@ -1,4 +1,4 @@
-import { LeadStage } from '@hermes/database';
+import { LeadStage } from '@sentinel/database';
 import { CustomersController } from './customers.controller';
 
 describe('CustomersController', () => {

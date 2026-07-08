@@ -1,4 +1,4 @@
-import { SentinelDecision, RiskLevel } from '@hermes/database';
+import { SentinelDecision, RiskLevel } from '@sentinel/database';
 
 /**
  * Golden dataset for the AI safety regression gate (audit item #2).

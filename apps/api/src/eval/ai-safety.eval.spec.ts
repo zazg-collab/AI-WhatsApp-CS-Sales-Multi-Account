@@ -1,4 +1,4 @@
-import { SentinelDecision } from '@hermes/database';
+import { SentinelDecision } from '@sentinel/database';
 import {
   evaluateRules,
   decisionFromConfidence,

@@ -171,7 +171,7 @@ export function ConversationList({
             onChange={(e) => onSearchChange?.(e.target.value)}
             placeholder={t('searchPlaceholder')}
             aria-label={t('searchPlaceholder')}
-            className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-8 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-hermes-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+            className="h-9 w-full rounded-lg border border-gray-200 bg-gray-50 pl-8 pr-8 text-[13px] text-gray-900 placeholder:text-gray-400 focus:border-sentinel-400 focus:bg-white focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           />
           {searchValue && (
             <button
@@ -210,7 +210,7 @@ export function ConversationList({
             className={cn(
               'shrink-0 rounded px-2.5 py-1 text-xs font-medium transition-colors',
               filter === f.key
-                ? 'bg-hermes-600 text-white'
+                ? 'bg-sentinel-600 text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700',
             )}
           >
@@ -269,7 +269,7 @@ export function ConversationList({
       {/* Start new chat form */}
       <div className="border-b border-gray-100 p-3 dark:border-gray-800">
         <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold text-gray-700 dark:text-gray-200">
-          <UserPlus className="h-3.5 w-3.5 text-hermes-600" aria-hidden="true" />
+          <UserPlus className="h-3.5 w-3.5 text-sentinel-600" aria-hidden="true" />
           {t('startChat')}
         </div>
         <div className="space-y-2">
@@ -314,7 +314,7 @@ export function ConversationList({
                         onClick={() => pickContact(c)}
                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-gray-50 dark:hover:bg-gray-800"
                       >
-                        <AddressBook className="h-3.5 w-3.5 shrink-0 text-hermes-500" aria-hidden="true" />
+                        <AddressBook className="h-3.5 w-3.5 shrink-0 text-sentinel-500" aria-hidden="true" />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-medium text-gray-900 dark:text-gray-100">{c.name || c.phoneNumber}</span>
                           {c.name && <span className="block truncate text-gray-400">{c.phoneNumber}</span>}
@@ -324,7 +324,7 @@ export function ConversationList({
                   )}
                 </div>
               )}
-              <button type="button" onClick={() => { setManualEntry(true); setContactQuery(''); setContactResults([]); }} className="mt-1 text-[11px] font-medium text-hermes-600 hover:underline">
+              <button type="button" onClick={() => { setManualEntry(true); setContactQuery(''); setContactResults([]); }} className="mt-1 text-[11px] font-medium text-sentinel-600 hover:underline">
                 {t('orTypeManually')}
               </button>
             </div>
@@ -379,7 +379,7 @@ export function ConversationList({
               <div className="space-y-2">
                 <p className="text-sm text-gray-500 dark:text-gray-400">{t('noConversationsAll').split('\n')[0]}</p>
                 <p className="text-xs text-gray-400 dark:text-gray-500">{t('noConversationsAll').split('\n')[1]}</p>
-                <Link href="/accounts" className="mt-3 inline-block text-xs text-hermes-600 underline-offset-2 hover:underline dark:text-hermes-400">
+                <Link href="/accounts" className="mt-3 inline-block text-xs text-sentinel-600 underline-offset-2 hover:underline dark:text-sentinel-400">
                   {t('goToAccounts')}
                 </Link>
               </div>
