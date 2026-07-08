@@ -12,6 +12,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiExcludeController } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
+import { AccountScopeGuard } from '../../common/account-scope.guard';
 import { WaService } from './wa.service';
 import {
   UpdateProfileDto,
@@ -42,7 +43,7 @@ import {
 @ApiExcludeController()
 @ApiTags('whatsapp-ops')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AccountScopeGuard)
 @Controller('wa/accounts/:id')
 export class WaOpsController {
   constructor(private readonly wa: WaService) {}

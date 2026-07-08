@@ -165,7 +165,7 @@ describe('WaController', () => {
   const settings: any = { sentinel: jest.fn().mockResolvedValue({ defaultAiMode: 'ai_draft' }) };
   const c = new WaController(wa, prisma, contacts, settings);
   it('list/qr/restart/update/create', async () => {
-    c.list();
+    await c.list({ id: 'u1', role: 'owner' } as any);
     expect(await c.qr('acc1')).toEqual({ qr: 'qr', connected: true, status: 'scanning' });
     expect(await c.restart('acc1')).toEqual({ success: true });
     c.update('acc1', {} as any, { id: 'u1' } as any);

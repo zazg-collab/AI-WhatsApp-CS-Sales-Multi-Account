@@ -13,6 +13,8 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
+import { AccountScopeGuard } from '../../common/account-scope.guard';
+import { allowedAccountIds } from '../../common/account-scope.util';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import { WaService } from './wa.service';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -26,7 +28,7 @@ import { logAudit } from '../../common/audit.util';
 // PRD 14.2 — WhatsApp accounts (Baileys gateway).
 @ApiTags('whatsapp-accounts')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AccountScopeGuard)
 @Controller('wa/accounts')
 export class WaController {
   private readonly logger = new Logger(WaController.name);
@@ -40,8 +42,10 @@ export class WaController {
   @ApiOperation({ summary: 'List all WhatsApp accounts' })
   @Roles('viewer')
   @Get()
-  list() {
+  async list(@CurrentUser() user: AuthUser) {
+    const scope = await allowedAccountIds(this.prisma, user);
     return this.prisma.whatsappAccount.findMany({
+      where: scope !== null ? { id: { in: scope } } : undefined,
       orderBy: { createdAt: 'desc' },
       // Conversation count powers the delete-impact warning in the UI.
       include: { _count: { select: { conversations: true } } },
