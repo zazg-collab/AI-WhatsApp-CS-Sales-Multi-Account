@@ -6,6 +6,7 @@ import { WaService } from '../wa/wa.service';
 import { CreateFollowUpDto } from './dto/create-followup.dto';
 import { convertToUTC } from '../../common/timezone.util';
 import { currentContext } from '../../common/request-context';
+import { assertConversationScope, type ScopedUser } from '../../common/account-scope.util';
 
 @Injectable()
 export class FollowUpsService {
@@ -17,7 +18,8 @@ export class FollowUpsService {
     private readonly waService: WaService,
   ) {}
 
-  async schedule(dto: CreateFollowUpDto) {
+  async schedule(dto: CreateFollowUpDto, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, dto.conversationId, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: dto.conversationId },
       include: { customer: true },
@@ -51,16 +53,20 @@ export class FollowUpsService {
     return followUp;
   }
 
-  async list(conversationId: string) {
+  async list(conversationId: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, conversationId, user);
     return this.prisma.followUp.findMany({
       where: { conversationId },
       orderBy: { scheduledAt: 'asc' },
     });
   }
 
-  async cancel(id: string) {
+  async cancel(id: string, user?: ScopedUser) {
     const followUp = await this.prisma.followUp.findUnique({ where: { id } });
     if (!followUp) throw new NotFoundException('Follow-up not found');
+    if (followUp.conversationId) {
+      await assertConversationScope(this.prisma, followUp.conversationId, user);
+    }
 
     // Try to remove job from queue
     try {

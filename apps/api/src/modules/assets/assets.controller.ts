@@ -62,8 +62,8 @@ export class AssetsController {
   @ApiOperation({ summary: 'Suggest assets to send for a conversation (advisory)' })
   @Roles('admin', 'supervisor', 'owner')
   @Get('suggestions')
-  suggestions(@Query('conversationId') conversationId: string) {
-    return this.assets.suggest(conversationId);
+  suggestions(@Query('conversationId') conversationId: string, @CurrentUser() user: AuthUser) {
+    return this.assets.suggest(conversationId, user);
   }
 
   @ApiOperation({ summary: 'Upload a new media asset (image/video/document)' })
@@ -106,6 +106,6 @@ export class AssetsController {
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/send')
   send(@Param('id') id: string, @Body() dto: SendAssetDto, @CurrentUser() user: AuthUser) {
-    return this.assets.sendToConversation(id, dto.conversationId, user.id);
+    return this.assets.sendToConversation(id, dto.conversationId, user.id, user);
   }
 }

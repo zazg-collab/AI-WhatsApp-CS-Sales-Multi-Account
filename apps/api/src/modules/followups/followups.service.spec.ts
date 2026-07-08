@@ -14,6 +14,7 @@ describe('FollowUpsService', () => {
   beforeEach(() => {
     prisma = {
       conversation: { findUnique: jest.fn() },
+      whatsappAccount: { findMany: jest.fn().mockResolvedValue([]) },
       followUp: {
         create: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
@@ -53,6 +54,20 @@ describe('FollowUpsService', () => {
         expect.objectContaining({ jobId: 'followup-f1' }),
       );
       expect(queue.add.mock.calls[0][2].delay).toBeGreaterThan(0);
+    });
+
+    it('rejects an admin scoped to a different account (C3 broken-access-control regression)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1' });
+      prisma.whatsappAccount.findMany.mockResolvedValue([{ id: 'a2' }]);
+      const scopedAdmin = { id: 'admin1', role: 'admin' };
+      const future = new Date(Date.now() + 60000).toISOString();
+      await expect(
+        service.schedule(
+          { conversationId: 'c1', scheduledAt: future, message: 'hi' } as any,
+          scopedAdmin as never,
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(queue.add).not.toHaveBeenCalled();
     });
   });
 

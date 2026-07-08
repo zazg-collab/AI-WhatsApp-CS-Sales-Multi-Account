@@ -7,6 +7,7 @@ import { WaService } from '../wa/wa.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { extForMimetype } from '../wa/wa.util';
 import { logAudit } from '../../common/audit.util';
+import { assertConversationScope, type ScopedUser } from '../../common/account-scope.util';
 import { CreateAssetDto, UpdateAssetDto } from './dto/asset.dto';
 
 type MediaKind = 'image' | 'video' | 'document';
@@ -161,7 +162,8 @@ export class AssetsService {
    * For product assets the marketplace link is appended to the caption so the
    * customer gets a real, curated link (never one fabricated by the model).
    */
-  async sendToConversation(assetId: string, conversationId: string, adminId: string) {
+  async sendToConversation(assetId: string, conversationId: string, adminId: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, conversationId, user);
     const asset = await this.getOrThrow(assetId);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
@@ -230,7 +232,8 @@ export class AssetsService {
    * triggerKeywords, and offers testimonials when the customer sounds hesitant.
    * Advisory only — the admin still sends. The model never invents assets.
    */
-  async suggest(conversationId: string) {
+  async suggest(conversationId: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, conversationId, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       select: { id: true },

@@ -46,6 +46,7 @@ describe('AssetsService.suggest', () => {
   beforeEach(() => {
     prisma = {
       conversation: { findUnique: jest.fn().mockResolvedValue({ id: 'c1' }) },
+      whatsappAccount: { findMany: jest.fn().mockResolvedValue([]) },
       message: { findMany: jest.fn() },
       asset: { findMany: jest.fn() },
     };
@@ -54,6 +55,14 @@ describe('AssetsService.suggest', () => {
     const events = {} as any;
     const config = { get: jest.fn().mockReturnValue('false') } as any;
     service = new AssetsService(prisma, storage, wa, events, config);
+  });
+
+  it('rejects an admin scoped to a different account (C2 broken-access-control regression: suggest)', async () => {
+    prisma.conversation.findUnique.mockResolvedValue({ whatsappAccountId: 'a1' });
+    prisma.whatsappAccount.findMany.mockResolvedValue([{ id: 'a2' }]);
+    const scopedAdmin = { id: 'admin1', role: 'admin' };
+    await expect(service.suggest('c1', scopedAdmin as never)).rejects.toThrow();
+    expect(prisma.message.findMany).not.toHaveBeenCalled();
   });
 
   it('suggests a product card when customer asks about price', async () => {
@@ -82,5 +91,26 @@ describe('AssetsService.suggest', () => {
     const out = await service.suggest('c1');
     expect(out).toEqual([]);
     expect(prisma.asset.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('AssetsService.sendToConversation', () => {
+  it('rejects an admin scoped to a different account (C2 broken-access-control regression)', async () => {
+    const prisma: any = {
+      conversation: { findUnique: jest.fn().mockResolvedValue({ whatsappAccountId: 'a1' }) },
+      whatsappAccount: { findMany: jest.fn().mockResolvedValue([{ id: 'a2' }]) },
+      asset: { findUnique: jest.fn() },
+    };
+    const storage = { read: jest.fn() } as any;
+    const wa = { sendMediaBuffer: jest.fn() } as any;
+    const events = { emitToAccount: jest.fn() } as any;
+    const config = { get: jest.fn().mockReturnValue('false') } as any;
+    const service = new AssetsService(prisma, storage, wa, events, config);
+    const scopedAdmin = { id: 'admin1', role: 'admin' };
+    await expect(
+      service.sendToConversation('asset1', 'c1', 'admin1', scopedAdmin as never),
+    ).rejects.toThrow();
+    expect(prisma.asset.findUnique).not.toHaveBeenCalled();
+    expect(wa.sendMediaBuffer).not.toHaveBeenCalled();
   });
 });

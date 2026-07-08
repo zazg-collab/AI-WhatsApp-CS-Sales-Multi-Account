@@ -149,8 +149,9 @@ describe('FollowUpsController', () => {
   const svc: any = { schedule: fn(), list: fn(), cancel: fn() };
   const c = new FollowUpsController(svc);
   it('delegates', () => {
-    c.schedule({} as any); c.list('c1'); c.cancel('f1');
-    expect(svc.cancel).toHaveBeenCalledWith('f1');
+    const user = { id: 'u1' } as any;
+    c.schedule({} as any, user); c.list('c1', user); c.cancel('f1', user);
+    expect(svc.cancel).toHaveBeenCalledWith('f1', user);
   });
 });
 
