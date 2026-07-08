@@ -58,8 +58,10 @@ export default function KnowledgePage() {
 
   async function createBase(e: React.FormEvent) {
     e.preventDefault();
-    await api('/knowledge-bases', { method: 'POST', body: JSON.stringify({ name: baseName }) });
-    setBaseName(''); loadBases();
+    try {
+      await api('/knowledge-bases', { method: 'POST', body: JSON.stringify({ name: baseName }) });
+      setBaseName(''); loadBases();
+    } catch (err) { setError(err instanceof Error ? err.message : t('loadBasesError')); }
   }
 
   async function addItem(e: React.FormEvent) {
@@ -74,11 +76,13 @@ export default function KnowledgePage() {
       });
       baseId = base.id;
     }
-    await api(`/knowledge-bases/${baseId}/items`, { method: 'POST', body: JSON.stringify({ ...item, status: 'active' }) });
-    setItem({ title: '', content: '', productName: '' });
-    setPrefilled(false);
-    await loadBases();
-    loadBase(baseId);
+    try {
+      await api(`/knowledge-bases/${baseId}/items`, { method: 'POST', body: JSON.stringify({ ...item, status: 'active' }) });
+      setItem({ title: '', content: '', productName: '' });
+      setPrefilled(false);
+      await loadBases();
+      loadBase(baseId);
+    } catch (err) { setError(err instanceof Error ? err.message : t('loadItemsError')); }
   }
 
   // File/URL are now action-first: parse (no persistence) and pre-fill the form
@@ -92,10 +96,12 @@ export default function KnowledgePage() {
 
   async function doDeleteBase() {
     if (!confirmDeleteBase) return;
-    await api(`/knowledge-bases/${confirmDeleteBase.id}`, { method: 'DELETE' });
-    setBases((prev) => prev.filter((b) => b.id !== confirmDeleteBase.id));
-    if (selected === confirmDeleteBase.id) { setSelected(null); setItems([]); }
-    setConfirmDeleteBase(null);
+    try {
+      await api(`/knowledge-bases/${confirmDeleteBase.id}`, { method: 'DELETE' });
+      setBases((prev) => prev.filter((b) => b.id !== confirmDeleteBase.id));
+      if (selected === confirmDeleteBase.id) { setSelected(null); setItems([]); }
+      setConfirmDeleteBase(null);
+    } catch (err) { setError(err instanceof Error ? err.message : t('loadBasesError')); }
   }
 
   function openEditItem(it: Item) {
@@ -117,9 +123,11 @@ export default function KnowledgePage() {
 
   async function doDeleteItem() {
     if (!confirmDeleteItem) return;
-    await api(`/knowledge-items/${confirmDeleteItem.id}`, { method: 'DELETE' });
-    setItems((prev) => prev.filter((i) => i.id !== confirmDeleteItem.id));
-    setConfirmDeleteItem(null);
+    try {
+      await api(`/knowledge-items/${confirmDeleteItem.id}`, { method: 'DELETE' });
+      setItems((prev) => prev.filter((i) => i.id !== confirmDeleteItem.id));
+      setConfirmDeleteItem(null);
+    } catch (err) { setError(err instanceof Error ? err.message : t('loadItemsError')); }
   }
 
   async function handleFileUpload(file: File) {

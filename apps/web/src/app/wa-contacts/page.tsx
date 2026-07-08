@@ -307,10 +307,11 @@ export default function WhatsappContactsPage() {
                                   title="Add to WhatsApp contacts"
                                   disabled={addingIds[contact.id]}
                                   onClick={() => handleAddToWa(contact)}
-                                  className="flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50"
-                                  style={addedIds[contact.id]
-                                    ? { color: '#16a34a', background: '#f0fdf4' }
-                                    : { color: '#7c3aed', background: '#f5f3ff' }}
+                                  className={`flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                                    addedIds[contact.id]
+                                      ? 'text-channel-700 bg-channel-50 dark:text-channel-100 dark:bg-channel-700/25'
+                                      : 'text-sentinel-700 bg-sentinel-50 dark:text-sentinel-300 dark:bg-sentinel-900/30'
+                                  }`}
                                 >
                                   {addedIds[contact.id] ? (
                                     <><CheckCircle className="h-3.5 w-3.5" aria-hidden="true" />Added</>
@@ -365,10 +366,11 @@ export default function WhatsappContactsPage() {
                                 type="button"
                                 disabled={addingIds[contact.id]}
                                 onClick={() => handleAddToWa(contact)}
-                                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50"
-                                style={addedIds[contact.id]
-                                  ? { color: '#16a34a', background: '#f0fdf4' }
-                                  : { color: '#7c3aed', background: '#f5f3ff' }}
+                                className={`flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                                  addedIds[contact.id]
+                                    ? 'text-channel-700 bg-channel-50 dark:text-channel-100 dark:bg-channel-700/25'
+                                    : 'text-sentinel-700 bg-sentinel-50 dark:text-sentinel-300 dark:bg-sentinel-900/30'
+                                }`}
                               >
                                 {addedIds[contact.id] ? (
                                   <><CheckCircle className="h-3 w-3" aria-hidden="true" />Added ✓</>

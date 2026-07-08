@@ -131,13 +131,13 @@ export default function AnalyticsPage() {
                 <SummaryCard label={t('messages24h')} value={summary.messagesLast24h} tone="text-sentinel-600" />
                 <SummaryCard label={t('avgResponseTime')} value={summary.avgResponseTime} formatted={formatResponseTime(summary.avgResponseTime)} tone="text-sentinel-600" />
                 <SummaryCard
-                  label="Avg. Resolusi"
+                  label={t('avgResolution')}
                   value={summary.avgResolutionSeconds ?? 0}
                   formatted={summary.avgResolutionSeconds ? formatResponseTime(summary.avgResolutionSeconds) : '–'}
                   tone="text-channel-700"
                 />
                 <SummaryCard
-                  label="Reopen 7h"
+                  label={t('reopen7d')}
                   value={summary.totalReopened7d}
                   tone={summary.totalReopened7d > 0 ? 'text-review-600' : 'text-gray-500'}
                 />
@@ -155,7 +155,7 @@ export default function AnalyticsPage() {
                         return <Bar key={item.stage} label={item.stage.replace('_', ' ').toUpperCase()} meta={`${item.count} (${pct}%)`} pct={pct} color={leadColors[item.stage] ?? 'bg-gray-300 dark:bg-gray-600'} />;
                       })}
                       <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-700">
-                        <p className="mb-2 text-[10px] font-semibold text-gray-500 dark:text-gray-400">Legend</p>
+                        <p className="mb-2 text-[10px] font-semibold text-gray-500 dark:text-gray-400">{t('legend')}</p>
                         <div className="grid grid-cols-2 gap-2 text-[11px]">
                           {Object.entries(leadColorLabels).map(([key, label]) => (
                             <div key={key} className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-sm ${leadColors[key]}`} /><span className="text-gray-600 dark:text-gray-400">{label}</span></div>
@@ -189,7 +189,7 @@ export default function AnalyticsPage() {
                         <Bar key={item.mode} label={MODE_LABEL_KEY[item.mode] ? t(MODE_LABEL_KEY[item.mode]) : item.mode} meta={`${item.count} (${item.percentage}%)`} pct={item.percentage} color={modeColors[item.mode] ?? 'bg-gray-300 dark:bg-gray-600'} />
                       ))}
                       <div className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-700">
-                        <p className="mb-2 text-[10px] font-semibold text-gray-500 dark:text-gray-400">Legend</p>
+                        <p className="mb-2 text-[10px] font-semibold text-gray-500 dark:text-gray-400">{t('legend')}</p>
                         <div className="grid grid-cols-2 gap-2 text-[11px]">
                           {[['bg-channel-500','AI ON'],['bg-gray-300 dark:bg-gray-600','AI OFF'],['bg-review-500','Draft'],['bg-sentinel-500','Supervised'],['bg-danger-500','Paused']].map(([cls,label]) => (
                             <div key={label} className="flex items-center gap-1.5"><span className={`h-2 w-2 rounded-sm ${cls}`} /><span className="text-gray-600 dark:text-gray-400">{label}</span></div>
@@ -250,13 +250,13 @@ export default function AnalyticsPage() {
 
             {/* First Response Time per account */}
             {frtByAccount?.accounts && frtByAccount.accounts.length > 0 && (
-              <Panel title="First Response Time per Akun">
+              <Panel title={t('frtByAccount')}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs text-gray-500 dark:text-gray-400">
-                      <th className="pb-2 font-medium">Akun</th>
-                      <th className="pb-2 font-medium text-right">Avg. FRT</th>
-                      <th className="pb-2 font-medium text-right">Sampel</th>
+                      <th className="pb-2 font-medium">{t('colAccount')}</th>
+                      <th className="pb-2 font-medium text-right">{t('colAvgFrt')}</th>
+                      <th className="pb-2 font-medium text-right">{t('colSample')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -274,14 +274,14 @@ export default function AnalyticsPage() {
 
             {/* Reopen rate per account */}
             {reopenRate?.accounts && reopenRate.accounts.length > 0 && (
-              <Panel title="Reopen Rate per Akun">
+              <Panel title={t('reopenRateByAccount')}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs text-gray-500 dark:text-gray-400">
-                      <th className="pb-2 font-medium">Akun</th>
-                      <th className="pb-2 font-medium text-right">Total Selesai</th>
-                      <th className="pb-2 font-medium text-right">Reopen</th>
-                      <th className="pb-2 font-medium text-right">Rate</th>
+                      <th className="pb-2 font-medium">{t('colAccount')}</th>
+                      <th className="pb-2 font-medium text-right">{t('colTotalResolved')}</th>
+                      <th className="pb-2 font-medium text-right">{t('colReopen')}</th>
+                      <th className="pb-2 font-medium text-right">{t('colRate')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -300,16 +300,16 @@ export default function AnalyticsPage() {
 
             {/* Sentiment trend */}
             {sentimentTrend?.trend && sentimentTrend.trend.length > 0 && (
-              <Panel title="Tren Sentimen Customer">
+              <Panel title={t('sentimentTrend')}>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-left text-xs text-gray-500 dark:text-gray-400">
-                        <th className="pb-2 font-medium">Tanggal</th>
-                        <th className="pb-2 font-medium text-right">Avg. Skor</th>
-                        <th className="pb-2 font-medium text-right text-channel-700">Positif</th>
-                        <th className="pb-2 font-medium text-right text-gray-500">Netral</th>
-                        <th className="pb-2 font-medium text-right text-danger-600">Negatif</th>
+                        <th className="pb-2 font-medium">{t('colDate')}</th>
+                        <th className="pb-2 font-medium text-right">{t('colAvgScore')}</th>
+                        <th className="pb-2 font-medium text-right text-channel-700">{t('colPositive')}</th>
+                        <th className="pb-2 font-medium text-right text-gray-500">{t('colNeutral')}</th>
+                        <th className="pb-2 font-medium text-right text-danger-600">{t('colNegative')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
