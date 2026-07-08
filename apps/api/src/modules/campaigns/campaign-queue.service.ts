@@ -49,20 +49,32 @@ export class CampaignQueueService {
     // otherwise unrelated to any HTTP request.
     const { requestId } = currentContext();
 
-    for (const recipient of recipients) {
-      cumulativeDelay += Math.max(minGap, this.randomDelay(campaign.humanDelayMinMs, campaign.humanDelayMaxMs));
-      await this.crud.campaignsQueue.add(
-        'send-recipient',
-        { recipientId: recipient.id, requestId },
-        { delay: cumulativeDelay, jobId: `campaign-recipient-${recipient.id}` },
-      );
-    }
-
     const updated = await this.crud.prisma.campaign.update({
       where: { id },
       data: { status: baseDelay > 0 ? CampaignStatus.scheduled : CampaignStatus.running, startedAt: new Date() },
     });
+    // Mark `queued` BEFORE enqueueing: processRecipient() rejects any job whose
+    // recipient isn't already `queued` as a stale/duplicate job (H2 — a job
+    // firing before this flip would otherwise be dropped and the recipient
+    // left stranded in `pending`, since the reaper only sweeps `sending`).
     await this.crud.prisma.campaignRecipient.updateMany({ where: { id: { in: recipients.map((r) => r.id) } }, data: { status: CampaignRecipientStatus.queued, error: null } });
+
+    for (const recipient of recipients) {
+      cumulativeDelay += Math.max(minGap, this.randomDelay(campaign.humanDelayMinMs, campaign.humanDelayMaxMs));
+      const jobId = `campaign-recipient-${recipient.id}`;
+      // A prior failed/completed attempt (retryFailed) can leave a job under
+      // this same deterministic jobId around (removeOnFail keeps it for 7d).
+      // BullMQ silently no-ops add() when the jobId already exists, which
+      // would leave this recipient `queued` with nothing to ever process it
+      // (H1) — so clear any stale job first.
+      await this.crud.campaignsQueue.remove(jobId).catch(() => undefined);
+      await this.crud.campaignsQueue.add(
+        'send-recipient',
+        { recipientId: recipient.id, requestId },
+        { delay: cumulativeDelay, jobId },
+      );
+    }
+
     await this.audit.log(userId, 'campaign_started', 'Campaign', id, { queuedCount: recipients.length, rateLimitPerMinute: campaign.rateLimitPerMinute, scheduledAt: campaign.scheduledAt });
     return updated;
   }

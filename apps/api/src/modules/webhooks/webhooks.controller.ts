@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsOptional, IsString, IsUrl, ArrayMaxSize } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsOptional, IsString, IsUrl, ArrayMaxSize } from 'class-validator';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { WebhooksService, WEBHOOK_EVENTS } from './webhooks.service';
@@ -8,13 +8,13 @@ import { WebhooksService, WEBHOOK_EVENTS } from './webhooks.service';
 class CreateWebhookDto {
   @IsUrl({ require_tld: false }) url!: string;
   @IsString() secret!: string;
-  @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) events!: string[];
+  @IsArray() @ArrayMaxSize(10) @IsIn(WEBHOOK_EVENTS, { each: true }) events!: string[];
 }
 
 class UpdateWebhookDto {
   @IsOptional() @IsUrl({ require_tld: false }) url?: string;
   @IsOptional() @IsString() secret?: string;
-  @IsOptional() @IsArray() @ArrayMaxSize(10) @IsString({ each: true }) events?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(10) @IsIn(WEBHOOK_EVENTS, { each: true }) events?: string[];
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 

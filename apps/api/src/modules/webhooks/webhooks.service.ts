@@ -18,8 +18,12 @@ export class WebhooksService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Never returns the HMAC secret — it's write-only after creation. */
   list() {
-    return this.prisma.webhookEndpoint.findMany({ orderBy: { createdAt: 'asc' } });
+    return this.prisma.webhookEndpoint.findMany({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, url: true, events: true, isActive: true, createdAt: true },
+    });
   }
 
   create(url: string, secret: string, events: string[]) {

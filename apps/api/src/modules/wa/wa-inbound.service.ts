@@ -306,7 +306,14 @@ export class WaInboundService {
         return;
       }
       if (review.decision === SentinelDecision.approve) {
-        await this.sendAndStore(convo, text, review.id);
+        try {
+          await this.sendAndStore(convo, text, review.id);
+        } catch (err) {
+          // Send itself failed (e.g. account disconnected mid-flight) — the
+          // draft already passed review, don't drop it silently.
+          this.logger.error(`Send failed after Sentinel approval (fallback to draft): ${err instanceof Error ? err.message : err}`);
+          await this.storeDraft(conversationId, convo.whatsappAccountId, text, review.id);
+        }
       } else if (review.decision === SentinelDecision.draft) {
         await this.storeDraft(conversationId, convo.whatsappAccountId, text, review.id);
       } else {
@@ -318,7 +325,16 @@ export class WaInboundService {
       return;
     }
 
-    const message = await this.sendAndStore(convo, text);
+    let message;
+    try {
+      message = await this.sendAndStore(convo, text);
+    } catch (err) {
+      // ai_on send failed outright (e.g. account disconnected mid-flight) —
+      // hold the already-generated reply as a draft instead of losing it.
+      this.logger.error(`Send failed in ai_on mode (fallback to draft): ${err instanceof Error ? err.message : err}`);
+      await this.storeDraft(conversationId, convo.whatsappAccountId, text);
+      return;
+    }
 
     try {
       const assets = this.moduleRef.get<AssetsService>('ASSETS_SERVICE', { strict: false });
@@ -369,14 +385,21 @@ export class WaInboundService {
     let reviewId: string | undefined;
     if (fresh.aiMode === AiMode.ai_supervised || fresh.aiMode === AiMode.ai_on) {
       const combined = segments.map((s) => s.text).join('\n\n');
-      const review = await this.sentinel.review(conversationId, combined, { multiTopicBurst: true });
-      reviewId = review.id;
-      if (review.decision !== SentinelDecision.approve && review.decision !== SentinelDecision.draft) {
-        await this.prisma.conversation.update({
-          where: { id: conversationId },
-          data: { aiMode: AiMode.ai_paused, takeoverStatus: TakeoverStatus.waiting_admin },
-        });
-        return;
+      try {
+        const review = await this.sentinel.review(conversationId, combined, { multiTopicBurst: true });
+        reviewId = review.id;
+        if (review.decision !== SentinelDecision.approve && review.decision !== SentinelDecision.draft) {
+          await this.prisma.conversation.update({
+            where: { id: conversationId },
+            data: { aiMode: AiMode.ai_paused, takeoverStatus: TakeoverStatus.waiting_admin },
+          });
+          return;
+        }
+      } catch (err) {
+        // Same fallback as the single-message path: don't lose the segments
+        // just because Sentinel/the provider timed out — hold them as drafts
+        // (reviewId left unset) so an admin can see and route them manually.
+        this.logger.error(`Sentinel review failed on burst (fallback to draft): ${err instanceof Error ? err.message : err}`);
       }
     }
 

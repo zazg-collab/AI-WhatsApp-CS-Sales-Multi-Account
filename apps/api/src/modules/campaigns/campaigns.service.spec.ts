@@ -47,7 +47,7 @@ describe('CampaignsService', () => {
     wa = { sendText: jest.fn().mockResolvedValue('ext1'), sendMediaBuffer: jest.fn().mockResolvedValue('ext1') };
     storage = { read: jest.fn().mockResolvedValue(Buffer.from('x')) };
     events = { emit: jest.fn(), emitToAccount: jest.fn() };
-    queue = { add: jest.fn().mockResolvedValue({}), getJob: jest.fn() };
+    queue = { add: jest.fn().mockResolvedValue({}), getJob: jest.fn(), remove: jest.fn().mockResolvedValue(0) };
     const config = { get: jest.fn().mockReturnValue(undefined) };
     const settings = { campaign: jest.fn().mockResolvedValue({ defaultRateLimitPerMinute: 6, requireApproval: true }) };
     const crud = new CampaignCrudService(prisma, audit, queue, settings as any, config as any);
@@ -137,6 +137,29 @@ describe('CampaignsService', () => {
       expect(queue.add).toHaveBeenCalledTimes(2);
       expect(prisma.campaign.update.mock.calls[0][0].data.status).toBe(CampaignStatus.running);
     });
+    it('clears any stale job under the same jobId before re-adding (H1 retry-after-fail regression)', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({
+        id: 'cmp1', status: CampaignStatus.approved, scheduledAt: null,
+        rateLimitPerMinute: 6, humanDelayMinMs: 100, humanDelayMaxMs: 200,
+      });
+      prisma.campaignRecipient.findMany.mockResolvedValue([{ id: 'r1' }]);
+      await service.start('cmp1', 'u1');
+      expect(queue.remove).toHaveBeenCalledWith('campaign-recipient-r1');
+      const removeOrder = queue.remove.mock.invocationCallOrder[0];
+      const addOrder = queue.add.mock.invocationCallOrder[0];
+      expect(removeOrder).toBeLessThan(addOrder);
+    });
+    it('marks recipients queued before enqueueing jobs (H2 race regression)', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({
+        id: 'cmp1', status: CampaignStatus.approved, scheduledAt: null,
+        rateLimitPerMinute: 6, humanDelayMinMs: 100, humanDelayMaxMs: 200,
+      });
+      prisma.campaignRecipient.findMany.mockResolvedValue([{ id: 'r1' }]);
+      await service.start('cmp1', 'u1');
+      const updateManyOrder = prisma.campaignRecipient.updateMany.mock.invocationCallOrder[0];
+      const addOrder = queue.add.mock.invocationCallOrder[0];
+      expect(updateManyOrder).toBeLessThan(addOrder);
+    });
     it('rejects a concurrent campaign on the same account (M8)', async () => {
       prisma.campaign.findUnique.mockResolvedValue({
         id: 'cmp1', status: CampaignStatus.approved, whatsappAccountId: 'a1',
@@ -168,6 +191,10 @@ describe('CampaignsService', () => {
     it('cancel sets cancelled', async () => {
       await service.cancel('cmp1', 'u1');
       expect(prisma.campaign.update.mock.calls[0][0].data.status).toBe(CampaignStatus.cancelled);
+    });
+    it('pause rejects a campaign that is already completed', async () => {
+      prisma.campaign.findUnique.mockResolvedValue({ id: 'cmp1', status: CampaignStatus.completed });
+      await expect(service.pause('cmp1', 'u1')).rejects.toThrow(BadRequestException);
     });
     it('retryFailed resets failed recipients', async () => {
       await service.retryFailed('cmp1', 'u1');

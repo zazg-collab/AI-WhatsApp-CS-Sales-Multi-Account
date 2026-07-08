@@ -179,7 +179,10 @@ export class CampaignCrudService {
   }
 
   async pause(id: string, userId: string) {
-    await this.findCampaign(id);
+    const existing = await this.findCampaign(id);
+    if (!([CampaignStatus.running, CampaignStatus.scheduled] as CampaignStatus[]).includes(existing.status)) {
+      throw new BadRequestException(`Cannot pause a campaign that is ${existing.status}`);
+    }
     await this.removeRecipientJobs(id);
     const campaign = await this.prisma.campaign.update({ where: { id }, data: { status: CampaignStatus.paused } });
     await this.prisma.campaignRecipient.updateMany({ where: { campaignId: id, status: CampaignRecipientStatus.queued }, data: { status: CampaignRecipientStatus.pending } });
