@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EventsGateway } from '../../realtime/events.gateway';
 import { WaService } from '../wa/wa.service';
 import { logAudit } from '../../common/audit.util';
+import { assertConversationScope, canAccessAccount, type ScopedUser } from '../../common/account-scope.util';
 
 @Injectable()
 export class ConversationChatOpsService {
@@ -13,7 +14,8 @@ export class ConversationChatOpsService {
     private readonly events: EventsGateway,
   ) {}
 
-  private async conversationRoute(id: string) {
+  private async conversationRoute(id: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: { customer: { select: { phoneNumber: true, name: true } } },
@@ -27,7 +29,11 @@ export class ConversationChatOpsService {
     phoneNumber: string,
     name: string | undefined,
     adminId: string,
+    user?: ScopedUser,
   ) {
+    if (!(await canAccessAccount(this.prisma, accountId, user))) {
+      throw new NotFoundException('WhatsApp account not found');
+    }
     let digits = phoneNumber.replace(/[^\d]/g, '');
     if (digits.startsWith('0')) digits = `62${digits.slice(1)}`;
     if (digits.length < 8 || digits.length > 15) {
@@ -88,14 +94,18 @@ export class ConversationChatOpsService {
     return { id: conversation.id, customerId: customer.id };
   }
 
-  async validateNumber(accountId: string, phoneNumber: string) {
+  async validateNumber(accountId: string, phoneNumber: string, user?: ScopedUser) {
+    if (!(await canAccessAccount(this.prisma, accountId, user))) {
+      throw new NotFoundException('WhatsApp account not found');
+    }
     let digits = phoneNumber.replace(/[^\d]/g, '');
     if (digits.startsWith('0')) digits = `62${digits.slice(1)}`;
     const exists = await this.wa.isOnWhatsApp(accountId, digits);
     return { phoneNumber: digits, exists };
   }
 
-  async takeover(id: string, adminId: string) {
+  async takeover(id: string, adminId: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       select: { aiMode: true },
@@ -120,7 +130,8 @@ export class ConversationChatOpsService {
     return updated;
   }
 
-  async returnToAi(id: string, actorId?: string) {
+  async returnToAi(id: string, actorId?: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       select: { previousAiMode: true },
@@ -145,8 +156,8 @@ export class ConversationChatOpsService {
     return updated;
   }
 
-  async sendTyping(id: string, typing: boolean) {
-    const conversation = await this.conversationRoute(id);
+  async sendTyping(id: string, typing: boolean, user?: ScopedUser) {
+    const conversation = await this.conversationRoute(id, user);
     await this.wa.sendTyping(
       conversation.whatsappAccountId,
       conversation.customer.phoneNumber,
@@ -155,8 +166,8 @@ export class ConversationChatOpsService {
     return { success: true, typing };
   }
 
-  async setContactBlocked(id: string, blocked: boolean, adminId: string) {
-    const conversation = await this.conversationRoute(id);
+  async setContactBlocked(id: string, blocked: boolean, adminId: string, user?: ScopedUser) {
+    const conversation = await this.conversationRoute(id, user);
     await this.wa.setContactBlocked(
       conversation.whatsappAccountId,
       conversation.customer.phoneNumber,
@@ -183,8 +194,8 @@ export class ConversationChatOpsService {
   // (confirmed against the live API — 404, not an engine limitation), so this
   // only suppresses notifications inside Hermes, it does not silence the
   // customer's actual WhatsApp app.
-  async setChatMuted(id: string, muted: boolean, adminId: string) {
-    const conversation = await this.conversationRoute(id);
+  async setChatMuted(id: string, muted: boolean, adminId: string, user?: ScopedUser) {
+    const conversation = await this.conversationRoute(id, user);
     const muteUntil = muted ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) : null;
     await this.prisma.conversation.update({
       where: { id },
@@ -204,8 +215,8 @@ export class ConversationChatOpsService {
     return { success: true, muted };
   }
 
-  async setDisappearingMessages(id: string, enabled: boolean, adminId: string, duration?: number) {
-    const conversation = await this.conversationRoute(id);
+  async setDisappearingMessages(id: string, enabled: boolean, adminId: string, duration?: number, user?: ScopedUser) {
+    const conversation = await this.conversationRoute(id, user);
     const nextDuration = enabled ? duration ?? 7 * 24 * 60 * 60 : null;
     const setAt = enabled ? new Date() : null;
     await this.wa.setDisappearingMessages(
@@ -236,8 +247,8 @@ export class ConversationChatOpsService {
     return { success: true, enabled, duration: enabled ? duration ?? 7 * 24 * 60 * 60 : 0 };
   }
 
-  async setChatArchived(id: string, archived: boolean, adminId: string) {
-    const conversation = await this.conversationRoute(id);
+  async setChatArchived(id: string, archived: boolean, adminId: string, user?: ScopedUser) {
+    const conversation = await this.conversationRoute(id, user);
     await this.wa.setChatArchived(
       conversation.whatsappAccountId,
       conversation.customer.phoneNumber,
@@ -258,8 +269,8 @@ export class ConversationChatOpsService {
   }
 
   // Pin is dashboard-only — see setChatMuted comment above for why.
-  async setChatPinned(id: string, pinned: boolean, adminId: string) {
-    const conversation = await this.conversationRoute(id);
+  async setChatPinned(id: string, pinned: boolean, adminId: string, user?: ScopedUser) {
+    const conversation = await this.conversationRoute(id, user);
     await this.prisma.conversation.update({ where: { id }, data: { isPinned: pinned } });
     this.events.emitToAccount(conversation.whatsappAccountId, 'conversation:updated', {
       conversationId: id,

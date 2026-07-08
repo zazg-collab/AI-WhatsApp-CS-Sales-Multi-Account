@@ -7,6 +7,7 @@ import { MediaStorageService } from '../media/media-storage.service';
 import { extForMimetype, normalizePhone } from '../wa/wa.util';
 import { assertSafeMediaUrl } from '../../common/media-url.util';
 import { logAudit } from '../../common/audit.util';
+import { assertConversationScope, type ScopedUser } from '../../common/account-scope.util';
 
 function mediaTypeForMime(mime: string): 'image' | 'document' | 'audio' | 'video' {
   if (mime.startsWith('image/')) return 'image';
@@ -24,7 +25,8 @@ export class ConversationMessagingService {
     private readonly storage: MediaStorageService,
   ) {}
 
-  private async conversationRoute(id: string) {
+  private async conversationRoute(id: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: { customer: { select: { phoneNumber: true, name: true } } },
@@ -33,7 +35,8 @@ export class ConversationMessagingService {
     return conversation;
   }
 
-  private async messageWithRoute(conversationId: string, messageId: string) {
+  private async messageWithRoute(conversationId: string, messageId: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, conversationId, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       include: { customer: { select: { phoneNumber: true } } },
@@ -83,7 +86,8 @@ export class ConversationMessagingService {
     return message;
   }
 
-  async send(id: string, adminId: string, text: string, quotedMessageId?: string) {
+  async send(id: string, adminId: string, text: string, quotedMessageId?: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: { customer: true },
@@ -175,7 +179,8 @@ export class ConversationMessagingService {
     }
   }
 
-  async approveDraft(id: string, messageId: string, adminId: string, editedText?: string) {
+  async approveDraft(id: string, messageId: string, adminId: string, editedText?: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: { customer: true },
@@ -262,7 +267,8 @@ export class ConversationMessagingService {
     }
   }
 
-  async blockDraft(id: string, messageId: string, actorId?: string) {
+  async blockDraft(id: string, messageId: string, actorId?: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({ where: { id } });
     if (!conversation) throw new NotFoundException('Conversation not found');
 
@@ -295,8 +301,10 @@ export class ConversationMessagingService {
     mediaType: 'image' | 'document' | 'audio' | 'video',
     url: string,
     caption?: string,
+    user?: ScopedUser,
   ) {
     assertSafeMediaUrl(url);
+    await assertConversationScope(this.prisma, id, user);
 
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
@@ -346,7 +354,9 @@ export class ConversationMessagingService {
     adminId: string,
     file: { buffer: Buffer; mimetype: string; originalname?: string },
     caption?: string,
+    user?: ScopedUser,
   ) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: { customer: true },
@@ -395,7 +405,8 @@ export class ConversationMessagingService {
     return message;
   }
 
-  async markRead(id: string) {
+  async markRead(id: string, user?: ScopedUser) {
+    await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
       where: { id },
       include: { customer: { select: { phoneNumber: true } } },
@@ -424,8 +435,8 @@ export class ConversationMessagingService {
     return { marked: externalIds.length };
   }
 
-  async reactToMessage(id: string, messageId: string, emoji: string, adminId: string) {
-    const { conversation, message } = await this.messageWithRoute(id, messageId);
+  async reactToMessage(id: string, messageId: string, emoji: string, adminId: string, user?: ScopedUser) {
+    const { conversation, message } = await this.messageWithRoute(id, messageId, user);
     if (message.externalId) {
       const fromMe = message.senderType !== SenderType.customer;
       await this.wa.sendReaction(conversation.whatsappAccountId, conversation.customer.phoneNumber, message.externalId, emoji, fromMe);
@@ -442,8 +453,8 @@ export class ConversationMessagingService {
     return updated;
   }
 
-  async editMessage(id: string, messageId: string, newText: string, adminId: string) {
-    const { conversation, message } = await this.messageWithRoute(id, messageId);
+  async editMessage(id: string, messageId: string, newText: string, adminId: string, user?: ScopedUser) {
+    const { conversation, message } = await this.messageWithRoute(id, messageId, user);
     if (message.senderType === SenderType.customer) throw new BadRequestException('Tidak bisa mengedit pesan customer');
     if (message.externalId) {
       await this.wa.editMessage(conversation.whatsappAccountId, conversation.customer.phoneNumber, message.externalId, newText);
@@ -454,8 +465,8 @@ export class ConversationMessagingService {
     return updated;
   }
 
-  async deleteMessage(id: string, messageId: string, adminId: string) {
-    const { conversation, message } = await this.messageWithRoute(id, messageId);
+  async deleteMessage(id: string, messageId: string, adminId: string, user?: ScopedUser) {
+    const { conversation, message } = await this.messageWithRoute(id, messageId, user);
     const fromMe = message.senderType !== SenderType.customer;
     if (message.externalId) {
       await this.wa.deleteMessage(conversation.whatsappAccountId, conversation.customer.phoneNumber, message.externalId, fromMe);
@@ -466,8 +477,8 @@ export class ConversationMessagingService {
     return updated;
   }
 
-  async sendLocation(id: string, adminId: string, latitude: number, longitude: number, name?: string) {
-    const conversation = await this.conversationRoute(id);
+  async sendLocation(id: string, adminId: string, latitude: number, longitude: number, name?: string, user?: ScopedUser) {
+    const conversation = await this.conversationRoute(id, user);
     const externalId = await this.wa.sendLocation(
       conversation.whatsappAccountId,
       conversation.customer.phoneNumber,
@@ -486,8 +497,8 @@ export class ConversationMessagingService {
     return message;
   }
 
-  async sendPoll(id: string, adminId: string, question: string, options: string[], selectableCount = 1) {
-    const conversation = await this.conversationRoute(id);
+  async sendPoll(id: string, adminId: string, question: string, options: string[], selectableCount = 1, user?: ScopedUser) {
+    const conversation = await this.conversationRoute(id, user);
     const externalId = await this.wa.sendPoll(
       conversation.whatsappAccountId,
       conversation.customer.phoneNumber,
@@ -505,8 +516,8 @@ export class ConversationMessagingService {
     return message;
   }
 
-  async sendContacts(id: string, adminId: string, contacts: { name: string; phone: string }[]) {
-    const conversation = await this.conversationRoute(id);
+  async sendContacts(id: string, adminId: string, contacts: { name: string; phone: string }[], user?: ScopedUser) {
+    const conversation = await this.conversationRoute(id, user);
     const externalId = await this.wa.sendContacts(
       conversation.whatsappAccountId,
       conversation.customer.phoneNumber,
@@ -522,8 +533,8 @@ export class ConversationMessagingService {
     return message;
   }
 
-  async forwardMessage(id: string, messageId: string, toPhone: string, adminId: string) {
-    const { conversation, message } = await this.messageWithRoute(id, messageId);
+  async forwardMessage(id: string, messageId: string, toPhone: string, adminId: string, user?: ScopedUser) {
+    const { conversation, message } = await this.messageWithRoute(id, messageId, user);
     const digits = normalizePhone(toPhone);
     // Guard against malformed targets: normalizePhone strips non-digits, so a
     // value like "abc" collapses to "" and would otherwise build an empty JID
@@ -581,8 +592,8 @@ export class ConversationMessagingService {
     return { success: true, externalId };
   }
 
-  async setMessageStarred(id: string, messageId: string, starred: boolean, adminId: string) {
-    const { conversation, message } = await this.messageWithRoute(id, messageId);
+  async setMessageStarred(id: string, messageId: string, starred: boolean, adminId: string, user?: ScopedUser) {
+    const { conversation, message } = await this.messageWithRoute(id, messageId, user);
     if (message.externalId) {
       await this.wa.setMessageStarred(
         conversation.whatsappAccountId,

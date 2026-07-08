@@ -45,7 +45,7 @@ export class ConversationMessagesController {
     @Body() dto: ReactionDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.reactToMessage(id, messageId, dto.emoji, user.id);
+    return this.conversations.reactToMessage(id, messageId, dto.emoji, user.id, user);
   }
 
   @ApiOperation({ summary: 'Edit a message you sent' })
@@ -57,7 +57,7 @@ export class ConversationMessagesController {
     @Body() dto: EditMessageDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.editMessage(id, messageId, dto.text, user.id);
+    return this.conversations.editMessage(id, messageId, dto.text, user.id, user);
   }
 
   @ApiOperation({ summary: 'Delete a message for everyone (revoke)' })
@@ -68,7 +68,7 @@ export class ConversationMessagesController {
     @Param('messageId') messageId: string,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.deleteMessage(id, messageId, user.id);
+    return this.conversations.deleteMessage(id, messageId, user.id, user);
   }
 
   @Roles('admin', 'supervisor', 'owner')
@@ -78,7 +78,7 @@ export class ConversationMessagesController {
     @Body() dto: SendMessageDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.send(id, user.id, dto.text, dto.quotedMessageId);
+    return this.conversations.send(id, user.id, dto.text, dto.quotedMessageId, user);
   }
 
   // ponytail: legacy alias for POST :id/messages without quotedMessageId support — kept for any existing integrations
@@ -90,7 +90,7 @@ export class ConversationMessagesController {
     @Body() dto: SendMessageDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.send(id, user.id, dto.text);
+    return this.conversations.send(id, user.id, dto.text, undefined, user);
   }
 
   @ApiOperation({ summary: 'Approve & send a supervised AI draft' })
@@ -102,7 +102,7 @@ export class ConversationMessagesController {
     @Body() dto: ApproveDraftDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.approveDraft(id, messageId, user.id, dto.text);
+    return this.conversations.approveDraft(id, messageId, user.id, dto.text, user);
   }
 
   @ApiOperation({ summary: 'Block/discard a supervised AI draft' })
@@ -113,14 +113,14 @@ export class ConversationMessagesController {
     @Param('messageId') messageId: string,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.blockDraft(id, messageId, user.id);
+    return this.conversations.blockDraft(id, messageId, user.id, user);
   }
 
   @ApiOperation({ summary: 'Mark customer messages as read (WhatsApp blue ticks)' })
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/read')
-  markRead(@Param('id') id: string) {
-    return this.conversations.markRead(id);
+  markRead(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.conversations.markRead(id, user);
   }
 
   @ApiOperation({ summary: 'Send a WhatsApp location message' })
@@ -131,7 +131,7 @@ export class ConversationMessagesController {
     @Body() dto: SendLocationDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.sendLocation(id, user.id, dto.latitude, dto.longitude, dto.name);
+    return this.conversations.sendLocation(id, user.id, dto.latitude, dto.longitude, dto.name, user);
   }
 
   @ApiOperation({ summary: 'Send a WhatsApp poll' })
@@ -142,7 +142,7 @@ export class ConversationMessagesController {
     @Body() dto: SendPollDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.sendPoll(id, user.id, dto.question, dto.options, dto.selectableCount ?? 1);
+    return this.conversations.sendPoll(id, user.id, dto.question, dto.options, dto.selectableCount ?? 1, user);
   }
 
   @ApiOperation({ summary: 'Send WhatsApp contact cards' })
@@ -153,7 +153,7 @@ export class ConversationMessagesController {
     @Body() dto: SendContactDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.sendContacts(id, user.id, dto.contacts);
+    return this.conversations.sendContacts(id, user.id, dto.contacts, user);
   }
 
   @ApiOperation({ summary: 'Forward a stored message to another WhatsApp phone number' })
@@ -165,7 +165,7 @@ export class ConversationMessagesController {
     @Body() dto: ForwardMessageDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.forwardMessage(id, messageId, dto.toPhone, user.id);
+    return this.conversations.forwardMessage(id, messageId, dto.toPhone, user.id, user);
   }
 
   @ApiOperation({ summary: 'Star or unstar a WhatsApp message' })
@@ -177,7 +177,7 @@ export class ConversationMessagesController {
     @Body() dto: { star?: boolean },
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.setMessageStarred(id, messageId, dto.star !== false, user.id);
+    return this.conversations.setMessageStarred(id, messageId, dto.star !== false, user.id, user);
   }
 
   @Roles('admin', 'supervisor', 'owner')
@@ -187,7 +187,7 @@ export class ConversationMessagesController {
     @Body() dto: SendMediaDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.sendMedia(id, user.id, dto.mediaType, dto.url, dto.caption);
+    return this.conversations.sendMedia(id, user.id, dto.mediaType, dto.url, dto.caption, user);
   }
 
   @ApiOperation({ summary: 'Upload & send a media file from the admin device' })
@@ -208,6 +208,6 @@ export class ConversationMessagesController {
     @CurrentUser() user: AuthUser,
   ) {
     if (!file?.buffer?.length) throw new BadRequestException('No file uploaded');
-    return this.conversations.sendUploadedMedia(id, user.id, file, caption);
+    return this.conversations.sendUploadedMedia(id, user.id, file, caption, user);
   }
 }

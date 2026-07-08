@@ -50,6 +50,7 @@ describe('ConversationsService', () => {
       },
       whatsappAccount: {
         findUnique: jest.fn().mockResolvedValue({ id: 'a1', assignedBotId: null, assignedAdminId: null, aiMode: 'ai_draft' }),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
     wa = {
@@ -173,6 +174,19 @@ describe('ConversationsService', () => {
       });
       prisma.message.findFirst.mockResolvedValue(null);
       await expect(messaging.send('c1', 'admin', 'reply', 'q1')).rejects.toThrow(BadRequestException);
+      expect(wa.sendText).not.toHaveBeenCalled();
+    });
+    it('rejects an admin scoped to a different account (C1 broken-access-control regression)', async () => {
+      // assertConversationScope's findUnique (account-scope.util) is a separate
+      // call from the one above that returns the full conversation — mock it
+      // to report this conversation lives on account 'a1'.
+      prisma.conversation.findUnique.mockResolvedValueOnce({ whatsappAccountId: 'a1' });
+      // The admin is scoped to account 'a2' only (not 'a1').
+      prisma.whatsappAccount.findMany.mockResolvedValueOnce([{ id: 'a2' }]);
+      const scopedAdmin = { id: 'admin2', role: 'admin' };
+      await expect(
+        messaging.send('c1', 'admin2', 'hi', undefined, scopedAdmin as never),
+      ).rejects.toThrow(NotFoundException);
       expect(wa.sendText).not.toHaveBeenCalled();
     });
   });
@@ -466,12 +480,20 @@ describe('ConversationsService', () => {
   });
 
   it('takeover sets admin_takeover + ai_off and remembers previous mode', async () => {
-    prisma.conversation.findUnique.mockResolvedValue({ aiMode: AiMode.ai_supervised });
+    prisma.conversation.findUnique.mockResolvedValue({ aiMode: AiMode.ai_supervised, whatsappAccountId: 'a1' });
     await chatOps.takeover('c1', 'admin');
     const data = prisma.conversation.update.mock.calls[0][0].data;
     expect(data.takeoverStatus).toBe(TakeoverStatus.admin_takeover);
     expect(data.aiMode).toBe(AiMode.ai_off);
     expect(data.previousAiMode).toBe(AiMode.ai_supervised);
+  });
+
+  it('takeover rejects an admin scoped to a different account (C1 broken-access-control regression)', async () => {
+    prisma.conversation.findUnique.mockResolvedValueOnce({ whatsappAccountId: 'a1' });
+    prisma.whatsappAccount.findMany.mockResolvedValueOnce([{ id: 'a2' }]);
+    const scopedAdmin = { id: 'admin2', role: 'admin' };
+    await expect(chatOps.takeover('c1', 'admin2', scopedAdmin as never)).rejects.toThrow(NotFoundException);
+    expect(prisma.conversation.update).not.toHaveBeenCalled();
   });
 
   it('returnToAi restores the previous mode (DR1), not ai_on', async () => {

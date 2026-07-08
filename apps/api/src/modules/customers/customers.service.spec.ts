@@ -17,6 +17,7 @@ describe('CustomersService', () => {
         update: jest.fn(),
       },
       user: { findUnique: jest.fn() },
+      whatsappAccount: { findMany: jest.fn().mockResolvedValue([]) },
       conversation: { findMany: jest.fn().mockResolvedValue([]) },
       message: { findMany: jest.fn().mockResolvedValue([]) },
       sentinelReview: { findMany: jest.fn().mockResolvedValue([]) },
@@ -136,6 +137,21 @@ describe('CustomersService', () => {
           'u1',
         ),
       ).rejects.toThrow(NotFoundException);
+    });
+    it('rejects a customer outside a scoped admin\'s accounts (H1 broken-access-control regression)', async () => {
+      prisma.customer.findMany.mockResolvedValue([
+        { id: 'a', tags: [], notes: null, sourceAccountId: 'other-account', assignedAdminId: null },
+      ]);
+      prisma.whatsappAccount.findMany.mockResolvedValue([{ id: 'my-account' }]);
+      const scopedAdmin = { id: 'admin1', role: 'admin' };
+      await expect(
+        service.bulkAction(
+          { customerIds: ['a'], leadStage: LeadStage.hot } as any,
+          'admin1',
+          scopedAdmin as never,
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.customer.update).not.toHaveBeenCalled();
     });
   });
 

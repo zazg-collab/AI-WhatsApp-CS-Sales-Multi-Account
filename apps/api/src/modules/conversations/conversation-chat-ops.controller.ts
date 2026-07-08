@@ -32,28 +32,28 @@ export class ConversationChatOpsController {
   @Roles('admin', 'supervisor', 'owner')
   @Post('start')
   start(@Body() dto: StartConversationDto, @CurrentUser() user: AuthUser) {
-    return this.conversations.startConversation(dto.accountId, dto.phoneNumber, dto.name, user.id);
+    return this.conversations.startConversation(dto.accountId, dto.phoneNumber, dto.name, user.id, user);
   }
 
   @ApiOperation({ summary: 'Check if a phone number is registered on WhatsApp' })
   @Roles('admin', 'supervisor', 'owner')
   @Post('validate-number')
-  validateNumber(@Body() dto: ValidateNumberDto) {
-    return this.conversations.validateNumber(dto.accountId, dto.phoneNumber);
+  validateNumber(@Body() dto: ValidateNumberDto, @CurrentUser() user: AuthUser) {
+    return this.conversations.validateNumber(dto.accountId, dto.phoneNumber, user);
   }
 
   @ApiOperation({ summary: 'Block a WhatsApp contact' })
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/block-contact')
   blockContact(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.setContactBlocked(id, true, user.id);
+    return this.conversations.setContactBlocked(id, true, user.id, user);
   }
 
   @ApiOperation({ summary: 'Unblock a WhatsApp contact' })
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/unblock-contact')
   unblockContact(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.setContactBlocked(id, false, user.id);
+    return this.conversations.setContactBlocked(id, false, user.id, user);
   }
 
   @ApiOperation({ summary: 'Mute or unmute a WhatsApp chat' })
@@ -64,7 +64,7 @@ export class ConversationChatOpsController {
     @Body() dto: MuteChatDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.setChatMuted(id, dto.mute !== false, user.id);
+    return this.conversations.setChatMuted(id, dto.mute !== false, user.id, user);
   }
 
   @ApiOperation({ summary: 'Archive or unarchive a WhatsApp chat' })
@@ -75,7 +75,7 @@ export class ConversationChatOpsController {
     @Body() dto: { archive?: boolean },
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.setChatArchived(id, dto.archive !== false, user.id);
+    return this.conversations.setChatArchived(id, dto.archive !== false, user.id, user);
   }
 
   @ApiOperation({ summary: 'Pin or unpin a WhatsApp chat' })
@@ -86,7 +86,7 @@ export class ConversationChatOpsController {
     @Body() dto: { pin?: boolean },
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.setChatPinned(id, dto.pin !== false, user.id);
+    return this.conversations.setChatPinned(id, dto.pin !== false, user.id, user);
   }
 
   @ApiOperation({ summary: 'Enable/disable disappearing messages for a WhatsApp chat' })
@@ -97,25 +97,25 @@ export class ConversationChatOpsController {
     @Body() dto: DisappearingMessagesDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.conversations.setDisappearingMessages(id, dto.enable, user.id, dto.duration);
+    return this.conversations.setDisappearingMessages(id, dto.enable, user.id, dto.duration, user);
   }
 
   @ApiOperation({ summary: 'Send admin typing presence to WhatsApp' })
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/typing')
-  typing(@Param('id') id: string, @Body() dto: { typing?: boolean }) {
-    return this.conversations.sendTyping(id, dto.typing !== false);
+  typing(@Param('id') id: string, @Body() dto: { typing?: boolean }, @CurrentUser() user: AuthUser) {
+    return this.conversations.sendTyping(id, dto.typing !== false, user);
   }
 
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/takeover')
   takeover(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.takeover(id, user.id);
+    return this.conversations.takeover(id, user.id, user);
   }
 
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/return-to-ai')
   returnToAi(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.conversations.returnToAi(id, user.id);
+    return this.conversations.returnToAi(id, user.id, user);
   }
 }

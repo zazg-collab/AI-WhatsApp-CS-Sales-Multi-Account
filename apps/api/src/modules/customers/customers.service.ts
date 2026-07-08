@@ -121,7 +121,7 @@ export class CustomersService {
     return updated;
   }
 
-  async bulkAction(dto: BulkCustomerActionDto, userId: string) {
+  async bulkAction(dto: BulkCustomerActionDto, userId: string, user?: ScopedUser) {
     const customerIds = [...new Set(dto.customerIds.map((id) => id.trim()).filter(Boolean))];
     if (customerIds.length === 0) throw new BadRequestException('At least one customer is required');
     if (customerIds.length > 100) {
@@ -143,7 +143,18 @@ export class CustomersService {
       }
     }
 
-    const customers = await this.prisma.customer.findMany({ where: { id: { in: customerIds } } });
+    let customers = await this.prisma.customer.findMany({ where: { id: { in: customerIds } } });
+    // A scoped admin can only bulk-act on customers within their account scope
+    // (mirrors get()'s per-customer check) — silently drop out-of-scope
+    // customers into the same "not found" bucket instead of acting on them.
+    const scope = await allowedAccountIds(this.prisma, user);
+    if (scope !== null) {
+      customers = customers.filter(
+        (customer) =>
+          (customer.sourceAccountId !== null && scope.includes(customer.sourceAccountId)) ||
+          customer.assignedAdminId === user?.id,
+      );
+    }
     if (customers.length !== customerIds.length) {
       const found = new Set(customers.map((customer) => customer.id));
       const missing = customerIds.filter((id) => !found.has(id));

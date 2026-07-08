@@ -93,7 +93,7 @@ export class CustomersController {
   @Post('bulk')
   @Roles('owner', 'supervisor', 'admin')
   bulkAction(@Body() dto: BulkCustomerActionDto, @CurrentUser() user: AuthUser) {
-    return this.customers.bulkAction(dto, user.id);
+    return this.customers.bulkAction(dto, user.id, user);
   }
 
   @ApiOperation({ summary: 'Get a customer by ID' })

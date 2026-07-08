@@ -106,8 +106,9 @@ describe('ConversationsController', () => {
 
   it('start delegates with the current user', () => {
     svc.startConversation = jest.fn().mockResolvedValue({ id: 'c1' });
-    chatOps.start({ accountId: 'a1', phoneNumber: '0812345678', name: 'Budi' } as any, { id: 'u1' } as any);
-    expect(svc.startConversation).toHaveBeenCalledWith('a1', '0812345678', 'Budi', 'u1');
+    const authUser = { id: 'u1' } as any;
+    chatOps.start({ accountId: 'a1', phoneNumber: '0812345678', name: 'Budi' } as any, authUser);
+    expect(svc.startConversation).toHaveBeenCalledWith('a1', '0812345678', 'Budi', 'u1', authUser);
   });
 
   it('export writes CSV', async () => {
