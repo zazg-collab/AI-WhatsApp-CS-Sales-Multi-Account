@@ -1,0 +1,11 @@
+# Default owner for everything — every PR requires this review.
+# Replace with the GitHub team/handle that should gate merges.
+*                       @filmdown526-ux
+
+# Deploy/CI surface and DB migrations are the highest-blast-radius changes.
+/.github/workflows/     @filmdown526-ux
+/scripts/               @filmdown526-ux
+/packages/database/prisma/migrations/  @filmdown526-ux
+/docker-compose*.yml    @filmdown526-ux
+/apps/api/Dockerfile    @filmdown526-ux
+/apps/web/Dockerfile    @filmdown526-ux

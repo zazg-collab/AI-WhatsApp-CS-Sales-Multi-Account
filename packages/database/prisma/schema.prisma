@@ -1,0 +1,755 @@
+// Hermes AI Sales & CS Control Center — data model
+// See PRD section 13. All tables map 1:1 to the PRD spec.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ─────────────────────────────────────────────────
+
+enum Role {
+  owner
+  supervisor
+  admin
+  viewer
+}
+
+enum UserStatus {
+  active
+  suspended
+}
+
+enum GatewayType {
+  baileys
+  gowa
+  cloud_api
+}
+
+enum SessionStatus {
+  connected
+  disconnected
+  qr_required
+  banned
+  reconnecting
+  paused
+}
+
+/// AI behaviour mode. Applies at account / bot / conversation level.
+enum AiMode {
+  ai_on
+  ai_off
+  ai_draft
+  ai_supervised
+  ai_paused
+}
+
+enum BotStatus {
+  active
+  inactive
+  draft
+}
+
+enum KnowledgeStatus {
+  draft
+  active
+  expired
+  archived
+  needs_review
+}
+
+enum LeadStage {
+  cold
+  warm
+  hot
+  very_hot
+}
+
+/// Workflow status of a conversation, set by admins (open → pending → resolved).
+enum ConversationStatus {
+  open
+  pending
+  resolved
+}
+
+enum TakeoverStatus {
+  ai_active
+  admin_takeover
+  waiting_admin
+  resolved
+  returned_to_ai
+}
+
+enum SenderType {
+  customer
+  admin
+  ai
+  system
+  sentinel
+}
+
+enum MessageType {
+  text
+  image
+  video
+  audio
+  voice
+  document
+  sticker
+  location
+  system
+}
+
+enum MessageStatus {
+  pending
+  sent
+  delivered
+  read
+  failed
+}
+
+enum SentinelDecision {
+  approve
+  draft
+  block
+  pause_ai
+  takeover_required
+}
+
+enum RiskLevel {
+  low
+  medium
+  high
+  critical
+}
+
+enum FollowUpStatus {
+  scheduled
+  sent
+  cancelled
+  done
+}
+
+enum CampaignStatus {
+  draft
+  pending_approval
+  approved
+  scheduled
+  running
+  paused
+  completed
+  cancelled
+  failed
+}
+
+enum CampaignRecipientStatus {
+  pending
+  queued
+  sending
+  sent
+  failed
+  skipped
+}
+
+// ── Models ────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(uuid())
+  name         String
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  role         Role       @default(admin)
+  status       UserStatus @default(active)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  deletedAt    DateTime?  @map("deleted_at")
+
+  assignedAccounts WhatsappAccount[] @relation("AccountAdmin")
+  assignedCustomers Customer[]       @relation("CustomerAdmin")
+  conversations    Conversation[]    @relation("ConversationAdmin")
+  followUps        FollowUp[]
+  auditLogs        AuditLog[]
+  createdCampaigns Campaign[]       @relation("CampaignCreatedBy")
+  approvedCampaigns Campaign[]      @relation("CampaignApprovedBy")
+  createdKnowledge KnowledgeBase[]   @relation("KnowledgeCreatedBy")
+  approvedKnowledge KnowledgeBase[]  @relation("KnowledgeApprovedBy")
+  quickReplies     QuickReply[]
+  reviewedLearning LearningProposal[] @relation("LearningReviewedBy")
+  createdAssets    Asset[]            @relation("AssetCreatedBy")
+
+  @@map("users")
+}
+
+model WhatsappAccount {
+  id              String        @id @default(uuid())
+  accountName     String        @map("account_name")
+  phoneNumber     String        @unique @map("phone_number")
+  gatewayType     GatewayType   @default(baileys) @map("gateway_type")
+  sessionStatus   SessionStatus @default(disconnected) @map("session_status")
+  assignedBotId   String?       @map("assigned_bot_id")
+  assignedAdminId String?       @map("assigned_admin_id")
+  aiMode          AiMode        @default(ai_draft) @map("ai_mode")
+  isActive        Boolean       @default(true) @map("is_active")
+  // Business hours + auto-away (outside hours): SLA pauses, an away message
+  // is sent (when the bot isn't on ai_on).
+  businessHoursEnabled Boolean  @default(false) @map("business_hours_enabled")
+  businessHoursStart   String?  @map("business_hours_start") // "HH:MM"
+  businessHoursEnd     String?  @map("business_hours_end")   // "HH:MM"
+  businessDays         Int[]    @default([1, 2, 3, 4, 5]) @map("business_days") // 0=Sun..6=Sat
+  businessTimezone     String?  @map("business_timezone")
+  awayMessage          String?  @map("away_message")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  assignedBot   Bot?           @relation(fields: [assignedBotId], references: [id])
+  assignedAdmin User?          @relation("AccountAdmin", fields: [assignedAdminId], references: [id])
+  customers     Customer[]
+  conversations Conversation[]
+  contacts      WhatsappContact[]
+  channels      WaChannel[]
+  campaigns     Campaign[]
+  quickReplies  QuickReply[]
+
+  @@map("whatsapp_accounts")
+}
+
+model Bot {
+  id              String    @id @default(uuid())
+  botName         String    @map("bot_name")
+  personaId       String?   @map("persona_id")
+  knowledgeBaseId String?   @map("knowledge_base_id")
+  marketingFlowId String?   @map("marketing_flow_id")
+  defaultAiMode   AiMode    @default(ai_draft) @map("default_ai_mode")
+  language        String    @default("id")
+  status          BotStatus @default(draft)
+  /// Last time AI Learning mined this bot's history. Lets a re-run skip the
+  /// transcript miners when no new messages have arrived since.
+  lastMinedAt     DateTime? @map("last_mined_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  persona       Persona?         @relation(fields: [personaId], references: [id])
+  knowledgeBase KnowledgeBase?   @relation(fields: [knowledgeBaseId], references: [id])
+  accounts      WhatsappAccount[]
+  conversations Conversation[]
+  sentinelReviews SentinelReview[]
+  learningProposals LearningProposal[]
+
+  @@map("bots")
+}
+
+model Persona {
+  id             String   @id @default(uuid())
+  name           String
+  soulMd         String   @map("soul_md")
+  tone           String?
+  style          String?
+  rules          String?
+  forbiddenWords String[] @default([]) @map("forbidden_words")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  bots Bot[]
+
+  @@map("personas")
+}
+
+model KnowledgeBase {
+  id          String          @id @default(uuid())
+  name        String
+  description String?
+  status      KnowledgeStatus @default(draft)
+  createdById String?         @map("created_by")
+  approvedById String?        @map("approved_by")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  createdBy  User?           @relation("KnowledgeCreatedBy", fields: [createdById], references: [id])
+  approvedBy User?           @relation("KnowledgeApprovedBy", fields: [approvedById], references: [id])
+  items      KnowledgeItem[]
+  bots       Bot[]
+
+  @@map("knowledge_bases")
+}
+
+model KnowledgeItem {
+  id              String          @id @default(uuid())
+  knowledgeBaseId String          @map("knowledge_base_id")
+  title           String
+  content         String
+  category        String?
+  productName     String?         @map("product_name")
+  validFrom       DateTime?       @map("valid_from")
+  validUntil      DateTime?       @map("valid_until")
+  status          KnowledgeStatus @default(draft)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  // Semantic-retrieval (pgvector). Written by the embedding pipeline, read via
+  // raw SQL (`embedding <=> $query`). Unsupported → never selected by the
+  // generated client; the column type/dimension lives in the migration.
+  embedding       Unsupported("vector")?
+  embeddingModel  String?         @map("embedding_model")
+  // Hash of title+content at embed time; lets re-index skip unchanged items.
+  contentHash     String?         @map("content_hash")
+
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  @@index([knowledgeBaseId])
+  @@map("knowledge_items")
+}
+
+model Customer {
+  id              String    @id @default(uuid())
+  name            String?
+  phoneNumber     String    @map("phone_number")
+  sourceAccountId String?   @map("source_account_id")
+  assignedAdminId String?   @map("assigned_admin_id")
+  status          String?
+  leadScore       Int       @default(0) @map("lead_score")
+  leadStage       LeadStage @default(cold) @map("lead_stage")
+  tags            String[]  @default([])
+  notes           String?
+  aiMemory        String?   @map("ai_memory")
+  optedOut        Boolean   @default(false) @map("opted_out")
+  optedOutAt      DateTime? @map("opted_out_at")
+  avatarUrl       String?   @map("avatar_url")
+  lastMessageAt   DateTime? @map("last_message_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  sourceAccount WhatsappAccount? @relation(fields: [sourceAccountId], references: [id], onDelete: Cascade)
+  assignedAdmin User?            @relation("CustomerAdmin", fields: [assignedAdminId], references: [id])
+  conversations      Conversation[]
+  followUps          FollowUp[]
+  campaignRecipients CampaignRecipient[]
+  whatsappContacts   WhatsappContact[]
+  learningProposals  LearningProposal[]
+
+  @@unique([phoneNumber, sourceAccountId])
+  @@index([leadStage])
+  @@index([sourceAccountId])
+  @@index([assignedAdminId])
+  @@index([lastMessageAt])
+  @@map("customers")
+}
+
+model WhatsappContact {
+  id              String   @id @default(uuid())
+  whatsappAccountId String @map("whatsapp_account_id")
+  customerId      String?  @map("customer_id")
+  jid             String
+  lid             String?
+  phoneNumber     String?  @map("phone_number")
+  name            String?
+  notify          String?
+  verifiedName    String?  @map("verified_name")
+  avatarUrl       String?  @map("avatar_url")
+  status          String?
+  raw             Json?
+  lastSyncedAt    DateTime @default(now()) @map("last_synced_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  customer        Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@unique([whatsappAccountId, jid])
+  @@index([whatsappAccountId])
+  @@index([phoneNumber])
+  @@map("whatsapp_contacts")
+}
+
+// Local mirror of channels (newsletters) created/followed via this account.
+// ponytail: Baileys has no bulk "list subscribed newsletters" call, only
+// per-jid lookups — so we track membership locally instead of asking Baileys
+// to enumerate. createChannel/followChannel write here; listChannels reads it.
+model WaChannel {
+  id              String   @id @default(uuid())
+  whatsappAccountId String @map("whatsapp_account_id")
+  channelId       String   @map("channel_id")
+  name            String?
+  description     String?
+  isFollowing     Boolean  @default(true) @map("is_following")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([whatsappAccountId, channelId])
+  @@index([whatsappAccountId])
+  @@map("wa_channels")
+}
+
+model Conversation {
+  id                String         @id @default(uuid())
+  customerId        String         @map("customer_id")
+  whatsappAccountId String         @map("whatsapp_account_id")
+  botId             String?        @map("bot_id")
+  aiMode            AiMode         @default(ai_draft) @map("ai_mode")
+  previousAiMode    AiMode?        @map("previous_ai_mode")
+  takeoverStatus    TakeoverStatus @default(ai_active) @map("takeover_status")
+  status            ConversationStatus @default(open)
+  unreadCount       Int            @default(0) @map("unread_count")
+  slaBreachedAt     DateTime?      @map("sla_breached_at")
+  labels            String[]       @default([])
+  lastAwayAt        DateTime?      @map("last_away_at")
+  csatScore         Int?           @map("csat_score")
+  csatRequestedAt   DateTime?      @map("csat_requested_at")
+  csatRespondedAt   DateTime?      @map("csat_responded_at")
+  /// When Sentinel auto-learn last mined this conversation (idempotency guard).
+  learnedAt         DateTime?      @map("learned_at")
+  assignedAdminId   String?        @map("assigned_admin_id")
+  lastMessage       String?        @map("last_message")
+  lastMessageAt     DateTime?      @map("last_message_at")
+  firstResponseAt   DateTime?      @map("first_response_at")
+  resolvedAt        DateTime?      @map("resolved_at")
+  reopenCount       Int            @default(0) @map("reopen_count")
+  sentimentLabel    String?        @map("sentiment_label")
+  sentimentScore    Int?           @map("sentiment_score")
+  sentimentAt       DateTime?      @map("sentiment_at")
+  chatJid           String?        @map("chat_jid")
+  isGroup           Boolean        @default(false) @map("is_group")
+  groupSubject      String?        @map("group_subject")
+  groupOwnerJid     String?        @map("group_owner_jid")
+  groupDescription  String?        @map("group_description")
+  groupParticipants Json?          @map("group_participants")
+  groupMetadata     Json?          @map("group_metadata")
+  isArchived        Boolean        @default(false) @map("is_archived")
+  isPinned          Boolean        @default(false) @map("is_pinned")
+  isMuted           Boolean        @default(false) @map("is_muted")
+  muteUntil         DateTime?      @map("mute_until")
+  isBlocked         Boolean        @default(false) @map("is_blocked")
+  disappearingDuration Int?        @map("disappearing_duration")
+  disappearingSetAt DateTime?      @map("disappearing_set_at")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  customer        Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  bot             Bot?            @relation(fields: [botId], references: [id])
+  assignedAdmin   User?           @relation("ConversationAdmin", fields: [assignedAdminId], references: [id])
+  messages        Message[]
+  sentinelReviews SentinelReview[]
+  followUps       FollowUp[]
+  campaignRecipients CampaignRecipient[]
+
+  @@index([whatsappAccountId])
+  @@index([customerId])
+  @@index([status])
+  @@index([assignedAdminId])
+  @@index([lastMessageAt])
+  @@unique([whatsappAccountId, chatJid])
+  @@map("conversations")
+}
+
+model Message {
+  id             String        @id @default(uuid())
+  conversationId String        @map("conversation_id")
+  senderType     SenderType    @map("sender_type")
+  senderId       String?       @map("sender_id")
+  messageType    MessageType   @default(text) @map("message_type")
+  content        String?
+  mediaUrl       String?       @map("media_url")
+  status         MessageStatus @default(pending)
+  aiGenerated    Boolean       @default(false) @map("ai_generated")
+  sentinelReviewId String?       @unique @map("sentinel_review_id")
+  externalId     String?       @map("external_id")
+  quotedMessageId String?      @map("quoted_message_id")
+  reactions      Json?         // { "👍": ["628.."], ... } emoji → reactor jids
+  editedAt       DateTime?     @map("edited_at")
+  deletedAt      DateTime?     @map("deleted_at") // set when revoked (deleted for everyone)
+  isStarred      Boolean       @default(false) @map("is_starred")
+  isForwarded    Boolean       @default(false) @map("is_forwarded")
+  receiptDetails Json?         @map("receipt_details")
+  rawWaPayload   Json?         @map("raw_wa_payload")
+  waMessageType  String?       @map("wa_message_type")
+  senderName     String?       @map("sender_name")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sentinelReview SentinelReview? @relation(fields: [sentinelReviewId], references: [id])
+  quotedMessage Message?     @relation("MessageQuote", fields: [quotedMessageId], references: [id], onDelete: SetNull)
+  quotedBy      Message[]    @relation("MessageQuote")
+
+  @@unique([conversationId, externalId])
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model SentinelReview {
+  id              String         @id @default(uuid())
+  messageId       String?        @map("message_id")
+  conversationId  String         @map("conversation_id")
+  botId           String?        @map("bot_id")
+  confidenceScore Int            @map("confidence_score")
+  riskScore       Int            @map("risk_score")
+  riskLevel       RiskLevel      @map("risk_level")
+  decision        SentinelDecision
+  reason          String?
+  recommendation  String?
+  // Short hash of the Sentinel system prompt that produced this review. Lets you
+  // group reviews by prompt version to see if a prompt edit shifted decisions.
+  promptVersion   String?        @map("prompt_version")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  bot          Bot?         @relation(fields: [botId], references: [id])
+  message      Message?
+
+  @@index([conversationId])
+  @@map("sentinel_reviews")
+}
+
+model FollowUp {
+  id                 String         @id @default(uuid())
+  customerId         String         @map("customer_id")
+  conversationId     String?        @map("conversation_id")
+  scheduledAt        DateTime       @map("scheduled_at")
+  status             FollowUpStatus @default(scheduled)
+  messageTemplate    String?        @map("message_template")
+  aiGeneratedMessage String?        @map("ai_generated_message")
+  assignedAdminId    String?        @map("assigned_admin_id")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  conversation  Conversation? @relation(fields: [conversationId], references: [id])
+  assignedAdmin User?         @relation(fields: [assignedAdminId], references: [id])
+
+  @@index([scheduledAt])
+  @@map("follow_ups")
+}
+
+
+model Campaign {
+  id                  String         @id @default(uuid())
+  name                String
+  messageTemplate     String         @map("message_template")
+  targetFilter        Json?          @map("target_filter")
+  status              CampaignStatus @default(draft)
+  whatsappAccountId   String         @map("whatsapp_account_id")
+  createdById         String?        @map("created_by_id")
+  approvedById        String?        @map("approved_by_id")
+  scheduledAt         DateTime?      @map("scheduled_at")
+  startedAt           DateTime?      @map("started_at")
+  completedAt         DateTime?      @map("completed_at")
+  rateLimitPerMinute  Int            @default(6) @map("rate_limit_per_minute")
+  humanDelayMinMs     Int            @default(5000) @map("human_delay_min_ms")
+  humanDelayMaxMs     Int            @default(20000) @map("human_delay_max_ms")
+  /// Optional media asset to broadcast (the messageTemplate becomes its caption).
+  assetId             String?        @map("asset_id")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  whatsappAccount WhatsappAccount @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  createdBy       User?           @relation("CampaignCreatedBy", fields: [createdById], references: [id])
+  approvedBy      User?           @relation("CampaignApprovedBy", fields: [approvedById], references: [id])
+  asset           Asset?          @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  recipients      CampaignRecipient[]
+
+  @@index([status])
+  @@index([whatsappAccountId])
+  @@map("campaigns")
+}
+
+model CampaignRecipient {
+  id             String                  @id @default(uuid())
+  campaignId     String                  @map("campaign_id")
+  customerId      String                  @map("customer_id")
+  conversationId  String?                 @map("conversation_id")
+  phoneNumber     String                  @map("phone_number")
+  status          CampaignRecipientStatus @default(pending)
+  idempotencyKey  String                  @unique @map("idempotency_key")
+  sentMessageId   String?                 @map("sent_message_id")
+  error           String?
+  sentAt          DateTime?               @map("sent_at")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+
+  campaign     Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id])
+
+  @@unique([campaignId, customerId])
+  @@index([campaignId, status])
+  @@index([customerId])
+  @@map("campaign_recipients")
+}
+
+/// Canned reply / message template. Scoped to one WhatsApp account, or global
+/// when whatsappAccountId is null. Optionally triggered by a "/shortcut".
+model QuickReply {
+  id                String   @id @default(uuid())
+  title             String
+  content           String
+  shortcut          String?
+  whatsappAccountId String?  @map("whatsapp_account_id")
+  createdById       String?  @map("created_by_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  whatsappAccount WhatsappAccount? @relation(fields: [whatsappAccountId], references: [id], onDelete: Cascade)
+  createdBy       User?            @relation(fields: [createdById], references: [id])
+
+  @@index([whatsappAccountId])
+  @@map("quick_replies")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String
+  entityType String?  @map("entity_type")
+  entityId   String?  @map("entity_id")
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+/// Runtime-editable application settings (key → JSON value). Overrides the
+/// matching env default when present. One row per setting key; read through
+/// SettingsService which layers these over env-derived defaults.
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}
+
+/// AI-mined learning proposals derived from synced conversation history.
+/// Everything lands here as `pending` for human review; on approve it is
+/// materialized into the live table (KnowledgeItem / Persona / Customer note).
+/// `type`: knowledge | persona | customer_memory | playbook
+/// `status`: pending | approved | rejected
+model LearningProposal {
+  id               String    @id @default(uuid())
+  botId            String?   @map("bot_id")
+  customerId       String?   @map("customer_id")
+  /// Conversation this proposal was mined from (Sentinel auto-learn on resolve).
+  conversationId   String?   @map("conversation_id")
+  type             String
+  status           String    @default("pending")
+  title            String
+  /// Type-specific proposed content (e.g. {content,category} for knowledge,
+  /// {soulMd,tone,style,rules,forbiddenWords} for persona).
+  payload          Json
+  /// Messages this proposal was derived from, for owner verification.
+  sourceMessageIds String[]  @default([]) @map("source_message_ids")
+  sourceSummary    String?   @map("source_summary")
+  confidence       Int       @default(0)
+  /// Id of the row created/updated when the proposal was approved.
+  resultEntityId   String?   @map("result_entity_id")
+  reviewedById     String?   @map("reviewed_by")
+  reviewedAt       DateTime? @map("reviewed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  bot        Bot?      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  reviewedBy User?     @relation("LearningReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([status])
+  @@index([botId])
+  @@index([type])
+  @@map("learning_proposals")
+}
+
+/// A curated, reusable media asset the bot/admin can send to build a sale:
+/// brochures/company-profile (document), product cards (image + marketplace
+/// link), and testimonials (image/video). Files are NEVER fabricated by the
+/// AI — it may only pick from this library.
+/// `kind`: image | video | document   `purpose`: brochure | product | testimonial
+/// `status`: active | draft
+model Asset {
+  id              String   @id @default(uuid())
+  kind            String
+  purpose         String
+  title           String
+  caption         String?
+  storageKey      String   @map("storage_key")
+  mediaUrl        String   @map("media_url")
+  mimeType        String   @map("mime_type")
+  /// For purpose=product: the real marketplace/catalog link (Shopee/Tokopedia).
+  marketplaceUrl  String?  @map("marketplace_url")
+  tags            String[] @default([])
+  triggerKeywords String[] @default([]) @map("trigger_keywords")
+  status          String   @default("active")
+  /// Opt-in whitelist: only assets with autoSend=true may be sent automatically
+  /// by the bot under ai_on (and only when ASSET_AUTOSEND_ENABLED is set).
+  autoSend        Boolean  @default(false) @map("auto_send")
+  createdById     String?  @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  createdBy User?      @relation("AssetCreatedBy", fields: [createdById], references: [id])
+  campaigns Campaign[]
+
+  @@index([purpose])
+  @@index([status])
+  @@map("assets")
+}
+
+/// Product catalog with live stock, synced from the warehouse system
+/// (spreadsheet export, published Google Sheet, or — phase 2 — an external
+/// database). The bot answers stock questions only from this data; it never
+/// fabricates availability.
+model Product {
+  id           String    @id @default(uuid())
+  sku          String    @unique
+  name         String
+  category     String?
+  price        Int?
+  /// ISO 4217 currency code (e.g. "IDR", "USD", "EUR"). Null = unset/unknown.
+  currency     String?
+  stock        Int       @default(0)
+  unit         String?
+  description  String?
+  status       String    @default("active")
+  /// Where this row was last synced from (e.g. "csv", "gsheet:<id>").
+  source       String?
+  lastSyncedAt DateTime? @map("last_synced_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@index([status])
+  @@map("products")
+}
+
+/// A configured product data source that can be re-synced on demand.
+/// `type`: gsheet_csv (published-CSV URL) | postgres (phase 2)
+model ProductSource {
+  id           String    @id @default(uuid())
+  type         String
+  name         String
+  /// Type-specific config, e.g. { "url": "https://.../pub?output=csv" }.
+  config       Json
+  status       String    @default("active")
+  lastSyncedAt DateTime? @map("last_synced_at")
+  lastResult   String?   @map("last_result")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("product_sources")
+}
+
+model WebhookEndpoint {
+  id        String   @id @default(uuid())
+  url       String
+  secret    String   // HMAC-SHA256 signing key
+  events    String[] @default([])
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("webhook_endpoints")
+}

@@ -1,0 +1,4 @@
+ALTER TABLE "conversations"
+  ADD COLUMN IF NOT EXISTS "first_response_at" TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS "resolved_at"       TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS "reopen_count"      INTEGER NOT NULL DEFAULT 0;

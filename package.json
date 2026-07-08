@@ -1,0 +1,45 @@
+{
+  "name": "hermes-control-center",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hermes AI Sales & Customer Service Control Center",
+  "license": "MIT",
+  "author": "filmdown526-ux",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account.git"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev --workspace=@hermes/api",
+    "dev:web": "npm run dev --workspace=@hermes/web",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "db:generate": "npm run generate --workspace=@hermes/database",
+    "db:migrate": "npm run migrate --workspace=@hermes/database",
+    "db:seed": "npm run seed --workspace=@hermes/database",
+    "kb:reindex": "npm run kb:reindex --workspace=@hermes/api",
+    "test": "node scripts/qa-check.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@nestjs/bullmq": "^11.0.4",
+    "bullmq": "^5.78.0",
+    "headroom-ai": "^0.22.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^17.6.0",
+    "typescript-eslint": "^8.61.0"
+  },
+  "overrides": {
+    "reflect-metadata": "0.1.14"
+  }
+}

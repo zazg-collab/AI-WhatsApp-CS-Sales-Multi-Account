@@ -1,0 +1,66 @@
+# Production overrides — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file overrides restart policies, enables Redis password + persistence,
+# adds the Nginx reverse proxy with SSL, and wires NODE_ENV=production everywhere.
+
+services:
+  postgres:
+    restart: always
+    ports: []
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  redis:
+    restart: always
+    ports: []
+    # No weak default: deploy fails loudly if REDIS_PASSWORD is unset rather than
+    # shipping a guessable password to production.
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in production}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  api:
+    restart: always
+    environment:
+      - NODE_ENV=production
+      # Redis now requires a password in prod — the connection string must carry
+      # it or the API can't reach the queue/cache.
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in production}@redis:6379
+      # Encrypts external credentials at rest; must be a strong random value in prod.
+      - SECRET_ENCRYPTION_KEY=${SECRET_ENCRYPTION_KEY:?SECRET_ENCRYPTION_KEY must be set in production}
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  web:
+    restart: always
+    environment:
+      - NODE_ENV=production
+      # Required, no placeholder default — an unset/wrong public URL silently ships
+      # a broken frontend. Fail fast instead.
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL must be set in production}
+      - NEXT_PUBLIC_SOCKET_URL=${NEXT_PUBLIC_SOCKET_URL:?NEXT_PUBLIC_SOCKET_URL must be set in production}
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  nginx:
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot_certs:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    restart: always
+
+volumes:
+  certbot_certs:
+  certbot_www:

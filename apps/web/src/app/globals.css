@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+@layer base {
+  body {
+    font-variant-numeric: tabular-nums;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+
+  :focus-visible {
+    outline: 2px solid theme('colors.hermes.500');
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: theme('colors.hermes.600');
+    color: #ffffff;
+  }
+
+  button, a, input, textarea, select {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .operations-surface {
+    background-color: theme('colors.gray.50');
+    background-image: linear-gradient(to right, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .dark .operations-surface {
+    background-color: theme('colors.gray.950');
+    background-image: linear-gradient(to right, rgba(51, 65, 85, 0.35) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(51, 65, 85, 0.35) 1px, transparent 1px);
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.gray.200') transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 5px; height: 5px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: theme('colors.gray.200');
+    border-radius: 9999px;
+  }
+  .dark .scrollbar-thin { scrollbar-color: theme('colors.gray.700') transparent; }
+  .dark .scrollbar-thin::-webkit-scrollbar-thumb { background-color: theme('colors.gray.700'); }
+
+  /* Page entrance animation */
+  .animate-fade-in {
+    animation: fadeIn 0.22s ease-out both;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .text-gradient { color: theme('colors.hermes.700'); }
+  .dark .text-gradient { color: theme('colors.hermes.300'); }
+
+  /* Shimmer skeleton */
+  .animate-shimmer {
+    background: linear-gradient(90deg, #f1f5f9 25%, #f8fafc 50%, #f1f5f9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+  .dark .animate-shimmer {
+    background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+    background-size: 200% 100%;
+  }
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

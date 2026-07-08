@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hermes SalesOps Enterprise UIUX"
+  short_description: "Audit Hermes UI into enterprise SalesOps quality"
+  default_prompt: "Use $hermes-salesops-enterprise-uiux to audit and redesign all Hermes SalesOps pages for enterprise UI/UX quality."

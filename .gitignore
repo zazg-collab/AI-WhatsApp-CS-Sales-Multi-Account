@@ -1,0 +1,52 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+
+# env
+.env
+.env.local
+*.local
+
+# logs
+*.log
+npm-debug.log*
+*compact.txt
+
+# prisma
+packages/database/prisma/*.db
+
+# whatsapp sessions + downloaded inbound media
+.wa-sessions/
+.wa-media/
+auth_info_baileys/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# os
+.DS_Store
+*.tsbuildinfo
+data/
+
+# Local tooling / caches (not for VCS)
+.npm-cache/
+.claude/
+nul
+
+# Redesign-skill scaffolding / scratch artifacts (not for VCS)
+shared-references/
+frontend_redesign_skill_flow.md
+scripts/redesign_quality_gate.py
+
+# agent scratch
+.claude_*
+
+# portable Hermes Agent runtime (large binaries — never commit)
+hermes-portable/
+memory/
+.serena/
