@@ -125,19 +125,6 @@ describe('SentinelService', () => {
     });
   });
 
-  describe('approve/block', () => {
-    it('approve sets ai_on', async () => {
-      prisma.conversation.update.mockResolvedValue({});
-      await service.approve('c1');
-      expect(prisma.conversation.update.mock.calls[0][0].data.aiMode).toBe('ai_on');
-    });
-    it('block pauses ai', async () => {
-      prisma.conversation.update.mockResolvedValue({});
-      await service.block('c1');
-      expect(prisma.conversation.update.mock.calls[0][0].data.aiMode).toBe('ai_paused');
-    });
-  });
-
   describe('dashboards', () => {
     it('dailyReport aggregates', async () => {
       const r = await service.dailyReport();

@@ -482,20 +482,6 @@ export class SentinelService {
 
     return { bot: bot.botName, metrics, insight };
   }
-
-  async approve(conversationId: string) {
-    return this.prisma.conversation.update({
-      where: { id: conversationId },
-      data: { aiMode: 'ai_on', takeoverStatus: 'returned_to_ai' },
-    });
-  }
-
-  async block(conversationId: string) {
-    return this.prisma.conversation.update({
-      where: { id: conversationId },
-      data: { aiMode: 'ai_paused', takeoverStatus: 'waiting_admin' },
-    });
-  }
 }
 
 function clamp(n: unknown): number {
