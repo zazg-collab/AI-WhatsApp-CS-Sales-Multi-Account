@@ -962,6 +962,10 @@ export class WaService implements OnModuleInit {
     return this.gateway.muteChannel(accountId, channelId, mute);
   }
 
+  getChannelSubscribers(accountId: string, channelId: string) {
+    return this.gateway.getChannelSubscribers(accountId, channelId);
+  }
+
   reactToNewsletterMessage(accountId: string, channelId: string, serverId: string, reaction: string) {
     return this.gateway.reactToNewsletterMessage(accountId, channelId, serverId, reaction);
   }

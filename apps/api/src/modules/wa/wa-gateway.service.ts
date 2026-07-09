@@ -680,6 +680,12 @@ export class WaGatewayService {
     }
   }
 
+  /** Baileys' only channel-analytics surface: current subscriber count. */
+  async getChannelSubscribers(accountId: string, channelId: string): Promise<{ subscribers: number }> {
+    const sock = this.sock(accountId);
+    return (sock as any).newsletterSubscribers(channelId);
+  }
+
   async reactToNewsletterMessage(accountId: string, channelId: string, serverId: string, reaction: string): Promise<void> {
     const sock = this.sock(accountId);
     await (sock as any).newsletterReactMessage(channelId, serverId, reaction);

@@ -25,8 +25,6 @@ interface Channel {
   id?: string;
   name?: string;
   description?: string;
-  subscriberCount?: number;
-  followers?: number;
   [key: string]: unknown;
 }
 
@@ -57,6 +55,15 @@ export default function ChannelsPage() {
   const [actionInFlight, setActionInFlight] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'danger' } | null>(null);
 
+  // Subscriber counts — Baileys has no bulk field for this, fetched per channel.
+  const [subscriberCounts, setSubscriberCounts] = useState<Record<string, number>>({});
+
+  // Post-to-channel modal
+  const [postChannelId, setPostChannelId] = useState<string | null>(null);
+  const [postText, setPostText] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
+
   useEffect(() => {
     api<WaAccount[]>('/wa/accounts')
       .then((data) => {
@@ -72,12 +79,41 @@ export default function ChannelsPage() {
     if (!selectedAccountId) return;
     setChannels([]);
     setChannelsError(null);
+    setSubscriberCounts({});
     setLoadingChannels(true);
     api<Channel[]>(`/wa/accounts/${selectedAccountId}/channels`)
-      .then((data) => setChannels(data ?? []))
+      .then((data) => {
+        const list = data ?? [];
+        setChannels(list);
+        for (const c of list) {
+          const id = c.id as string | undefined;
+          if (!id) continue;
+          api<{ subscribers: number }>(`/wa/accounts/${selectedAccountId}/channels/${id}/subscribers`)
+            .then((r) => setSubscriberCounts((prev) => ({ ...prev, [id]: r.subscribers })))
+            .catch(() => {});
+        }
+      })
       .catch((err: Error) => setChannelsError(err.message ?? 'Failed to load channels'))
       .finally(() => setLoadingChannels(false));
   }, [selectedAccountId]);
+
+  async function handlePostToChannel() {
+    if (!postChannelId || !postText.trim()) return;
+    setPosting(true);
+    setPostError(null);
+    try {
+      await api(`/wa/accounts/${selectedAccountId}/channels/${postChannelId}/post`, {
+        method: 'POST',
+        body: JSON.stringify({ text: postText.trim() }),
+      });
+      setPostChannelId(null);
+      setPostText('');
+    } catch (err: unknown) {
+      setPostError((err as Error).message ?? 'Failed to post to channel');
+    } finally {
+      setPosting(false);
+    }
+  }
 
   async function handleCreate() {
     if (!createName.trim()) return;
@@ -158,12 +194,10 @@ export default function ChannelsPage() {
   }
 
   const channelName = (c: Channel) => (c.name as string | undefined) ?? (c.id as string | undefined) ?? 'Unnamed Channel';
-  const followerCount = (c: Channel) =>
-    typeof c.subscriberCount === 'number'
-      ? c.subscriberCount
-      : typeof c.followers === 'number'
-      ? c.followers
-      : null;
+  const followerCount = (c: Channel) => {
+    const id = c.id as string | undefined;
+    return id && id in subscriberCounts ? subscriberCounts[id] : null;
+  };
 
   return (
     <AppLayout>
@@ -251,6 +285,13 @@ export default function ChannelsPage() {
                         </div>
                       </div>
 
+                      <button
+                        className="rounded-lg bg-sentinel-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sentinel-700"
+                        onClick={() => { setPostChannelId(id); setPostText(''); setPostError(null); }}
+                      >
+                        Post to channel
+                      </button>
+
                       {/* Actions */}
                       <div className="flex gap-2">
                         <button
@@ -332,6 +373,30 @@ export default function ChannelsPage() {
             {JSON.stringify(metaData, null, 2)}
           </pre>
         )}
+      </Modal>
+
+      {/* Post to channel modal */}
+      <Modal open={!!postChannelId} onClose={() => setPostChannelId(null)} title="Post to channel">
+        <div className="flex flex-col gap-4">
+          <Field label="Message">
+            <textarea
+              className={inputClass}
+              rows={4}
+              placeholder="What's new?"
+              value={postText}
+              onChange={(e) => setPostText(e.target.value)}
+            />
+          </Field>
+          {postError && <p className="text-sm text-red-500">{postError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setPostChannelId(null)} disabled={posting}>
+              Cancel
+            </Button>
+            <Button onClick={handlePostToChannel} disabled={posting || !postText.trim()}>
+              {posting ? 'Posting...' : 'Post'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </AppLayout>
   );

@@ -31,6 +31,7 @@ import {
   FollowChannelDto,
   MuteChannelDto,
   ReactNewsletterDto,
+  PostToChannelDto,
   AddContactDto,
   SendLinkPreviewDto,
   SendTextStatusDto,
@@ -359,6 +360,21 @@ export class WaOpsController {
   async muteChannel(@Param('id') id: string, @Param('channelId') channelId: string, @Body() dto: MuteChannelDto) {
     await this.wa.muteChannel(id, channelId, dto.mute);
     return { success: true };
+  }
+
+  @ApiOperation({ summary: 'Get subscriber count for a channel (only analytics Baileys exposes)' })
+  @Roles('viewer')
+  @Get('channels/:channelId/subscribers')
+  getChannelSubscribers(@Param('id') id: string, @Param('channelId') channelId: string) {
+    return this.wa.getChannelSubscribers(id, channelId);
+  }
+
+  @ApiOperation({ summary: 'Post a text message to a channel/newsletter (admin-owned channels only)' })
+  @Roles('owner', 'supervisor', 'admin')
+  @Post('channels/:channelId/post')
+  async postToChannel(@Param('id') id: string, @Param('channelId') channelId: string, @Body() dto: PostToChannelDto) {
+    const externalId = await this.wa.sendText(id, channelId, dto.text);
+    return { success: true, externalId };
   }
 
   @ApiOperation({ summary: 'React to a newsletter message' })

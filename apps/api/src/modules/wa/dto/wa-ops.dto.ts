@@ -118,6 +118,10 @@ export class ReactNewsletterDto {
   @IsString() @MaxLength(10) reaction!: string;
 }
 
+export class PostToChannelDto {
+  @IsString() @MaxLength(4096) text!: string;
+}
+
 export class AddContactDto {
   @IsString() phone!: string;
   @IsString() @MaxLength(200) fullName!: string;
