@@ -17,6 +17,7 @@
     "dev:api": "npm run start:dev --workspace=@sentinel/api",
     "dev:web": "npm run dev --workspace=@sentinel/web",
     "build": "npm run build --workspaces --if-present",
+    "heroku-postbuild": "npm run db:generate && npm run build --workspace=@sentinel/api",
     "lint": "npm run lint --workspaces --if-present",
     "db:generate": "npm run generate --workspace=@sentinel/database",
     "db:migrate": "npm run migrate --workspace=@sentinel/database",
