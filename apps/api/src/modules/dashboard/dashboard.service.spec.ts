@@ -10,6 +10,7 @@ describe('DashboardService', () => {
         count: jest.fn().mockResolvedValue(0),
         findMany: jest.fn().mockResolvedValue([]),
         groupBy: jest.fn().mockResolvedValue([]),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { reopenCount: 0 } }),
       },
       followUp: { count: jest.fn().mockResolvedValue(0) },
       message: {
@@ -18,6 +19,7 @@ describe('DashboardService', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
       customer: { count: jest.fn().mockResolvedValue(0), groupBy: jest.fn().mockResolvedValue([]) },
+      $queryRaw: jest.fn().mockResolvedValue([{ avg_seconds: null }]),
     };
     service = new DashboardService(prisma);
   });

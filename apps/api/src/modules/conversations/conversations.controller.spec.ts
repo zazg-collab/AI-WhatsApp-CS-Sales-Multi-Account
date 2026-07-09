@@ -33,11 +33,11 @@ describe('ConversationsController', () => {
   const USER = { id: 'u1', role: 'owner' } as any;
 
   it('list parses query params', () => {
-    controller.list(USER, 'a1', AiMode.ai_on, ConversationStatus.open, 'u1', 'vip', 'budi', 'true', '2', '10');
+    controller.list(USER, 'a1', AiMode.ai_on, ConversationStatus.open, 'u1', 'vip', 'budi', 'true', 'true', '2', '10');
     expect(svc.list).toHaveBeenCalledWith({
       accountId: 'a1', aiMode: AiMode.ai_on, status: ConversationStatus.open,
       assignedAdminId: 'u1', label: 'vip', search: 'budi',
-      needsAttention: true, page: 2, limit: 10, user: USER,
+      needsAttention: true, excludeGroups: true, page: 2, limit: 10, user: USER,
     });
   });
 

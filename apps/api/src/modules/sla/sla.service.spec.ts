@@ -5,6 +5,7 @@ function makeService(overrides: { responseMinutes?: number } = {}) {
     conversation: {
       findMany: jest.fn().mockResolvedValue([]),
       update: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
   };
   const events: any = { emitToAccount: jest.fn() };
@@ -105,17 +106,26 @@ describe('SlaService', () => {
 
   it('does not re-flag an already-breached conversation', async () => {
     const { service, prisma, notifications } = makeService();
-    prisma.conversation.findMany.mockResolvedValue([
-      {
-        id: 'c1', whatsappAccountId: 'a1', status: 'open', slaBreachedAt: new Date(),
-        messages: [{ senderType: 'customer', createdAt: longAgo }],
-        customer: { name: 'Budi', phoneNumber: '628' },
-        whatsappAccount: { id: 'a1', accountName: 'Sales' },
-      },
-    ]);
+    // Breach-scan and idle-close both page through conversation.findMany;
+    // only serve the fixture to the breach-scan query (identified by its
+    // `customer` select) so the idle-close loop sees no candidates.
+    prisma.conversation.findMany.mockImplementation((args: any) =>
+      Promise.resolve(
+        args?.select?.customer
+          ? [
+              {
+                id: 'c1', whatsappAccountId: 'a1', status: 'open', slaBreachedAt: new Date(),
+                messages: [{ senderType: 'customer', createdAt: longAgo }],
+                customer: { name: 'Budi', phoneNumber: '628' },
+                whatsappAccount: { id: 'a1', accountName: 'Sales' },
+              },
+            ]
+          : [],
+      ),
+    );
     const r = await service.scan();
     expect(prisma.conversation.update).not.toHaveBeenCalled();
     expect(notifications.send).not.toHaveBeenCalled();
-    expect(r).toEqual({ breached: 0, cleared: 0 });
+    expect(r).toEqual({ breached: 0, cleared: 0, autoClosed: 0 });
   });
 });

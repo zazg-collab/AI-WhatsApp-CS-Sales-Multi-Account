@@ -45,7 +45,7 @@ describe('CustomersService', () => {
   describe('get', () => {
     it('returns customer', async () => {
       prisma.customer.findUnique.mockResolvedValue({ id: 'c1' });
-      expect(await service.get('c1')).toEqual({ id: 'c1' });
+      expect(await service.get('c1')).toEqual({ id: 'c1', avatarUrl: null, waName: null });
     });
     it('throws when missing', async () => {
       prisma.customer.findUnique.mockResolvedValue(null);

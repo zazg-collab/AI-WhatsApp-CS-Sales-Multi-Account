@@ -104,7 +104,7 @@ describe('ConversationsService', () => {
       await expect(service.get('c1')).rejects.toThrow(NotFoundException);
     });
     it('returns the conversation with its most recent message page + cursor', async () => {
-      prisma.conversation.findUnique.mockResolvedValue({ id: 'c1' });
+      prisma.conversation.findUnique.mockResolvedValue({ id: 'c1', customer: { whatsappContacts: [] } });
       prisma.message.findMany.mockResolvedValue([
         { id: 'm2', createdAt: new Date('2024-01-02') },
         { id: 'm1', createdAt: new Date('2024-01-01') },
@@ -445,7 +445,7 @@ describe('ConversationsService', () => {
       const file = { buffer: Buffer.from('img'), mimetype: 'image/png', originalname: 'p.png' };
       await messaging.sendUploadedMedia('c1', 'admin', file, 'hi');
       expect(storage.save).toHaveBeenCalledWith(file.buffer, 'png');
-      expect(wa.sendMediaBuffer).toHaveBeenCalledWith('a1', '628', 'image', file.buffer, 'image/png', 'hi', 'p.png');
+      expect(wa.sendMediaBuffer).toHaveBeenCalledWith('a1', '628', 'image', file.buffer, 'image/png', 'hi', 'p.png', false);
       expect(prisma.message.create.mock.calls[0][0].data.mediaUrl).toBe('/media/k.png');
       expect(events.emitToAccount).toHaveBeenCalledWith('a1', 'message:new', expect.anything());
     });
