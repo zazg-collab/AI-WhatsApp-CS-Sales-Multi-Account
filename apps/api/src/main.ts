@@ -7,7 +7,12 @@ import { StructuredLogger } from './common/structured-logger';
 import { ErrorReporterService } from './common/error-reporter.service';
 
 async function bootstrap() {
+  // ponytail: temporary boot-timing diagnostic for the H20 boot-timeout
+  // investigation — plain console.log so it prints even before the Nest
+  // logger is wired up (bufferLogs holds back the Nest Logger, not this).
+  console.log('[boot] bootstrap() started, creating Nest app...');
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  console.log('[boot] Nest app created (all modules initialized)');
   // Machine-parseable JSON logs with per-request correlation ids.
   app.useLogger(new StructuredLogger());
   app.getHttpAdapter().getInstance().disable('x-powered-by');
