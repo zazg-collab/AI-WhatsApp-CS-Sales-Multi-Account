@@ -15,6 +15,8 @@ export const dict: Dict = {
   mediaSendLocation: { id: 'Kirim lokasi', en: 'Send location' },
   mediaSendPoll: { id: 'Kirim polling', en: 'Send poll' },
   mediaSendContact: { id: 'Kirim kontak', en: 'Send contact' },
+  mediaSendSticker: { id: 'Kirim sebagai stiker', en: 'Send as sticker' },
+  mediaSendViewOnce: { id: 'Kirim lihat sekali', en: 'Send view once' },
   mediaLocationPlaceholder: { id: 'latitude, longitude, nama (opsional)', en: 'latitude, longitude, name (optional)' },
   mediaPollPlaceholder: { id: 'Pertanyaan | Opsi 1 | Opsi 2', en: 'Question | Option 1 | Option 2' },
   mediaContactPlaceholder: { id: 'Nama | Nomor telepon', en: 'Name | Phone number' },

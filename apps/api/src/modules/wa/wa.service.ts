@@ -728,13 +728,14 @@ export class WaService implements OnModuleInit {
   sendMediaBuffer(
     accountId: string,
     phone: string,
-    mediaType: 'image' | 'document' | 'audio' | 'video',
+    mediaType: 'image' | 'document' | 'audio' | 'video' | 'sticker',
     buffer: Buffer,
     mimetype: string,
     caption?: string,
     fileName?: string,
+    viewOnce = false,
   ): Promise<string | null> {
-    return this.gateway.sendMediaBuffer(accountId, phoneToJid(phone), mediaType, buffer, mimetype, caption, fileName);
+    return this.gateway.sendMediaBuffer(accountId, phoneToJid(phone), mediaType, buffer, mimetype, caption, fileName, viewOnce);
   }
 
   sendLocation(accountId: string, phone: string, latitude: number, longitude: number, name?: string): Promise<string | null> {

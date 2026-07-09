@@ -27,7 +27,7 @@ interface ChatComposerProps {
   onComposerChange: (value: string) => void;
   onSend: (text: string) => Promise<void>;
   onAttachMedia?: () => void;
-  onUploadFile?: (file: File) => Promise<void>;
+  onUploadFile?: (file: File, asSticker?: boolean, viewOnce?: boolean) => Promise<void>;
   onSendLocation?: (raw: string) => void;
   onSendPoll?: (raw: string) => void;
   onSendContacts?: (raw: string) => void;
@@ -137,7 +137,24 @@ export function ChatComposer({
   const t = useT(dict);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pendingUploadModeRef = useRef<'sticker' | 'viewOnce' | null>(null);
+  const [filePicker, setFilePicker] = useState<'sticker' | 'viewOnce' | null>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  // The file input's `accept` must update before the click fires, so open the
+  // picker on the next tick once React has re-rendered it with the right filter.
+  useEffect(() => {
+    if (filePicker) {
+      fileInputRef.current?.click();
+      setFilePicker(null);
+    }
+  }, [filePicker]);
+
+  const openMediaFilePicker = (mode: 'sticker' | 'viewOnce' | null) => {
+    pendingUploadModeRef.current = mode;
+    if (mode) setFilePicker(mode);
+    else fileInputRef.current?.click();
+  };
 
   const [sending, setSending] = useState(false);
   const [mediaForm, setMediaForm] = useState<MediaForm | null>(null);
@@ -494,7 +511,7 @@ export function ChatComposer({
               <div className="space-y-1 p-2">
                 <button
                   onClick={() => {
-                    if (onUploadFile) fileInputRef.current?.click();
+                    if (onUploadFile) openMediaFilePicker(null);
                     else onAttachMedia?.();
                     close();
                   }}
@@ -504,6 +521,24 @@ export function ChatComposer({
                   <Paperclip className="h-4 w-4" aria-hidden="true" />
                   {t('attachMedia')}
                 </button>
+                {onUploadFile && (
+                  <button
+                    onClick={() => { openMediaFilePicker('sticker'); close(); }}
+                    disabled={disabled}
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                  >
+                    🏷️ {t('mediaSendSticker')}
+                  </button>
+                )}
+                {onUploadFile && (
+                  <button
+                    onClick={() => { openMediaFilePicker('viewOnce'); close(); }}
+                    disabled={disabled}
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-700"
+                  >
+                    1️⃣ {t('mediaSendViewOnce')}
+                  </button>
+                )}
                 {onSendLocation && (
                   <button
                     onClick={() => openMediaForm('location')}
@@ -626,12 +661,15 @@ export function ChatComposer({
       <input
         ref={fileInputRef}
         type="file"
+        accept={filePicker === 'sticker' ? 'image/*' : filePicker === 'viewOnce' ? 'image/*,video/*' : undefined}
         hidden
         aria-hidden="true"
         onChange={(e) => {
           const file = e.target.files?.[0];
+          const mode = pendingUploadModeRef.current;
+          pendingUploadModeRef.current = null;
           if (file && onUploadFile) {
-            onUploadFile(file).finally(() => {
+            onUploadFile(file, mode === 'sticker', mode === 'viewOnce').finally(() => {
               if (fileInputRef.current) fileInputRef.current.value = '';
             });
           }

@@ -205,9 +205,11 @@ export class ConversationMessagesController {
     @Param('id') id: string,
     @UploadedFile() file: { buffer: Buffer; mimetype: string; originalname?: string } | undefined,
     @Body('caption') caption: string | undefined,
+    @Body('asSticker') asSticker: string | undefined,
+    @Body('viewOnce') viewOnce: string | undefined,
     @CurrentUser() user: AuthUser,
   ) {
     if (!file?.buffer?.length) throw new BadRequestException('No file uploaded');
-    return this.conversations.sendUploadedMedia(id, user.id, file, caption, user);
+    return this.conversations.sendUploadedMedia(id, user.id, file, caption, user, asSticker === 'true', viewOnce === 'true');
   }
 }

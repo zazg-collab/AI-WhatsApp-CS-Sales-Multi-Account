@@ -355,6 +355,8 @@ export class ConversationMessagingService {
     file: { buffer: Buffer; mimetype: string; originalname?: string },
     caption?: string,
     user?: ScopedUser,
+    asSticker = false,
+    viewOnce = false,
   ) {
     await assertConversationScope(this.prisma, id, user);
     const conversation = await this.prisma.conversation.findUnique({
@@ -363,7 +365,9 @@ export class ConversationMessagingService {
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
 
-    const mediaType = mediaTypeForMime(file.mimetype);
+    const mediaType = asSticker && file.mimetype.startsWith('image/') ? 'sticker' : mediaTypeForMime(file.mimetype);
+    // We store the original (pre-webp-conversion) bytes for our own record/thumbnail —
+    // the sticker-specific webp conversion only happens on the buffer sent to Baileys.
     const { url } = await this.storage.save(file.buffer, extForMimetype(file.mimetype));
 
     const externalId = await this.wa.sendMediaBuffer(
@@ -374,6 +378,7 @@ export class ConversationMessagingService {
       file.mimetype,
       caption,
       file.originalname,
+      viewOnce,
     );
 
     const typeMap: Record<string, MessageType> = {
@@ -381,6 +386,7 @@ export class ConversationMessagingService {
       document: MessageType.document,
       audio: MessageType.audio,
       video: MessageType.video,
+      sticker: MessageType.sticker,
     };
 
     const message = await this.prisma.message.create({

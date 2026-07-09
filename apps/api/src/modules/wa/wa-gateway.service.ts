@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { WASocket } from '@whiskeysockets/baileys';
+import sharp from 'sharp';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { WaSessionStore } from './wa-session.store';
@@ -151,22 +152,32 @@ export class WaGatewayService {
   async sendMediaBuffer(
     accountId: string,
     chatId: string,
-    mediaType: 'image' | 'document' | 'audio' | 'video',
+    mediaType: 'image' | 'document' | 'audio' | 'video' | 'sticker',
     buffer: Buffer,
     mimetype: string,
     caption?: string,
     fileName?: string,
+    viewOnce = false,
   ): Promise<string | null> {
     const sock = this.sock(accountId);
     await this.rateLimiter.throttle(accountId);
     await this.humanDelay();
     let content: Record<string, unknown>;
-    if (mediaType === 'image') content = { image: buffer, caption: caption ?? '' };
+    if (mediaType === 'image') content = { image: buffer, caption: caption ?? '', viewOnce };
     else if (mediaType === 'document') content = { document: buffer, mimetype: mimetype || 'application/octet-stream', fileName: fileName ?? caption ?? 'file' };
     else if (mediaType === 'audio') content = { audio: buffer, mimetype: mimetype || 'audio/mp4', ptt: true };
-    else content = { video: buffer, caption: caption ?? '' };
+    else if (mediaType === 'sticker') content = { sticker: await this.toStickerWebp(buffer) };
+    else content = { video: buffer, caption: caption ?? '', viewOnce };
     const sent = await sock.sendMessage(chatId, content as never);
     return sent?.key.id ?? null;
+  }
+
+  /** WhatsApp stickers must be webp, square-padded. Baileys does not convert for us. */
+  private async toStickerWebp(buffer: Buffer): Promise<Buffer> {
+    return sharp(buffer)
+      .resize(512, 512, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .webp()
+      .toBuffer();
   }
 
   // ── Message ops ─────────────────────────────────────────────────────────────

@@ -481,12 +481,14 @@ export function useInbox(initialConversationId: string | null) {
   const clearQuote = () => setQuoteMessage(null);
   const clearEdit = () => setEditingMessage(null);
 
-  const handleMediaFile = async (file: File) => {
+  const handleMediaFile = async (file: File, asSticker = false, viewOnce = false) => {
     if (!activeId || uploadingMedia) return;
     setUploadingMedia(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
+      if (asSticker) formData.append('asSticker', 'true');
+      if (viewOnce) formData.append('viewOnce', 'true');
       await uploadFile(`/conversations/${activeId}/media/upload`, formData);
       if (activeId) await loadConv(activeId);
       await loadList();
