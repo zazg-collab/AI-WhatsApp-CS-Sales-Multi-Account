@@ -82,19 +82,21 @@ assert.match(auditPage, /Failed to load audit log/, 'Audit UI must show load err
 
 
 const waService = read('apps/api/src/modules/wa/wa.service.ts');
+const waInbound = read('apps/api/src/modules/wa/wa-inbound.service.ts');
 const messageIngest = read('apps/api/src/modules/wa/message-ingest.service.ts');
 assert.match(waService, /syncFullHistory: this\.syncFullHistory/, 'WhatsApp sync must request full phone history when enabled');
-assert.match(waService, /Browsers\.macOS\('Desktop'\)/, 'WhatsApp history sync must use a desktop browser identity');
+assert.match(waService, /process\.env\.WA_BROWSER_PLATFORM \|\| 'Mac OS'/, 'WhatsApp history sync must default to a desktop (Mac OS) browser identity, env-overridable if WhatsApp starts fingerprinting the default tuple');
 assert.match(waService, /type !== 'notify' && type !== 'append'/, 'WhatsApp sync must ingest live and history append messages');
 assert.doesNotMatch(waService, /m\.key\.fromMe \|\| !m\.key\.remoteJid/, 'WhatsApp sync must not drop phone-sent fromMe messages');
-assert.match(waService, /fromMe,[\s\S]*occurredAt: this\.messageTimestamp\(m\)/, 'WhatsApp sync must pass phone direction and timestamp into ingest');
+assert.match(waInbound, /fromMe,[\s\S]*occurredAt: m\.messageTimestamp/, 'WhatsApp sync must pass phone direction and timestamp into ingest');
 assert.match(messageIngest, /senderType: fromMe \? SenderType\.admin : SenderType\.customer/, 'Phone-sent messages must appear as admin-side messages');
 assert.match(messageIngest, /phone_message_sync/, 'Phone-sent messages must be audited as phone sync events');
 assert.match(messageIngest, /!fromMe && !msg\.suppressAutomation/, 'Phone/history sync must not trigger customer automation side effects');
 
 const dashboardController = read('apps/api/src/modules/dashboard/dashboard.controller.ts');
 assert.match(dashboardController, /@Get\('performance'\)/, 'Performance overview endpoint must exist');
-assert.match(dashboardController, /@Get\('performance\/ai-quality'\)/, 'AI quality endpoint must exist');
-assert.match(dashboardController, /@Get\('performance\/campaigns'\)/, 'Campaign performance endpoint must exist');
+const dashboardService = read('apps/api/src/modules/dashboard/dashboard.service.ts');
+assert.match(dashboardService, /this\.getAiQuality\(safeDays\)/, 'Performance overview must include AI quality data');
+assert.match(dashboardService, /this\.getCampaignPerformance\(safeDays\)/, 'Performance overview must include campaign performance data');
 
 console.log('QA hardening checks passed');
