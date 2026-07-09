@@ -7,7 +7,11 @@ function jwt(r: string) {
 }
 
 const apiMock = vi.fn();
-vi.mock('@/lib/api', () => ({ api: (...a: any[]) => apiMock(...a), getToken: () => jwt(role) }));
+vi.mock('@/lib/api', () => ({
+  api: (...a: any[]) => apiMock(...a),
+  getToken: () => jwt(role),
+  resolveMediaUrl: (u?: string | null) => u ?? null,
+}));
 vi.mock('@/lib/socket', () => ({ getSocket: () => ({ on: vi.fn(), off: vi.fn() }) }));
 
 import UsersPage from './page';

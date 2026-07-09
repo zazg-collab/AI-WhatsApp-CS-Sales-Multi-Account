@@ -25,7 +25,8 @@ describe('api()', () => {
   it('builds the full URL and returns parsed json', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ hello: 'world' }),
+      status: 200,
+      text: async () => JSON.stringify({ hello: 'world' }),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -42,7 +43,8 @@ describe('api()', () => {
     setToken('jwt-123');
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({}),
+      status: 200,
+      text: async () => '{}',
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -54,7 +56,8 @@ describe('api()', () => {
   it('merges custom headers and options', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({}),
+      status: 200,
+      text: async () => '{}',
     });
     vi.stubGlobal('fetch', fetchMock);
 
