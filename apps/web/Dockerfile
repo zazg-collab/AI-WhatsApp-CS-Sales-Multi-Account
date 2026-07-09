@@ -4,6 +4,13 @@ COPY package*.json ./
 COPY apps/web/package*.json ./apps/web/
 RUN npm ci
 COPY . .
+# Next.js inlines NEXT_PUBLIC_* into the client bundle at build time, so they
+# must be supplied as build args (docker build --build-arg ...), not just as
+# a runtime `environment:` entry.
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_SOCKET_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_SOCKET_URL=${NEXT_PUBLIC_SOCKET_URL}
 RUN npm run build --workspace=@sentinel/web
 
 FROM node:20-alpine AS runner
