@@ -625,4 +625,31 @@ export class ConversationMessagingService {
     });
     return updated;
   }
+
+  async setMessagePinned(id: string, messageId: string, pinned: boolean, adminId: string, user?: ScopedUser) {
+    const { conversation, message } = await this.messageWithRoute(id, messageId, user);
+    if (message.externalId) {
+      await this.wa.pinMessage(
+        conversation.whatsappAccountId,
+        conversation.customer.phoneNumber,
+        message.externalId,
+        !pinned,
+      );
+    }
+    const updated = await this.prisma.message.update({
+      where: { id: messageId },
+      data: { isPinned: pinned },
+    });
+    this.events.emitToAccount(conversation.whatsappAccountId, 'message:updated', {
+      conversationId: id,
+      message: updated,
+    });
+    await logAudit(this.prisma, {
+      userId: adminId,
+      action: pinned ? 'message_pin' : 'message_unpin',
+      entityType: 'message',
+      entityId: messageId,
+    });
+    return updated;
+  }
 }

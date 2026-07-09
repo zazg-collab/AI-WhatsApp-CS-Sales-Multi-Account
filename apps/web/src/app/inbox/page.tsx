@@ -47,7 +47,7 @@ function InboxInner() {
     sendAsset, dismissAsset, suggestBot,
     sendLocation, sendPoll, sendContactCard,
     setContactBlocked, setChatMuted, setChatArchived, setChatPinned, clearChat,
-    setMessageStarred, forwardMessage, setDisappearing, saveLabels,
+    setMessageStarred, setMessagePinned, forwardMessage, setDisappearing, saveLabels,
     validateNumber, startConversation, searchContacts, assignAdmin, updateNotes, handleMediaFile,
     msgSearch, msgSearchResults, msgSearching, searchMessages,
     hasMoreMessages, loadingOlderMessages, loadOlderMessages,
@@ -151,6 +151,7 @@ function InboxInner() {
             onReplyToMessage={quoteReply}
             onEditMessage={editSentMessage}
             onStarMessage={setMessageStarred}
+            onPinMessage={setMessagePinned}
             onForwardMessage={forwardMessage}
             msgSearch={msgSearch}
             msgSearchResults={msgSearchResults}

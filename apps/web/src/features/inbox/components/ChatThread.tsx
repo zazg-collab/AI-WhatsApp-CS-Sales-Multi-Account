@@ -18,6 +18,7 @@ interface RowCallbacks {
   onEdit: () => void;
   onDelete?: () => void;
   onStar: () => void;
+  onPin: () => void;
   onForward?: (toPhone: string) => Promise<boolean>;
 }
 
@@ -54,6 +55,7 @@ interface ChatThreadProps {
   onReplyToMessage?: (message: Message) => void;
   onEditMessage?: (message: Message) => void;
   onStarMessage?: (messageId: string, star: boolean) => Promise<void>;
+  onPinMessage?: (messageId: string, pin: boolean) => Promise<void>;
   onForwardMessage?: (messageId: string, toPhone: string) => Promise<boolean>;
   msgSearch?: string;
   msgSearchResults?: Message[];
@@ -111,6 +113,7 @@ export function ChatThread({
   onReplyToMessage,
   onEditMessage,
   onStarMessage,
+  onPinMessage,
   onForwardMessage,
   msgSearch = '',
   msgSearchResults = [],
@@ -194,7 +197,7 @@ export function ChatThread({
     const result = new Map<string, RowCallbacks>();
     for (const message of conversation?.messages ?? []) {
       liveIds.add(message.id);
-      const deps = [message.id, onHoverMessageEnter, onHoverMessageExit, onReactMessage, onReplyToMessage, onEditMessage, onDeleteMessage, onStarMessage, onForwardMessage, message.isStarred];
+      const deps = [message.id, onHoverMessageEnter, onHoverMessageExit, onReactMessage, onReplyToMessage, onEditMessage, onDeleteMessage, onStarMessage, onPinMessage, onForwardMessage, message.isStarred, message.isPinned];
       const cached = cache.get(message.id);
       if (cached && deps.every((d, i) => d === cached.deps[i])) {
         result.set(message.id, cached.bundle);
@@ -208,6 +211,7 @@ export function ChatThread({
         onEdit: () => onEditMessage?.(message),
         onDelete: onDeleteMessage ? () => onDeleteMessage(message.id) : undefined,
         onStar: () => onStarMessage?.(message.id, !message.isStarred),
+        onPin: () => onPinMessage?.(message.id, !message.isPinned),
         onForward: onForwardMessage ? (toPhone) => onForwardMessage(message.id, toPhone) : undefined,
       };
       cache.set(message.id, { deps, bundle });
@@ -215,7 +219,7 @@ export function ChatThread({
     }
     for (const id of cache.keys()) if (!liveIds.has(id)) cache.delete(id);
     return result;
-  }, [conversation?.messages, onHoverMessageEnter, onHoverMessageExit, onReactMessage, onReplyToMessage, onEditMessage, onDeleteMessage, onStarMessage, onForwardMessage]);
+  }, [conversation?.messages, onHoverMessageEnter, onHoverMessageExit, onReactMessage, onReplyToMessage, onEditMessage, onDeleteMessage, onStarMessage, onPinMessage, onForwardMessage]);
 
   // Only blank the pane when there is no conversation to show. When one is
   // already open, keep the timeline mounted during busy actions (approve,
@@ -309,6 +313,7 @@ export function ChatThread({
                     onEdit={cb?.onEdit ?? (() => onEditMessage?.(message))}
                     onDelete={cb?.onDelete}
                     onStar={cb?.onStar ?? (() => onStarMessage?.(message.id, !message.isStarred))}
+                    onPin={cb?.onPin ?? (() => onPinMessage?.(message.id, !message.isPinned))}
                     onForward={cb?.onForward}
                     onJumpToMessage={jumpToMessage}
                   />

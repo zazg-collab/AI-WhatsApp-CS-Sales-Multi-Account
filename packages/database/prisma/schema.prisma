@@ -463,6 +463,7 @@ model Message {
   editedAt       DateTime?     @map("edited_at")
   deletedAt      DateTime?     @map("deleted_at") // set when revoked (deleted for everyone)
   isStarred      Boolean       @default(false) @map("is_starred")
+  isPinned       Boolean       @default(false) @map("is_pinned")
   isForwarded    Boolean       @default(false) @map("is_forwarded")
   receiptDetails Json?         @map("receipt_details")
   rawWaPayload   Json?         @map("raw_wa_payload")

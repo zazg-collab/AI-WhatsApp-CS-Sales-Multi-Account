@@ -389,6 +389,7 @@ export function useInbox(initialConversationId: string | null) {
   const setChatPinned = (pin: boolean) => act(() => api(`/conversations/${activeId}/pin`, { method: 'POST', body: JSON.stringify({ pin }) }));
   const clearChat = () => act(() => api(`/conversations/${activeId}/clear-chat`, { method: 'POST' }));
   const setMessageStarred = (messageId: string, star: boolean) => act(() => api(`/conversations/${activeId}/messages/${messageId}/star`, { method: 'POST', body: JSON.stringify({ star }) }));
+  const setMessagePinned = (messageId: string, pin: boolean) => act(() => api(`/conversations/${activeId}/messages/${messageId}/pin`, { method: 'POST', body: JSON.stringify({ pin }) }));
   // Dedicated (not via act): a forward lands in a different conversation, so
   // there is nothing in the current timeline to refetch. Returns success so the
   // popover can keep itself open with an error and close only on success.
@@ -526,7 +527,7 @@ export function useInbox(initialConversationId: string | null) {
     sendAsset, dismissAsset, suggestBot,
     sendLocation, sendPoll, sendContactCard,
     setContactBlocked, setChatMuted, setChatArchived, setChatPinned, clearChat,
-    setMessageStarred, forwardMessage, setDisappearing, saveLabels,
+    setMessageStarred, setMessagePinned, forwardMessage, setDisappearing, saveLabels,
     validateNumber, startConversation, searchContacts, assignAdmin, updateNotes, handleMediaFile,
     msgSearch, msgSearchResults, msgSearching, searchMessages,
     hasMoreMessages, loadingOlderMessages, loadOlderMessages,

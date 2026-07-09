@@ -180,6 +180,18 @@ export class ConversationMessagesController {
     return this.conversations.setMessageStarred(id, messageId, dto.star !== false, user.id, user);
   }
 
+  @ApiOperation({ summary: 'Pin or unpin a WhatsApp message' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Post(':id/messages/:messageId/pin')
+  pinMessage(
+    @Param('id') id: string,
+    @Param('messageId') messageId: string,
+    @Body() dto: { pin?: boolean },
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.conversations.setMessagePinned(id, messageId, dto.pin !== false, user.id, user);
+  }
+
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/media')
   sendMedia(

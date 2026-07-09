@@ -25,6 +25,7 @@ export interface Message {
   editedAt?: string | null;
   deletedAt?: string | null;
   isStarred?: boolean;
+  isPinned?: boolean;
 }
 
 export interface SentinelReview {

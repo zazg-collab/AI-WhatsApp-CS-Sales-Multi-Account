@@ -8,6 +8,7 @@ import {
   Trash,
   Star,
   Smiley,
+  PushPin,
 } from '@/components/ui/core-essential-icons';
 import { useT, type Dict } from '@/lib/i18n';
 import { cn } from '@/lib/cn';
@@ -25,6 +26,8 @@ const dict: Dict = {
   react: { id: 'Beri reaksi', en: 'React' },
   star: { id: 'Bintangi', en: 'Star' },
   unstar: { id: 'Hapus bintang', en: 'Unstar' },
+  pin: { id: 'Sematkan', en: 'Pin' },
+  unpin: { id: 'Lepas sematan', en: 'Unpin' },
   forward: { id: 'Teruskan', en: 'Forward' },
   forwardTo: { id: 'Teruskan ke nomor', en: 'Forward to number' },
   forwardPlaceholder: { id: 'Nomor tujuan, mis. 628123…', en: 'Target number, e.g. 628123…' },
@@ -52,6 +55,7 @@ interface ChatThreadMessageProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onStar?: (starred: boolean) => void;
+  onPin?: (pinned: boolean) => void;
   onForward?: (toPhone: string) => Promise<boolean>;
   onJumpToMessage?: (messageId: string) => void;
 }
@@ -79,6 +83,7 @@ function ChatThreadMessageImpl({
   onEdit,
   onDelete,
   onStar,
+  onPin,
   onForward,
   onJumpToMessage,
 }: ChatThreadMessageProps) {
@@ -177,6 +182,18 @@ function ChatThreadMessageImpl({
               title={m.isStarred ? t('unstar') : t('star')}
             >
               <Star className={cn('h-4 w-4', m.isStarred && 'fill-amber-400 text-amber-400')} aria-hidden="true" />
+            </button>
+          )}
+
+          {onPin && (
+            <button
+              type="button"
+              className={actionBtn}
+              onClick={() => onPin(!m.isPinned)}
+              aria-label={m.isPinned ? t('unpin') : t('pin')}
+              title={m.isPinned ? t('unpin') : t('pin')}
+            >
+              <PushPin className={cn('h-4 w-4', m.isPinned && 'fill-sentinel-500 text-sentinel-500')} aria-hidden="true" />
             </button>
           )}
 
