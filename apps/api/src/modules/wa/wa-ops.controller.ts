@@ -315,6 +315,21 @@ export class WaOpsController {
     return { success: true };
   }
 
+  @ApiOperation({ summary: 'List phone numbers blocked on this WhatsApp account' })
+  @Roles('viewer')
+  @Get('blocked-contacts')
+  getBlockedContacts(@Param('id') id: string) {
+    return this.wa.getBlockedContacts(id);
+  }
+
+  @ApiOperation({ summary: 'Unblock a phone number that has no conversation record yet' })
+  @Roles('owner', 'supervisor', 'admin')
+  @Post('blocked-contacts/:phone/unblock')
+  async unblockContact(@Param('id') id: string, @Param('phone') phone: string) {
+    await this.wa.setContactBlocked(id, phone, false);
+    return { success: true };
+  }
+
   // ── Channels (Newsletters) ─────────────────────────────────────────────────
 
   @ApiOperation({ summary: 'List subscribed WhatsApp channels/newsletters' })

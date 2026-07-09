@@ -766,6 +766,11 @@ export class WaService implements OnModuleInit {
     return this.gateway.forwardMessage(accountId, phoneToJid(toPhone), messageId);
   }
 
+  async getBlockedContacts(accountId: string): Promise<string[]> {
+    const jids = await this.gateway.getBlockedContacts(accountId);
+    return jids.map((jid) => jidToPhone(jid));
+  }
+
   setContactBlocked(accountId: string, phone: string, blocked: boolean): Promise<void> {
     return this.gateway.setContactBlocked(accountId, phoneToJid(phone), blocked);
   }

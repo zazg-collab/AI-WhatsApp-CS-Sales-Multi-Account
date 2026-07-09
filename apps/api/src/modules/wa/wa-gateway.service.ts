@@ -389,6 +389,12 @@ export class WaGatewayService {
     await sock.updateBlockStatus(contactId, blocked ? 'block' : 'unblock');
   }
 
+  async getBlockedContacts(accountId: string): Promise<string[]> {
+    const sock = this.sock(accountId);
+    const list = await (sock as any).fetchBlocklist();
+    return (list as (string | undefined)[]).filter((jid): jid is string => Boolean(jid));
+  }
+
   // ── Groups ──────────────────────────────────────────────────────────────────
 
   async getGroupInfo(accountId: string, groupId: string): Promise<GroupInfoLike | null> {

@@ -69,6 +69,8 @@ const dict: Dict = {
   addAccount: { id: 'Tambah akun', en: 'Add account' },
   notLinked: { id: 'Belum terkait customer', en: 'Not linked to CRM' },
   noCrmName: { id: 'crm', en: 'crm' },
+  blockedContacts: { id: '{n} kontak diblokir', en: '{n} blocked contacts' },
+  unblock: { id: 'Buka blokir', en: 'Unblock' },
 };
 
 function displayName(contact: WhatsappContact) {
@@ -87,6 +89,9 @@ export default function WhatsappContactsPage() {
   const [page, setPage] = useState(1);
   const [addedIds, setAddedIds] = useState<Record<string, boolean>>({});
   const [addingIds, setAddingIds] = useState<Record<string, boolean>>({});
+  const [blocked, setBlocked] = useState<string[]>([]);
+  const [blockedOpen, setBlockedOpen] = useState(false);
+  const [unblockingPhone, setUnblockingPhone] = useState<string | null>(null);
 
   const selectedAccount = useMemo(
     () => accounts.find((account) => account.id === accountId) ?? null,
@@ -138,6 +143,24 @@ export default function WhatsappContactsPage() {
   useEffect(() => {
     loadContacts();
   }, [loadContacts]);
+
+  useEffect(() => {
+    if (!accountId) { setBlocked([]); return; }
+    api<string[]>(`/wa/accounts/${accountId}/blocked-contacts`)
+      .then(setBlocked)
+      .catch(() => setBlocked([]));
+  }, [accountId]);
+
+  async function handleUnblock(phone: string) {
+    if (!accountId) return;
+    setUnblockingPhone(phone);
+    try {
+      await api(`/wa/accounts/${accountId}/blocked-contacts/${phone}/unblock`, { method: 'POST' });
+      setBlocked((prev) => prev.filter((p) => p !== phone));
+    } finally {
+      setUnblockingPhone(null);
+    }
+  }
 
   async function handleAddToWa(contact: WhatsappContact) {
     const phone = contact.phoneNumber?.replace(/\D/g, '');
@@ -214,6 +237,36 @@ export default function WhatsappContactsPage() {
               {error && (
                 <div className="mb-4 rounded border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 dark:border-danger-900/60 dark:bg-danger-950/40 dark:text-danger-200">
                   {error}
+                </div>
+              )}
+
+              {blocked.length > 0 && (
+                <div className="mb-4 rounded border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+                  <button
+                    type="button"
+                    onClick={() => setBlockedOpen((v) => !v)}
+                    className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {t('blockedContacts', { n: blocked.length })}
+                    <span className="text-xs text-gray-400">{blockedOpen ? '▲' : '▼'}</span>
+                  </button>
+                  {blockedOpen && (
+                    <ul className="divide-y divide-gray-100 border-t border-gray-100 dark:divide-gray-800 dark:border-gray-800">
+                      {blocked.map((phone) => (
+                        <li key={phone} className="flex items-center justify-between px-4 py-2 text-sm">
+                          <span className="font-mono text-gray-700 dark:text-gray-300">{formatPhone(phone, phone)}</span>
+                          <button
+                            type="button"
+                            disabled={unblockingPhone === phone}
+                            onClick={() => handleUnblock(phone)}
+                            className="rounded px-2 py-1 text-xs font-medium text-sentinel-700 hover:bg-sentinel-50 disabled:opacity-50 dark:text-sentinel-300 dark:hover:bg-sentinel-900/30"
+                          >
+                            {t('unblock')}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               )}
 
