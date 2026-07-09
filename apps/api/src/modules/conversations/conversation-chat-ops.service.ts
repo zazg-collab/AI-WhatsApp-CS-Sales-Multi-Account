@@ -190,6 +190,25 @@ export class ConversationChatOpsService {
     return { success: true, blocked };
   }
 
+  /**
+   * Clears the chat's message history on the linked WhatsApp device only —
+   * this app's own message archive (source of truth for CS ops) is untouched.
+   * ponytail: no separate "delete chat" action — WA's delete-chat is the same
+   * device-local wipe as clear plus removing it from the chat list, which adds
+   * no practical value here since the conversation stays reachable via search.
+   */
+  async clearChat(id: string, adminId: string, user?: ScopedUser) {
+    const conversation = await this.conversationRoute(id, user);
+    await this.wa.clearChat(conversation.whatsappAccountId, conversation.customer.phoneNumber);
+    await logAudit(this.prisma, {
+      userId: adminId,
+      action: 'chat_clear',
+      entityType: 'conversation',
+      entityId: id,
+    });
+    return { success: true };
+  }
+
   // Mute is dashboard-only: WAHA has no chat-level mute endpoint on any engine
   // (confirmed against the live API — 404, not an engine limitation), so this
   // only suppresses notifications inside Hermes, it does not silence the

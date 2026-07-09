@@ -89,6 +89,13 @@ export class ConversationChatOpsController {
     return this.conversations.setChatPinned(id, dto.pin !== false, user.id, user);
   }
 
+  @ApiOperation({ summary: "Clear the chat's message history on the linked WhatsApp device (this app's own archive is untouched)" })
+  @Roles('supervisor', 'owner')
+  @Post(':id/clear-chat')
+  clearChat(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.conversations.clearChat(id, user.id, user);
+  }
+
   @ApiOperation({ summary: 'Enable/disable disappearing messages for a WhatsApp chat' })
   @Roles('admin', 'supervisor', 'owner')
   @Post(':id/disappearing-messages')

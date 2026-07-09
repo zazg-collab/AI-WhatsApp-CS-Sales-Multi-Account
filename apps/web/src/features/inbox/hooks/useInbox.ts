@@ -387,6 +387,7 @@ export function useInbox(initialConversationId: string | null) {
   const setChatMuted = (mute: boolean) => act(() => api(`/conversations/${activeId}/mute`, { method: 'POST', body: JSON.stringify({ mute }) }));
   const setChatArchived = (archive: boolean) => act(() => api(`/conversations/${activeId}/archive`, { method: 'POST', body: JSON.stringify({ archive }) }));
   const setChatPinned = (pin: boolean) => act(() => api(`/conversations/${activeId}/pin`, { method: 'POST', body: JSON.stringify({ pin }) }));
+  const clearChat = () => act(() => api(`/conversations/${activeId}/clear-chat`, { method: 'POST' }));
   const setMessageStarred = (messageId: string, star: boolean) => act(() => api(`/conversations/${activeId}/messages/${messageId}/star`, { method: 'POST', body: JSON.stringify({ star }) }));
   // Dedicated (not via act): a forward lands in a different conversation, so
   // there is nothing in the current timeline to refetch. Returns success so the
@@ -522,7 +523,7 @@ export function useInbox(initialConversationId: string | null) {
     reactToMessage, markRead, setAiMode, setBot, setWorkflowStatus,
     sendAsset, dismissAsset, suggestBot,
     sendLocation, sendPoll, sendContactCard,
-    setContactBlocked, setChatMuted, setChatArchived, setChatPinned,
+    setContactBlocked, setChatMuted, setChatArchived, setChatPinned, clearChat,
     setMessageStarred, forwardMessage, setDisappearing, saveLabels,
     validateNumber, startConversation, searchContacts, assignAdmin, updateNotes, handleMediaFile,
     msgSearch, msgSearchResults, msgSearching, searchMessages,

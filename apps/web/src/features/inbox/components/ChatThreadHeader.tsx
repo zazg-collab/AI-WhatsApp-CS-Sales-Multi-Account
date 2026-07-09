@@ -11,6 +11,7 @@ import {
   Clock,
   Prohibit,
   ArrowUUpLeft,
+  Trash,
   type Icon,
 } from '@/components/ui/core-essential-icons';
 import { Avatar } from '@/components/ui/Avatar';
@@ -31,6 +32,7 @@ export interface ConversationActions {
   onTogglePin?: (pin: boolean) => void;
   onToggleBlock?: (block: boolean) => void;
   onToggleDisappearing?: (enable: boolean, duration?: number) => void;
+  onClearChat?: () => void;
 }
 
 interface ChatThreadHeaderProps {
@@ -187,6 +189,19 @@ export function ChatThreadHeader({
                     icon={Prohibit}
                     label={conversation.isBlocked ? 'Unblock contact' : 'Block contact'}
                     onClick={() => { actions.onToggleBlock?.(!conversation.isBlocked); close(); }}
+                  />
+                )}
+                {actions.onClearChat && (
+                  <MenuItem
+                    danger
+                    icon={Trash}
+                    label="Clear chat on device"
+                    onClick={() => {
+                      close();
+                      if (confirm('Clear this chat\'s message history on the linked WhatsApp device? This does not delete records in Sentinel.')) {
+                        actions.onClearChat?.();
+                      }
+                    }}
                   />
                 )}
               </div>

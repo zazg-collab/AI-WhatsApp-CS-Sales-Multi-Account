@@ -46,7 +46,7 @@ function InboxInner() {
     reactToMessage, markRead, setAiMode, setBot, setWorkflowStatus,
     sendAsset, dismissAsset, suggestBot,
     sendLocation, sendPoll, sendContactCard,
-    setContactBlocked, setChatMuted, setChatArchived, setChatPinned,
+    setContactBlocked, setChatMuted, setChatArchived, setChatPinned, clearChat,
     setMessageStarred, forwardMessage, setDisappearing, saveLabels,
     validateNumber, startConversation, searchContacts, assignAdmin, updateNotes, handleMediaFile,
     msgSearch, msgSearchResults, msgSearching, searchMessages,
@@ -139,6 +139,7 @@ function InboxInner() {
               onTogglePin: setChatPinned,
               onToggleBlock: setContactBlocked,
               onToggleDisappearing: setDisappearing,
+              onClearChat: clearChat,
             }}
             onBack={() => setActiveId(null)}
             onShowDetails={() => setShowRightPanel(!showRightPanel)}
