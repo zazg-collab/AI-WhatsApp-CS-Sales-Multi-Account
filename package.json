@@ -18,7 +18,7 @@
     "dev:web": "npm run dev --workspace=@sentinel/web",
     "build": "npm run build --workspaces --if-present",
     "heroku-postbuild": "npm run db:generate && npm run build --workspace=@sentinel/api",
-    "postinstall": "npm run db:generate",
+    "postinstall": "node scripts/postinstall.js",
     "start": "node apps/api/dist/main.js",
     "lint": "npm run lint --workspaces --if-present",
     "db:generate": "npm run generate --workspace=@sentinel/database",
