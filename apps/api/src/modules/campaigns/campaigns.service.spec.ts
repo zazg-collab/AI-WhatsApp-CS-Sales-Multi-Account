@@ -136,6 +136,9 @@ describe('CampaignsService', () => {
       await service.start('cmp1', 'u1');
       expect(queue.add).toHaveBeenCalledTimes(2);
       expect(prisma.campaign.update.mock.calls[0][0].data.status).toBe(CampaignStatus.running);
+      // Only `pending` recipients — never auto-requeue `failed` (reaped ones may
+      // have already delivered; retry-failed is the explicit human path).
+      expect(prisma.campaignRecipient.findMany.mock.calls[0][0].where.status).toBe(CampaignRecipientStatus.pending);
     });
     it('clears any stale job under the same jobId before re-adding (H1 retry-after-fail regression)', async () => {
       prisma.campaign.findUnique.mockResolvedValue({
@@ -268,6 +271,18 @@ describe('CampaignsService', () => {
         conversation: { takeoverStatus: 'ai_active' },
         campaign: { status: CampaignStatus.running, whatsappAccountId: 'a1', messageTemplate: 'hi', createdById: 'u1' },
       });
+      await service.processRecipient('r1');
+      expect(wa.sendText).not.toHaveBeenCalled();
+      expect(prisma.campaignRecipient.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: CampaignRecipientStatus.skipped }) }),
+      );
+    });
+    it('skips a recipient whose optedOut boolean was set after enqueue (no tag)', async () => {
+      // Keyword auto-detect and the opt-out endpoint set only customer.optedOut,
+      // not the opt_out tag — the send-time guard must honor the boolean too.
+      const r = queuedRecipient() as any;
+      r.customer = { tags: [], status: 'active', optedOut: true };
+      prisma.campaignRecipient.findUnique.mockResolvedValue(r);
       await service.processRecipient('r1');
       expect(wa.sendText).not.toHaveBeenCalled();
       expect(prisma.campaignRecipient.update).toHaveBeenCalledWith(

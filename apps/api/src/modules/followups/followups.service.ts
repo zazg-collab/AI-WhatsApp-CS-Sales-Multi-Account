@@ -122,6 +122,7 @@ export class FollowUpsService {
     const blockedTags = ['opt_out', 'blocked', 'do_not_contact'];
     const normalizedTags = (customer.tags ?? []).map((tag) => tag.toLowerCase());
     const optedOut =
+      customer.optedOut ||
       blockedTags.some((tag) => normalizedTags.includes(tag)) ||
       blockedTags.includes((customer.status ?? '').toLowerCase());
     if (optedOut) {
@@ -137,6 +138,14 @@ export class FollowUpsService {
       conv.takeoverStatus === 'waiting_admin'
     ) {
       this.logger.warn(`Follow-up ${followUpId} conversation under admin handling, cancelling`);
+      await this.prisma.followUp.update({
+        where: { id: followUpId },
+        data: { status: 'cancelled' },
+      });
+      return;
+    }
+    if (!followUp.messageTemplate?.trim()) {
+      this.logger.warn(`Follow-up ${followUpId} has an empty message template, cancelling`);
       await this.prisma.followUp.update({
         where: { id: followUpId },
         data: { status: 'cancelled' },
@@ -164,7 +173,7 @@ export class FollowUpsService {
       await this.waService.sendText(
         conv.whatsappAccount.id,
         customer.phoneNumber,
-        followUp.messageTemplate ?? '',
+        followUp.messageTemplate,
       );
       this.logger.log(`Follow-up ${followUpId} sent successfully`);
     } catch (e) {

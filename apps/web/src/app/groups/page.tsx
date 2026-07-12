@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Plus,
   PencilSimple,
@@ -52,6 +52,7 @@ export default function GroupsPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [groups, setGroups] = useState<GroupChat[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
 
@@ -103,34 +104,42 @@ export default function GroupsPage() {
         setAccounts(data ?? []);
         if (data?.length) setSelectedAccountId(data[0].id);
       })
-      .catch(() => {})
+      .catch((err) => setAccountsError(err?.message ?? 'Failed to load accounts'))
       .finally(() => setLoadingAccounts(false));
   }, []);
 
-  // Load groups when account changes
-  useEffect(() => {
+  // Load groups for the selected account. Shared by the account-change effect
+  // and by mutations (create/join) so the list actually refreshes afterward.
+  const loadGroups = useCallback(async () => {
     if (!selectedAccountId) return;
     setLoadingGroups(true);
     setGroupsError(null);
     setGroups([]);
-    api<{ chats: Array<{ id: string; name?: string; subject?: string; description?: string }> }>(
-      `/wa/accounts/${selectedAccountId}/chats/overview`
-    )
-      .then((data) => {
-        const chats = data?.chats ?? (Array.isArray(data) ? (data as GroupChat[]) : []);
-        const filtered = chats
-          .filter((c) => c.id?.endsWith('@g.us'))
-          .map((c) => ({
-            id: c.id,
-            name: c.subject ?? c.name ?? c.id,
-            subject: c.subject,
-            description: c.description,
-          }));
-        setGroups(filtered);
-      })
-      .catch((err) => setGroupsError(err?.message ?? 'Failed to load groups'))
-      .finally(() => setLoadingGroups(false));
+    try {
+      const data = await api<{ chats: Array<{ id: string; name?: string; subject?: string; description?: string }> }>(
+        `/wa/accounts/${selectedAccountId}/chats/overview`
+      );
+      const chats = data?.chats ?? (Array.isArray(data) ? (data as GroupChat[]) : []);
+      const filtered = chats
+        .filter((c) => c.id?.endsWith('@g.us'))
+        .map((c) => ({
+          id: c.id,
+          name: c.subject ?? c.name ?? c.id,
+          subject: c.subject,
+          description: c.description,
+        }));
+      setGroups(filtered);
+    } catch (err: unknown) {
+      setGroupsError(err instanceof Error ? err.message : 'Failed to load groups');
+    } finally {
+      setLoadingGroups(false);
+    }
   }, [selectedAccountId]);
+
+  // Load groups when account changes
+  useEffect(() => {
+    void loadGroups();
+  }, [loadGroups]);
 
   function groupPath(groupId: string) {
     return `/wa/accounts/${selectedAccountId}/groups/${encodeURIComponent(groupId)}`;
@@ -152,8 +161,7 @@ export default function GroupsPage() {
       setCreateOpen(false);
       setCreateName('');
       setCreateParticipants('');
-      // Reload groups
-      setSelectedAccountId((id) => id); // trigger effect
+      await loadGroups();
     } catch (err: unknown) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create group');
     } finally {
@@ -172,8 +180,7 @@ export default function GroupsPage() {
       });
       setJoinOpen(false);
       setJoinCode('');
-      // Reload
-      setSelectedAccountId((id) => id);
+      await loadGroups();
     } catch (err: unknown) {
       setJoinError(err instanceof Error ? err.message : 'Failed to join group');
     } finally {
@@ -298,6 +305,8 @@ export default function GroupsPage() {
           </label>
           {loadingAccounts ? (
             <div className="h-9 w-64 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800" />
+          ) : accountsError ? (
+            <p className="text-sm text-danger-600 dark:text-danger-400">{accountsError}</p>
           ) : accounts.length === 0 ? (
             <p className="text-sm text-gray-500 dark:text-gray-400">No accounts found.</p>
           ) : (

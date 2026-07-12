@@ -40,7 +40,9 @@ export class CampaignSendService {
     }
 
     const normalizedTags = (recipient.customer.tags ?? []).map((t) => t.toLowerCase());
-    const customerOptedOut = BLOCKED_TAGS.some((t) => normalizedTags.includes(t)) || BLOCKED_TAGS.includes((recipient.customer.status ?? '').toLowerCase());
+    // `optedOut` covers keyword auto-detect and the manual endpoint, which set
+    // only the boolean (no tag) — a customer can opt out after being enqueued.
+    const customerOptedOut = recipient.customer.optedOut || BLOCKED_TAGS.some((t) => normalizedTags.includes(t)) || BLOCKED_TAGS.includes((recipient.customer.status ?? '').toLowerCase());
     if (customerOptedOut) {
       await this.crud.prisma.campaignRecipient.update({ where: { id: recipient.id }, data: { status: CampaignRecipientStatus.skipped, error: 'Customer opted out before send' } });
       await this.crud.refreshCampaignCompletion(recipient.campaignId);
@@ -54,7 +56,11 @@ export class CampaignSendService {
 
     const claim = await this.crud.prisma.campaignRecipient.updateMany({ where: { id: recipient.id, status: CampaignRecipientStatus.queued }, data: { status: CampaignRecipientStatus.sending, error: null } });
     if (claim.count === 0) { this.logger.warn(`Campaign recipient ${recipient.id} already claimed, skipping`); return; }
-    await this.crud.prisma.campaign.update({ where: { id: recipient.campaignId }, data: { status: CampaignStatus.running } });
+    // Flip the campaign to `running` only on the first recipient that leaves the
+    // scheduled state — avoids one write per recipient on large sends.
+    if (recipient.campaign.status === CampaignStatus.scheduled) {
+      await this.crud.prisma.campaign.updateMany({ where: { id: recipient.campaignId, status: CampaignStatus.scheduled }, data: { status: CampaignStatus.running } });
+    }
 
     const content = renderTemplate(recipient.campaign.messageTemplate, { name: recipient.customer?.name, phone: recipient.phoneNumber });
 

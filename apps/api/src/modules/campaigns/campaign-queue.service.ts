@@ -34,8 +34,12 @@ export class CampaignQueueService {
       throw new BadRequestException(`Daily send cap reached for this account (${this.crud.maxDailySendsPerAccount}/24h). Try again later.`);
     }
 
+    // Only `pending` — never auto-requeue `failed`. The reaper marks stuck
+    // recipients `failed` precisely because they may have already delivered;
+    // re-sending them requires the explicit retry-failed endpoint (which flips
+    // them back to `pending` as a deliberate human action).
     const recipients = await this.crud.prisma.campaignRecipient.findMany({
-      where: { campaignId: id, status: { in: [CampaignRecipientStatus.pending, CampaignRecipientStatus.failed] } },
+      where: { campaignId: id, status: CampaignRecipientStatus.pending },
       orderBy: { createdAt: 'asc' },
     });
     if (recipients.length === 0) throw new BadRequestException('No pending recipients to send');
@@ -121,8 +125,15 @@ export class CampaignQueueService {
   @Interval(60_000)
   async runScheduledCampaigns() {
     try {
+      // Exclude campaigns whose jobs are already enqueued/in flight — start()
+      // has already run for them; re-calling it every minute just log-spams
+      // (and used to re-queue `failed` recipients).
       const due = await this.crud.prisma.campaign.findMany({
-        where: { status: CampaignStatus.scheduled, scheduledAt: { lte: new Date() } },
+        where: {
+          status: CampaignStatus.scheduled,
+          scheduledAt: { lte: new Date() },
+          recipients: { none: { status: { in: [CampaignRecipientStatus.queued, CampaignRecipientStatus.sending] } } },
+        },
         select: { id: true, createdById: true },
       });
       for (const campaign of due) {
