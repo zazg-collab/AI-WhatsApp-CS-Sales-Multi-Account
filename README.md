@@ -1,5 +1,16 @@
 # Hermes AI — WhatsApp Sales & Customer Service Control Center
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)](https://www.typescriptlang.org/)
+[![NestJS](https://img.shields.io/badge/NestJS-10.4-red.svg)](https://nestjs.com/)
+[![Next.js](https://img.shields.io/badge/Next.js-14.2-black.svg)](https://nextjs.org/)
+[![Prisma](https://img.shields.io/badge/Prisma-5.22-2D3748.svg)](https://www.prisma.io/)
+[![CI](https://github.com/filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account/actions/workflows/ci.yml/badge.svg)](https://github.com/filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account/actions/workflows/ci.yml)
+[![Release](https://github.com/filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account/actions/workflows/release.yml/badge.svg)](https://github.com/filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account/actions/workflows/release.yml)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account/blob/master/CONTRIBUTING.md)
+[![Code of Conduct](https://img.shields.io/badge/Code%20of%20Conduct-Contributor%20Covenant-ff69b4.svg)](https://github.com/filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account/blob/master/CODE_OF_CONDUCT.md)
+
 A semi-automated system for managing **multiple AI-powered WhatsApp chatbots**
 from a single dashboard, with **Hermes** as a supervisor layer that reviews
 answers, scores risk/confidence, and controls quality across every bot.
@@ -359,18 +370,16 @@ constant-time API-key check and fails closed when unconfigured.
 
 ## Documentation
 
-- [CLAUDE.md](./CLAUDE.md) — architecture & contributor guidance (canonical;
-  `AGENTS.md` just points here)
+- [CLAUDE.md](./CLAUDE.md) — architecture & contributor guidance (canonical; `AGENTS.md` just points here)
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — how to contribute, development setup, code standards
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) — community standards (Contributor Covenant)
+- [SECURITY.md](./SECURITY.md) — vulnerability reporting & disclosure policy
+- [CHANGELOG.md](./CHANGELOG.md) — release history
 - [docs/OPERATOR_GUIDE.md](./docs/OPERATOR_GUIDE.md) — day-to-day operation
-- [docs/deployment.md](./docs/deployment.md) — deploy, migrate, backup, pilot,
-  observability, rollback
-- [docs/observability.md](./docs/observability.md) — log retention, SLOs,
-  alert severity ladder, incident response
-- [docs/troubleshooting.md](./docs/troubleshooting.md) — generic local-dev
-  fixes (Docker not running, migration drift, QR/session reset, stuck queues)
+- [docs/deployment.md](./docs/deployment.md) — deploy, migrate, backup, pilot, observability, rollback
+- [docs/observability.md](./docs/observability.md) — log retention, SLOs, alert severity ladder, incident response
+- [docs/troubleshooting.md](./docs/troubleshooting.md) — generic local-dev fixes (Docker not running, migration drift, QR/session reset, stuck queues)
 - [docs/vps-deploy.md](./docs/vps-deploy.md) — bare-VPS deployment walkthrough
-- [docs/vercel-railway-setup.md](./docs/vercel-railway-setup.md) — Vercel +
-  Railway managed deployment walkthrough
-- [PENDING_UI.md](./PENDING_UI.md) — backend endpoints implemented without a
-  frontend yet (live backlog)
+- [docs/vercel-railway-setup.md](./docs/vercel-railway-setup.md) — Vercel + Railway managed deployment walkthrough
+- [PENDING_UI.md](./PENDING_UI.md) — backend endpoints implemented without a frontend yet (live backlog)
 - [services/hermes-agent-skills/crm-report.md](./services/hermes-agent-skills/crm-report.md) — Hermes Agent CRM report skill

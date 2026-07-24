@@ -2,13 +2,33 @@
   "name": "sentinel-control-center",
   "version": "0.1.0",
   "private": true,
-  "description": "Hermes AI Sales & Customer Service Control Center",
+  "description": "Hermes AI Sales & Customer Service Control Center — Multi-account WhatsApp AI chatbots with Hermes supervisor",
   "license": "MIT",
   "author": "filmdown526-ux",
+  "homepage": "https://github.com/filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account.git"
   },
+  "bugs": {
+    "url": "https://github.com/filmdown526-ux/AI-WhatsApp-CS-Sales-Multi-Account/issues"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/filmdown526-ux"
+  },
+  "keywords": [
+    "whatsapp",
+    "chatbot",
+    "ai",
+    "customer-service",
+    "sales",
+    "baileys",
+    "nestjs",
+    "nextjs",
+    "prisma",
+    "multi-tenant"
+  ],
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -25,7 +45,8 @@
     "db:migrate": "npm run migrate --workspace=@sentinel/database",
     "db:seed": "npm run seed --workspace=@sentinel/database",
     "kb:reindex": "npm run kb:reindex --workspace=@sentinel/api",
-    "test": "node scripts/qa-check.mjs"
+    "test": "node scripts/qa-check.mjs",
+    "prepare": "husky install"
   },
   "engines": {
     "node": ">=20"
@@ -40,9 +61,29 @@
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^17.6.0",
-    "typescript-eslint": "^8.61.0"
+    "typescript-eslint": "^8.61.0",
+    "husky": "^9.1.6",
+    "semantic-release": "^24.1.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.0",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^10.3.5",
+    "@semantic-release/npm": "^12.0.1",
+    "@semantic-release/release-notes-generator": "^14.0.3"
   },
   "overrides": {
     "reflect-metadata": "0.1.14"
+  },
+  "release": {
+    "branches": ["master", "main"],
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      "@semantic-release/changelog",
+      "@semantic-release/npm",
+      "@semantic-release/github",
+      "@semantic-release/git"
+    ],
+    "changelog": "CHANGELOG.md"
   }
 }

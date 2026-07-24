@@ -1,0 +1,142 @@
+version: 2
+updates:
+  # Root package.json (npm)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "chore(deps):"
+      include: "scope"
+    groups:
+      dev-deps:
+        patterns:
+          - "*"
+        dependency-type: "development"
+      prod-deps:
+        patterns:
+          - "*"
+        dependency-type: "production"
+    ignore:
+      - dependency-name: "typescript"
+        versions: [">5.6.3"]
+    open-pull-requests-limit: 10
+
+  # API workspace
+  - package-ecosystem: "npm"
+    directory: "/apps/api"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "api"
+    commit-message:
+      prefix: "chore(deps-api):"
+      include: "scope"
+    groups:
+      nestjs:
+        patterns:
+          - "@nestjs/*"
+      testing:
+        patterns:
+          - "jest"
+          - "@types/jest"
+          - "ts-jest"
+          - "supertest"
+          - "@types/supertest"
+      dev-deps:
+        patterns:
+          - "*"
+        dependency-type: "development"
+    open-pull-requests-limit: 10
+
+  # Web workspace
+  - package-ecosystem: "npm"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "web"
+    commit-message:
+      prefix: "chore(deps-web):"
+      include: "scope"
+    groups:
+      nextjs:
+        patterns:
+          - "next"
+          - "react"
+          - "react-dom"
+      testing:
+        patterns:
+          - "vitest"
+          - "@testing-library/*"
+          - "jsdom"
+      dev-deps:
+        patterns:
+          - "*"
+        dependency-type: "development"
+    open-pull-requests-limit: 10
+
+  # Database package
+  - package-ecosystem: "npm"
+    directory: "/packages/database"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "npm"
+      - "database"
+    commit-message:
+      prefix: "chore(deps-db):"
+      include: "scope"
+    open-pull-requests-limit: 5
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(deps-ci):"
+      include: "scope"
+    open-pull-requests-limit: 5
+
+  # Docker
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(deps-docker):"
+      include: "scope"
+    open-pull-requests-limit: 5
