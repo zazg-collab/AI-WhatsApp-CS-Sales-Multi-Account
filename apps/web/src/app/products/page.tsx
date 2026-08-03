@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Cube, UploadSimple, ArrowsClockwise, Trash, Plus, MagnifyingGlass, Package, Warning } from '@/components/ui/core-essential-icons';
+import { Cube, UploadSimple, ArrowsClockwise, Trash, Plus, MagnifyingGlass, Package, Warning, Lock, LockOpen } from '@/components/ui/core-essential-icons';
 import { api, uploadFile, hasRole } from '@/lib/api';
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -60,10 +60,15 @@ const dict: Dict = {
   colStock: { id: 'Stok', en: 'Stock' },
   // >>> ANGGA: berat satuan produk, dipakai modul ongkir Mengantar.
   colWeight: { id: 'Berat', en: 'Weight' },
-  weightPlaceholder: { id: 'default', en: 'default' },
+  weightUnlock: { id: 'Buka kunci berat', en: 'Unlock weight' },
+  weightLock: { id: 'Kunci berat', en: 'Lock weight' },
+  weightLocked: {
+    id: 'Terkunci — klik gembok dulu untuk mengubah.',
+    en: 'Locked — click the padlock to edit.',
+  },
   weightHint: {
-    id: 'Berat satuan dalam gram, dipakai untuk hitung ongkir. Kosongkan = pakai berat default toko.',
-    en: 'Per-unit weight in grams, used to compute shipping. Leave empty = use the store default weight.',
+    id: 'Berat satuan dalam gram, dipakai untuk hitung ongkir. Angka abu-abu = berat default toko yang otomatis dipakai selama kolom ini dibiarkan kosong.',
+    en: 'Per-unit weight in grams, used to compute shipping. The greyed number is the store default that applies while this is left empty.',
   },
   weightSaved: { id: 'Berat produk tersimpan.', en: 'Product weight saved.' },
   // <<< ANGGA
@@ -128,6 +133,28 @@ export default function ProductsPage() {
   const { lang } = useLang();
   const canManage = hasRole('admin');
   const canConfigure = hasRole('supervisor');
+  // >>> ANGGA: hasRole() membaca JWT dari localStorage SAAT RENDER, jadi di
+  // server selalu false dan di browser bisa true. Kalau dipakai langsung untuk
+  // memilih JENIS elemen (input vs span), React gagal hydrate. Render pertama
+  // di klien harus sama persis dengan server; kontrol khusus peran baru muncul
+  // setelah mount. Sengaja TIDAK menyentuh `canManage` itu sendiri — ia juga
+  // dipakai load() untuk memutuskan fetch sumber data, dan menunda nilainya
+  // akan membuat fetch itu terlewat.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  // Nilai berat yang sedang diketik admin, per produk. Input dibuat controlled
+  // (bukan defaultValue) supaya angkanya ikut segar setelah daftar produk
+  // di-refetch — defaultValue hanya berlaku saat node DOM pertama dibuat.
+  const [weightDraft, setWeightDraft] = useState<Record<string, string>>({});
+  // Berat default toko (config modul ongkir) — ditampilkan sebagai placeholder
+  // abu-abu supaya jelas angka apa yang berlaku selama kolom dikosongkan.
+  // Diambil dari server, TIDAK ditulis di sini: angkanya milik config, dan
+  // menyalinnya ke frontend berarti dua sumber kebenaran yang bisa berbeda.
+  const [defaultWeight, setDefaultWeight] = useState<number | null>(null);
+  // Tiap baris terkunci secara bawaan supaya berat tidak keubah tidak sengaja.
+  const [unlocked, setUnlocked] = useState<Record<string, boolean>>({});
+  const weightRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // <<< ANGGA
   const [products, setProducts] = useState<Product[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [search, setSearch] = useState('');
@@ -162,6 +189,13 @@ export default function ProductsPage() {
       .catch((e) => setError(e instanceof Error ? e.message : t('loadError')))
       .finally(() => setLoading(false));
     if (canManage) api<Source[]>('/products/sources/list').then(setSources).catch(() => setSources([]));
+    // >>> ANGGA
+    if (canManage) {
+      api<{ defaultWeightGrams: number }>('/shipping/status')
+        .then((s) => setDefaultWeight(s.defaultWeightGrams))
+        .catch(() => setDefaultWeight(null));
+    }
+    // <<< ANGGA
   }
   useEffect(load, [debouncedSearch, t]);
 
@@ -180,11 +214,24 @@ export default function ProductsPage() {
         method: 'PATCH',
         body: JSON.stringify({ weightGrams: value }),
       });
+      // Buang draft supaya input kembali mengikuti nilai dari server.
+      setWeightDraft((d) => { const next = { ...d }; delete next[id]; return next; });
       setNotice(t('weightSaved'));
     } catch (e) {
       setProducts((prev) => prev.map((x) => (x.id === id ? { ...x, weightGrams: before } : x)));
       setError(e instanceof Error ? e.message : t('loadError'));
     }
+  }
+  // <<< ANGGA
+
+  // >>> ANGGA: buka gembok -> fokus ke kolom. Tutup gembok -> simpan lalu kunci.
+  function toggleWeightLock(id: string) {
+    setUnlocked((u) => {
+      const next = !u[id];
+      if (next) setTimeout(() => weightRefs.current[id]?.focus(), 0);
+      else void saveWeight(id, weightRefs.current[id]?.value ?? '');
+      return { ...u, [id]: next };
+    });
   }
   // <<< ANGGA
 
@@ -314,7 +361,7 @@ export default function ProductsPage() {
         {error && <Card className="mb-4 border-danger-200 bg-danger-50 p-3 text-[13px] text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20"><button onClick={() => setError(null)} className="flex items-center justify-between w-full"><span>{error}</span><span className="ml-2">×</span></button></Card>}
         {notice && <Card className="mb-4 border-sentinel-200 bg-sentinel-50 p-3 text-[13px] text-sentinel-700 dark:border-sentinel-700/40 dark:bg-sentinel-900/20"><button onClick={() => setNotice(null)} className="flex items-center justify-between w-full"><span>{notice}</span><span className="ml-2">×</span></button></Card>}
 
-        {canManage && (
+        {mounted && canManage && (
           <Card className="mb-5 p-4">
             <h2 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">{t('stockSources')}</h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -325,7 +372,7 @@ export default function ProductsPage() {
               <span className="text-[11px] text-gray-400">{t('csvColumns')}</span>
             </div>
 
-            {canConfigure && (
+            {mounted && canConfigure && (
               <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800">
                 <p className="mb-2 text-[12px] font-medium text-gray-600 dark:text-gray-300">{t('syncable')}</p>
                 <div className="flex flex-col gap-2">
@@ -448,24 +495,39 @@ export default function ProductsPage() {
                       </td>
                       {/* >>> ANGGA: berat satuan (gram) untuk modul ongkir. */}
                       <td className="px-3 py-2 text-right">
-                        {canManage ? (
-                          <span className="inline-flex items-center gap-1">
+                        {mounted && canManage ? (
+                          <span className="inline-flex items-center justify-end gap-1">
                             <input
-                              type="number"
-                              min={1}
+                              type="text"
                               inputMode="numeric"
+                              pattern="[0-9]*"
+                              disabled={!unlocked[p.id]}
+                              ref={(el) => { weightRefs.current[p.id] = el; }}
                               aria-label={`${t('colWeight')} ${p.name}`}
-                              title={t('weightHint')}
-                              defaultValue={p.weightGrams ?? ''}
-                              placeholder={t('weightPlaceholder')}
-                              onBlur={(e) => saveWeight(p.id, e.target.value)}
+                              title={unlocked[p.id] ? t('weightHint') : t('weightLocked')}
+                              value={weightDraft[p.id] ?? (p.weightGrams != null ? String(p.weightGrams) : '')}
+                              onChange={(e) => setWeightDraft((d) => ({ ...d, [p.id]: e.target.value.replace(/\D/g, '') }))}
+                              placeholder={defaultWeight != null ? String(defaultWeight) : ''}
+                              onBlur={(e) => { void saveWeight(p.id, e.target.value); setUnlocked((u) => ({ ...u, [p.id]: false })); }}
                               onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                              className="w-20 rounded border border-gray-200 bg-transparent px-1.5 py-0.5 text-right text-[13px] tabular-nums text-gray-900 dark:border-gray-700 dark:text-gray-100"
+                              className="w-14 rounded border border-gray-200 bg-white px-1.5 py-0.5 text-right text-[13px] tabular-nums text-gray-900 placeholder:text-gray-400 disabled:cursor-default disabled:border-transparent disabled:bg-transparent dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:disabled:bg-transparent"
                             />
                             <span className="text-[11px] text-gray-400">g</span>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => toggleWeightLock(p.id)}
+                              aria-label={`${unlocked[p.id] ? t('weightLock') : t('weightUnlock')} ${p.name}`}
+                              title={unlocked[p.id] ? t('weightLock') : t('weightUnlock')}
+                              className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                            >
+                              {unlocked[p.id]
+                                ? <LockOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                                : <Lock className="h-3.5 w-3.5" aria-hidden="true" />}
+                            </button>
                           </span>
                         ) : (
-                          <span className="tabular-nums text-gray-500">{p.weightGrams != null ? `${p.weightGrams} g` : '—'}</span>
+                          <span className="tabular-nums text-gray-500">{p.weightGrams != null ? `${p.weightGrams} g` : '\u2014'}</span>
                         )}
                       </td>
                       {/* <<< ANGGA */}
@@ -497,7 +559,7 @@ export default function ProductsPage() {
                   <div className="mt-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                     <span className="tabular-nums">{p.sku}</span>
                     {/* >>> ANGGA */}
-                    <span className="tabular-nums" title={t('weightHint')}>{p.weightGrams != null ? `${p.weightGrams} g` : `${t('colWeight')}: ${t('weightPlaceholder')}`}</span>
+                    <span className="tabular-nums" title={t('weightHint')}>{`${t('colWeight')}: ${p.weightGrams ?? defaultWeight ?? '\u2014'} g`}</span>
                     {/* <<< ANGGA */}
                     <span className="tabular-nums text-gray-700 dark:text-gray-200">{p.price != null ? formatPrice(p.price, lang, p.currency) : '-'}</span>
                   </div>

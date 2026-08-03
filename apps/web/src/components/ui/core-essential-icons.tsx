@@ -130,6 +130,10 @@ export const Tray: Icon = Phosphor.Tray;
 export const Gear: Icon = Phosphor.Gear;
 export const SignOut: Icon = Phosphor.SignOut;
 export const Key: Icon = Phosphor.Key;
+// >>> ANGGA: gembok untuk mengunci kolom yang rawan keubah tidak sengaja.
+export const Lock: Icon = Phosphor.Lock;
+export const LockOpen: Icon = Phosphor.LockOpen;
+// <<< ANGGA
 export const BookOpen: Icon = Phosphor.BookOpen;
 export const Images: Icon = Phosphor.Images;
 export const Paperclip: Icon = Phosphor.Paperclip;
