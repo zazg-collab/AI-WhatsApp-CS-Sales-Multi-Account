@@ -67,6 +67,23 @@ describe('ProductsPage — kolom berat (modul ongkir)', () => {
     await waitFor(() => expect(kolomBerat('Golok Cordova').placeholder).toBe('1000'));
   });
 
+  // >>> ANGGA: penjaga jebakan `useHasRole`.
+  // `canManage` baru true SESUDAH mount. Fetch khusus admin karena itu dipisah
+  // ke efeknya sendiri: kalau ikut menempel di load() (deps [debouncedSearch,t])
+  // ia selamanya jalan saat peran masih false dan tidak pernah dicoba lagi —
+  // sumber data & berat default diam-diam tidak pernah termuat. Menambah
+  // `canManage` ke deps load() juga salah: daftar produk ketarik dua kali.
+  it('data khusus admin tetap termuat sesudah peran diketahui, tanpa menarik produk dua kali', async () => {
+    render(<ProductsPage />);
+    await screen.findByLabelText('Weight Golok Cordova');
+    await waitFor(() => {
+      expect(apiMock).toHaveBeenCalledWith('/products/sources/list');
+      expect(apiMock).toHaveBeenCalledWith('/shipping/status');
+    });
+    const daftarProduk = apiMock.mock.calls.filter((c) => String(c[0]).startsWith('/products') && !String(c[0]).startsWith('/products/sources'));
+    expect(daftarProduk).toHaveLength(1);
+  });
+
   it('terkunci secara bawaan; gembok yang membukanya', async () => {
     render(<ProductsPage />);
     await screen.findByLabelText('Weight Golok Cordova');

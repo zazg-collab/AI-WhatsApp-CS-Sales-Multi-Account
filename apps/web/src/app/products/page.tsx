@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Cube, UploadSimple, ArrowsClockwise, Trash, Plus, MagnifyingGlass, Package, Warning, Lock, LockOpen } from '@/components/ui/core-essential-icons';
-import { api, uploadFile, hasRole } from '@/lib/api';
+import { api, uploadFile } from '@/lib/api';
+import { useHasRole } from '@/lib/use-has-role'; // >>> ANGGA <<<
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -131,17 +132,14 @@ interface SourcePreview {
 export default function ProductsPage() {
   const t = useT(dict);
   const { lang } = useLang();
-  const canManage = hasRole('admin');
-  const canConfigure = hasRole('supervisor');
-  // >>> ANGGA: hasRole() membaca JWT dari localStorage SAAT RENDER, jadi di
-  // server selalu false dan di browser bisa true. Kalau dipakai langsung untuk
-  // memilih JENIS elemen (input vs span), React gagal hydrate. Render pertama
-  // di klien harus sama persis dengan server; kontrol khusus peran baru muncul
-  // setelah mount. Sengaja TIDAK menyentuh `canManage` itu sendiri — ia juga
-  // dipakai load() untuk memutuskan fetch sumber data, dan menunda nilainya
-  // akan membuat fetch itu terlewat.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // >>> ANGGA: `hasRole()` membaca JWT dari localStorage SAAT RENDER — di server
+  // selalu false, di browser bisa true. Dipakai langsung untuk memilih JENIS
+  // elemen (input vs span di kolom berat), React gagal hydrate seluruh halaman.
+  // `useHasRole` adalah helper resmi repo ini untuk itu: render pertama selalu
+  // `allowed:false` di kedua sisi, peran sungguhan dibaca sesudah mount.
+  const { allowed: canManage } = useHasRole('admin');
+  const { allowed: canConfigure } = useHasRole('supervisor');
+  // <<< ANGGA
   // Nilai berat yang sedang diketik admin, per produk. Input dibuat controlled
   // (bukan defaultValue) supaya angkanya ikut segar setelah daftar produk
   // di-refetch — defaultValue hanya berlaku saat node DOM pertama dibuat.
@@ -188,16 +186,25 @@ export default function ProductsPage() {
       .then(setProducts)
       .catch((e) => setError(e instanceof Error ? e.message : t('loadError')))
       .finally(() => setLoading(false));
-    if (canManage) api<Source[]>('/products/sources/list').then(setSources).catch(() => setSources([]));
-    // >>> ANGGA
-    if (canManage) {
-      api<{ defaultWeightGrams: number }>('/shipping/status')
-        .then((s) => setDefaultWeight(s.defaultWeightGrams))
-        .catch(() => setDefaultWeight(null));
-    }
-    // <<< ANGGA
+    loadAdminExtras();
   }
   useEffect(load, [debouncedSearch, t]);
+
+  // >>> ANGGA: data khusus admin dipisah dari load().
+  // `canManage` baru bernilai true SESUDAH mount (lihat useHasRole), jadi kalau
+  // fetch ini tetap menempel di load() — yang deps-nya cuma [debouncedSearch, t]
+  // — ia selamanya berjalan saat peran masih false dan tidak pernah dicoba lagi.
+  // Menambahkan `canManage` ke deps load() juga bukan jawabannya: daftar produk
+  // jadi ikut ditarik dua kali tiap halaman dibuka.
+  function loadAdminExtras() {
+    if (!canManage) return;
+    api<Source[]>('/products/sources/list').then(setSources).catch(() => setSources([]));
+    api<{ defaultWeightGrams: number }>('/shipping/status')
+      .then((s) => setDefaultWeight(s.defaultWeightGrams))
+      .catch(() => setDefaultWeight(null));
+  }
+  useEffect(loadAdminExtras, [canManage]);
+  // <<< ANGGA
 
   // >>> ANGGA: simpan berat satuan produk (gram). Kosong = null, artinya
   // kembali memakai fallback berat default di config ongkir.
@@ -361,7 +368,7 @@ export default function ProductsPage() {
         {error && <Card className="mb-4 border-danger-200 bg-danger-50 p-3 text-[13px] text-danger-700 dark:border-danger-700/40 dark:bg-danger-900/20"><button onClick={() => setError(null)} className="flex items-center justify-between w-full"><span>{error}</span><span className="ml-2">×</span></button></Card>}
         {notice && <Card className="mb-4 border-sentinel-200 bg-sentinel-50 p-3 text-[13px] text-sentinel-700 dark:border-sentinel-700/40 dark:bg-sentinel-900/20"><button onClick={() => setNotice(null)} className="flex items-center justify-between w-full"><span>{notice}</span><span className="ml-2">×</span></button></Card>}
 
-        {mounted && canManage && (
+        {canManage && (
           <Card className="mb-5 p-4">
             <h2 className="mb-3 text-sm font-semibold text-gray-900 dark:text-gray-100">{t('stockSources')}</h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -372,7 +379,7 @@ export default function ProductsPage() {
               <span className="text-[11px] text-gray-400">{t('csvColumns')}</span>
             </div>
 
-            {mounted && canConfigure && (
+            {canConfigure && (
               <div className="mt-4 border-t border-gray-100 pt-3 dark:border-gray-800">
                 <p className="mb-2 text-[12px] font-medium text-gray-600 dark:text-gray-300">{t('syncable')}</p>
                 <div className="flex flex-col gap-2">
@@ -495,7 +502,7 @@ export default function ProductsPage() {
                       </td>
                       {/* >>> ANGGA: berat satuan (gram) untuk modul ongkir. */}
                       <td className="px-3 py-2 text-right">
-                        {mounted && canManage ? (
+                        {canManage ? (
                           <span className="inline-flex items-center justify-end gap-1">
                             <input
                               type="text"
