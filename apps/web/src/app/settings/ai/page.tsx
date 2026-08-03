@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ArrowsClockwise, Cpu, FloppyDisk, ShieldWarning, ChatCircle, Bell, Clock, MegaphoneSimple, type Icon } from '@/components/ui/core-essential-icons';
+import Link from 'next/link'; // >>> ANGGA <<<
+import { ArrowsClockwise, Cpu, FloppyDisk, ShieldWarning, ChatCircle, Bell, Clock, MegaphoneSimple, Package, type Icon } from '@/components/ui/core-essential-icons';
 import { api } from '@/lib/api';
 import { useHasRole } from '@/lib/use-has-role'; // >>> ANGGA <<<
 import { AppLayout } from '@/components/AppLayout';
@@ -104,6 +105,7 @@ const dict: Dict = {
   modeOn: { id: 'AI aktif (auto-reply)', en: 'AI on (auto-reply)' },
   // Campaign
   tabCampaign: { id: 'Keamanan Campaign', en: 'Campaign Safety' },
+  tabShipping: { id: 'Ongkir (Mengantar)', en: 'Shipping (Mengantar)' }, // >>> ANGGA <<<
   campaignIntro: {
     id: 'Default global untuk campaign baru. Rate limit & jeda tetap bisa di-override per-campaign di halaman Campaigns.',
     en: 'Global defaults for new campaigns. Rate limit & delay can still be overridden per campaign on the Campaigns page.',
@@ -322,6 +324,17 @@ export default function SettingsPage() {
               </button>
             );
           })}
+          {/* >>> ANGGA: rute terpisah (berkas ini sudah 640 baris, konvensi repo
+              membatasi 400), tapi tetap tampil sebagai tab supaya terasa satu
+              area Pengaturan. */}
+          <Link
+            href="/settings/shipping"
+            className="flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-[13px] font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+          >
+            <Package className="h-4 w-4" aria-hidden="true" />
+            {t('tabShipping')}
+          </Link>
+          {/* <<< ANGGA */}
         </div>
 
         {/* >>> ANGGA: tunggu peran diketahui supaya spanduk ini tidak berkedip <<< */}
