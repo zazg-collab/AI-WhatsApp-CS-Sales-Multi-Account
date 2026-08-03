@@ -1,3 +1,5 @@
+import { extractFirstJson } from '../../common/json-extract.util'; // >>> ANGGA <<<
+
 /**
  * Extract a JSON document from a raw LLM response. Robust to the things real
  * providers do around the answer:
@@ -34,11 +36,14 @@ export function extractJson(raw: string, open: '{' | '[' = '{', depth = 0): stri
     }
   }
 
-  const close = open === '{' ? '}' : ']';
-  const start = s.indexOf(open);
-  const end = s.lastIndexOf(close);
-  if (start !== -1 && end !== -1 && end > start) return s.slice(start, end + 1);
-  return s.trim();
+  // >>> ANGGA: dulu "kurung buka pertama sampai kurung tutup TERAKHIR" — cacat
+  // yang sama persis dengan yang meledak di `ai.service.ts` 2026-08-03: begitu
+  // model menempelkan sesuatu setelah JSON-nya (sampah, atau salinan kedua
+  // jawaban yang sama), potongan itu ikut tertelan dan parse gagal total.
+  // Pengupasan <think>/envelope di atas tetap dipertahankan — yang diganti
+  // hanya cara memotongnya, sekarang lewat pemindai kedalaman kurung bersama.
+  return extractFirstJson(s, open) ?? s.trim();
+  // <<< ANGGA
 }
 
 /** Parse an LLM response expected to contain a JSON array. Never throws. */

@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { assertConversationScope, type ScopedUser } from '../../common/account-scope.util';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { MetricsService } from '../../common/metrics/metrics.service';
+import { extractFirstJson } from '../../common/json-extract.util'; // >>> ANGGA <<<
 import {
   AiProviderService,
   ChatMessage,
@@ -248,9 +249,13 @@ export class AiService {
       if (segments.length === 0) throw new Error('no usable segments');
       return segments;
     } catch (err) {
+      // >>> ANGGA: JANGAN pernah memakai `raw` sebagai teks balasan di sini.
+      // Panggilan ini MEMINTA JSON; kalau yang datang bukan JSON, itu kegagalan
+      // generasi, bukan balasan. Baris lama `stripDataFences(raw)` justru
+      // menempelkan keluaran model mentah ke kotak draft — 2026-08-03 seorang
+      // admin melihat `{"segments":[...]}</sai>{{...}}` utuh di sana.
+      // Jalur mundur yang benar sudah ada: buat ulang sebagai balasan tunggal.
       this.logger.warn(`Segmented reply parse failed (${err}); falling back to single reply`);
-      const text = stripDataFences(raw).trim();
-      if (text) return [{ answersIndex: null, text }];
       const single = await this.generateReply(conversationId);
       return [{ answersIndex: null, text: single.text }];
     }
@@ -468,13 +473,17 @@ export class AiService {
     return LeadStage.cold;
   }
 
-  /** Tolerate models that wrap JSON in prose or code fences. */
+  /**
+   * >>> ANGGA: Tolerate models that wrap JSON in prose or code fences.
+   *
+   * Dulu isinya "kurung buka pertama sampai kurung tutup TERAKHIR" — rapuh
+   * begitu model menulis apa pun sesudah JSON-nya. Sekarang mendelegasikan ke
+   * pemindai kedalaman kurung bersama (`common/json-extract.util.ts`) yang
+   * berhenti di objek pertama yang tertutup sempurna. Mengembalikan string
+   * kosong kalau tidak ada — biar `JSON.parse` melempar dan pemanggilnya masuk
+   * jalur galat yang sudah ada, bukan diam-diam salah.
+   */
   private extractJson(raw: string): string {
-    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenced) return fenced[1].trim();
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
-    if (start !== -1 && end !== -1) return raw.slice(start, end + 1);
-    return raw;
+    return extractFirstJson(raw) ?? '';
   }
 }

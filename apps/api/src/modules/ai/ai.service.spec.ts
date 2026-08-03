@@ -106,6 +106,37 @@ describe('AiService', () => {
       const r = await service.generateSegmentedReply('c1', burst);
       expect(r).toEqual([{ answersIndex: null, text: 'Baik kak, harganya 50rb dan stok L masih ada.' }]);
     });
+
+    // >>> ANGGA — regresi insiden 2026-08-03: draft berisi keluaran model mentah.
+    it('insiden asli: JSON valid + </sai> + salinan kedua tetap terbaca benar', async () => {
+      provider.chat.mockResolvedValue(
+        '{"segments":[{"menjawab":1,"balasan":"Mamuju Utara dan Mamuju itu berbeda lokasi, ya kak?"},'
+        + '{"menjawab":2,"balasan":"Setelah dikonfirmasi, saya cek ongkirnya."}]}'
+        + '</sai>{{"segments":[{"menjawab":1,"balasan":"duplikat"}]}}',
+      );
+      const r = await service.generateSegmentedReply('c1', burst);
+      expect(r).toEqual([
+        { answersIndex: 1, text: 'Mamuju Utara dan Mamuju itu berbeda lokasi, ya kak?' },
+        { answersIndex: 2, text: 'Setelah dikonfirmasi, saya cek ongkirnya.' },
+      ]);
+      // Tidak ada sisa sampah model yang lolos ke teks balasan.
+      expect(JSON.stringify(r)).not.toContain('sai');
+      expect(JSON.stringify(r)).not.toContain('segments');
+    });
+
+    it('JSON rusak TIDAK pernah dipakai apa adanya — balasan dibuat ulang', async () => {
+      // Panggilan 1 = jalur tersegmen (rusak/terpotong), panggilan 2 =
+      // pembuatan ulang sebagai balasan tunggal oleh generateReply().
+      provider.chat
+        .mockResolvedValueOnce('{"segments":[{"menjawab":1,"balasan":"kepotong di tengah')
+        .mockResolvedValueOnce('Halo kak, boleh dibantu ya.');
+      const r = await service.generateSegmentedReply('c1', burst);
+      expect(r).toEqual([{ answersIndex: null, text: 'Halo kak, boleh dibantu ya.' }]);
+      // Yang dulu bocor ke kotak draft: potongan JSON mentahnya sendiri.
+      expect(r[0].text).not.toContain('segments');
+      expect(r[0].text).not.toContain('{');
+    });
+    // <<< ANGGA
   });
 
   describe('summarizeChat', () => {

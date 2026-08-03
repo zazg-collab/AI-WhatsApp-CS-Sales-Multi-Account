@@ -4,6 +4,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { AiProviderService } from '../ai/ai-provider.service';
 import { tokenizeForMatch, scoreProductMatch } from '../products/products.util';
+// >>> ANGGA: satu pemindai JSON dipakai bersama seluruh parser keluaran LLM,
+// supaya tidak ada dua perilaku yang bisa diam-diam berbeda. <<< ANGGA
+import { extractFirstJson } from '../../common/json-extract.util';
 import {
   t,
   SHIPPING_EXTRACT_SYSTEM,
@@ -323,7 +326,22 @@ export class ShippingService {
    * Inti Langkah 3-9, tanpa percakapan — dipakai juga oleh endpoint uji manual
    * admin di controller (pola "kolom uji pertanyaan" di menu Knowledge).
    */
-  async quote(input: { keyword: string; items: ExtractedItem[] }): Promise<ShippingResult> {
+  async quote(input: {
+    keyword: string;
+    items: ExtractedItem[];
+    /**
+     * >>> ANGGA: izinkan menghitung TANPA daftar barang — ongkir saja, memakai
+     * berat default toko untuk 1 unit, harga barang 0.
+     *
+     * HANYA dipakai alat uji manual admin. Jalur pelanggan
+     * (`quoteForConversation`) TIDAK PERNAH menyalakan ini: total transfer/COD
+     * yang dikutip ke pelanggan menurut definisi butuh harga barang, dan
+     * mengarangnya berarti menebak — pagar utama LAMPIRAN. Untuk admin yang
+     * cuma ingin tahu "ongkir ke Magetan berapa", memaksa mengisi barang dulu
+     * membuat alat ujinya tidak berguna.
+     */
+    allowEmptyItems?: boolean;
+  }): Promise<ShippingResult> {
     const cfg = await this.settings.shipping();
     if (!cfg.mengantarApiKey || !cfg.mengantarOriginId) return { status: 'not_configured' };
 
@@ -348,8 +366,11 @@ export class ShippingService {
     const destinationId = target.ids[0];
 
     // Langkah 4 — berat & harga total order dari katalog (deterministik).
-    const resolved = await this.resolveItems(input.items, cfg.defaultWeightGrams);
-    if (resolved.unmatched.length || resolved.matched.length === 0) {
+    const shippingOnly = input.items.length === 0 && input.allowEmptyItems === true;
+    const resolved = shippingOnly
+      ? { matched: [], unmatched: [], totalGrams: cfg.defaultWeightGrams, totalPrice: 0 }
+      : await this.resolveItems(input.items, cfg.defaultWeightGrams);
+    if (!shippingOnly && (resolved.unmatched.length || resolved.matched.length === 0)) {
       return { status: 'unresolved_items', unmatched: resolved.unmatched };
     }
     const weightKg = gramsToKg(resolved.totalGrams);
@@ -419,6 +440,7 @@ export class ShippingService {
         : regionBlocked
           ? 'region'
           : 'no_eligible_courier',
+      shippingOnly, // >>> ANGGA <<<
       // Sengaja item MENTAH hasil ekstraksi (bukan nama katalog): dipakai untuk
       // membandingkan "isi order masih sama?" saat memutuskan cache masih sah.
       items: input.items.map((i) => ({
@@ -558,20 +580,12 @@ export class ShippingService {
 
 // ── Pembantu murni tingkat modul ────────────────────────────────────────────
 
-/** Toleran terhadap model yang membungkus JSON dengan prosa/pagar kode. */
-export function extractJson(raw: string): string {
-  const fenced = raw?.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) return fenced[1].trim();
-  const start = raw?.indexOf('{') ?? -1;
-  const end = raw?.lastIndexOf('}') ?? -1;
-  if (start !== -1 && end !== -1) return raw.slice(start, end + 1);
-  return raw ?? '';
-}
+
 
 export function parseExtract(raw: string): ShippingOrderExtract {
   const empty: ShippingOrderExtract = { city: null, items: [] };
   try {
-    const json = JSON.parse(extractJson(raw)) as {
+    const json = JSON.parse(extractFirstJson(raw) ?? '') as {
       kota?: unknown;
       city?: unknown;
       items?: Array<{ nama?: unknown; name?: unknown; qty?: unknown }>;

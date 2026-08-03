@@ -41,8 +41,12 @@ export interface ShippingQuote {
   destinationId: string;
   /** Berat total order setelah konversi ke kg (dibulatkan ke atas). */
   weightKg: number;
-  /** Total harga barang (Σ qty × harga katalog). */
+  /** Total harga barang (Σ qty × harga katalog). 0 kalau kutipan ongkir-saja. */
   goodsTotal: number;
+  /** >>> ANGGA: true kalau dihitung TANPA daftar barang — hanya mungkin lewat
+   *  alat uji admin, tidak pernah dari percakapan pelanggan. Angkanya berarti
+   *  ONGKIR saja, bukan total belanja. */
+  shippingOnly: boolean;
   transferCourier: string;
   /** Total transfer SUDAH dibulatkan (Rule 11). */
   transferTotal: number;

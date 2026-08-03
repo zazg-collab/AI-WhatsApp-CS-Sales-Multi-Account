@@ -225,6 +225,37 @@ describe('§9.2 — qty > 1 dan/atau lebih dari satu produk berbeda', () => {
     expect(h.mengantar.estimate).toHaveBeenCalledWith(expect.objectContaining({ weightKg: 7 }));
   });
 
+  // >>> ANGGA: alat uji admin boleh menghitung ongkir saja.
+  it('tanpa barang + allowEmptyItems → ongkir saja pakai berat default, harga barang 0', async () => {
+    const h = harness();
+    const res: any = await h.svc.quote({ keyword: 'Medan', items: [], allowEmptyItems: true });
+    expect(res.status).toBe('ok');
+    expect(res.quote.shippingOnly).toBe(true);
+    expect(res.quote.goodsTotal).toBe(0);
+    // Berat default toko 1000 g → 1 kg.
+    expect(h.mengantar.estimate).toHaveBeenCalledWith(expect.objectContaining({ weightKg: 1 }));
+    // Totalnya murni ongkir JNE (recommended), tanpa harga barang.
+    expect(res.quote.transferTotal).toBe(47000);
+    // Katalog tidak perlu disentuh sama sekali.
+    expect(h.prisma.product.findMany).not.toHaveBeenCalled();
+  });
+
+  it('tanpa barang TANPA allowEmptyItems (jalur pelanggan) tetap menolak menebak', async () => {
+    const h = harness();
+    const res = await h.svc.quote({ keyword: 'Medan', items: [] });
+    expect(res.status).toBe('unresolved_items');
+    expect(h.mengantar.estimate).not.toHaveBeenCalled();
+  });
+
+  it('percakapan pelanggan TIDAK PERNAH memakai jalur ongkir-saja', async () => {
+    const h = harness({ extract: { kota: 'Medan', items: [] } });
+    const res = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('unresolved_items');
+    const text = await h.svc.getGroundingText('c1');
+    expect(text).not.toMatch(/\d{3,}/);
+  });
+  // <<< ANGGA
+
   it('nama barang tidak cocok katalog → TIDAK menebak, tidak ada angka', async () => {
     const h = harness({
       extract: { kota: 'Medan', items: [{ nama: 'kompor gas rinnai', qty: 1 }] },

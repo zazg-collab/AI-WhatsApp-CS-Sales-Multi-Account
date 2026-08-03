@@ -135,6 +135,24 @@ describe('ShippingSettingsPage', () => {
     expect(screen.getByText('lion')).toBeInTheDocument();
   });
 
+  it('hasil tanpa barang ditandai jelas sebagai ONGKIR saja', async () => {
+    mockApi({
+      quote: {
+        status: 'ok',
+        quote: {
+          city: 'MAGETAN', province: 'JAWA TIMUR', weightKg: 1, goodsTotal: 0,
+          transferCourier: 'JNE', transferTotal: 24000,
+          codCourier: null, codTotal: null, codEligible: false, shippingOnly: true,
+        },
+      },
+    });
+    render(<ShippingSettingsPage />);
+    fireEvent.change(await screen.findByLabelText(/Destination city/), { target: { value: 'Magetan' } });
+    fireEvent.click(screen.getByRole('button', { name: /Calculate/ }));
+    expect(await screen.findByText(/SHIPPING only/)).toBeInTheDocument();
+    expect(screen.getByText(/24\.000/)).toBeInTheDocument();
+  });
+
   it('status gagal dijelaskan dengan kalimat, bukan kode mentah', async () => {
     mockApi({ quote: { status: 'no_courier' } });
     render(<ShippingSettingsPage />);

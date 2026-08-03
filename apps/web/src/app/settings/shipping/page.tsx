@@ -135,6 +135,10 @@ const dict: Dict = {
   resNoCod: { id: 'COD tidak ditawarkan', en: 'COD not offered' },
   resWeight: { id: 'Berat ditagih', en: 'Chargeable weight' },
   resGoods: { id: 'Harga barang', en: 'Goods subtotal' },
+  resShippingOnly: {
+    id: 'Dihitung TANPA barang — angka di bawah adalah ONGKIR saja (berat default toko, 1 unit), bukan total belanja. Isi kolom barang kalau ingin total yang sebenarnya.',
+    en: 'Calculated with NO items — the numbers below are SHIPPING only (store default weight, 1 unit), not an order total. Fill the items box for a real total.',
+  },
 
   stAmbiguous: { id: 'Nama kota cocok dengan beberapa daerah — bot akan bertanya dulu, tidak menebak.', en: 'The city name matches several places — the bot will ask first, never guess.' },
   stNeedProvince: { id: 'Terlalu banyak (atau tidak ada) daerah yang cocok — bot akan minta provinsinya.', en: 'Too many (or no) matching places — the bot will ask for the province.' },
@@ -164,6 +168,7 @@ interface QuoteOk {
     city: string; province: string; weightKg: number; goodsTotal: number;
     transferCourier: string; transferTotal: number;
     codCourier: string | null; codTotal: number | null; codEligible: boolean;
+    shippingOnly?: boolean;
   };
 }
 /** Semua status non-ok yang bisa dikembalikan ShippingService. Didaftar satu
@@ -465,6 +470,9 @@ export default function ShippingSettingsPage() {
                       <Badge tone="success">{testResult.quote.city}</Badge>
                       <span className="text-xs text-gray-400">{testResult.quote.province}</span>
                     </div>
+                    {testResult.quote.shippingOnly && (
+                      <p className="mb-2 text-xs text-review-700 dark:text-review-300">{t('resShippingOnly')}</p>
+                    )}
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
                       <dt className="text-gray-500">{t('resGoods')}</dt>
                       <dd className="text-right tabular-nums">Rp{formatIdr(testResult.quote.goodsTotal)}</dd>
