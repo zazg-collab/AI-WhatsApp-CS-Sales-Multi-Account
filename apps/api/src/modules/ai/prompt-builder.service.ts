@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { SenderType } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ChatMessage } from './ai-provider.service';
 import { ProductsService } from '../products/products.service';
 import { KnowledgeIndexService, RetrievedKnowledge } from './knowledge-index.service';
+import { ShippingService } from '../shipping/shipping.service'; // >>> ANGGA <<<
 import {
   t,
   BASE_RULES,
@@ -71,6 +72,10 @@ export class PromptBuilderService {
     private readonly prisma: PrismaService,
     private readonly products: ProductsService,
     private readonly knowledgeIndex: KnowledgeIndexService,
+    // >>> ANGGA: opsional supaya seluruh spec lama yang membangun service ini
+    // dengan 3 argumen tetap jalan tanpa diubah.
+    @Optional() private readonly shipping?: ShippingService,
+    // <<< ANGGA
   ) {}
 
   /**
@@ -144,7 +149,17 @@ export class PromptBuilderService {
     // availability only from this real data — never fabricated. Embedded in the
     // primary system message (not a trailing one) because models heed the first
     // system block strongest; otherwise the fallback rule overrides it.
-    const products = query ? await this.products.relevantForQuery(query) : [];
+    // >>> ANGGA: ongkir live dihitung PARALEL dengan pencarian produk (Langkah 2
+    // LAMPIRAN: "jalan paralel dengan alur balasan utama"), bukan berurutan,
+    // supaya tidak menambah latensi balasan. Gagal apa pun -> string kosong,
+    // yang berarti tidak ada apa-apa yang disuntik soal ongkir.
+    const [products, shippingGrounding] = await Promise.all([
+      query ? this.products.relevantForQuery(query) : Promise.resolve([]),
+      this.shipping
+        ? this.shipping.getGroundingText(conversationId, lang).catch(() => '')
+        : Promise.resolve(''),
+    ]);
+    // <<< ANGGA
     const botLocale = localeFor(lang);
     const productBlock = products.length
       ? [
@@ -245,6 +260,13 @@ export class PromptBuilderService {
       { role: 'system', content: t(SECURITY_DIRECTIVE, lang) },
       { role: 'system', content: sharedSystem },
       { role: 'system', content: customerSystem },
+      // >>> ANGGA: data ongkir sengaja jadi pesan system TERSENDIRI, bukan
+      // digabung ke `sharedSystem`. Alasannya sama seperti blok customer:
+      // isinya berbeda per percakapan, jadi menggabungkannya akan merusak
+      // prefix yang bisa di-cache provider. Hanya angka akhir yang sudah
+      // dibulatkan yang ada di dalamnya (Langkah 10 LAMPIRAN).
+      ...(shippingGrounding ? [{ role: 'system' as const, content: shippingGrounding }] : []),
+      // <<< ANGGA
       ...history,
     ];
   }

@@ -58,6 +58,15 @@ const dict: Dict = {
   colSku: { id: 'SKU', en: 'SKU' },
   colPrice: { id: 'Harga', en: 'Price' },
   colStock: { id: 'Stok', en: 'Stock' },
+  // >>> ANGGA: berat satuan produk, dipakai modul ongkir Mengantar.
+  colWeight: { id: 'Berat', en: 'Weight' },
+  weightPlaceholder: { id: 'default', en: 'default' },
+  weightHint: {
+    id: 'Berat satuan dalam gram, dipakai untuk hitung ongkir. Kosongkan = pakai berat default toko.',
+    en: 'Per-unit weight in grams, used to compute shipping. Leave empty = use the store default weight.',
+  },
+  weightSaved: { id: 'Berat produk tersimpan.', en: 'Product weight saved.' },
+  // <<< ANGGA
   sourceNamePlaceholder: { id: 'Nama sumber (mis. Gudang Utama)', en: 'Source name (e.g. Main Warehouse)' },
   gsheetCsvOption: { id: 'Google Sheet (link CSV)', en: 'Google Sheet (CSV link)' },
   gsheetApiOption: { id: 'Google Sheet (API, privat)', en: 'Google Sheet (API, private)' },
@@ -95,6 +104,7 @@ interface Product {
   unit: string | null;
   status: string;
   lastSyncedAt: string | null;
+  weightGrams: number | null; // >>> ANGGA <<<
 }
 
 interface Source {
@@ -154,6 +164,29 @@ export default function ProductsPage() {
     if (canManage) api<Source[]>('/products/sources/list').then(setSources).catch(() => setSources([]));
   }
   useEffect(load, [debouncedSearch, t]);
+
+  // >>> ANGGA: simpan berat satuan produk (gram). Kosong = null, artinya
+  // kembali memakai fallback berat default di config ongkir.
+  async function saveWeight(id: string, raw: string) {
+    const trimmed = raw.trim();
+    const value = trimmed === '' ? null : Number(trimmed);
+    if (value !== null && (!Number.isFinite(value) || value < 1)) return;
+    const before = products.find((x) => x.id === id)?.weightGrams ?? null;
+    if (before === value) return;
+    // Optimistic: tabel langsung ikut berubah, dikembalikan kalau server tolak.
+    setProducts((prev) => prev.map((x) => (x.id === id ? { ...x, weightGrams: value } : x)));
+    try {
+      await api(`/products/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ weightGrams: value }),
+      });
+      setNotice(t('weightSaved'));
+    } catch (e) {
+      setProducts((prev) => prev.map((x) => (x.id === id ? { ...x, weightGrams: before } : x)));
+      setError(e instanceof Error ? e.message : t('loadError'));
+    }
+  }
+  // <<< ANGGA
 
   const LOW_STOCK = 5;
   const stats = useMemo(() => {
@@ -394,7 +427,7 @@ export default function ProductsPage() {
             <div className="scrollbar-thin hidden overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-800 sm:block">
               <table className="w-full min-w-[28rem] text-[13px]">
                 <thead className="bg-gray-50 text-left text-[11px] uppercase tracking-wider text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                  <tr><th scope="col" className="px-3 py-2">{t('colProduct')}</th><th scope="col" className="px-3 py-2">{t('colSku')}</th><th scope="col" className="px-3 py-2 text-right">{t('colPrice')}</th><th scope="col" className="px-3 py-2 text-right">{t('colStock')}</th></tr>
+                  <tr><th scope="col" className="px-3 py-2">{t('colProduct')}</th><th scope="col" className="px-3 py-2">{t('colSku')}</th><th scope="col" className="px-3 py-2 text-right">{t('colPrice')}</th><th scope="col" className="px-3 py-2 text-right">{t('colStock')}</th><th scope="col" className="px-3 py-2 text-right" title={t('weightHint')}>{t('colWeight')}</th></tr>
                 </thead>
                 <tbody>
                   {products.map((p) => (
@@ -413,6 +446,29 @@ export default function ProductsPage() {
                           <span className="tabular-nums font-medium text-gray-900 dark:text-gray-100">{p.stock}{p.unit ? ` ${p.unit}` : ''}</span>
                         )}
                       </td>
+                      {/* >>> ANGGA: berat satuan (gram) untuk modul ongkir. */}
+                      <td className="px-3 py-2 text-right">
+                        {canManage ? (
+                          <span className="inline-flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={1}
+                              inputMode="numeric"
+                              aria-label={`${t('colWeight')} ${p.name}`}
+                              title={t('weightHint')}
+                              defaultValue={p.weightGrams ?? ''}
+                              placeholder={t('weightPlaceholder')}
+                              onBlur={(e) => saveWeight(p.id, e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                              className="w-20 rounded border border-gray-200 bg-transparent px-1.5 py-0.5 text-right text-[13px] tabular-nums text-gray-900 dark:border-gray-700 dark:text-gray-100"
+                            />
+                            <span className="text-[11px] text-gray-400">g</span>
+                          </span>
+                        ) : (
+                          <span className="tabular-nums text-gray-500">{p.weightGrams != null ? `${p.weightGrams} g` : '—'}</span>
+                        )}
+                      </td>
+                      {/* <<< ANGGA */}
                     </tr>
                   ))}
                 </tbody>
@@ -440,6 +496,9 @@ export default function ProductsPage() {
                   </div>
                   <div className="mt-2 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
                     <span className="tabular-nums">{p.sku}</span>
+                    {/* >>> ANGGA */}
+                    <span className="tabular-nums" title={t('weightHint')}>{p.weightGrams != null ? `${p.weightGrams} g` : `${t('colWeight')}: ${t('weightPlaceholder')}`}</span>
+                    {/* <<< ANGGA */}
                     <span className="tabular-nums text-gray-700 dark:text-gray-200">{p.price != null ? formatPrice(p.price, lang, p.currency) : '-'}</span>
                   </div>
                 </div>

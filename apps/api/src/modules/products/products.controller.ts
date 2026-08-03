@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsInt, IsOptional, IsString, Matches, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
@@ -26,6 +26,10 @@ class UpdateProductDto {
   @IsOptional() @IsString() @Matches(/^[A-Z]{3}$/) currency?: string;
   @IsOptional() @IsIn(['active', 'inactive']) status?: string;
   @IsOptional() @IsString() description?: string;
+  // >>> ANGGA: berat satuan (gram) untuk modul ongkir. Boleh dikosongkan
+  // (null) — artinya pakai fallback config `shipping.defaultWeightGrams`.
+  // Batas atas 1.000.000 g (1 ton) semata pagar salah ketik.
+  @IsOptional() @IsInt() @Min(1) @Max(1_000_000) weightGrams?: number | null;
 }
 
 class CreateSourceDto {
@@ -54,7 +58,7 @@ export class ProductsController {
     return this.products.list({ search, status });
   }
 
-  @ApiOperation({ summary: 'Update a product (stock/price/status/description)' })
+  @ApiOperation({ summary: 'Update a product (stock/price/status/description/weightGrams)' })
   @Roles('admin', 'supervisor', 'owner')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateProductDto) {

@@ -520,3 +520,55 @@ export function localeFor(lang: BotLang): string {
 // ── Re-export typed getter ────────────────────────────────────────────────────
 
 export { t };
+
+// >>> ANGGA — Modul Shipping Service Mengantar.
+// Prompt LLM kecil auxiliary (Langkah 2 LAMPIRAN): SATU panggilan, DUA keluaran
+// (kota tujuan + daftar item), pola sama persis LEAD_SCORE_SYSTEM/SENTIMENT_SYSTEM.
+export const SHIPPING_EXTRACT_SYSTEM = {
+  id: `Kamu mengekstrak DATA PENGIRIMAN dari percakapan WhatsApp sebuah toko.
+Balas HANYA JSON: {"kota": string|null, "items": [{"nama": string, "qty": number}]}
+Aturan:
+- "kota": nama kota/kabupaten/provinsi TUJUAN KIRIM yang disebut pelanggan. null kalau belum ada yang disebut.
+- "items": SEMUA barang yang pelanggan sebut ingin dibeli sejauh ini di percakapan ini. Salin nama produknya apa adanya seperti yang ditulis pelanggan; jangan diterjemahkan, jangan dikarang, jangan ditambah barang yang tidak disebut.
+- "qty": 1 kalau pelanggan tidak menyebut jumlah; ikuti angkanya kalau pelanggan menyebut jumlah/pcs/buah.
+- JANGAN menyebutkan harga, berat, atau ongkir dalam bentuk apa pun. Angka-angka itu diambil sistem dari katalog, bukan darimu.`,
+
+  en: `You extract SHIPPING DATA from a shop's WhatsApp conversation.
+Reply ONLY with JSON: {"kota": string|null, "items": [{"nama": string, "qty": number}]}
+Rules:
+- "kota": the destination city/regency/province the customer mentioned. null if none mentioned yet.
+- "items": ALL products the customer has said they want to buy so far in this conversation. Copy the product names verbatim as the customer wrote them; do not translate, invent, or add items that were not mentioned.
+- "qty": 1 when the customer gave no quantity; otherwise follow the number they gave.
+- NEVER output prices, weights, or shipping costs. Those come from the catalog, not from you.`,
+};
+
+export const SHIPPING_EXTRACT_USER = {
+  id: 'Ekstrak kota tujuan kirim & daftar barang dari percakapan di atas. Balas HANYA JSON.',
+  en: 'Extract the destination city and the item list from the conversation above. Reply ONLY with JSON.',
+};
+
+export const SHIPPING_GROUNDING_INTRO = {
+  id: 'DATA ONGKIR TERKINI & SAH (dihitung sistem dari tarif live ekspedisi untuk SELURUH barang yang disebut pelanggan). Pakai angka di bawah APA ADANYA. Jangan menghitung ulang, jangan menjumlah sendiri, jangan menampilkan rincian ongkir/biaya COD terpisah ke pelanggan, dan jangan menyebut angka lain yang tidak ada di sini.',
+  en: 'CURRENT AUTHORITATIVE SHIPPING DATA (computed by the system from live carrier rates for ALL items the customer mentioned). Use the numbers below AS-IS. Do not recompute, do not add them up yourself, do not show the shipping/COD fee breakdown to the customer, and never state a number that is not listed here.',
+};
+
+export const SHIPPING_GROUNDING_UNKNOWN = {
+  id: 'DATA ONGKIR: sistem ongkir BELUM bisa memastikan tarif untuk order ini. JANGAN menyebut angka ongkir, total, atau biaya COD apa pun — termasuk jangan menyiratkan gratis/Rp0. Katakan jujur bahwa ongkirnya sedang dicek dulu ke admin.',
+  en: 'SHIPPING DATA: the shipping system could NOT determine a rate for this order. Do NOT state any shipping cost, total, or COD fee — and do not imply it is free/zero. Say honestly that you are checking the shipping cost with the team first.',
+};
+
+export const SHIPPING_GROUNDING_AMBIGUOUS = {
+  id: 'DATA ONGKIR: nama kota yang disebut pelanggan cocok dengan lebih dari satu daerah. JANGAN menyebut angka ongkir apa pun dulu. Tanyakan dulu dengan bahasa santai yang mana yang dimaksud, dari pilihan berikut:',
+  en: 'SHIPPING DATA: the city the customer mentioned matches more than one place. Do NOT state any shipping cost yet. Ask casually which one they mean, from these options:',
+};
+
+export const SHIPPING_GROUNDING_NEED_PROVINCE = {
+  id: 'DATA ONGKIR: nama daerah yang disebut pelanggan cocok dengan terlalu banyak daerah (atau tidak ditemukan). JANGAN menyebut angka ongkir apa pun. Minta pelanggan menyebutkan provinsinya saja — jangan menyodorkan daftar panjang.',
+  en: 'SHIPPING DATA: the place the customer mentioned matches too many locations (or none). Do NOT state any shipping cost. Ask which province it is in — do not dump a long list.',
+};
+
+export const SHIPPING_GROUNDING_UNRESOLVED_ITEMS = {
+  id: 'DATA ONGKIR: sistem belum bisa memastikan ongkir karena barang yang dimaksud pelanggan belum jelas/tidak cocok dengan katalog. JANGAN menyebut angka ongkir atau total apa pun. Pastikan dulu produk mana persisnya yang mau dipesan.',
+  en: 'SHIPPING DATA: shipping cannot be quoted yet because the item the customer means is unclear or does not match the catalog. Do NOT state any shipping cost or total. Confirm exactly which product they want first.',
+};
+// <<< ANGGA

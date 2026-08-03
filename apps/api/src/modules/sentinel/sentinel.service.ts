@@ -10,6 +10,7 @@ import { EventsGateway } from '../../realtime/events.gateway';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { AiProviderService } from '../ai/ai-provider.service';
 import { PromptBuilderService } from '../ai/prompt-builder.service';
+import { ShippingService } from '../shipping/shipping.service'; // >>> ANGGA <<<
 import { SettingsService } from '../settings/settings.service';
 import { HermesAgentClient } from './hermes-agent.client';
 import { MetricsService } from '../../common/metrics/metrics.service';
@@ -28,6 +29,7 @@ const FALLBACK_MARKERS = Object.values(FALLBACK_PHRASE) as string[];
 import {
   checkKnowledgeGrounding,
   checkForbiddenWords, // >>> ANGGA <<<
+  checkShippingEscalation, // >>> ANGGA <<<
   checkPriceGrounding,
   decisionFromConfidence,
   evaluateRules,
@@ -64,6 +66,7 @@ export class SentinelService {
     private readonly agent: HermesAgentClient,
     private readonly settings: SettingsService,
     @Optional() private readonly metrics?: MetricsService,
+    @Optional() private readonly shipping?: ShippingService, // >>> ANGGA <<<
   ) {}
 
   /**
@@ -108,7 +111,14 @@ export class SentinelService {
     // number that isn't anywhere in the actual knowledge/product data the bot
     // was given? Catches fabrication a flaky LLM judge might still approve.
     const groundingText = await this.prompts.getGroundingText(conversationId);
-    const groundingHit = checkPriceGrounding(draftText, groundingText);
+    // >>> ANGGA: angka ongkir/COD yang sudah dibulatkan ikut jadi acuan sah,
+    // supaya total yang benar tidak salah ditandai "mengarang" — dan sebaliknya
+    // total yang TIDAK dihitung sistem tetap ketahan.
+    const shippingNumbers = this.shipping
+      ? await this.shipping.getGroundingNumbers(conversationId).catch(() => '')
+      : '';
+    const groundingHit = checkPriceGrounding(draftText, groundingText, shippingNumbers);
+    // <<< ANGGA
 
     // 1c. RAG discipline: nothing retrieved + bot didn't punt to the fallback
     // phrase → it likely answered from outside the KB. Same n8n/Dify-style
@@ -120,6 +130,13 @@ export class SentinelService {
     const forbiddenHit = checkForbiddenWords(
       draftText,
       conversation.bot?.persona?.forbiddenWords,
+    );
+
+    // 1e. Sistem ongkir tidak bisa memberi angka PADAHAL pelanggan sudah
+    // mengarah ke checkout -> naikkan ke admin (LAMPIRAN §3 + Rule 10).
+    const shippingHit = checkShippingEscalation(
+      this.shipping?.lastOutcome(conversationId) ?? null,
+      lastCustomerText,
     );
     // <<< ANGGA
 
@@ -157,6 +174,12 @@ export class SentinelService {
       decision = mostRestrictive(decision, forbiddenHit.decision);
       riskLevel = highestRisk(riskLevel, forbiddenHit.riskLevel);
       reason = `${forbiddenHit.reason}. ${reason}`;
+    }
+
+    if (shippingHit) {
+      decision = mostRestrictive(decision, shippingHit.decision);
+      riskLevel = highestRisk(riskLevel, shippingHit.riskLevel);
+      reason = `${shippingHit.reason}. ${reason}`;
     }
     // <<< ANGGA
 

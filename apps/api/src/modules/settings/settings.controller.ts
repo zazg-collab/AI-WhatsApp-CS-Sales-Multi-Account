@@ -22,7 +22,15 @@ export class SettingsController {
   /** Never return the raw API key — only whether one is configured. */
   private mask(all: AppSettings) {
     const { apiKey, ...ai } = all.ai;
-    return { ...all, ai: { ...ai, apiKeySet: !!apiKey } };
+    // >>> ANGGA: kredensial Mengantar diperlakukan sama seperti AI_API_KEY —
+    // tidak pernah dikembalikan mentah ke dashboard, cuma status "sudah diisi".
+    const { mengantarApiKey, ...shipping } = all.shipping;
+    return {
+      ...all,
+      ai: { ...ai, apiKeySet: !!apiKey },
+      shipping: { ...shipping, mengantarApiKeySet: !!mengantarApiKey },
+    };
+    // <<< ANGGA
   }
 
   @ApiOperation({ summary: 'Get application settings (secrets masked)' })
@@ -47,6 +55,13 @@ export class SettingsController {
     if (dto.sla) await this.settings.updateCategory('sla', dto.sla);
     if (dto.sentinel) await this.settings.updateCategory('sentinel', dto.sentinel);
     if (dto.campaign) await this.settings.updateCategory('campaign', dto.campaign);
+    // >>> ANGGA: kunci API kosong = "pertahankan yang tersimpan", sama seperti ai.apiKey.
+    if (dto.shipping) {
+      const shipping = { ...dto.shipping };
+      if (!shipping.mengantarApiKey || !shipping.mengantarApiKey.trim()) delete shipping.mengantarApiKey;
+      if (Object.keys(shipping).length) await this.settings.updateCategory('shipping', shipping);
+    }
+    // <<< ANGGA
 
     await logAudit(this.prisma, {
       userId: user.id,
@@ -56,6 +71,7 @@ export class SettingsController {
       newValue: {
         categories: Object.keys(dto),
         aiApiKeyChanged: !!(dto.ai?.apiKey && dto.ai.apiKey.trim()),
+        mengantarApiKeyChanged: !!(dto.shipping?.mengantarApiKey && dto.shipping.mengantarApiKey.trim()), // >>> ANGGA <<<
       },
     });
 

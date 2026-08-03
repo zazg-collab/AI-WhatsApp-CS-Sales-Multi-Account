@@ -714,6 +714,12 @@ model Product {
   currency     String?
   stock        Int       @default(0)
   unit         String?
+  /// >>> ANGGA: berat satuan produk dalam GRAM, dipakai modul shipping untuk
+  /// menghitung berat total order (berat x qty, dijumlah lintas item).
+  /// NULL = pakai fallback config `shipping.defaultWeightGrams`. Sengaja
+  /// nullable: seluruh katalog Cordova saat ini sama rata 1000 g sehingga
+  /// fallback sudah benar; kolom ini untuk pembeda berat di masa depan.
+  weightGrams  Int?      @map("weight_grams")
   description  String?
   status       String    @default("active")
   /// Where this row was last synced from (e.g. "csv", "gsheet:<id>").

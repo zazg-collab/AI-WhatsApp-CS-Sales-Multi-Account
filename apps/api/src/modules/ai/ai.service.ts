@@ -11,6 +11,13 @@ import {
 } from './ai-provider.service';
 import { PromptBuilderService } from './prompt-builder.service';
 import { AiCacheService } from './ai-cache.service';
+// >>> ANGGA: pemanggilan LLM auxiliary Langkah 2 modul shipping (deteksi tujuan
+// + item order dalam SATU panggilan). Implementasinya tinggal di
+// `shipping.service.ts` bersama pemakainya; di sini disediakan pintu masuk
+// resmi lewat AiService supaya sejajar dengan `leadScore`/`analyzeSentiment`
+// dan bisa dipakai controller/uji tanpa menyentuh modul shipping langsung.
+import { ShippingService, type ShippingOrderExtract } from '../shipping/shipping.service';
+// <<< ANGGA
 import {
   t,
   LEAD_SCORE_SYSTEM,
@@ -98,11 +105,23 @@ export class AiService {
     private readonly cache: AiCacheService,
     @Optional() private readonly webhooks?: WebhooksService,
     @Optional() private readonly metrics?: MetricsService,
+    @Optional() private readonly shipping?: ShippingService, // >>> ANGGA <<<
   ) {}
 
   cacheStats() {
     return this.cache.stats();
   }
+
+  // >>> ANGGA: Langkah 2 LAMPIRAN — satu panggilan LLM kecil mode JSON yang
+  // mengembalikan tujuan kirim DAN daftar item sekaligus (bukan dua panggilan
+  // terpisah, supaya biaya token tidak dobel). Pola sama persis
+  // LEAD_SCORE_SYSTEM/SENTIMENT_SYSTEM: temperature 0, json: true, parse
+  // toleran, tidak pernah melempar.
+  async extractShippingOrder(conversationId: string): Promise<ShippingOrderExtract> {
+    if (!this.shipping) return { city: null, items: [] };
+    return this.shipping.extractOrderTarget(conversationId);
+  }
+  // <<< ANGGA
 
   listModels() {
     return this.provider.listModels();

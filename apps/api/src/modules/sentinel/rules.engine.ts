@@ -117,11 +117,24 @@ export function decisionFromConfidence(
  * judge might still approve. Never flags when there is no grounding data to
  * compare against (nothing to fabricate FROM, or the bot has no KB yet).
  */
-export function checkPriceGrounding(draftText: string, groundedText: string): RuleHit | null {
-  if (!groundedText.trim()) return null;
+export function checkPriceGrounding(
+  draftText: string,
+  groundedText: string,
+  // >>> ANGGA: angka ongkir/total COD yang SUDAH DIBULATKAN dari modul shipping
+  // (Langkah 11 LAMPIRAN). Sengaja parameter terpisah & opsional, bukan
+  // digabung ke `groundedText`, karena `checkKnowledgeGrounding` memakai
+  // KOSONG/TIDAKNYA `groundedText` sebagai sinyal "tidak ada yang terambil dari
+  // knowledge base" — kalau teks ongkir ikut ke sana, aturan itu jadi lumpuh.
+  shippingNumbers = '',
+  // <<< ANGGA
+): RuleHit | null {
+  if (!groundedText.trim() && !shippingNumbers.trim()) return null; // >>> ANGGA <<<
   const draftNumbers = draftText.match(/\d[\d.,]{3,}/g) ?? [];
   if (draftNumbers.length === 0) return null;
-  const groundedDigits = (groundedText.match(/\d+/g) ?? []).join(' ');
+  const groundedDigits = [
+    (groundedText.match(/\d+/g) ?? []).join(' '),
+    (shippingNumbers.match(/\d+/g) ?? []).join(' '), // >>> ANGGA <<<
+  ].join(' ');
   const ungrounded = draftNumbers
     .map((n) => n.replace(/\D/g, ''))
     .filter((n) => n.length >= 4 && !groundedDigits.includes(n));
@@ -129,7 +142,7 @@ export function checkPriceGrounding(draftText: string, groundedText: string): Ru
   return {
     decision: SentinelDecision.draft,
     riskLevel: RiskLevel.medium,
-    reason: `Draft menyebut angka (${ungrounded.join(', ')}) yang tidak ditemukan di product knowledge/stok — kemungkinan mengarang`,
+    reason: `Draft menyebut angka (${ungrounded.join(', ')}) yang tidak ditemukan di product knowledge/stok/ongkir — kemungkinan mengarang`,
   };
 }
 
@@ -192,6 +205,42 @@ export function checkForbiddenWords(
     decision: SentinelDecision.takeover_required,
     riskLevel: RiskLevel.high,
     reason: `Balasan memakai kata terlarang persona: "${matched}"`,
+  };
+}
+// <<< ANGGA
+
+// >>> ANGGA: eskalasi kalau sistem ongkir tidak bisa memberi angka SAAT
+// pelanggan sudah siap checkout (LAMPIRAN §3 + Rule 10). Paralel dengan
+// `checkKnowledgeGrounding` untuk knowledge base yang kosong.
+//
+// Dua kondisi sengaja DIBEDAKAN di alasannya walau tindakannya sama, supaya
+// bisa dipisah saat ditelusuri di log/monitoring: "0 kurir lolos filter" itu
+// sinyal daftar exclude/allowlist perlu ditinjau, sedangkan "API tidak
+// merespons" itu sinyal infrastruktur.
+const CHECKOUT_READY =
+  /\b(checkout|pesan|order|beli|ambil|alamat|kirim ke|cod|transfer|bayar|bayarnya|ongkir|total|dp)\b/i;
+
+export type ShippingFailure = 'api_error' | 'no_courier' | 'not_configured';
+
+export function checkShippingEscalation(
+  outcome: string | null | undefined,
+  customerText: string,
+): RuleHit | null {
+  const failures: string[] = ['api_error', 'no_courier', 'not_configured'];
+  if (!outcome || !failures.includes(outcome)) return null;
+  if (!CHECKOUT_READY.test(customerText ?? '')) return null;
+
+  const detail =
+    outcome === 'no_courier'
+      ? 'API ongkir hidup tapi TIDAK ADA kurir yang lolos filter untuk tujuan ini (tinjau daftar exclude/allowlist)'
+      : outcome === 'not_configured'
+        ? 'Kredensial Mengantar belum dikonfigurasi'
+        : 'API ongkir tidak merespons / timeout';
+
+  return {
+    decision: SentinelDecision.takeover_required,
+    riskLevel: RiskLevel.high,
+    reason: `Pelanggan sudah mengarah ke checkout tapi ongkir belum bisa dipastikan — ${detail}`,
   };
 }
 // <<< ANGGA

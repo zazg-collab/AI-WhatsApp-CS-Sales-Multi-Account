@@ -27,6 +27,7 @@ import { SettingsModule } from './modules/settings/settings.module';
 import { LearningModule } from './modules/learning/learning.module';
 import { AssetsModule } from './modules/assets/assets.module';
 import { ProductsModule } from './modules/products/products.module';
+import { ShippingModule } from './modules/shipping/shipping.module'; // >>> ANGGA <<<
 import { AgentModule } from './modules/agent/agent.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
@@ -84,6 +85,7 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
     LearningModule,
     AssetsModule,
     ProductsModule,
+    ShippingModule, // >>> ANGGA <<<
     AgentModule,
     AlertsModule,
   ],

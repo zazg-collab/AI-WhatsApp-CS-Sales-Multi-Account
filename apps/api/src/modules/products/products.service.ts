@@ -83,7 +83,19 @@ export class ProductsService implements OnModuleInit {
     });
   }
 
-  async update(id: string, data: { stock?: number; price?: number; currency?: string; status?: string; description?: string }) {
+  async update(
+    id: string,
+    data: {
+      stock?: number;
+      price?: number;
+      currency?: string;
+      status?: string;
+      description?: string;
+      /** >>> ANGGA: berat satuan (gram) untuk modul ongkir. null = kosongkan
+       *  lagi supaya kembali memakai fallback config. */
+      weightGrams?: number | null;
+    },
+  ) {
     const existing = await this.prisma.product.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Product not found');
     return this.prisma.product.update({ where: { id }, data });

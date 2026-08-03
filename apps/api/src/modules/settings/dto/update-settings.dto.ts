@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsOptional,
   IsString,
   IsNumber,
@@ -97,6 +98,43 @@ class CampaignSettingsDto {
   requireApproval?: boolean;
 }
 
+// >>> ANGGA: config modul Shipping Service Mengantar (§6 LAMPIRAN).
+class ShippingSettingsDto {
+  // Kosong = pertahankan kunci yang tersimpan (lihat controller).
+  @IsOptional() @IsString()
+  mengantarApiKey?: string;
+
+  @IsOptional() @IsString()
+  mengantarOriginId?: string;
+
+  @IsOptional() @IsString()
+  baseUrl?: string;
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  courierExclude?: string[];
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  codAllowlist?: string[];
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  codBlockedRegionKeywords?: string[];
+
+  @IsOptional() @IsNumber() @Min(1) @Max(1_000_000)
+  defaultWeightGrams?: number;
+
+  @IsOptional() @IsNumber() @Min(0) @Max(604_800_000)
+  quoteCacheTtlMs?: number;
+
+  @IsOptional() @IsNumber() @Min(0) @Max(1_000_000)
+  discountMaxPerOrder?: number;
+
+  // 1 = tanpa pembulatan. Batas atas 100.000 supaya salah ketik tidak membuat
+  // semua harga melompat ke kelipatan yang absurd.
+  @IsOptional() @IsNumber() @Min(1) @Max(100_000)
+  priceRoundingIncrement?: number;
+}
+// <<< ANGGA
+
 export class UpdateSettingsDto {
   @IsOptional() @ValidateNested() @Type(() => AiSettingsDto)
   ai?: AiSettingsDto;
@@ -115,4 +153,9 @@ export class UpdateSettingsDto {
 
   @IsOptional() @ValidateNested() @Type(() => CampaignSettingsDto)
   campaign?: CampaignSettingsDto;
+
+  // >>> ANGGA
+  @IsOptional() @ValidateNested() @Type(() => ShippingSettingsDto)
+  shipping?: ShippingSettingsDto;
+  // <<< ANGGA
 }

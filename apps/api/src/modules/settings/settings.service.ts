@@ -9,6 +9,7 @@ import {
   SlaSettings,
   SentinelSettings,
   CampaignSettings,
+  ShippingSettings, // >>> ANGGA <<<
 } from './settings.types';
 
 /**
@@ -33,6 +34,16 @@ export class SettingsService {
     const n = Number(value);
     return Number.isFinite(n) && n >= 0 ? n : fallback;
   }
+
+  // >>> ANGGA: parser daftar dari env (CSV) untuk config modul shipping.
+  // Nilai kosong/tidak diset → pakai fallback (daftar default §6 LAMPIRAN).
+  private list(value: unknown, fallback: string[]): string[] {
+    if (Array.isArray(value)) return value.map(String).map((v) => v.trim()).filter(Boolean);
+    const raw = typeof value === 'string' ? value : '';
+    const parsed = raw.split(',').map((v) => v.trim()).filter(Boolean);
+    return parsed.length ? parsed : fallback;
+  }
+  // <<< ANGGA
 
   /** Env-derived defaults — the baseline before any DB override. */
   private defaults(): AppSettings {
@@ -71,6 +82,26 @@ export class SettingsService {
         defaultRateLimitPerMinute: this.num(this.config.get('CAMPAIGN_DEFAULT_RATE_LIMIT'), 6),
         requireApproval: (this.config.get<string>('CAMPAIGN_REQUIRE_APPROVAL') ?? 'true') !== 'false',
       },
+      // >>> ANGGA: default modul shipping. Angka & daftar di sini SAMA PERSIS
+      // dengan tabel §6 LAMPIRAN; kode modul shipping tidak boleh punya salinan
+      // angka-angka ini sendiri.
+      shipping: {
+        mengantarApiKey: this.config.get<string>('MENGANTAR_API_KEY') ?? '',
+        mengantarOriginId: this.config.get<string>('MENGANTAR_ORIGIN_ID') ?? '',
+        baseUrl: (this.config.get<string>('MENGANTAR_BASE_URL') ?? 'https://app.mengantar.com').replace(/\/$/, ''),
+        courierExclude: this.list(this.config.get('SHIPPING_COURIER_EXCLUDE'), [
+          'paxel', 'JNECargo', 'SiCepatCargo', 'SapCargo', 'iDexpressCargo', 'SAPLite', 'iDlite',
+        ]),
+        codAllowlist: this.list(this.config.get('SHIPPING_COD_ALLOWLIST'), ['JNE']),
+        codBlockedRegionKeywords: this.list(
+          this.config.get('SHIPPING_COD_BLOCKED_REGION_KEYWORDS'), ['papua', 'maluku'],
+        ),
+        defaultWeightGrams: this.num(this.config.get('SHIPPING_DEFAULT_WEIGHT_GRAMS'), 1000),
+        quoteCacheTtlMs: this.num(this.config.get('SHIPPING_QUOTE_CACHE_TTL_MS'), 21_600_000),
+        discountMaxPerOrder: this.num(this.config.get('SHIPPING_DISCOUNT_MAX_PER_ORDER'), 5000),
+        priceRoundingIncrement: this.num(this.config.get('SHIPPING_PRICE_ROUNDING_INCREMENT'), 500),
+      },
+      // <<< ANGGA
     };
   }
 
@@ -111,6 +142,11 @@ export class SettingsService {
   async campaign(): Promise<CampaignSettings> {
     return (await this.getAll()).campaign;
   }
+  // >>> ANGGA
+  async shipping(): Promise<ShippingSettings> {
+    return (await this.getAll()).shipping;
+  }
+  // <<< ANGGA
 
   /** Persist a category's values (partial merge) and invalidate the cache. */
   async updateCategory<K extends keyof AppSettings>(

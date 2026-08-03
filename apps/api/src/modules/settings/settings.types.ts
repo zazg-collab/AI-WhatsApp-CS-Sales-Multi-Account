@@ -62,6 +62,40 @@ export interface CampaignSettings {
   requireApproval: boolean;
 }
 
+// >>> ANGGA: config modul Shipping Service Mengantar (LAMPIRAN §6).
+// Disimpan sebagai SATU baris app_settings (key = "shipping") mengikuti pola
+// kategori yang sudah dipakai Sentinel — bukan 9 baris key flat, karena
+// SettingsService.getAll() hanya membaca baris yang key-nya cocok nama kategori.
+// Nama key §6 dipertahankan di komentar tiap field supaya tetap bisa ditelusuri
+// balik ke dokumen.
+export interface ShippingSettings {
+  /** §6 `mengantar_api_key`. RAHASIA — jangan pernah dicetak/di-log mentah. */
+  mengantarApiKey: string;
+  /** §6 `mengantar_origin_id` — titik asal kirim milik Cordova. */
+  mengantarOriginId: string;
+  /** Base URL API Mengantar. Di luar tabel §6 (parameter teknis, bukan angka
+   *  bisnis) supaya endpoint bisa diarahkan ke sandbox/mock tanpa ubah kode. */
+  baseUrl: string;
+  /** §6 `shipping_courier_exclude` — Rule 1. */
+  courierExclude: string[];
+  /** §6 `shipping_cod_allowlist` — Rule 2 baris terakhir (flag kosong/null). */
+  codAllowlist: string[];
+  /** §6 `shipping_cod_blocked_region_keywords` — Rule 3. Dicocokkan sebagai
+   *  substring case-insensitive ke PROVINCE_NAME, bukan exact match. */
+  codBlockedRegionKeywords: string[];
+  /** §6 `shipping_default_weight_grams` — FALLBACK saja (Rule 4), dipakai hanya
+   *  kalau `Product.weightGrams` kosong untuk produk itu. */
+  defaultWeightGrams: number;
+  /** §6 `shipping_quote_cache_ttl_ms` — Rule 8, default 6 jam. */
+  quoteCacheTtlMs: number;
+  /** §6 `shipping_discount_max_per_order` — Rule 7. v1: DOKUMENTASI SAJA,
+   *  penegakannya masih kepatuhan LLM, bukan gate numerik. */
+  discountMaxPerOrder: number;
+  /** §6 `shipping_price_rounding_increment` — Rule 11. */
+  priceRoundingIncrement: number;
+}
+// <<< ANGGA
+
 export interface AppSettings {
   ai: AiSettings;
   wa: WaSettings;
@@ -69,6 +103,7 @@ export interface AppSettings {
   sla: SlaSettings;
   sentinel: SentinelSettings;
   campaign: CampaignSettings;
+  shipping: ShippingSettings; // >>> ANGGA <<<
 }
 
 export type SettingsCategory = keyof AppSettings;
