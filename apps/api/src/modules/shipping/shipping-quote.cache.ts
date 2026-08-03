@@ -27,7 +27,8 @@ export type ShippingOutcome =
   | 'ok'
   | 'no_destination'
   | 'ambiguous'
-  | 'need_province'
+  | 'need_more_detail'
+  | 'destination_stuck'
   | 'unresolved_items'
   | 'no_courier'
   | 'api_error'
@@ -47,6 +48,8 @@ export interface ShippingQuote {
    *  alat uji admin, tidak pernah dari percakapan pelanggan. Angkanya berarti
    *  ONGKIR saja, bukan total belanja. */
   shippingOnly: boolean;
+  /** Nama barang yang disebut pelanggan tapi tidak cocok katalog (kalau ada). */
+  unmatchedNames?: string[];
   transferCourier: string;
   /** Total transfer SUDAH dibulatkan (Rule 11). */
   transferTotal: number;
@@ -68,6 +71,17 @@ interface Entry {
 export class ShippingQuoteCache {
   private readonly store = new Map<string, Entry>();
   private readonly outcomes = new Map<string, { outcome: ShippingOutcome; at: number }>();
+  /**
+   * >>> ANGGA: berapa kali bot SUDAH bertanya soal tujuan di percakapan ini.
+   * Dipakai menaikkan tangga pertanyaan supaya bot tidak pernah mengulang
+   * kalimat yang sama dua kali.
+   *
+   * `messageId` disimpan bersamanya karena satu giliran balasan memanggil
+   * grounding LEBIH DARI SEKALI (prompt-builder saat menulis draft, lalu
+   * Sentinel saat mereview). Tanpa penjaga ini, satu pesan pelanggan bisa
+   * menaikkan tangga 2-3 sekaligus dan bot melompat langsung ke admin.
+   */
+  private readonly asks = new Map<string, { count: number; messageId: string }>();
   private hits = 0;
   private misses = 0;
 
@@ -126,6 +140,29 @@ export class ShippingQuoteCache {
     }
   }
 
+  /** Naikkan penghitung SEKALI per pesan pelanggan. Mengembalikan ronde saat ini. */
+  bumpAsk(conversationId: string, messageId: string): number {
+    const prev = this.asks.get(conversationId);
+    if (prev && prev.messageId === messageId) return prev.count;
+    const next = { count: (prev?.count ?? 0) + 1, messageId };
+    this.asks.set(conversationId, next);
+    while (this.asks.size > MAX_QUOTE_ENTRIES) {
+      const oldest = this.asks.keys().next().value;
+      if (oldest === undefined) break;
+      this.asks.delete(oldest);
+    }
+    return next.count;
+  }
+
+  askCount(conversationId: string): number {
+    return this.asks.get(conversationId)?.count ?? 0;
+  }
+
+  /** Tujuan akhirnya jelas → tangga kembali ke nol. */
+  resetAsks(conversationId: string): void {
+    this.asks.delete(conversationId);
+  }
+
   lastOutcome(conversationId: string): ShippingOutcome | null {
     const memo = this.outcomes.get(conversationId);
     if (!memo) return null;
@@ -149,6 +186,7 @@ export class ShippingQuoteCache {
   clear(): void {
     this.store.clear();
     this.outcomes.clear();
+    this.asks.clear();
     this.hits = 0;
     this.misses = 0;
   }

@@ -14,7 +14,11 @@ import {
   SHIPPING_GROUNDING_INTRO,
   SHIPPING_GROUNDING_UNKNOWN,
   SHIPPING_GROUNDING_AMBIGUOUS,
-  SHIPPING_GROUNDING_NEED_PROVINCE,
+  SHIPPING_GROUNDING_NEED_DETAIL,
+  SHIPPING_GROUNDING_ASK_DISTRICT,
+  SHIPPING_GROUNDING_ASK_PROVINCE,
+  SHIPPING_GROUNDING_DESTINATION_STUCK,
+  SHIPPING_GROUNDING_SHIPPING_ONLY,
   SHIPPING_GROUNDING_UNRESOLVED_ITEMS,
 } from '../../i18n/bot-prompts';
 import {
@@ -73,6 +77,21 @@ export const MIN_PRODUCT_MATCH_SCORE = 2;
 /** Berapa pesan terakhir yang dibaca LLM deteksi Langkah 2. Parameter teknis. */
 export const EXTRACT_HISTORY_LIMIT = 20;
 
+/**
+ * >>> ANGGA — berapa kali bot boleh bertanya soal tujuan sebelum menyerahkannya
+ * ke admin. Tangganya: (1) pertanyaan tertutup "Kota atau Kabupaten?",
+ * (2) minta kecamatan, (3) serahkan ke manusia.
+ *
+ * Yang tertutup didahulukan karena paling murah: pelanggan memilih satu dari
+ * dua, jawabannya langsung memetakan ke destination_id yang SUDAH di tangan,
+ * tanpa pencarian ulang. Kecamatan sengaja di tangga dua — jawabannya bisa
+ * ambigu sendiri (dibuktikan live: "Cibinong" ada di Kab. Bogor DAN Kab.
+ * Cianjur), jadi menaruhnya duluan malah bisa menambah putaran.
+ *
+ * Parameter teknis, bukan angka bisnis §6.
+ */
+export const MAX_DESTINATION_ASKS = 2;
+
 export interface ExtractedItem {
   name: string;
   qty: number;
@@ -85,8 +104,8 @@ export interface ShippingOrderExtract {
 
 export type ShippingResult =
   | { status: 'ok'; quote: ShippingQuote }
-  | { status: 'ambiguous'; candidates: Array<{ city: string; province: string }> }
-  | { status: 'need_province'; keyword: string }
+  | { status: 'ambiguous'; candidates: Array<{ city: string; province: string; label: string }> }
+  | { status: 'need_more_detail'; keyword: string }
   | { status: 'no_destination' }
   | { status: 'unresolved_items'; unmatched: string[] }
   | { status: 'no_courier' }
@@ -117,23 +136,94 @@ export function gramsToKg(totalGrams: number): number {
   return Math.max(1, Math.ceil(totalGrams / 1000));
 }
 
-/** Kelompokkan hasil Search Address per PROVINCE_NAME + CITY_NAME (Langkah 3). */
-export function groupAddresses(rows: MengantarAddress[]): Array<{
+/**
+ * >>> ANGGA — Langkah 3, DIPERBAIKI setelah dipakai ke tujuan sungguhan.
+ *
+ * Cara lama (§3 LAMPIRAN): kelompokkan SEMUA hasil per provinsi+kota lalu hitung
+ * kelompoknya — 1 auto, 2-3 tanya, >3 minta provinsi.
+ *
+ * Terbukti salah di lapangan (diuji live 2026-08-03): pencarian Mengantar
+ * mencocokkan sampai level kelurahan, jadi "Surabaya" balik 10 kelompok dan
+ * "Bandung" 25 — sembilan puluh persennya cuma desa senama di kabupaten lain.
+ * Akibatnya kota-kota TERBESAR justru selalu jatuh ke "minta provinsi" dan
+ * modul ini nyaris tidak pernah mengeluarkan angka.
+ *
+ * Perbaikannya memakai field yang memang sudah disediakan API, bukan heuristik
+ * karangan: cocokkan kata kunci ke SATU level yang tepat, dengan urutan
+ * CITY_NAME → DISTRICT_NAME → SUBDISTRICT_NAME, lalu hitung kota unik di level
+ * itu saja. Sepuluh kelompok "Surabaya" langsung runtuh jadi satu.
+ *
+ * Kecocokan harus PERSIS, bukan "mengandung": "Solo" mengandung-cocok ke
+ * "SOLOK" (Sumatera Barat) dan akan membuat bot menyebut angka yang salah
+ * dengan percaya diri.
+ */
+export type DestinationLevel = 'city' | 'district' | 'subdistrict';
+
+export interface DestinationCandidate {
   city: string;
   province: string;
+  /** CITY_NAME_SI dari Mengantar, mis. "Kota Bogor" / "Kab. Bogor". */
+  cityLabel: string;
   ids: string[];
-}> {
-  const groups = new Map<string, { city: string; province: string; ids: string[] }>();
-  for (const r of rows ?? []) {
-    const city = (r?.CITY_NAME ?? '').trim();
-    const province = (r?.PROVINCE_NAME ?? '').trim();
-    if (!city || !r?._id) continue;
-    const key = `${province.toLowerCase()}|${city.toLowerCase()}`;
-    const existing = groups.get(key);
-    if (existing) existing.ids.push(r._id);
-    else groups.set(key, { city, province, ids: [r._id] });
+}
+
+export interface DestinationMatch {
+  level: DestinationLevel;
+  candidates: DestinationCandidate[];
+}
+
+const LEVEL_FIELD: Array<[DestinationLevel, keyof MengantarAddress]> = [
+  ['city', 'CITY_NAME'],
+  ['district', 'DISTRICT_NAME'],
+  ['subdistrict', 'SUBDISTRICT_NAME'],
+];
+
+const samaPersis = (a: unknown, b: string) =>
+  String(a ?? '').trim().toLowerCase() === b.trim().toLowerCase();
+
+export function resolveDestination(
+  rows: MengantarAddress[],
+  keyword: string,
+): DestinationMatch | null {
+  const kw = (keyword ?? '').trim();
+  if (!kw) return null;
+
+  for (const [level, field] of LEVEL_FIELD) {
+    const cocok = (rows ?? []).filter((r) => r && samaPersis(r[field], kw));
+    if (!cocok.length) continue;
+
+    const byCity = new Map<string, DestinationCandidate>();
+    for (const r of cocok) {
+      // CITY_NAME_SI WAJIB ikut kunci: "Kota Bogor" dan "Kab. Bogor" punya
+      // PROVINCE_NAME dan CITY_NAME yang sama persis — tanpa ini keduanya
+      // menyatu jadi satu kandidat dan bot berhenti bertanya padahal harus.
+      const key = `${r.PROVINCE_NAME}|${r.CITY_NAME}|${r.CITY_NAME_SI ?? ''}`.toLowerCase();
+      const found = byCity.get(key);
+      if (found) found.ids.push(r._id);
+      else {
+        byCity.set(key, {
+          city: (r.CITY_NAME ?? '').trim(),
+          province: (r.PROVINCE_NAME ?? '').trim(),
+          cityLabel: (r.CITY_NAME_SI ?? '').trim() || (r.CITY_NAME ?? '').trim(),
+          ids: [r._id],
+        });
+      }
+    }
+    return { level, candidates: Array.from(byCity.values()) };
   }
-  return Array.from(groups.values());
+  return null;
+}
+
+/**
+ * Pilih pembeda yang BENAR-BENAR memisahkan kandidat, otomatis. Kalau
+ * kandidatnya beda provinsi, provinsi yang dipakai; kalau seprovinsi (kasus
+ * paling sering — "Kota Bogor" vs "Kab. Bogor"), pakai nama resmi Mengantar.
+ * Diuji live: kandidat "bogor" dan "cibinong" dua-duanya di Jawa Barat, jadi
+ * bertanya pakai provinsi di situ tidak menolong sama sekali.
+ */
+export function labelKandidat(c: DestinationCandidate, semua: DestinationCandidate[]): string {
+  const bedaProvinsi = new Set(semua.map((x) => x.province.toLowerCase())).size > 1;
+  return bedaProvinsi ? `${c.cityLabel}, ${c.province}` : c.cityLabel;
 }
 
 /** Rule 1 — filter kurir. */
@@ -217,6 +307,13 @@ export class ShippingService {
     private readonly cache: ShippingQuoteCache,
   ) {}
 
+  /** >>> ANGGA: true selama TIDAK ada produk aktif yang beratnya melebihi berat
+   *  default toko. Selama itu benar, "ongkir 1 pcs" berlaku untuk seluruh
+   *  katalog dan boleh disebut sebagai angka pasti. Begitu ada satu produk yang
+   *  lebih berat, kalimatnya otomatis berubah jadi "mulai dari" — tanpa perlu
+   *  diurus manual. */
+  private beratSeragam = true;
+
   cacheStats() {
     return this.cache.stats();
   }
@@ -289,7 +386,8 @@ export class ShippingService {
     }
 
     // Langkah 1 — cek cache dulu, deterministik, tanpa LLM.
-    const lastCustomerText = await this.lastCustomerText(conversationId);
+    const lastMsg = await this.lastCustomerMessage(conversationId);
+    const lastCustomerText = lastMsg.content;
     const cached = this.cache.get(conversationId);
     const mayHaveChanged =
       PLACE_HINT.test(lastCustomerText) || ORDER_CHANGE_HINT.test(lastCustomerText);
@@ -318,6 +416,21 @@ export class ShippingService {
     if (result.status === 'ok') {
       this.cache.set(conversationId, result.quote, cfg.quoteCacheTtlMs);
     }
+
+    // >>> ANGGA — tangga pertanyaan tujuan. Hanya dua status ini yang berarti
+    // "bot harus bertanya lagi"; sisanya (ok / API mati / dsb) tidak menghitung.
+    // Penghitungnya naik SEKALI per pesan pelanggan (lihat `bumpAsk`), karena
+    // satu giliran balasan memanggil grounding lebih dari sekali.
+    if (result.status === 'ambiguous' || result.status === 'need_more_detail') {
+      const ronde = this.cache.bumpAsk(conversationId, lastMsg.id);
+      this.cache.recordOutcome(
+        conversationId,
+        ronde > MAX_DESTINATION_ASKS ? 'destination_stuck' : result.status,
+      );
+      return result;
+    }
+    // Tujuan akhirnya jelas (atau masalahnya bukan soal tujuan) → tangga direset.
+    this.cache.resetAsks(conversationId);
     this.cache.recordOutcome(conversationId, result.status);
     return result;
   }
@@ -329,18 +442,6 @@ export class ShippingService {
   async quote(input: {
     keyword: string;
     items: ExtractedItem[];
-    /**
-     * >>> ANGGA: izinkan menghitung TANPA daftar barang — ongkir saja, memakai
-     * berat default toko untuk 1 unit, harga barang 0.
-     *
-     * HANYA dipakai alat uji manual admin. Jalur pelanggan
-     * (`quoteForConversation`) TIDAK PERNAH menyalakan ini: total transfer/COD
-     * yang dikutip ke pelanggan menurut definisi butuh harga barang, dan
-     * mengarangnya berarti menebak — pagar utama LAMPIRAN. Untuk admin yang
-     * cuma ingin tahu "ongkir ke Magetan berapa", memaksa mengisi barang dulu
-     * membuat alat ujinya tidak berguna.
-     */
-    allowEmptyItems?: boolean;
   }): Promise<ShippingResult> {
     const cfg = await this.settings.shipping();
     if (!cfg.mengantarApiKey || !cfg.mengantarOriginId) return { status: 'not_configured' };
@@ -348,32 +449,55 @@ export class ShippingService {
     // Langkah 3 — Search Address + pengelompokan per provinsi+kota.
     const rows = await this.mengantar.searchAddress(input.keyword);
     if (rows === null) return { status: 'api_error' };
-    const groups = groupAddresses(rows);
-    // Kata kunci disebut tapi tidak ketemu sama sekali di data Mengantar —
-    // beda kasus dari "pelanggan belum menyebut kota": minta pelanggan
-    // menyebut provinsi/kota yang lebih jelas, jangan diam soal ongkir.
-    if (groups.length === 0) return { status: 'need_province', keyword: input.keyword };
-    if (groups.length > 3) return { status: 'need_province', keyword: input.keyword };
-    if (groups.length > 1) {
+    const match = resolveDestination(rows, input.keyword);
+    // Tidak ada kecocokan PERSIS di level manapun. Sering terjadi karena
+    // pencarian Mengantar dipotong di 50 baris dan kota aslinya tenggelam
+    // (diuji live: "Padang" & "Malang" tidak muncul sama sekali di 50 baris
+    // itu). Meminta provinsi TIDAK menolong di kasus ini — saringan provinsi
+    // atas hasil "padang" menyisakan nol baris. Yang terbukti menolong adalah
+    // kecamatan: "Padang Barat"/"Klojen"/"Laweyan" semuanya resolve bersih.
+    if (!match) return { status: 'need_more_detail', keyword: input.keyword };
+    if (match.candidates.length > 3) return { status: 'need_more_detail', keyword: input.keyword };
+    if (match.candidates.length > 1) {
       return {
         status: 'ambiguous',
-        candidates: groups.map((g) => ({ city: g.city, province: g.province })),
+        candidates: match.candidates.map((c) => ({
+          city: c.city,
+          province: c.province,
+          label: labelKandidat(c, match.candidates),
+        })),
       };
     }
-    const target = groups[0];
+    const target = match.candidates[0];
     // Tarif Mengantar seragam per kota/kabupaten (dibuktikan live), jadi _id
     // mana pun dari kelompok ini boleh dipakai sebagai destination_id.
     const destinationId = target.ids[0];
 
     // Langkah 4 — berat & harga total order dari katalog (deterministik).
-    const shippingOnly = input.items.length === 0 && input.allowEmptyItems === true;
-    const resolved = shippingOnly
-      ? { matched: [], unmatched: [], totalGrams: cfg.defaultWeightGrams, totalPrice: 0 }
-      : await this.resolveItems(input.items, cfg.defaultWeightGrams);
-    if (!shippingOnly && (resolved.unmatched.length || resolved.matched.length === 0)) {
-      return { status: 'unresolved_items', unmatched: resolved.unmatched };
-    }
+    // >>> ANGGA — dulu: tidak ada produk cocok => TIDAK ADA ANGKA SAMA SEKALI.
+    // Itu menyatukan dua hal yang sebenarnya terpisah, dan bikin modul ini
+    // nyaris tak berguna: "berapa ongkir ke X?" sebelum memilih produk adalah
+    // pola tanya paling umum, dan bot selalu mengelak.
+    //
+    //   ONGKIR tidak butuh tahu produknya — seluruh katalog Cordova sama rata
+    //   1000 g, jadi ongkir 1 pcs itu angka PASTI, bukan tebakan.
+    //   TOTAL BELANJA memang butuh produk, dan gerbang itu tetap dipertahankan.
+    //
+    // Jadi kalau ada satu saja item yang tidak cocok katalog (atau tidak ada
+    // item sama sekali), kita turun ke kutipan ONGKIR SAJA: berat default untuk
+    // 1 pcs, harga barang 0, dan ditandai `shippingOnly` supaya grounding text
+    // menyebutnya apa adanya — bukan diam-diam disodorkan sebagai total.
+    const raw = input.items.length
+      ? await this.resolveItems(input.items, cfg.defaultWeightGrams)
+      : { matched: [], unmatched: [], totalGrams: 0, totalPrice: 0 };
+    const semuaCocok = raw.matched.length > 0 && raw.unmatched.length === 0;
+    const shippingOnly = !semuaCocok;
+    const resolved = semuaCocok
+      ? raw
+      : { matched: [], unmatched: raw.unmatched, totalGrams: cfg.defaultWeightGrams, totalPrice: 0 };
     const weightKg = gramsToKg(resolved.totalGrams);
+
+    if (shippingOnly) this.beratSeragam = await this.cekBeratSeragam(cfg.defaultWeightGrams);
 
     // Langkah 5 — cek ongkir TANPA COD dulu, lalu terapkan Rule 1.
     const estimates = await this.mengantar.estimate({ destinationId, weightKg });
@@ -441,6 +565,7 @@ export class ShippingService {
           ? 'region'
           : 'no_eligible_courier',
       shippingOnly, // >>> ANGGA <<<
+      unmatchedNames: resolved.unmatched, // >>> ANGGA <<<
       // Sengaja item MENTAH hasil ekstraksi (bukan nama katalog): dipakai untuk
       // membandingkan "isi order masih sama?" saat memutuskan cache masih sah.
       items: input.items.map((i) => ({
@@ -472,6 +597,20 @@ export class ShippingService {
     switch (result.status) {
       case 'ok': {
         const q = result.quote;
+        // >>> ANGGA: kutipan ONGKIR SAJA punya bentuk kalimat sendiri — angka
+        // ini ongkir, BUKAN total belanja, dan bot harus menyebutnya begitu.
+        if (q.shippingOnly) {
+          const dasar = q.transferTotal;
+          const lines = [
+            t(SHIPPING_GROUNDING_SHIPPING_ONLY, lang),
+            `• Tujuan: ${q.city}, ${q.province}`,
+            `• Ongkir ${this.beratSeragam ? '' : 'MULAI DARI '}Rp${formatIdr(dasar)} untuk 1 pcs (kurir ${q.transferCourier})`,
+          ];
+          if (q.unmatchedNames?.length) {
+            lines.push(`• Barang "${q.unmatchedNames.join('", "')}" belum cocok dengan katalog — pastikan dulu produknya.`);
+          }
+          return lines.join('\n');
+        }
         const lines = [
           t(SHIPPING_GROUNDING_INTRO, lang),
           `• Tujuan: ${q.city}, ${q.province}`,
@@ -488,14 +627,27 @@ export class ShippingService {
         }
         return lines.join('\n');
       }
-      case 'ambiguous':
+      case 'ambiguous': {
+        // >>> ANGGA — tangga 1: pertanyaan tertutup. Label sudah dipilihkan
+        // `labelKandidat` (provinsi kalau beda provinsi, "Kota/Kab." kalau
+        // seprovinsi). Tangga 2: minta kecamatan. Tangga 3: serahkan ke admin.
+        const ronde = this.cache.askCount(conversationId);
+        if (ronde > MAX_DESTINATION_ASKS) return t(SHIPPING_GROUNDING_DESTINATION_STUCK, lang);
+        if (ronde > 1) return t(SHIPPING_GROUNDING_ASK_DISTRICT, lang);
         return (
           t(SHIPPING_GROUNDING_AMBIGUOUS, lang) +
           '\n' +
-          result.candidates.map((c) => `• ${c.city}, ${c.province}`).join('\n')
+          result.candidates.map((c) => `• ${c.label}`).join('\n')
         );
-      case 'need_province':
-        return t(SHIPPING_GROUNDING_NEED_PROVINCE, lang);
+      }
+      case 'need_more_detail': {
+        // Tidak ada pertanyaan tertutup yang bisa diajukan di sini, jadi
+        // tangga 1 langsung kecamatan, tangga 2 tawarkan provinsi/kota besar.
+        const ronde = this.cache.askCount(conversationId);
+        if (ronde > MAX_DESTINATION_ASKS) return t(SHIPPING_GROUNDING_DESTINATION_STUCK, lang);
+        if (ronde > 1) return t(SHIPPING_GROUNDING_ASK_PROVINCE, lang);
+        return t(SHIPPING_GROUNDING_NEED_DETAIL, lang);
+      }
       case 'unresolved_items':
         return t(SHIPPING_GROUNDING_UNRESOLVED_ITEMS, lang);
       case 'no_destination':
@@ -525,13 +677,29 @@ export class ShippingService {
 
   // ── Pembantu internal ────────────────────────────────────────────────────
 
-  private async lastCustomerText(conversationId: string): Promise<string> {
+  /** Adakah produk aktif yang lebih berat dari berat default toko? */
+  private async cekBeratSeragam(defaultWeightGrams: number): Promise<boolean> {
+    try {
+      const lebihBerat = await this.prisma.product.count({
+        where: { status: 'active', weightGrams: { gt: defaultWeightGrams } },
+      });
+      return lebihBerat === 0;
+    } catch {
+      // Gagal menghitung → anggap TIDAK seragam (pakai "mulai dari"), pilihan
+      // yang tidak pernah membuat toko nombok.
+      return false;
+    }
+  }
+
+  private async lastCustomerMessage(
+    conversationId: string,
+  ): Promise<{ id: string; content: string }> {
     const msg = await this.prisma.message.findFirst({
       where: { conversationId, senderType: SenderType.customer },
       orderBy: { createdAt: 'desc' },
-      select: { content: true },
+      select: { id: true, content: true },
     });
-    return msg?.content ?? '';
+    return { id: msg?.id ?? '', content: msg?.content ?? '' };
   }
 
   /**

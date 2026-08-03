@@ -220,18 +220,20 @@ export function checkForbiddenWords(
 const CHECKOUT_READY =
   /\b(checkout|pesan|order|beli|ambil|alamat|kirim ke|cod|transfer|bayar|bayarnya|ongkir|total|dp)\b/i;
 
-export type ShippingFailure = 'api_error' | 'no_courier' | 'not_configured';
+export type ShippingFailure = 'api_error' | 'no_courier' | 'not_configured' | 'destination_stuck';
 
 export function checkShippingEscalation(
   outcome: string | null | undefined,
   customerText: string,
 ): RuleHit | null {
-  const failures: string[] = ['api_error', 'no_courier', 'not_configured'];
+  const failures: string[] = ['api_error', 'no_courier', 'not_configured', 'destination_stuck'];
   if (!outcome || !failures.includes(outcome)) return null;
   if (!CHECKOUT_READY.test(customerText ?? '')) return null;
 
   const detail =
-    outcome === 'no_courier'
+    outcome === 'destination_stuck'
+      ? 'Tujuan sudah ditanyakan dua kali dan tetap tidak bisa dipastikan — alamatnya perlu dibantu manusia'
+      : outcome === 'no_courier'
       ? 'API ongkir hidup tapi TIDAK ADA kurir yang lolos filter untuk tujuan ini (tinjau daftar exclude/allowlist)'
       : outcome === 'not_configured'
         ? 'Kredensial Mengantar belum dikonfigurasi'

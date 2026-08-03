@@ -2,7 +2,8 @@ import {
   ShippingService,
   roundTo,
   gramsToKg,
-  groupAddresses,
+  resolveDestination,
+  labelKandidat,
   passesCourierFilter,
   isCourierCodEligible,
   isRegionCodBlocked,
@@ -72,8 +73,15 @@ const CONFIG = {
   priceRoundingIncrement: 500,
 };
 
-function addr(province: string, city: string, id: string, district = 'X') {
-  return { _id: id, PROVINCE_NAME: province, CITY_NAME: city, DISTRICT_NAME: district };
+function addr(province: string, city: string, id: string, district = 'X', opts: { si?: string; sub?: string } = {}) {
+  return {
+    _id: id,
+    PROVINCE_NAME: province,
+    CITY_NAME: city,
+    CITY_NAME_SI: opts.si ?? `Kota ${city}`,
+    DISTRICT_NAME: district,
+    SUBDISTRICT_NAME: opts.sub ?? 'Z',
+  };
 }
 
 interface HarnessOpts {
@@ -103,9 +111,13 @@ function harness(opts: HarnessOpts = {}) {
       }),
     },
     message: {
-      findFirst: jest.fn().mockResolvedValue({ content: opts.lastCustomerText ?? 'kirim ke Medan ya' }),
+      findFirst: jest.fn().mockResolvedValue({ id: 'm1', content: opts.lastCustomerText ?? 'kirim ke Medan ya' }),
     },
-    product: { findMany: jest.fn().mockResolvedValue(products) },
+    product: {
+      findMany: jest.fn().mockResolvedValue(products),
+      // Berapa produk aktif yang lebih berat dari berat default toko.
+      count: jest.fn().mockResolvedValue(0),
+    },
   };
   const settings: any = { shipping: jest.fn().mockResolvedValue(cfg) };
   const provider: any = { chat: jest.fn().mockResolvedValue(JSON.stringify(extract)) };
@@ -140,55 +152,178 @@ function withCodFee(base: Record<string, any>, codAmount: number) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 describe('§9.1 — kota ambigu: bot BERTANYA, bukan menebak', () => {
-  it('2 kelompok kota → status ambiguous, API ongkir tidak pernah dipanggil', async () => {
+  /**
+   * >>> ANGGA — kriteria §9 nomor 1 DIPERBARUI (disetujui Bossfren 2026-08-03).
+   *
+   * Bunyi lama: "≥2 KELOMPOK kota → bot bertanya". Terbukti salah dipakai ke
+   * data sungguhan: pencarian Mengantar mencocokkan sampai level kelurahan,
+   * jadi "Surabaya" balik 10 kelompok dan "Bandung" 25 — hampir semuanya cuma
+   * desa senama di kabupaten lain. Kota terbesar justru tidak pernah bisa
+   * dikutip ongkirnya.
+   *
+   * Bunyi baru: ambigu = lebih dari satu KOTA yang NAMANYA sama pada level
+   * kecocokan yang sama.
+   */
+  it('BARU: 10 kelompok tapi hanya 1 kota bernama sama → otomatis, tidak bertanya', async () => {
     const h = harness({
       addresses: [
-        addr('SUMATERA BARAT', 'PADANG', 'a1'),
-        addr('SUMATERA UTARA', 'MEDAN', 'a2', 'PADANG BULAN'),
-        addr('SUMATERA UTARA', 'MEDAN', 'a3', 'PADANG BULAN SELAYANG'),
+        addr('JAWA TIMUR', 'SURABAYA', 'sby-1', 'GUBENG'),
+        addr('LAMPUNG', 'LAMPUNG TENGAH', 'lt-1', 'SEPUTIH', { sub: 'SURABAYA' }),
+        addr('BENGKULU', 'BENGKULU', 'bkl-1', 'X', { sub: 'SURABAYA' }),
+        addr('JAWA BARAT', 'BANDUNG', 'bdg-1', 'X', { sub: 'SURABAYA' }),
       ],
-      extract: { kota: 'Padang', items: [{ nama: 'Golok Cordova', qty: 1 }] },
+      extract: { kota: 'Surabaya', items: [{ nama: 'Golok Cordova', qty: 1 }] },
     });
-    const res = await h.svc.quoteForConversation('c1');
-    expect(res.status).toBe('ambiguous');
-    // GAGAL kalau sistem diam-diam memilih salah satu lalu menghitung ongkir.
-    expect(h.mengantar.estimate).not.toHaveBeenCalled();
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.city).toBe('SURABAYA');
+  });
 
+  it('dua KOTA bernama sama → bertanya, dan API ongkir tidak pernah dipanggil', async () => {
+    const h = harness({
+      addresses: [
+        addr('JAWA BARAT', 'BOGOR', 'b1', 'X', { si: 'Kota Bogor' }),
+        addr('JAWA BARAT', 'BOGOR', 'b2', 'X', { si: 'Kab. Bogor' }),
+      ],
+      extract: { kota: 'Bogor', items: [{ nama: 'Golok Cordova', qty: 1 }] },
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ambiguous');
+    expect(h.mengantar.estimate).not.toHaveBeenCalled();
+    // Seprovinsi → pembedanya nama resmi Mengantar, bukan provinsi.
+    expect(res.candidates.map((c: any) => c.label).sort()).toEqual(['Kab. Bogor', 'Kota Bogor']);
     const text = await h.svc.getGroundingText('c1');
-    expect(text).toContain('PADANG');
-    expect(text).toContain('MEDAN');
-    // Tidak ada satu pun angka rupiah yang boleh muncul.
+    expect(text).toContain('Kota Bogor');
     expect(text).not.toMatch(/\d{3,}/);
   });
 
-  it('>3 kelompok kota → minta provinsi saja, tanpa daftar panjang', async () => {
+  it('kandidat beda provinsi → pembedanya provinsi', () => {
+    const kand = [
+      { city: 'X', province: 'JAWA BARAT', cityLabel: 'Kab. X', ids: ['1'] },
+      { city: 'X', province: 'BANTEN', cityLabel: 'Kab. X', ids: ['2'] },
+    ];
+    expect(labelKandidat(kand[0], kand)).toBe('Kab. X, JAWA BARAT');
+  });
+
+  it('cocok di level KECAMATAN kalau tidak ada kota yang bernama begitu', async () => {
     const h = harness({
       addresses: [
-        addr('SUMATERA BARAT', 'PADANG', 'a1'),
-        addr('SUMATERA UTARA', 'MEDAN', 'a2'),
-        addr('SUMATERA UTARA', 'TEBING TINGGI', 'a3'),
-        addr('SUMATERA UTARA', 'LANGKAT', 'a4'),
-        addr('SUMATERA UTARA', 'SIMALUNGUN', 'a5'),
+        addr('JAWA BARAT', 'CIREBON', 'crb-1', 'ARJAWINANGUN', { si: 'Kab. Cirebon' }),
+        addr('JAWA BARAT', 'CIREBON', 'crb-2', 'ARJAWINANGUN', { si: 'Kab. Cirebon' }),
       ],
+      extract: { kota: 'Arjawinangun', items: [{ nama: 'Golok Cordova', qty: 1 }] },
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.city).toBe('CIREBON');
+  });
+
+  it('cocok "mengandung" TIDAK dianggap cocok — Solo bukan SOLOK', () => {
+    const rows = [addr('SUMATERA BARAT', 'SOLOK', 's1')];
+    expect(resolveDestination(rows as any, 'Solo')).toBeNull();
+    expect(resolveDestination(rows as any, 'Solok')?.candidates).toHaveLength(1);
+  });
+
+  it('tidak ada kecocokan persis → minta detail (kecamatan), tanpa angka', async () => {
+    const h = harness({
+      addresses: [addr('LAMPUNG', 'LAMPUNG TENGAH', 'x1', 'SEPUTIH', { sub: 'PADANG RATU' })],
       extract: { kota: 'Padang', items: [{ nama: 'Golok Cordova', qty: 1 }] },
     });
     const res = await h.svc.quoteForConversation('c1');
-    expect(res.status).toBe('need_province');
+    expect(res.status).toBe('need_more_detail');
     expect(h.mengantar.estimate).not.toHaveBeenCalled();
     const text = await h.svc.getGroundingText('c1');
-    expect(text).not.toMatch(/TEBING TINGGI|LANGKAT|SIMALUNGUN/);
+    expect(text).toMatch(/KECAMATAN/i);
+    expect(text).not.toMatch(/\d{3,}/);
   });
 
-  it('1 kelompok kota (banyak kelurahan) → otomatis, tidak bertanya', async () => {
+  it('lebih dari 3 kota bernama sama → minta detail, jangan sodorkan daftar', async () => {
     const h = harness({
-      addresses: [
-        addr('SUMATERA UTARA', 'MEDAN', 'd1', 'MEDAN KOTA'),
-        addr('SUMATERA UTARA', 'MEDAN', 'd2', 'MEDAN BARU'),
-        addr('SUMATERA UTARA', 'MEDAN', 'd3', 'MEDAN SELAYANG'),
-      ],
+      addresses: ['A', 'B', 'C', 'D'].map((p, i) => addr(`PROV ${p}`, 'SUKAMAJU', `s${i}`)),
+      extract: { kota: 'Sukamaju', items: [{ nama: 'Golok Cordova', qty: 1 }] },
     });
-    const res = await h.svc.quoteForConversation('c1');
-    expect(res.status).toBe('ok');
+    expect((await h.svc.quoteForConversation('c1')).status).toBe('need_more_detail');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('ANGGA — tangga pertanyaan tujuan (jangan pernah mengulang kalimat sama)', () => {
+  const bogor = {
+    addresses: [
+      addr('JAWA BARAT', 'BOGOR', 'b1', 'X', { si: 'Kota Bogor' }),
+      addr('JAWA BARAT', 'BOGOR', 'b2', 'X', { si: 'Kab. Bogor' }),
+    ],
+    extract: { kota: 'Bogor', items: [{ nama: 'Golok Cordova', qty: 1 }] },
+  };
+
+  /** Pelanggan mengirim pesan baru; grounding diminta seperti alur sungguhan. */
+  async function giliran(h: ReturnType<typeof harness>, id: string, teks: string) {
+    h.prisma.message.findFirst.mockResolvedValue({ id, content: teks });
+    return h.svc.getGroundingText('c1');
+  }
+
+  it('tangga 1 = pertanyaan tertutup Kota/Kab', async () => {
+    const h = harness(bogor);
+    const teks = await giliran(h, 'm1', 'kirim ke bogor');
+    expect(teks).toContain('Kota Bogor');
+    expect(teks).toContain('Kab. Bogor');
+    expect(teks).not.toMatch(/KECAMATAN/i);
+  });
+
+  it('tangga 2 = minta kecamatan, BUKAN mengulang pertanyaan yang sama', async () => {
+    const h = harness(bogor);
+    await giliran(h, 'm1', 'kirim ke bogor');
+    const teks = await giliran(h, 'm2', 'kurang tahu kak');
+    expect(teks).toMatch(/KECAMATAN/i);
+    expect(teks).toContain('JANGAN mengulang pertanyaan yang sama');
+  });
+
+  it('tangga 3 = serahkan ke admin, berhenti bertanya', async () => {
+    const h = harness(bogor);
+    await giliran(h, 'm1', 'kirim ke bogor');
+    await giliran(h, 'm2', 'kurang tahu kak');
+    const teks = await giliran(h, 'm3', 'bingung kak');
+    expect(teks).toContain('BERHENTI bertanya');
+    expect(h.svc.lastOutcome('c1')).toBe('destination_stuck');
+    // Sentinel ikut menarik admin kalau pelanggan sudah mengarah checkout.
+    expect(checkShippingEscalation('destination_stuck', 'ya udah saya mau order')).not.toBeNull();
+  });
+
+  it('satu pesan pelanggan hanya menaikkan tangga SEKALI walau grounding diminta berkali-kali', async () => {
+    // Alur nyata memanggil grounding dua kali per giliran: sekali saat menulis
+    // draft, sekali lagi saat Sentinel mereview. Tanpa penjaga per-pesan, satu
+    // balasan bisa melompat langsung ke tangga 3.
+    const h = harness(bogor);
+    await giliran(h, 'm1', 'kirim ke bogor');
+    const teks = await giliran(h, 'm1', 'kirim ke bogor');
+    expect(teks).toContain('Kota Bogor');
+    expect(h.svc.lastOutcome('c1')).toBe('ambiguous');
+  });
+
+  it('tujuan akhirnya jelas → tangga kembali ke nol', async () => {
+    const h = harness(bogor);
+    await giliran(h, 'm1', 'kirim ke bogor');
+    await giliran(h, 'm2', 'kurang tahu kak');
+    // Pelanggan akhirnya menyebut kota yang tidak ambigu.
+    h.mengantar.searchAddress.mockResolvedValue([addr('SUMATERA UTARA', 'MEDAN', 'd1')]);
+    h.provider.chat.mockResolvedValue(JSON.stringify({ kota: 'Medan', items: [{ nama: 'Golok Cordova', qty: 1 }] }));
+    await giliran(h, 'm3', 'medan aja kak');
+    expect(h.svc.lastOutcome('c1')).toBe('ok');
+
+    // Ambigu lagi nanti → mulai dari tangga 1 lagi, bukan lanjut ke admin.
+    h.mengantar.searchAddress.mockResolvedValue(bogor.addresses);
+    h.provider.chat.mockResolvedValue(JSON.stringify(bogor.extract));
+    const teks = await giliran(h, 'm4', 'eh kirim ke bogor aja deh');
+    expect(teks).toContain('Kota Bogor');
+  });
+
+  it('kasus tanpa kecocokan: tangga 1 kecamatan, tangga 2 provinsi', async () => {
+    const h = harness({
+      addresses: [addr('LAMPUNG', 'LAMPUNG TENGAH', 'x1', 'SEPUTIH', { sub: 'PADANG RATU' })],
+      extract: { kota: 'Padang', items: [{ nama: 'Golok Cordova', qty: 1 }] },
+    });
+    expect(await giliran(h, 'm1', 'ke padang')).toMatch(/KECAMATAN/i);
+    expect(await giliran(h, 'm2', 'gak tau kak')).toMatch(/PROVINSI/i);
   });
 });
 
@@ -225,47 +360,62 @@ describe('§9.2 — qty > 1 dan/atau lebih dari satu produk berbeda', () => {
     expect(h.mengantar.estimate).toHaveBeenCalledWith(expect.objectContaining({ weightKg: 7 }));
   });
 
-  // >>> ANGGA: alat uji admin boleh menghitung ongkir saja.
-  it('tanpa barang + allowEmptyItems → ongkir saja pakai berat default, harga barang 0', async () => {
-    const h = harness();
-    const res: any = await h.svc.quote({ keyword: 'Medan', items: [], allowEmptyItems: true });
+  /**
+   * >>> ANGGA — aturan produk DIPERBARUI (disetujui Bossfren 2026-08-03).
+   *
+   * Dulu: tidak ada produk cocok => TIDAK ADA ANGKA SAMA SEKALI. Itu menyatukan
+   * dua hal terpisah. ONGKIR tidak butuh tahu produknya (seluruh katalog
+   * Cordova sama rata 1000 g, jadi ongkir 1 pcs itu angka PASTI); yang butuh
+   * produk adalah TOTAL BELANJA. Gerbang untuk total tetap dipertahankan.
+   */
+  it('tanpa produk → ongkir 1 pcs tetap dikutip, TOTAL tetap ditahan', async () => {
+    const h = harness({ extract: { kota: 'Medan', items: [] } });
+    const res: any = await h.svc.quoteForConversation('c1');
     expect(res.status).toBe('ok');
     expect(res.quote.shippingOnly).toBe(true);
     expect(res.quote.goodsTotal).toBe(0);
-    // Berat default toko 1000 g → 1 kg.
+    // Berat default 1000 g → 1 kg; ongkir JNE (recommended) = 47.000.
     expect(h.mengantar.estimate).toHaveBeenCalledWith(expect.objectContaining({ weightKg: 1 }));
-    // Totalnya murni ongkir JNE (recommended), tanpa harga barang.
     expect(res.quote.transferTotal).toBe(47000);
-    // Katalog tidak perlu disentuh sama sekali.
-    expect(h.prisma.product.findMany).not.toHaveBeenCalled();
-  });
 
-  it('tanpa barang TANPA allowEmptyItems (jalur pelanggan) tetap menolak menebak', async () => {
-    const h = harness();
-    const res = await h.svc.quote({ keyword: 'Medan', items: [] });
-    expect(res.status).toBe('unresolved_items');
-    expect(h.mengantar.estimate).not.toHaveBeenCalled();
-  });
-
-  it('percakapan pelanggan TIDAK PERNAH memakai jalur ongkir-saja', async () => {
-    const h = harness({ extract: { kota: 'Medan', items: [] } });
-    const res = await h.svc.quoteForConversation('c1');
-    expect(res.status).toBe('unresolved_items');
     const text = await h.svc.getGroundingText('c1');
-    expect(text).not.toMatch(/\d{3,}/);
+    expect(text).toContain('ONGKIR SAJA');
+    expect(text).toContain('1 pcs');
+    // GAGAL kalau angka itu disodorkan sebagai total belanja.
+    expect(text).not.toContain('Total kalau TRANSFER');
   });
-  // <<< ANGGA
 
-  it('nama barang tidak cocok katalog → TIDAK menebak, tidak ada angka', async () => {
+  it('nama barang tidak cocok katalog → ongkir saja + sebutkan barang yang gagal', async () => {
+    const h = harness({ extract: { kota: 'Medan', items: [{ nama: 'kompor gas rinnai', qty: 1 }] } });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.shippingOnly).toBe(true);
+    const text = await h.svc.getGroundingText('c1');
+    expect(text).toContain('kompor gas rinnai');
+    expect(text).not.toContain('Total kalau TRANSFER');
+  });
+
+  it('sebagian barang cocok, sebagian tidak → JANGAN kutip total yang bolong', async () => {
     const h = harness({
-      extract: { kota: 'Medan', items: [{ nama: 'kompor gas rinnai', qty: 1 }] },
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Cordova', qty: 1 }, { nama: 'kompor gas', qty: 1 }] },
     });
-    const res = await h.svc.quoteForConversation('c1');
-    expect(res.status).toBe('unresolved_items');
-    expect(h.mengantar.estimate).not.toHaveBeenCalled();
-    const text = await h.svc.getGroundingText('c1');
-    expect(text).not.toMatch(/\d{3,}/);
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.quote.shippingOnly).toBe(true);
+    expect(res.quote.goodsTotal).toBe(0);
   });
+
+  it('katalog seragam → angka pasti; ada produk lebih berat → "MULAI DARI"', async () => {
+    const seragam = harness({ extract: { kota: 'Medan', items: [] } });
+    seragam.prisma.product.count = jest.fn().mockResolvedValue(0);
+    await seragam.svc.quoteForConversation('c1');
+    expect(await seragam.svc.getGroundingText('c1')).not.toContain('MULAI DARI');
+
+    const campur = harness({ extract: { kota: 'Medan', items: [] } });
+    campur.prisma.product.count = jest.fn().mockResolvedValue(1);
+    await campur.svc.quoteForConversation('c2');
+    expect(await campur.svc.getGroundingText('c2')).toContain('MULAI DARI');
+  });
+
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -557,14 +707,15 @@ describe('pembantu murni & kontrak grounding', () => {
     expect(gramsToKg(0)).toBe(1);
   });
 
-  it('groupAddresses mengelompokkan per provinsi + kota, bukan per baris', () => {
-    const groups = groupAddresses([
+  it('resolveDestination mengelompokkan per kota, bukan per baris', () => {
+    const m = resolveDestination([
       addr('SUMATERA UTARA', 'MEDAN', 'a', 'MEDAN KOTA'),
       addr('SUMATERA UTARA', 'MEDAN', 'b', 'MEDAN BARU'),
       addr('SUMATERA BARAT', 'PADANG', 'c'),
-    ]);
-    expect(groups).toHaveLength(2);
-    expect(groups[0].ids).toEqual(['a', 'b']);
+    ] as any, 'Medan');
+    expect(m!.level).toBe('city');
+    expect(m!.candidates).toHaveLength(1);
+    expect(m!.candidates[0].ids).toEqual(['a', 'b']);
   });
 
   it('grounding text hanya memuat angka akhir, tidak pernah rincian mentah', async () => {

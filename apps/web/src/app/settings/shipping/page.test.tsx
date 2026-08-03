@@ -166,15 +166,16 @@ describe('ShippingSettingsPage', () => {
       quote: {
         status: 'ambiguous',
         candidates: [
-          { city: 'PADANG', province: 'SUMATERA BARAT' },
-          { city: 'MEDAN', province: 'SUMATERA UTARA' },
+          { city: 'BOGOR', province: 'JAWA BARAT', label: 'Kota Bogor' },
+          { city: 'BOGOR', province: 'JAWA BARAT', label: 'Kab. Bogor' },
         ],
       },
     });
     render(<ShippingSettingsPage />);
-    fireEvent.change(await screen.findByLabelText(/Destination city/), { target: { value: 'Padang' } });
+    fireEvent.change(await screen.findByLabelText(/Destination city/), { target: { value: 'Bogor' } });
     fireEvent.click(screen.getByRole('button', { name: /Calculate/ }));
-    expect(await screen.findByText('PADANG, SUMATERA BARAT')).toBeInTheDocument();
+    expect(await screen.findByText('Kota Bogor')).toBeInTheDocument();
+    expect(screen.getByText('Kab. Bogor')).toBeInTheDocument();
     expect(screen.queryByText(/^Rp/)).not.toBeInTheDocument();
   });
 });

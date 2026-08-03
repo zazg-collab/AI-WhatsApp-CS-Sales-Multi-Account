@@ -562,9 +562,32 @@ export const SHIPPING_GROUNDING_AMBIGUOUS = {
   en: 'SHIPPING DATA: the city the customer mentioned matches more than one place. Do NOT state any shipping cost yet. Ask casually which one they mean, from these options:',
 };
 
-export const SHIPPING_GROUNDING_NEED_PROVINCE = {
-  id: 'DATA ONGKIR: nama daerah yang disebut pelanggan cocok dengan terlalu banyak daerah (atau tidak ditemukan). JANGAN menyebut angka ongkir apa pun. Minta pelanggan menyebutkan provinsinya saja — jangan menyodorkan daftar panjang.',
-  en: 'SHIPPING DATA: the place the customer mentioned matches too many locations (or none). Do NOT state any shipping cost. Ask which province it is in — do not dump a long list.',
+export const SHIPPING_GROUNDING_NEED_DETAIL = {
+  id: 'DATA ONGKIR: nama daerah yang disebut pelanggan belum bisa dipastikan (tidak ketemu persis, atau cocok dengan terlalu banyak daerah). JANGAN menyebut angka ongkir apa pun. Minta KECAMATAN-nya — itu yang paling ampuh menemukan lokasinya. Kalau pelanggan terdengar bingung, boleh tawarkan menyebut provinsi atau kota terdekat sebagai gantinya. Jangan menyodorkan daftar panjang.',
+  en: 'SHIPPING DATA: the place the customer mentioned could not be pinned down (no exact match, or too many matches). Do NOT state any shipping cost. Ask for the DISTRICT (kecamatan) — that resolves the location most reliably. If the customer sounds unsure, offer the province or nearest city instead. Do not dump a long list.',
+};
+
+// Tangga 2 — pertanyaan tertutup sudah dicoba tapi tujuannya masih belum pasti.
+export const SHIPPING_GROUNDING_ASK_DISTRICT = {
+  id: 'DATA ONGKIR: tujuan masih belum pasti dan pertanyaan sebelumnya belum terjawab jelas. JANGAN mengulang pertanyaan yang sama. JANGAN menyebut angka ongkir apa pun. Kali ini minta KECAMATAN-nya — sebutkan bahwa itu yang paling cepat memastikan lokasi.',
+  en: 'SHIPPING DATA: the destination is still unresolved and the previous question was not answered clearly. Do NOT repeat the same question. Do NOT state any shipping cost. This time ask for the DISTRICT (kecamatan), noting it is the fastest way to pin the location.',
+};
+
+// Tangga 2 untuk kasus "tidak ketemu sama sekali" — kecamatan sudah diminta.
+export const SHIPPING_GROUNDING_ASK_PROVINCE = {
+  id: 'DATA ONGKIR: tujuan masih belum pasti walau kecamatan sudah ditanyakan. JANGAN mengulang pertanyaan yang sama. JANGAN menyebut angka ongkir apa pun. Tawarkan cara lain yang lebih gampang: sebutkan PROVINSI atau kota besar terdekat.',
+  en: 'SHIPPING DATA: the destination is still unresolved even after asking for the district. Do NOT repeat the same question. Do NOT state any shipping cost. Offer an easier route instead: ask for the PROVINCE or the nearest major city.',
+};
+
+// Tangga 3 — sudah dua kali bertanya, tetap buntu. Serahkan ke manusia.
+export const SHIPPING_GROUNDING_DESTINATION_STUCK = {
+  id: 'DATA ONGKIR: tujuan sudah ditanyakan dua kali dan tetap belum bisa dipastikan. BERHENTI bertanya soal lokasi — mengulang lagi hanya membuat pelanggan jengkel. JANGAN menyebut angka ongkir apa pun. Katakan dengan sopan bahwa alamatnya akan dibantu dicek admin, lalu tanyakan hal lain yang bisa dibantu.',
+  en: 'SHIPPING DATA: the destination has been asked about twice and is still unresolved. STOP asking about the location — asking again only frustrates the customer. Do NOT state any shipping cost. Politely say a human colleague will help confirm the address, then move the conversation on.',
+};
+
+export const SHIPPING_GROUNDING_SHIPPING_ONLY = {
+  id: 'DATA ONGKIR TERKINI & SAH — tapi produknya BELUM dipastikan, jadi angka di bawah adalah ONGKIR SAJA untuk 1 pcs, BUKAN total belanja. Sebutkan apa adanya sebagai ongkir, JANGAN pernah menyebutnya total atau menjumlahkannya dengan harga barang. Setelah itu tanyakan produk mana yang diinginkan supaya totalnya bisa dihitung.',
+  en: 'CURRENT AUTHORITATIVE SHIPPING DATA — but the product is NOT confirmed yet, so the number below is SHIPPING ONLY for 1 item, NOT an order total. State it as shipping cost, NEVER as a total and never add it to a product price yourself. Then ask which product they want so the total can be computed.',
 };
 
 export const SHIPPING_GROUNDING_UNRESOLVED_ITEMS = {

@@ -24,6 +24,10 @@ export interface MengantarAddress {
   _id: string;
   PROVINCE_NAME: string;
   CITY_NAME: string;
+  /** Nama resmi berlabel, mis. "Kota Bogor" / "Kab. Bogor". Dipakai untuk
+   *  menyusun kalimat disambiguasi dengan kata-kata milik Mengantar sendiri,
+   *  bukan karangan bot. */
+  CITY_NAME_SI?: string;
   DISTRICT_NAME?: string;
   SUBDISTRICT_NAME?: string;
 }

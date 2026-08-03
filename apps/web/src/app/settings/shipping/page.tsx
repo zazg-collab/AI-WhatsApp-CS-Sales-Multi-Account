@@ -141,7 +141,10 @@ const dict: Dict = {
   },
 
   stAmbiguous: { id: 'Nama kota cocok dengan beberapa daerah — bot akan bertanya dulu, tidak menebak.', en: 'The city name matches several places — the bot will ask first, never guess.' },
-  stNeedProvince: { id: 'Terlalu banyak (atau tidak ada) daerah yang cocok — bot akan minta provinsinya.', en: 'Too many (or no) matching places — the bot will ask for the province.' },
+  stNeedDetail: {
+    id: 'Nama daerahnya belum bisa dipastikan — bot akan minta KECAMATAN-nya (provinsi ditawarkan kalau pelanggan bingung).',
+    en: 'The place could not be pinned down — the bot will ask for the DISTRICT (province offered if the customer is unsure).',
+  },
   stUnresolved: { id: 'Barang belum cocok dengan katalog — bot memastikan produknya dulu, tanpa menyebut angka.', en: 'Items do not match the catalog — the bot confirms the product first, without quoting a number.' },
   stNoCourier: { id: 'API menjawab, tapi tidak ada kurir yang lolos saringan. Diperlakukan sama seperti API mati.', en: 'The API answered but no courier passed the filter. Treated the same as an API outage.' },
   stApiError: { id: 'API Mengantar tidak menjawab. Bot akan bilang ongkir belum bisa dipastikan.', en: 'The Mengantar API did not respond. The bot will say shipping cannot be confirmed.' },
@@ -175,9 +178,9 @@ interface QuoteOk {
  *  per satu (bukan `string`) supaya TypeScript bisa mempersempit tipe, dan
  *  supaya status baru di server memaksa halaman ini ikut diperbarui. */
 interface QuoteOther {
-  status: 'ambiguous' | 'need_province' | 'unresolved_items' | 'no_courier'
+  status: 'ambiguous' | 'need_more_detail' | 'unresolved_items' | 'no_courier'
     | 'api_error' | 'not_configured' | 'no_destination';
-  candidates?: Array<{ city: string; province: string }>;
+  candidates?: Array<{ city: string; province: string; label: string }>;
 }
 type QuoteResult = QuoteOk | QuoteOther;
 
@@ -300,7 +303,7 @@ export default function ShippingSettingsPage() {
 
   const statusNote: Record<string, string> = {
     ambiguous: t('stAmbiguous'),
-    need_province: t('stNeedProvince'),
+    need_more_detail: t('stNeedDetail'),
     unresolved_items: t('stUnresolved'),
     no_courier: t('stNoCourier'),
     api_error: t('stApiError'),
@@ -503,7 +506,7 @@ export default function ShippingSettingsPage() {
                     <p>{statusNote[testResult.status] ?? testResult.status}</p>
                     {testResult.candidates && (
                       <ul className="mt-1 list-inside list-disc text-xs">
-                        {testResult.candidates.map((c) => <li key={`${c.province}-${c.city}`}>{c.city}, {c.province}</li>)}
+                        {testResult.candidates.map((c) => <li key={`${c.province}-${c.city}-${c.label}`}>{c.label}</li>)}
                       </ul>
                     )}
                   </div>

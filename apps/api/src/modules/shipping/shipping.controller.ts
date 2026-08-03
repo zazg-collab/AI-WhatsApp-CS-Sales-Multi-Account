@@ -52,9 +52,6 @@ export class ShippingController {
     return this.shipping.quote({
       keyword: dto.keyword,
       items: (dto.items ?? []).map((i) => ({ name: i.name, qty: i.qty ?? 1 })),
-      // >>> ANGGA: alat uji admin boleh menghitung ongkir saja tanpa barang.
-      // Jalur pelanggan tidak pernah lewat sini. <<< ANGGA
-      allowEmptyItems: true,
     });
   }
 
