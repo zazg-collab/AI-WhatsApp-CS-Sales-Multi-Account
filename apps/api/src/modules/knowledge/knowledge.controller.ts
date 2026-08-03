@@ -62,6 +62,17 @@ export class KnowledgeController {
     return this.knowledge.reindex(id);
   }
 
+  // >>> ANGGA: dipakai tombol "Bangun ulang indeks" di /settings/ai.
+  // Rute ini didaftarkan SEBELUM 'knowledge-bases/:id' mana pun tidak jadi soal
+  // karena prefix-nya beda ('knowledge/'), jadi tidak ada bentrok :id.
+  @ApiOperation({ summary: 'Rebuild semantic embeddings for every knowledge base' })
+  @Roles('owner', 'supervisor')
+  @Post('knowledge/reindex-all')
+  reindexAll() {
+    return this.knowledge.reindexAll();
+  }
+  // <<< ANGGA
+
   @ApiOperation({ summary: 'Update a knowledge base' })
   @Roles('owner', 'supervisor')
   @Patch('knowledge-bases/:id')

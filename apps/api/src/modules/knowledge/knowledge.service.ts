@@ -77,6 +77,23 @@ export class KnowledgeService {
     return { enabled: true, reindexed };
   }
 
+  // >>> ANGGA: reindex SEMUA knowledge base sekaligus. Dibutuhkan tombol
+  // "Bangun ulang indeks" di /settings/ai — sesudah RAG dinyalakan, item lama
+  // belum punya embedding, dan upstream cuma menyediakan reindex per-base
+  // (yang bahkan tidak punya pemanggil di frontend) atau skrip CLI kb:reindex.
+  async reindexAll() {
+    if (!(await this.knowledgeIndex.enabled())) {
+      return { enabled: false, bases: 0, reindexed: 0 };
+    }
+    const bases = await this.prisma.knowledgeBase.findMany({ select: { id: true } });
+    let reindexed = 0;
+    for (const base of bases) {
+      reindexed += await this.knowledgeIndex.reindexBase(base.id);
+    }
+    return { enabled: true, bases: bases.length, reindexed };
+  }
+  // <<< ANGGA
+
   updateBase(id: string, dto: UpdateKnowledgeBaseDto, userId: string) {
     return this.prisma.knowledgeBase.update({
       where: { id },

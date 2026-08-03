@@ -30,6 +30,18 @@ class AiSettingsDto {
 
   @IsOptional() @IsNumber() @Min(1000) @Max(120_000)
   timeoutMs?: number;
+
+  // >>> ANGGA: buka sakelar RAG ke dashboard. Upstream hanya membacanya dari env
+  // (AI_EMBED_MODEL / AI_EMBED_DIM) sehingga menyalakannya butuh edit .env + restart.
+  // Dua field ini sudah ada di AiSettings & defaults(), dan overlay DB di
+  // SettingsService bersifat generik — jadi cukup diizinkan lewat DTO.
+  // embedModel kosong = RAG mati (lihat EmbeddingService.enabled()).
+  @IsOptional() @IsString()
+  embedModel?: string;
+
+  @IsOptional() @IsNumber() @Min(64) @Max(8192)
+  embedDim?: number;
+  // <<< ANGGA
 }
 
 class WaSettingsDto {

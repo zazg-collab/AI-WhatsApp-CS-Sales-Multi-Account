@@ -43,6 +43,34 @@ const dict: Dict = {
   testingConnection: { id: 'Menguji…', en: 'Testing…' },
   testOk: { id: 'Koneksi berhasil — {n} model tersedia.', en: 'Connection successful — {n} models available.' },
   testFail: { id: 'Koneksi gagal. Periksa Base URL & API key.', en: 'Connection failed. Check the Base URL & API key.' },
+  // >>> ANGGA: sakelar RAG
+  ragTitle: { id: 'Pencarian semantik (RAG)', en: 'Semantic retrieval (RAG)' },
+  ragToggle: { id: 'Aktifkan RAG', en: 'Enable RAG' },
+  ragHint: {
+    id: 'Saat mati, knowledge dicari dengan pencocokan kata saja. Saat aktif, tiap item di-embed dan dicari berdasarkan makna. Butuh ekstensi pgvector (sudah terpasang lewat migrasi 20).',
+    en: 'When off, knowledge is retrieved by keyword matching only. When on, each item is embedded and retrieved by meaning. Requires the pgvector extension (installed by migration 20).',
+  },
+  ragModel: { id: 'Model embedding', en: 'Embedding model' },
+  ragModelHint: {
+    id: 'Tidak muncul di daftar model chat — ketik manual. OpenAI: text-embedding-3-small · OpenRouter: openai/text-embedding-3-small',
+    en: 'Not listed among chat models — type it manually. OpenAI: text-embedding-3-small · OpenRouter: openai/text-embedding-3-small',
+  },
+  ragDim: { id: 'Dimensi vektor', en: 'Vector dimension' },
+  ragDimHint: {
+    id: 'WAJIB sama dengan kolom vector(N) di database (bawaan 1536). Kalau beda, penyimpanan embedding gagal diam-diam.',
+    en: 'MUST match the vector(N) column in the database (default 1536). A mismatch makes embedding writes fail silently.',
+  },
+  ragReindex: { id: 'Bangun ulang indeks', en: 'Rebuild index' },
+  ragReindexing: { id: 'Membangun…', en: 'Rebuilding…' },
+  ragReindexHint: {
+    id: 'Jalankan sekali sesudah menyalakan RAG — item lama belum punya embedding. Memanggil API embedding, jadi ada biayanya.',
+    en: 'Run once after enabling RAG — existing items have no embeddings yet. This calls the embedding API, so it costs money.',
+  },
+  ragReindexOk: { id: '{n} item terindeks dari {b} knowledge base.', en: 'Indexed {n} items across {b} knowledge bases.' },
+  ragReindexOff: { id: 'RAG belum aktif di server — nyalakan lalu Simpan dulu.', en: 'RAG is not enabled on the server — turn it on and save first.' },
+  ragReindexFail: { id: 'Gagal membangun indeks. Cek model embedding & API key.', en: 'Reindex failed. Check the embedding model & API key.' },
+  ragDirty: { id: 'Ada perubahan RAG yang belum disimpan.', en: 'Unsaved RAG changes.' },
+  // <<< ANGGA
   // WA
   waIntro: { id: 'Jeda mirip-manusia menurunkan risiko banned. Nilai dalam milidetik.', en: 'Human-like delays reduce ban risk. Values in milliseconds.' },
   humanMin: { id: 'Jeda kirim minimum (ms)', en: 'Min send delay (ms)' },
@@ -88,7 +116,9 @@ const dict: Dict = {
 type Tab = 'ai' | 'wa' | 'notif' | 'sentinel' | 'campaign';
 
 interface SettingsShape {
-  ai: { baseUrl: string; model: string; sentinelModel: string; temperature: number; timeoutMs: number; apiKeySet: boolean };
+  // >>> ANGGA: embedModel/embedDim ditambahkan (sakelar RAG)
+  ai: { baseUrl: string; model: string; sentinelModel: string; temperature: number; timeoutMs: number; apiKeySet: boolean; embedModel: string; embedDim: number };
+  // <<< ANGGA
   wa: { humanDelayMinMs: number; humanDelayMaxMs: number; typingPerCharMs: number; typingMinMs: number; typingMaxMs: number };
   notifications: { hermesNotifyTarget: string };
   sla: { responseMinutes: number };
@@ -113,6 +143,12 @@ export default function SettingsPage() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [testingConn, setTestingConn] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  // >>> ANGGA: state sakelar RAG. ragDirty mengunci tombol reindex sampai
+  // perubahan disimpan — server memakai nilai dari DB, bukan isi form.
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexMsg, setReindexMsg] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [ragDirty, setRagDirty] = useState(false);
+  // <<< ANGGA
 
   useEffect(() => {
     api<SettingsShape>('/settings')
@@ -145,6 +181,28 @@ export default function SettingsPage() {
     }
   }
 
+  // >>> ANGGA: bangun ulang embedding untuk semua knowledge base.
+  async function reindexAll() {
+    setReindexing(true);
+    setReindexMsg(null);
+    try {
+      const r = await api<{ enabled: boolean; bases: number; reindexed: number }>(
+        '/knowledge/reindex-all',
+        { method: 'POST' },
+      );
+      setReindexMsg(
+        r.enabled
+          ? { ok: true, msg: t('ragReindexOk', { n: r.reindexed, b: r.bases }) }
+          : { ok: false, msg: t('ragReindexOff') },
+      );
+    } catch {
+      setReindexMsg({ ok: false, msg: t('ragReindexFail') });
+    } finally {
+      setReindexing(false);
+    }
+  }
+  // <<< ANGGA
+
   async function loadModels() {
     setLoadingModels(true);
     setModelsMsg(null);
@@ -175,6 +233,10 @@ export default function SettingsPage() {
           temperature: Number(data.ai.temperature),
           timeoutMs: Number(data.ai.timeoutMs),
           ...(apiKeyInput.trim() ? { apiKey: apiKeyInput.trim() } : {}),
+          // >>> ANGGA: sakelar RAG. embedModel kosong = RAG mati.
+          embedModel: (data.ai.embedModel ?? '').trim(),
+          embedDim: Number(data.ai.embedDim) || 1536,
+          // <<< ANGGA
         };
       } else if (tab === 'wa') {
         if (
@@ -215,6 +277,7 @@ export default function SettingsPage() {
       setData(updated);
       setApiKeyInput('');
       setSavedMsg(t('saved'));
+      setRagDirty(false); // >>> ANGGA: buka kunci tombol reindex sesudah tersimpan
     } catch (err) {
       setError(err instanceof Error ? err.message : t('saveError'));
     } finally {
@@ -324,6 +387,62 @@ export default function SettingsPage() {
                       value={data.ai.timeoutMs} onChange={(e) => patch('ai', 'timeoutMs', e.target.value)} />
                   </Field>
                 </div>
+
+                {/* >>> ANGGA: sakelar RAG — upstream hanya lewat env + restart */}
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                  <p className="mb-2 text-[13px] font-semibold text-gray-800 dark:text-gray-100">{t('ragTitle')}</p>
+                  <label className="flex items-start gap-2">
+                    <input type="checkbox"
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-sentinel-600 focus:ring-sentinel-400 disabled:opacity-50"
+                      disabled={!canEdit}
+                      checked={!!(data.ai.embedModel ?? '').trim()}
+                      onChange={(e) => {
+                        // Default id model menyesuaikan provider: OpenRouter memakai
+                        // penamaan ber-namespace, OpenAI tidak.
+                        const viaOpenRouter = (data.ai.baseUrl ?? '').includes('openrouter');
+                        patch('ai', 'embedModel', e.target.checked
+                          ? (viaOpenRouter ? 'openai/text-embedding-3-small' : 'text-embedding-3-small')
+                          : '');
+                        setRagDirty(true);
+                        setReindexMsg(null);
+                      }} />
+                    <span>
+                      <span className="block text-[13px] font-medium text-gray-700 dark:text-gray-200">{t('ragToggle')}</span>
+                      <span className="mt-0.5 block text-xs text-gray-400">{t('ragHint')}</span>
+                    </span>
+                  </label>
+
+                  {!!(data.ai.embedModel ?? '').trim() && (
+                    <div className="mt-3 space-y-3 border-l-2 border-gray-100 pl-4 dark:border-gray-800">
+                      <Field label={t('ragModel')} hint={t('ragModelHint')}>
+                        <input className={fieldCls} disabled={!canEdit}
+                          value={data.ai.embedModel ?? ''}
+                          onChange={(e) => { patch('ai', 'embedModel', e.target.value); setRagDirty(true); }} />
+                      </Field>
+                      <Field label={t('ragDim')} hint={t('ragDimHint')}>
+                        <input type="number" min="64" max="8192" className={fieldCls} disabled={!canEdit}
+                          value={data.ai.embedDim ?? 1536}
+                          onChange={(e) => { patch('ai', 'embedDim', e.target.value); setRagDirty(true); }} />
+                      </Field>
+                      <div>
+                        <Button variant="outline" size="sm" onClick={reindexAll}
+                          disabled={reindexing || !canEdit || ragDirty}>
+                          <ArrowsClockwise className={cn('h-4 w-4', reindexing && 'animate-spin')} aria-hidden="true" />
+                          {reindexing ? t('ragReindexing') : t('ragReindex')}
+                        </Button>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {ragDirty ? t('ragDirty') : t('ragReindexHint')}
+                        </p>
+                        {reindexMsg && (
+                          <p className={`mt-1 text-xs font-medium ${reindexMsg.ok ? 'text-channel-700 dark:text-channel-400' : 'text-danger-700 dark:text-danger-400'}`}>
+                            {reindexMsg.msg}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {/* <<< ANGGA */}
               </div>
             )}
 
