@@ -12,6 +12,7 @@ export interface Persona {
   tone: string | null;
   style: string | null;
   rules: string | null;
+  forbiddenWords?: string[]; // >>> ANGGA: ditegakkan Sentinel (rules.engine.ts) <<<
 }
 
 export interface KnowledgeBase {

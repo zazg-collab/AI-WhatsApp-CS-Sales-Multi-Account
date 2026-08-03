@@ -33,7 +33,9 @@ function FormError({ message }: { message: string }) {
 
 function PersonaModal({ onClose, onCreated, persona }: { onClose: () => void; onCreated: (p: Persona) => void; persona?: Persona }) {
   const t = useT(dict);
-  const [form, setForm] = useState({ name: persona?.name ?? '', soulMd: persona?.soulMd ?? '', tone: persona?.tone ?? '', style: persona?.style ?? '', rules: persona?.rules ?? '' });
+  // >>> ANGGA: `forbidden` disimpan sebagai teks berkoma di form, dipecah jadi array saat dikirim
+  const [form, setForm] = useState({ name: persona?.name ?? '', soulMd: persona?.soulMd ?? '', tone: persona?.tone ?? '', style: persona?.style ?? '', rules: persona?.rules ?? '', forbidden: (persona?.forbiddenWords ?? []).join(', ') });
+  // <<< ANGGA
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +46,9 @@ function PersonaModal({ onClose, onCreated, persona }: { onClose: () => void; on
     try {
       const saved = await api<Persona>(persona ? `/bots/personas/${persona.id}` : '/bots/personas', {
         method: persona ? 'PATCH' : 'POST',
-        body: JSON.stringify({ name: form.name, soulMd: form.soulMd, tone: form.tone || undefined, style: form.style || undefined, rules: form.rules || undefined }),
+        // >>> ANGGA: forbiddenWords selalu dikirim (array kosong = hapus daftarnya)
+        body: JSON.stringify({ name: form.name, soulMd: form.soulMd, tone: form.tone || undefined, style: form.style || undefined, rules: form.rules || undefined, forbiddenWords: form.forbidden.split(',').map((w) => w.trim()).filter(Boolean) }),
+        // <<< ANGGA
       });
       onCreated(saved);
     } catch (err) {
@@ -71,6 +75,12 @@ function PersonaModal({ onClose, onCreated, persona }: { onClose: () => void; on
           <Field label={t('styleLabel')} value={form.style} onChange={(e) => setForm({ ...form, style: e.target.value })} placeholder={t('stylePlaceholder')} />
         </div>
         <TextareaField label={t('rulesLabel')} rows={2} value={form.rules} onChange={(e) => setForm({ ...form, rules: e.target.value })} placeholder={t('rulesPlaceholder')} className="resize-none" />
+        {/* >>> ANGGA: isian kata terlarang — kolomnya sudah lama ada di DB, formnya belum */}
+        <div>
+          <Field label={t('forbiddenLabel')} value={form.forbidden} onChange={(e) => setForm({ ...form, forbidden: e.target.value })} placeholder={t('forbiddenPlaceholder')} />
+          <p className="mt-1 text-xs text-gray-400">{t('forbiddenHint')}</p>
+        </div>
+        {/* <<< ANGGA */}
         {error && <FormError message={error} />}
       </form>
     </Modal>

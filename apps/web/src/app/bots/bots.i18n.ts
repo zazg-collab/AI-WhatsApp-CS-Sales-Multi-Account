@@ -21,6 +21,15 @@ export const dict: Dict = {
   stylePlaceholder: { id: 'ringkas, detail…', en: 'concise, detailed…' },
   rulesLabel: { id: 'Aturan', en: 'Rules' },
   rulesPlaceholder: { id: 'Jangan sebut harga tanpa persetujuan admin…', en: 'Do not quote prices without admin approval…' },
+  // >>> ANGGA: kata terlarang. Kolomnya sudah ada di DB dan diisi AI Learning,
+  // tapi upstream tidak pernah menyediakan isiannya di form ini.
+  forbiddenLabel: { id: 'Kata terlarang', en: 'Forbidden words' },
+  forbiddenPlaceholder: { id: 'gratis ongkir, garansi seumur hidup, pasti sampai besok', en: 'free shipping, lifetime warranty, guaranteed tomorrow' },
+  forbiddenHint: {
+    id: 'Pisahkan dengan koma. Balasan bot yang memuat salah satunya akan DITAHAN dan diteruskan ke admin — bukan sekadar dilarang lewat prompt.',
+    en: 'Comma-separated. A bot reply containing any of these is HELD for an admin — not merely discouraged via the prompt.',
+  },
+  // <<< ANGGA
   editBotTitle: { id: 'Edit bot: {name}', en: 'Edit bot: {name}' },
   newBotTitle: { id: 'Bot baru', en: 'New bot' },
   botDesc: { id: 'Otak chatbot: persona, knowledge base, dan mode AI default.', en: 'Chatbot brain: persona, knowledge base, and default AI mode.' },
