@@ -97,12 +97,29 @@ export class BotsService {
   }
 
   async assignToAccount(botId: string, accountId: string) {
-    await this.get(botId);
+    const bot = await this.get(botId);
     const account = await this.prisma.whatsappAccount.findUnique({ where: { id: accountId } });
     if (!account) throw new NotFoundException('WhatsApp account not found');
+
+    // >>> ANGGA: `Bot.defaultAiMode` akhirnya dipakai. Sebelumnya kolom itu
+    // diisi lewat form, disimpan, lalu tidak pernah dibaca siapa pun — mode
+    // akun tetap datang dari SENTINEL_DEFAULT_AI_MODE saat akun dibuat.
+    //
+    // Dua batas yang SENGAJA dipasang:
+    //  1. Hanya saat penugasan benar-benar BERUBAH. Menekan "Tugaskan" ulang
+    //     pada akun yang sudah dipegang bot ini tidak menyetel ulang modenya.
+    //  2. Hanya menyentuh mode AKUN, tidak pernah percakapan yang sedang jalan
+    //     — `conversation.aiMode` distempel saat percakapan lahir dan tetap
+    //     apa adanya. Tanpa batas ini, mengedit bot bisa diam-diam menaikkan
+    //     puluhan percakapan aktif dari draft ke kirim-otomatis.
+    const penugasanBerubah = account.assignedBotId !== botId;
     return this.prisma.whatsappAccount.update({
       where: { id: accountId },
-      data: { assignedBotId: botId },
+      data: {
+        assignedBotId: botId,
+        ...(penugasanBerubah ? { aiMode: bot.defaultAiMode } : {}),
+      },
     });
+    // <<< ANGGA
   }
 }

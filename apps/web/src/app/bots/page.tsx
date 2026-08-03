@@ -205,6 +205,12 @@ function BotModal({ bot, personas, knowledgeBases, accounts, onClose, onSaved, o
           <p className={`rounded-md px-3 py-2 text-xs ${form.defaultAiMode === 'ai_on' ? 'bg-danger-50 text-danger-700 dark:bg-danger-900/20 dark:text-danger-400' : 'bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
             {aiModeHelp[form.defaultAiMode]}
           </p>
+          {/* >>> ANGGA: dua keterangan ini menjelaskan kapan field-nya berlaku.
+              Sebelumnya dua-duanya tersimpan tapi tidak berefek apa pun, dan
+              tidak ada satu kata pun di UI yang memberi tahu. */}
+          <p className="text-xs text-gray-400">{t('defaultAiModeScope')}</p>
+          <p className="text-xs text-gray-400">{t('statusScope')}</p>
+          {/* <<< ANGGA */}
           {error && <FormError message={error} />}
         </form>
 

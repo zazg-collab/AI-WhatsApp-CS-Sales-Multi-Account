@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ModuleRef } from '@nestjs/core';
 import {
   AiMode,
+  BotStatus, // >>> ANGGA: untuk gerbang status bot <<<
   SentinelDecision,
   MessageStatus,
   MessageType,
@@ -254,9 +255,22 @@ export class WaInboundService {
   private async maybeAutoReply(conversationId: string) {
     const convo = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
-      include: { customer: true },
+      // >>> ANGGA: bot ikut diambil untuk memeriksa statusnya <<<
+      include: { customer: true, bot: { select: { status: true } } },
     });
     if (!convo) { this.logger.debug(`maybeAutoReply: conversation not found: ${conversationId}`); return; }
+    // >>> ANGGA: gerbang status bot. Sebelumnya `Bot.status` (active/inactive/
+    // draft) tersimpan tapi tidak pernah dibaca kode mana pun — mau apa pun
+    // isinya, bot tetap membalas. Sekarang hanya bot `active` yang bekerja,
+    // jadi status ini berfungsi sebagai saklar mati per-bot tanpa perlu
+    // melepas penugasan akun (dan kehilangan konfigurasinya).
+    // Percakapan TANPA bot sengaja dibiarkan lewat — perilaku lama tetap:
+    // balas dengan persona bawaan.
+    if (convo.bot && convo.bot.status !== BotStatus.active) {
+      this.logger.debug(`maybeAutoReply: bot status is ${convo.bot.status}, not active`);
+      return;
+    }
+    // <<< ANGGA
     if (convo.takeoverStatus === TakeoverStatus.admin_takeover) { this.logger.debug(`maybeAutoReply: admin takeover active`); return; }
     if (convo.aiMode === AiMode.ai_off || convo.aiMode === AiMode.ai_paused) { this.logger.debug(`maybeAutoReply: AI mode is off/paused: ${convo.aiMode}`); return; }
     if (!convo.customer.phoneNumber) { this.logger.debug(`maybeAutoReply: no phone number`); return; }

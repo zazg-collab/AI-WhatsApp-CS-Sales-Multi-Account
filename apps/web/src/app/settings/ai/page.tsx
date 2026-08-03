@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ArrowsClockwise, Cpu, FloppyDisk, ShieldWarning, ChatCircle, Bell, Clock, MegaphoneSimple, type Icon } from '@/components/ui/core-essential-icons';
-import { api, hasRole } from '@/lib/api';
+import { api } from '@/lib/api';
+import { useHasRole } from '@/lib/use-has-role'; // >>> ANGGA <<<
 import { AppLayout } from '@/components/AppLayout';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Card } from '@/components/ui/Card';
@@ -131,7 +132,10 @@ const fieldCls =
 
 export default function SettingsPage() {
   const t = useT(dict);
-  const canEdit = hasRole('owner');
+  // >>> ANGGA: dulu `hasRole('owner')` langsung — bikin hydration mismatch
+  // karena server tidak punya token. Lihat lib/use-has-role.ts.
+  const { allowed: canEdit, ready: roleReady } = useHasRole('owner');
+  // <<< ANGGA
   const [tab, setTab] = useState<Tab>('ai');
   const [data, setData] = useState<SettingsShape | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState('');
@@ -320,7 +324,8 @@ export default function SettingsPage() {
           })}
         </div>
 
-        {!canEdit && (
+        {/* >>> ANGGA: tunggu peran diketahui supaya spanduk ini tidak berkedip <<< */}
+        {roleReady && !canEdit && (
           <Card className="mb-4 flex items-start gap-2 border-review-200 bg-review-50 p-3 dark:border-review-700/40 dark:bg-review-900/20">
             <ShieldWarning className="mt-0.5 h-4 w-4 shrink-0 text-review-600" aria-hidden="true" />
             <p className="text-[13px] text-review-700 dark:text-review-300">{t('readOnly')}</p>

@@ -58,6 +58,16 @@ export const dict: Dict = {
   languageId: { id: 'Indonesia', en: 'Indonesian' },
   languageEn: { id: 'English', en: 'English' },
   statusLabel: { id: 'Status', en: 'Status' },
+  // >>> ANGGA: jelaskan kapan dua field ini berlaku
+  defaultAiModeScope: {
+    id: 'Mode AI default dipakai saat bot ditugaskan ke sebuah nomor. Percakapan yang sedang berjalan TIDAK ikut berubah — modenya diatur per percakapan di Inbox.',
+    en: 'The default AI mode applies when this bot is assigned to a number. Conversations already running are NOT changed — their mode is set per conversation in the Inbox.',
+  },
+  statusScope: {
+    id: 'Hanya bot berstatus Active yang membalas. Draft & Inactive berhenti total tanpa perlu melepas penugasan nomor.',
+    en: 'Only bots with status Active reply. Draft & Inactive stop entirely without unassigning the number.',
+  },
+  // <<< ANGGA
   statusDraft: { id: 'Draft', en: 'Draft' },
   statusActive: { id: 'Aktif', en: 'Active' },
   statusInactive: { id: 'Nonaktif', en: 'Inactive' },
