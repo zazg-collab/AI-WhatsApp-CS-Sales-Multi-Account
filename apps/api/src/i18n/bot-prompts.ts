@@ -91,6 +91,31 @@ export const PERSONA_SECTION_LABEL = {
   en: 'Persona (Soul):',
 };
 
+// >>> ANGGA: label detail persona. Upstream menyimpan tone/style/rules/
+// forbiddenWords di tabel `personas`, memintanya lewat form UI, dan
+// menghasilkannya tiap kali Learning menambang persona — tapi TIDAK PERNAH
+// memasukkannya ke prompt; hanya soulMd yang terbaca. Empat label ini
+// menutup celah itu. Penegakan forbiddenWords TIDAK cukup di prompt saja
+// (larangan prompt selalu bocor sesekali) — ada pemeriksa deterministik di
+// rules.engine.ts yang menahan balasannya.
+export const PERSONA_TONE_LABEL = {
+  id: 'Nada bicara:',
+  en: 'Tone of voice:',
+};
+export const PERSONA_STYLE_LABEL = {
+  id: 'Gaya penulisan:',
+  en: 'Writing style:',
+};
+export const PERSONA_RULES_LABEL = {
+  id: 'Aturan khusus persona ini:',
+  en: 'Persona-specific rules:',
+};
+export const PERSONA_FORBIDDEN_LABEL = {
+  id: 'DILARANG KERAS memakai kata/frasa berikut, termasuk variasinya:',
+  en: 'NEVER use the following words/phrases, including variations:',
+};
+// <<< ANGGA
+
 /** Rule 3 fallback phrase — also used as the FALLBACK_MARKER in analytics. */
 export const FALLBACK_PHRASE = {
   id: 'Untuk info tersebut saya bantu konfirmasi dulu ke admin ya kak.',

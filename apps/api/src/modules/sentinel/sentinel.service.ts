@@ -27,6 +27,7 @@ import {
 const FALLBACK_MARKERS = Object.values(FALLBACK_PHRASE) as string[];
 import {
   checkKnowledgeGrounding,
+  checkForbiddenWords, // >>> ANGGA <<<
   checkPriceGrounding,
   decisionFromConfidence,
   evaluateRules,
@@ -90,6 +91,9 @@ export class SentinelService {
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
+        // >>> ANGGA: persona dibutuhkan untuk menegakkan forbiddenWords
+        bot: { include: { persona: true } },
+        // <<< ANGGA
       },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
@@ -110,6 +114,14 @@ export class SentinelService {
     // phrase → it likely answered from outside the KB. Same n8n/Dify-style
     // "answer only from retrieved context" guarantee, enforced deterministically.
     const knowledgeHit = checkKnowledgeGrounding(draftText, groundingText, lastCustomerText);
+
+    // >>> ANGGA: 1d. Kata terlarang persona — hanya diperiksa pada teks balasan
+    // bot, bukan pesan pelanggan.
+    const forbiddenHit = checkForbiddenWords(
+      draftText,
+      conversation.bot?.persona?.forbiddenWords,
+    );
+    // <<< ANGGA
 
     // 2. LLM judgement.
     const llm = await this.llmReview(conversationId, draftText);
@@ -139,6 +151,14 @@ export class SentinelService {
       riskLevel = highestRisk(riskLevel, knowledgeHit.riskLevel);
       reason = `${knowledgeHit.reason}. ${reason}`;
     }
+
+    // >>> ANGGA
+    if (forbiddenHit) {
+      decision = mostRestrictive(decision, forbiddenHit.decision);
+      riskLevel = highestRisk(riskLevel, forbiddenHit.riskLevel);
+      reason = `${forbiddenHit.reason}. ${reason}`;
+    }
+    // <<< ANGGA
 
     if (opts.multiTopicBurst && decision === SentinelDecision.approve) {
       decision = SentinelDecision.draft;

@@ -168,3 +168,30 @@ export function mostRestrictive(
 export function highestRisk(a: RiskLevel, b: RiskLevel): RiskLevel {
   return RISK_RANK[a] >= RISK_RANK[b] ? a : b;
 }
+
+// >>> ANGGA: penegakan `Persona.forbiddenWords`.
+// Upstream menyimpan daftar ini (form UI + hasil mining Learning) tapi tidak
+// pernah menegakkannya di mana pun — namanya menjanjikan larangan, efeknya nol.
+// Sengaja HANYA memeriksa teks balasan bot, bukan pesan pelanggan: daftar ini
+// soal kata yang BOT tidak boleh ucapkan; pelanggan bebas mengetik apa saja.
+// Larangan di prompt saja tidak pernah 100% — ini jaring deterministiknya.
+export function checkForbiddenWords(
+  draftText: string,
+  forbiddenWords: string[] | null | undefined,
+): RuleHit | null {
+  const words = (forbiddenWords ?? [])
+    .map((w) => String(w).trim().toLowerCase())
+    .filter(Boolean);
+  if (!words.length) return null;
+
+  const lower = (draftText ?? '').toLowerCase();
+  const matched = words.find((w) => lower.includes(w));
+  if (!matched) return null;
+
+  return {
+    decision: SentinelDecision.takeover_required,
+    riskLevel: RiskLevel.high,
+    reason: `Balasan memakai kata terlarang persona: "${matched}"`,
+  };
+}
+// <<< ANGGA

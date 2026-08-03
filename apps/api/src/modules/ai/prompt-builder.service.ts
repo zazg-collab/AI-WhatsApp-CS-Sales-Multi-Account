@@ -15,6 +15,12 @@ import {
   MEDIA_EMPTY_NOTE,
   MEDIA_SECTION_LABEL,
   PERSONA_SECTION_LABEL,
+  // >>> ANGGA
+  PERSONA_TONE_LABEL,
+  PERSONA_STYLE_LABEL,
+  PERSONA_RULES_LABEL,
+  PERSONA_FORBIDDEN_LABEL,
+  // <<< ANGGA
   PRODUCT_AVAILABLE,
   PRODUCT_OUT_OF_STOCK,
   PRODUCT_STOCK_INTRO,
@@ -95,6 +101,29 @@ export class PromptBuilderService {
       conversation.bot?.persona?.soulMd ??
       t(BOT_PERSONA_FALLBACK, lang);
 
+    // >>> ANGGA: tone/style/rules/forbiddenWords ikut masuk prompt. Upstream
+    // menyimpannya tapi tidak pernah membacanya, jadi form UI & hasil mining
+    // Learning selama ini tidak berefek apa pun. Tetap di dalam blok bersama
+    // (per-bot konstan) supaya prompt caching provider tidak rusak.
+    const persona = conversation.bot?.persona;
+    const personaDetail: string[] = [];
+    if (persona?.tone?.trim()) {
+      personaDetail.push(`${t(PERSONA_TONE_LABEL, lang)} ${persona.tone.trim()}`);
+    }
+    if (persona?.style?.trim()) {
+      personaDetail.push(`${t(PERSONA_STYLE_LABEL, lang)} ${persona.style.trim()}`);
+    }
+    if (persona?.rules?.trim()) {
+      personaDetail.push(t(PERSONA_RULES_LABEL, lang), persona.rules.trim());
+    }
+    const forbidden = (persona?.forbiddenWords ?? [])
+      .map((w) => String(w).trim())
+      .filter(Boolean);
+    if (forbidden.length) {
+      personaDetail.push(`${t(PERSONA_FORBIDDEN_LABEL, lang)} ${forbidden.join(', ')}`);
+    }
+    // <<< ANGGA
+
     // Relevance query = the customer's most recent messages. Used to pick the
     // most relevant knowledge items instead of dumping the whole base.
     const query = conversation.messages
@@ -149,6 +178,7 @@ export class PromptBuilderService {
       '',
       t(PERSONA_SECTION_LABEL, lang),
       soul,
+      ...(personaDetail.length ? personaDetail : []), // >>> ANGGA <<<
       '',
       t(KNOWLEDGE_SECTION_LABEL, lang),
       // Knowledge is retrieved from items that may echo customer-supplied text;
