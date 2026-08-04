@@ -110,13 +110,51 @@ export function decisionFromConfidence(
 }
 
 /**
- * Deterministic groundedness check (audit follow-up): flags a draft that
- * states a price-like number (4+ digits — phone/quantity noise is shorter)
- * which does not appear anywhere in the knowledge/product data actually
- * injected into the prompt. Catches outright fabrication that a flaky LLM
- * judge might still approve. Never flags when there is no grounding data to
- * compare against (nothing to fabricate FROM, or the bot has no KB yet).
+ * >>> ANGGA — semua angka di sebuah teks, diambil UTUH dan dinormalkan.
+ *
+ * TERBUKTI DI PRODUKSI (insiden Fatih 2026-08-03): gerbang ini bekerja — ia
+ * menangkap `294000, 299000` dan menahan draftnya. Jadi yang diperbaiki di
+ * sini BUKAN kebocoran, melainkan dua sumber TUDUHAN PALSU yang membuatnya
+ * menahan jawaban yang sebenarnya benar:
+ *
+ *  1. Sisi acuan dipecah per digit (`match(/\d+/g).join(' ')`), jadi harga
+ *     yang ditulis berformat rupiah di knowledge base — "Rp139.000" — tersimpan
+ *     sebagai "139 000". Draft yang menyebut 139000 lalu dituduh mengarang,
+ *     padahal angkanya persis dari knowledge base itu sendiri.
+ *  2. Ambangnya "4 digit ke atas" menyapu tahun ("Garansi 2026") dan nomor
+ *     urut ikut tertuduh.
+ *
+ * Keduanya bikin jawaban benar mendarat di kotak draft, dan tiap draft palsu
+ * mengikis kepercayaan pada gerbangnya sendiri.
+ *
+ * Satu fungsi ini MENGGANTIKAN pencocokan lama di kedua sisi (acuan & draft) —
+ * bukan lapisan tambahan di atasnya. Semua ejaan ("150.000", "150 000",
+ * "150000") mendarat di satu bentuk yang sama, lalu dibandingkan sebagai
+ * anggota himpunan, bukan sebagai potongan teks.
+ *
+ * @param hanyaHarga untuk sisi DRAFT: hanya angka yang BERBENTUK uang yang
+ * diperiksa — ditulis dengan pemisah ribuan, ATAU didahului "Rp", ATAU 5 digit
+ * ke atas. Bukan daftar pengecualian, melainkan satu definisi "ini angka uang".
+ * Sisi acuan sengaja mengambil SEMUA angka: makin luas acuannya, makin kecil
+ * peluang menuduh yang benar.
  */
+export function angkaUtuh(text: string, hanyaHarga = false): Set<string> {
+  const out = new Set<string>();
+  // Cabang pertama menangkap angka berpemisah ribuan ("139.000", "1 250 000");
+  // cabang kedua angka polos. Dipisah begini supaya "1.5 kg" tetap terbaca dua
+  // angka, dan supaya tiap angka tahu SENDIRI bagaimana ia ditulis.
+  const pola = /(rp\.?\s*)?(\d{1,3}(?:[.,\s]\d{3})+|\d+)/gi;
+  for (const m of (text ?? '').matchAll(pola)) {
+    const tok = m[2];
+    const berbentukUang = Boolean(m[1]) || /[.,\s]/.test(tok);
+    const bersih = tok.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+    if (!bersih) continue;
+    if (hanyaHarga && !berbentukUang && bersih.length < 5) continue;
+    out.add(bersih);
+  }
+  return out;
+}
+
 export function checkPriceGrounding(
   draftText: string,
   groundedText: string,
@@ -129,16 +167,11 @@ export function checkPriceGrounding(
   // <<< ANGGA
 ): RuleHit | null {
   if (!groundedText.trim() && !shippingNumbers.trim()) return null; // >>> ANGGA <<<
-  const draftNumbers = draftText.match(/\d[\d.,]{3,}/g) ?? [];
-  if (draftNumbers.length === 0) return null;
-  const groundedDigits = [
-    (groundedText.match(/\d+/g) ?? []).join(' '),
-    (shippingNumbers.match(/\d+/g) ?? []).join(' '), // >>> ANGGA <<<
-  ].join(' ');
-  const ungrounded = draftNumbers
-    .map((n) => n.replace(/\D/g, ''))
-    .filter((n) => n.length >= 4 && !groundedDigits.includes(n));
+  // >>> ANGGA — dicocokkan sebagai ANGKA UTUH, bukan potongan teks.
+  const grounded = new Set([...angkaUtuh(groundedText), ...angkaUtuh(shippingNumbers)]);
+  const ungrounded = [...angkaUtuh(draftText, true)].filter((n) => !grounded.has(n));
   if (ungrounded.length === 0) return null;
+  // <<< ANGGA
   return {
     decision: SentinelDecision.draft,
     riskLevel: RiskLevel.medium,

@@ -6,6 +6,9 @@ import { logAudit } from '../../common/audit.util';
 interface ListFilters {
   userId?: string;
   entity?: string;
+  /** >>> ANGGA: satu baris yang diaudit, mis. satu percakapan. `logAudit`
+   *  sudah menyimpannya sejak awal, tapi belum pernah bisa disaring. */
+  entityId?: string;
   action?: string;
   from?: string;
   to?: string;
@@ -39,11 +42,12 @@ export class AuditService {
   }
 
   async list(filters: ListFilters) {
-    const { userId, entity, action, from, to, limit = 20, offset = 0 } = filters;
+    const { userId, entity, entityId, action, from, to, limit = 20, offset = 0 } = filters;
 
     const where: Record<string, unknown> = {};
     if (userId) where.userId = userId;
     if (entity) where.entityType = entity;
+    if (entityId) where.entityId = entityId; // >>> ANGGA <<<
     if (action) where.action = { contains: action, mode: 'insensitive' };
     if (from || to) {
       where.createdAt = {

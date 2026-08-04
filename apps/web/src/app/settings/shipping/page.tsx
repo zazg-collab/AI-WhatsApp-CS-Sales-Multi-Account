@@ -92,6 +92,14 @@ const dict: Dict = {
     en: 'Matched as a substring of the province name (case-insensitive), not an exact name — so newly split provinces are blocked automatically. A store policy, not a carrier limit.',
   },
 
+  // >>> ANGGA: kamus nama panggilan daerah.
+  aliasTitle: { id: 'Nama panggilan daerah', en: 'Place nicknames' },
+  alias: { id: 'Tukar nama sebelum dicari', en: 'Rewrite before searching' },
+  aliasHint: {
+    id: 'Satu baris per nama: yang diketik pelanggan = yang dicari ke Mengantar. Data Mengantar memakai nama resmi, pelanggan memakai nama panggilan — "solo", "jogja", "sby", "tangsel" semuanya nihil hasil di sana. Dicocokkan ke SELURUH kata kunci, huruf besar-kecil diabaikan; kalau tidak ada di daftar, yang diketik dipakai apa adanya. Isi kanan boleh nama kota resmi atau nama kecamatan.',
+    en: 'One line per name: what the customer types = what is searched at Mengantar. Mengantar uses official names while customers use nicknames — "solo", "jogja", "sby", "tangsel" all return nothing there. Matched against the WHOLE keyword, case-insensitive; anything not listed is searched as typed. The right-hand side may be an official city or a district name.',
+  },
+
   // Angka
   numbersTitle: { id: 'Berat & harga', en: 'Weight & pricing' },
   defaultWeight: { id: 'Berat default per produk (gram)', en: 'Default weight per product (grams)' },
@@ -163,6 +171,7 @@ interface ShippingSettings {
   quoteCacheTtlMs: number;
   discountMaxPerOrder: number;
   priceRoundingIncrement: number;
+  destinationAliases: Record<string, string>; // >>> ANGGA <<<
 }
 
 interface QuoteOk {
@@ -208,6 +217,31 @@ export function parseItems(raw: string): Array<{ name: string; qty: number }> {
     .filter((x): x is { name: string; qty: number } => x !== null);
 }
 
+/**
+ * >>> ANGGA — kamus alias sebagai teks biasa, satu baris per nama:
+ *   `solo = surakarta`
+ * Dipilih ketimbang tabel dua kolom karena isinya sering ditempel sekaligus
+ * dari catatan, dan baris tanpa `=` cukup diabaikan diam-diam saat mengetik
+ * (jangan sampai baris setengah jadi menghapus baris lain).
+ */
+export function parseAliases(raw: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const baris of raw.split('\n')) {
+    const i = baris.indexOf('=');
+    if (i <= 0) continue;
+    const dari = baris.slice(0, i).trim().toLowerCase().replace(/\s+/g, ' ');
+    const ke = baris.slice(i + 1).trim();
+    if (dari && ke) out[dari] = ke;
+  }
+  return out;
+}
+
+export function formatAliases(map: Record<string, string>): string {
+  return Object.entries(map ?? {})
+    .map(([dari, ke]) => `${dari} = ${ke}`)
+    .join('\n');
+}
+
 export function formatIdr(value: number): string {
   return Math.round(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
@@ -217,6 +251,7 @@ export default function ShippingSettingsPage() {
   const { allowed: canEdit, ready: roleReady } = useHasRole('owner');
   const [data, setData] = useState<ShippingSettings | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [aliasText, setAliasText] = useState(''); // >>> ANGGA <<<
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [cacheSize, setCacheSize] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -238,7 +273,13 @@ export default function ShippingSettingsPage() {
 
   useEffect(() => {
     api<{ shipping: ShippingSettings }>('/settings')
-      .then((all) => setData(all.shipping))
+      .then((all) => {
+        setData(all.shipping);
+        // >>> ANGGA: teks alias disimpan MENTAH di state sendiri. Kalau ia
+        // di-parse setiap ketikan, baris yang baru setengah diketik ("solo"
+        // tanpa "=") langsung hilang dari layar.
+        setAliasText(formatAliases(all.shipping.destinationAliases));
+      })
       .catch((err) => setError(err instanceof Error ? err.message : t('loadError')));
     loadStatus();
   }, [t]);
@@ -264,6 +305,7 @@ export default function ShippingSettingsPage() {
         quoteCacheTtlMs: Number(data.quoteCacheTtlMs),
         discountMaxPerOrder: Number(data.discountMaxPerOrder),
         priceRoundingIncrement: Number(data.priceRoundingIncrement),
+        destinationAliases: parseAliases(aliasText), // >>> ANGGA <<<
       };
       // Kunci kosong = pertahankan yang tersimpan (server juga menjaga ini).
       if (apiKeyInput.trim()) payload.mengantarApiKey = apiKeyInput.trim();
@@ -273,6 +315,7 @@ export default function ShippingSettingsPage() {
         body: JSON.stringify({ shipping: payload }),
       });
       setData(updated.shipping);
+      setAliasText(formatAliases(updated.shipping.destinationAliases)); // >>> ANGGA <<<
       setApiKeyInput('');
       setSavedMsg(t('saved'));
       loadStatus();
@@ -404,6 +447,20 @@ export default function ShippingSettingsPage() {
                 <Field label={t('codBlocked')} hint={`${t('listHint')} ${t('codBlockedHint')}`}>
                   <input className={fieldCls} disabled={!canEdit} value={data.codBlockedRegionKeywords.join(', ')}
                     onChange={(e) => patch('codBlockedRegionKeywords', parseList(e.target.value))} />
+                </Field>
+
+                {/* >>> ANGGA: kamus nama panggilan daerah. */}
+                <h2 className="pt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{t('aliasTitle')}</h2>
+                <Field label={t('alias')} hint={t('aliasHint')}>
+                  <textarea
+                    rows={8}
+                    spellCheck={false}
+                    aria-label={t('alias')}
+                    className={`${fieldCls} h-auto resize-y py-2 font-mono leading-5`}
+                    disabled={!canEdit}
+                    value={aliasText}
+                    onChange={(e) => { setAliasText(e.target.value); setSavedMsg(null); }}
+                  />
                 </Field>
 
                 <h2 className="pt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{t('numbersTitle')}</h2>

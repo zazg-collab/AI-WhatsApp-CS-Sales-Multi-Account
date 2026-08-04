@@ -375,9 +375,28 @@ export class PromptBuilderService {
     const recencyRank = new Map<string, number>();
     items.forEach((it, idx) => recencyRank.set(it.id, idx));
 
-    const scored = Array.from(byId.values()).map((item) => ({
+    // >>> ANGGA — bobot kata: yang UMUM hampir tidak berarti apa-apa.
+    //
+    // Insiden 2026-08-03: pelanggan tanya "1 aja, kirim ke purworejo berapa
+    // ya?" dan bot membacakan seluruh SOP pengiriman & COD padahal belum ada
+    // yang dipesan. Pemicunya kata "kirim" — ia cocok ke butir SOP itu dan
+    // ikut menang, lalu memakan satu dari 12 slot yang tersedia.
+    //
+    // Akar masalahnya: dulu SETIAP kata dihitung sama. Padahal "kirim",
+    // "harga", "kak" muncul di hampir semua butir — mereka tidak membedakan
+    // apa pun. Yang membedakan justru kata langka seperti "betekok".
+    //
+    // Jadi tiap kata sekarang dibobot terbalik terhadap seberapa sering ia
+    // muncul di seluruh kandidat: ada di semua butir → bobot ~0; cuma di satu
+    // butir → bobot ~1. Tidak ada daftar kata terlarang yang perlu ditulis
+    // atau dirawat — bobotnya ikut menyesuaikan sendiri ke isi knowledge base
+    // Bossfren, termasuk waktu butirnya bertambah.
+    const kandidat = Array.from(byId.values());
+    const bobot = this.termWeights(kandidat, terms);
+
+    const scored = kandidat.map((item) => ({
       item,
-      score: (vectorScore.get(item.id) ?? 0) + this.relevanceScore(item, terms),
+      score: (vectorScore.get(item.id) ?? 0) + this.relevanceScore(item, terms, bobot),
       // Lower is more recent; unknown (vector-only) items sort last on ties.
       recency: recencyRank.get(item.id) ?? Number.MAX_SAFE_INTEGER,
     }));
@@ -401,15 +420,47 @@ export class PromptBuilderService {
     );
   }
 
-  /** How many query terms appear in an item's title/product/content. */
+  /**
+   * >>> ANGGA — bobot tiap kata kunci, dihitung dari kandidat yang ada.
+   *
+   * Rumusnya IDF yang dinormalkan ke rentang 0..1:
+   *   ada di SEMUA butir  → ~0   (tidak membedakan apa pun)
+   *   ada di SATU butir    → ~1   (sangat membedakan)
+   *
+   * Dinormalkan (bukan IDF mentah) supaya skala skor kata kunci tetap 0..2
+   * seperti sebelumnya — kalau tidak, keseimbangannya dengan sinyal vektor
+   * (`KNOWLEDGE_VECTOR_WEIGHT`) ikut bergeser diam-diam.
+   */
+  private termWeights(
+    items: Array<{ title: string; productName: string | null; content: string }>,
+    terms: string[],
+  ): Map<string, number> {
+    const out = new Map<string, number>();
+    const n = items.length;
+    if (n === 0) return out;
+    const hays = items.map((i) =>
+      `${i.title} ${i.productName ?? ''} ${i.content}`.toLowerCase(),
+    );
+    const pembagi = Math.log(n + 1) || 1;
+    for (const t of terms) {
+      const df = hays.reduce((sum, h) => sum + (h.includes(t) ? 1 : 0), 0);
+      out.set(t, Math.log((n + 1) / (df + 1)) / pembagi);
+    }
+    return out;
+  }
+
+  /** Seberapa cocok satu butir dengan kata kunci, sesudah tiap kata dibobot. */
   private relevanceScore(
     item: { title: string; productName: string | null; content: string },
     terms: string[],
+    bobot?: Map<string, number>,
   ): number {
     const hay = `${item.title} ${item.productName ?? ''} ${item.content}`.toLowerCase();
     let score = 0;
     for (const t of terms) {
-      if (hay.includes(t)) score += item.title.toLowerCase().includes(t) ? 2 : 1;
+      if (!hay.includes(t)) continue;
+      const w = bobot ? (bobot.get(t) ?? 0) : 1;
+      score += (item.title.toLowerCase().includes(t) ? 2 : 1) * w;
     }
     return score;
   }

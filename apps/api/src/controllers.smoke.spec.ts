@@ -141,8 +141,18 @@ describe('AuditController', () => {
   const svc: any = { list: fn() };
   const c = new AuditController(svc);
   it('parses paging', () => {
-    c.list('Thing', 'create', '2024', '2025', '10', '0');
+    c.list('Thing', undefined, 'create', '2024', '2025', '10', '0');
     expect(svc.list).toHaveBeenCalledWith(expect.objectContaining({ limit: 10, offset: 0 }));
+  });
+
+  // >>> ANGGA: saringan per baris (satu percakapan) — dipakai panel Audit trail
+  // di inbox. Kolomnya sudah lama terisi `logAudit`, cuma belum pernah bisa
+  // disaring, jadi panel itu terpaksa mengarang isinya dari state.
+  it('meneruskan entityId ke service', () => {
+    c.list('conversation', 'c1');
+    expect(svc.list).toHaveBeenCalledWith(
+      expect.objectContaining({ entity: 'conversation', entityId: 'c1' }),
+    );
   });
 });
 

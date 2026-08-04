@@ -43,6 +43,35 @@ export class SettingsService {
     const parsed = raw.split(',').map((v) => v.trim()).filter(Boolean);
     return parsed.length ? parsed : fallback;
   }
+
+  /**
+   * Parser kamus alias dari env: `"solo=surakarta,jogja=yogyakarta"`.
+   * Kunci dinormalkan (huruf kecil, spasi rapat) supaya pencocokan nanti murni
+   * perbandingan string — tidak ada normalisasi tersembunyi di sisi pemakai.
+   */
+  private pairs(value: unknown, fallback: Record<string, string>): Record<string, string> {
+    const dari = (obj: Record<string, unknown>): Record<string, string> => {
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        const kunci = String(k).trim().toLowerCase().replace(/\s+/g, ' ');
+        const nilai = String(v ?? '').trim();
+        if (kunci && nilai) out[kunci] = nilai;
+      }
+      return out;
+    };
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return dari(value as Record<string, unknown>);
+    }
+    const raw = typeof value === 'string' ? value : '';
+    const parsed: Record<string, unknown> = {};
+    for (const bagian of raw.split(',')) {
+      const i = bagian.indexOf('=');
+      if (i <= 0) continue;
+      parsed[bagian.slice(0, i)] = bagian.slice(i + 1);
+    }
+    const hasil = dari(parsed);
+    return Object.keys(hasil).length ? hasil : fallback;
+  }
   // <<< ANGGA
 
   /** Env-derived defaults — the baseline before any DB override. */
@@ -100,6 +129,39 @@ export class SettingsService {
         quoteCacheTtlMs: this.num(this.config.get('SHIPPING_QUOTE_CACHE_TTL_MS'), 21_600_000),
         discountMaxPerOrder: this.num(this.config.get('SHIPPING_DISCOUNT_MAX_PER_ORDER'), 5000),
         priceRoundingIncrement: this.num(this.config.get('SHIPPING_PRICE_ROUNDING_INCREMENT'), 500),
+        // >>> ANGGA — daftar awal, SELURUHNYA diverifikasi live ke API Mengantar
+        // 2026-08-03: setiap kunci di kiri terbukti nol kandidat (atau salah
+        // kota), dan setiap nilai di kanan terbukti menghasilkan tepat satu kota
+        // yang benar. Bossfren bisa menambah/menghapus dari /settings/shipping
+        // tanpa menyentuh kode.
+        destinationAliases: this.pairs(this.config.get('SHIPPING_DESTINATION_ALIASES'), {
+          // Nama resmi ≠ nama sehari-hari.
+          solo: 'surakarta',
+          jogja: 'yogyakarta',
+          jogjakarta: 'yogyakarta',
+          yogya: 'yogyakarta',
+          'ujung pandang': 'makassar',
+          // Salah eja yang BERBAHAYA: "makasar" (satu s) adalah kecamatan di
+          // Jakarta Timur — tanpa baris ini, pelanggan Makassar dikutip ongkir
+          // Jakarta Timur dengan penuh percaya diri.
+          makasar: 'makassar',
+          // Singkatan yang lazim di WhatsApp; semuanya nol baris di Mengantar.
+          sby: 'surabaya',
+          smg: 'semarang',
+          bdg: 'bandung',
+          tangsel: 'tangerang selatan',
+          bsd: 'tangerang selatan',
+          jaksel: 'jakarta selatan',
+          jakbar: 'jakarta barat',
+          jaktim: 'jakarta timur',
+          jakut: 'jakarta utara',
+          jakpus: 'jakarta pusat',
+          // Kota yang tenggelam karena hasil pencarian dipotong 50 baris:
+          // "malang" & "padang" tidak pernah memunculkan kotanya sendiri, jadi
+          // dialihkan ke kecamatan pusatnya yang bersih satu kota.
+          malang: 'klojen',
+          padang: 'padang barat',
+        }),
       },
       // <<< ANGGA
     };

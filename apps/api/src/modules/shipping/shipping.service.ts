@@ -31,6 +31,7 @@ import {
 import {
   ShippingQuoteCache,
   sameCity,
+  type DestinationChoice,
   type ShippingOutcome,
   type ShippingQuote,
 } from './shipping-quote.cache';
@@ -104,7 +105,7 @@ export interface ShippingOrderExtract {
 
 export type ShippingResult =
   | { status: 'ok'; quote: ShippingQuote }
-  | { status: 'ambiguous'; candidates: Array<{ city: string; province: string; label: string }> }
+  | { status: 'ambiguous'; candidates: DestinationChoice[] }
   | { status: 'need_more_detail'; keyword: string }
   | { status: 'no_destination' }
   | { status: 'unresolved_items'; unmatched: string[] }
@@ -164,54 +165,105 @@ export interface DestinationCandidate {
   province: string;
   /** CITY_NAME_SI dari Mengantar, mis. "Kota Bogor" / "Kab. Bogor". */
   cityLabel: string;
+  /** Level kecocokan TERBAIK yang dimiliki kota ini. */
+  level: DestinationLevel;
+  /** Berapa baris hasil yang menunjuk ke kota ini. */
+  rows: number;
   ids: string[];
 }
 
-export interface DestinationMatch {
-  level: DestinationLevel;
-  candidates: DestinationCandidate[];
+const LEVEL_RANK: Record<DestinationLevel, number> = { city: 0, district: 1, subdistrict: 2 };
+
+const norm = (v: unknown) => String(v ?? '').trim().toLowerCase();
+
+/**
+ * Level kecocokan terbaik satu baris terhadap kata kunci, atau null.
+ *
+ * Level `district` menerima DUA bentuk: nama kecamatan yang sama persis, ATAU
+ * kata kunci sebagai KATA AWAL yang utuh ("Purwokerto" → "PURWOKERTO BARAT").
+ * Banyak kota yang orang sebut sehari-hari — Purwokerto, Cikarang, Serpong,
+ * Ciputat — di data Mengantar bukan CITY_NAME, melainkan pecahan kecamatan.
+ *
+ * Wajib KATA UTUH, bukan awalan huruf: "Solo" bukan awal kata dari "SOLOKURO"
+ * (itu satu kata sendiri). Tanpa syarat ini, "Solo" terkunci ke Lamongan.
+ */
+export function levelKecocokan(r: MengantarAddress, keyword: string): DestinationLevel | null {
+  const k = norm(keyword);
+  if (!k) return null;
+  if (norm(r?.CITY_NAME) === k) return 'city';
+  const distrik = norm(r?.DISTRICT_NAME);
+  if (distrik === k || distrik.startsWith(`${k} `)) return 'district';
+  if (norm(r?.SUBDISTRICT_NAME) === k) return 'subdistrict';
+  return null;
 }
 
-const LEVEL_FIELD: Array<[DestinationLevel, keyof MengantarAddress]> = [
-  ['city', 'CITY_NAME'],
-  ['district', 'DISTRICT_NAME'],
-  ['subdistrict', 'SUBDISTRICT_NAME'],
-];
-
-const samaPersis = (a: unknown, b: string) =>
-  String(a ?? '').trim().toLowerCase() === b.trim().toLowerCase();
-
+/**
+ * >>> ANGGA — Langkah 3, rancangan Bossfren (2026-08-03).
+ *
+ * Kumpulkan SEMUA kota yang punya kecocokan, urutkan dari yang paling
+ * meyakinkan, lalu biarkan pemanggilnya memutuskan: pakai langsung, atau
+ * tanyakan dua teratas.
+ *
+ * MENGGANTIKAN (bukan menumpuk) rancangan saya sebelumnya yang memakai ambang
+ * jumlah kelompok — 1 auto / 2-3 tanya / >3 minta provinsi. Ambang itu dibuang
+ * seluruhnya: "Purwokerto" punya 6 kandidat dan dulu langsung dilempar ke
+ * pertanyaan terbuka, padahal Kab. Banyumas menang telak 27 baris lawan 2.
+ *
+ * Urutannya: level kecocokan dulu (kota > kecamatan > kelurahan), baru jumlah
+ * baris. Jumlah baris SENGAJA bukan penentu utama — ia cuma menghitung berapa
+ * desa yang kebetulan senama, bukan mana yang orang maksud. Buktinya
+ * "Jatinegara" menang di Kab. Tegal (17 baris) atas Kota Jakarta Timur (9).
+ */
 export function resolveDestination(
   rows: MengantarAddress[],
   keyword: string,
-): DestinationMatch | null {
-  const kw = (keyword ?? '').trim();
-  if (!kw) return null;
-
-  for (const [level, field] of LEVEL_FIELD) {
-    const cocok = (rows ?? []).filter((r) => r && samaPersis(r[field], kw));
-    if (!cocok.length) continue;
-
-    const byCity = new Map<string, DestinationCandidate>();
-    for (const r of cocok) {
-      // CITY_NAME_SI WAJIB ikut kunci: "Kota Bogor" dan "Kab. Bogor" punya
-      // PROVINCE_NAME dan CITY_NAME yang sama persis — tanpa ini keduanya
-      // menyatu jadi satu kandidat dan bot berhenti bertanya padahal harus.
-      const key = `${r.PROVINCE_NAME}|${r.CITY_NAME}|${r.CITY_NAME_SI ?? ''}`.toLowerCase();
-      const found = byCity.get(key);
-      if (found) found.ids.push(r._id);
-      else {
-        byCity.set(key, {
-          city: (r.CITY_NAME ?? '').trim(),
-          province: (r.PROVINCE_NAME ?? '').trim(),
-          cityLabel: (r.CITY_NAME_SI ?? '').trim() || (r.CITY_NAME ?? '').trim(),
-          ids: [r._id],
-        });
-      }
+): DestinationCandidate[] {
+  const byCity = new Map<string, DestinationCandidate>();
+  for (const r of rows ?? []) {
+    const level = levelKecocokan(r, keyword);
+    if (!level || !r?._id) continue;
+    // CITY_NAME_SI WAJIB ikut kunci: "Kota Bogor" dan "Kab. Bogor" punya
+    // PROVINCE_NAME dan CITY_NAME yang sama persis — tanpa ini keduanya
+    // menyatu jadi satu kandidat dan bot berhenti bertanya padahal harus.
+    const key = `${r.PROVINCE_NAME}|${r.CITY_NAME}|${r.CITY_NAME_SI ?? ''}`.toLowerCase();
+    const found = byCity.get(key);
+    if (found) {
+      found.ids.push(r._id);
+      found.rows++;
+      if (LEVEL_RANK[level] < LEVEL_RANK[found.level]) found.level = level;
+    } else {
+      byCity.set(key, {
+        city: (r.CITY_NAME ?? '').trim(),
+        province: (r.PROVINCE_NAME ?? '').trim(),
+        cityLabel: (r.CITY_NAME_SI ?? '').trim() || (r.CITY_NAME ?? '').trim(),
+        level,
+        rows: 1,
+        ids: [r._id],
+      });
     }
-    return { level, candidates: Array.from(byCity.values()) };
   }
-  return null;
+  return Array.from(byCity.values()).sort(
+    (a, b) => LEVEL_RANK[a.level] - LEVEL_RANK[b.level] || b.rows - a.rows,
+  );
+}
+
+/** Kandidat teratas harus seunggul ini (dalam jumlah baris) sebelum dipakai
+ *  tanpa bertanya, kalau levelnya sama. Parameter teknis. */
+export const DOMINANCE_RATIO = 3;
+
+/**
+ * Bolehkah kandidat teratas dipakai langsung tanpa bertanya?
+ *
+ * Ya kalau ia satu-satunya, ATAU levelnya lebih tinggi dari pesaing terdekat,
+ * ATAU barisnya minimal 3x lipat. Kalau setara — Cibinong 14 lawan 13,
+ * Jatinegara 17 lawan 9, Bogor 30 lawan 20 — JANGAN memilih diam-diam, tanya.
+ */
+export function kandidatDominan(urut: DestinationCandidate[]): boolean {
+  if (urut.length === 0) return false;
+  if (urut.length === 1) return true;
+  const [satu, dua] = urut;
+  if (LEVEL_RANK[satu.level] < LEVEL_RANK[dua.level]) return true;
+  return satu.rows >= dua.rows * DOMINANCE_RATIO;
 }
 
 /**
@@ -224,6 +276,91 @@ export function resolveDestination(
 export function labelKandidat(c: DestinationCandidate, semua: DestinationCandidate[]): string {
   const bedaProvinsi = new Set(semua.map((x) => x.province.toLowerCase())).size > 1;
   return bedaProvinsi ? `${c.cityLabel}, ${c.province}` : c.cityLabel;
+}
+
+/**
+ * Berapa banyak pilihan yang DIBACAKAN ke pelanggan saat bertanya.
+ *
+ * Rancangan Bossfren: "tinggal konfirm aja 2 lokasi teratas". Dua itu batas
+ * pertanyaan yang masih enak dijawab lewat WhatsApp; sisanya tetap disimpan
+ * (lihat `setPending`) supaya pelanggan yang menyebut kandidat ketiga tetap
+ * langsung ketemu. Parameter teknis, bukan angka bisnis §6.
+ */
+export const MAX_CHOICES_ASKED = 2;
+
+/** Pisah jadi kata; "Kab." → "kab", "Kabupaten" → "kab" supaya dua ejaan yang
+ *  sama-sama umum di WhatsApp tidak dianggap beda. */
+function kata(teks: string): string[] {
+  return norm(teks)
+    .replace(/[.,]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => (w === 'kabupaten' ? 'kab' : w));
+}
+
+/**
+ * >>> ANGGA — tangga 1 balik arah: memetakan JAWABAN pelanggan ke salah satu
+ * pilihan yang tadi ditawarkan, tanpa mencari ulang ke Mengantar.
+ *
+ * Ini yang membuat pertanyaan tertutup benar-benar tertutup. Tanpa ini,
+ * jawaban "Kota Bogor" malah membuat keadaan lebih buruk: pencarian Mengantar
+ * mencocokkan CITY_NAME PERSIS dan nilainya "BOGOR", jadi "kota bogor" tidak
+ * cocok apa pun dan bot bertanya lagi — persis pengalaman yang bikin jengkel.
+ *
+ * Cara memilihnya sengaja konservatif: hanya kata yang MEMBEDAKAN antar pilihan
+ * yang dihitung (kata yang muncul di semua label — biasanya nama kotanya
+ * sendiri — diabaikan), dan kalau skornya seri hasilnya null. Seri berarti
+ * pelanggan belum benar-benar memilih; menebak di situ persis kesalahan yang
+ * mau dihindari.
+ */
+export function pilihKandidat(
+  pilihan: DestinationChoice[],
+  teks: string,
+): DestinationChoice | null {
+  if (!pilihan.length) return null;
+  const jawaban = new Set(kata(teks));
+  if (!jawaban.size) return null;
+
+  const perLabel = pilihan.map((p) => new Set(kata(p.label)));
+  const frekuensi = new Map<string, number>();
+  for (const set of perLabel) {
+    for (const w of set) frekuensi.set(w, (frekuensi.get(w) ?? 0) + 1);
+  }
+
+  const skor = perLabel.map(
+    (set) =>
+      [...set].filter((w) => (frekuensi.get(w) ?? 0) < pilihan.length && jawaban.has(w)).length,
+  );
+  const tertinggi = Math.max(...skor);
+  if (tertinggi === 0) return null;
+  if (skor.filter((s) => s === tertinggi).length > 1) return null;
+  return pilihan[skor.indexOf(tertinggi)];
+}
+
+/**
+ * >>> ANGGA — LAPISAN KOSAKATA, dijalankan sebelum Langkah 3.
+ *
+ * Sengaja BUKAN bagian dari resolusi alamat: ia tidak melihat baris hasil, tidak
+ * memilih kandidat, dan tidak punya ambang apa pun. Tugasnya satu — menukar
+ * nama panggilan dengan nama yang dikenal Mengantar, lalu menyerahkan sisanya
+ * ke `resolveDestination` yang sama persis seperti sebelumnya.
+ *
+ * Kenapa perlu (semua dibuktikan live 2026-08-03):
+ *   solo/jogja/tangsel/sby/smg/bdg/jaksel → NOL baris hasil, bot terpaksa
+ *     bertanya kecamatan untuk kota sebesar Solo.
+ *   malang → 50 baris habis oleh "SAMALANGA", "GUNUNGMALANG", "MALANG NENGAH";
+ *     Kota Malang tidak pernah muncul sama sekali.
+ *   makasar (satu 's') → cocok PERSIS ke kecamatan MAKASAR, Jakarta Timur.
+ *     Ini yang paling berbahaya: bukan gagal, tapi berhasil ke kota yang SALAH.
+ *
+ * Pencocokan sengaja SELURUH kata kunci, bukan per kata: "solo" ditukar,
+ * "solo baru" tidak. Menukar sebagian kata akan merusak nama majemuk yang sah.
+ */
+export function terapkanAlias(keyword: string, aliases: Record<string, string>): string {
+  const asli = (keyword ?? '').trim();
+  const kunci = asli.toLowerCase().replace(/\s+/g, ' ');
+  const ganti = aliases?.[kunci];
+  return ganti && ganti.trim() ? ganti.trim() : asli;
 }
 
 /** Rule 1 — filter kurir. */
@@ -398,6 +535,23 @@ export class ShippingService {
 
     // Langkah 2 — deteksi tujuan & item.
     const extract = await this.extractOrderTarget(conversationId);
+
+    // >>> ANGGA — tangga 1 (jawaban): kalau giliran sebelumnya bot menawarkan
+    // pilihan tertutup dan pesan ini memilih salah satunya, langsung pakai
+    // destination_id yang sudah disimpan. Ini dijalankan SEBELUM pencarian
+    // ulang justru karena pencarian ulang-lah yang gagal untuk teks jawaban
+    // ("Kota Bogor" tidak pernah cocok dengan CITY_NAME "BOGOR").
+    const dipilih = pilihKandidat(this.cache.pending(conversationId), lastCustomerText);
+    if (dipilih) {
+      this.cache.clearPending(conversationId);
+      this.cache.resetAsks(conversationId);
+      this.cache.reset(conversationId);
+      const hasil = await this.quoteUntukTujuan(dipilih, extract.items);
+      if (hasil.status === 'ok') this.cache.set(conversationId, hasil.quote, cfg.quoteCacheTtlMs);
+      this.cache.recordOutcome(conversationId, hasil.status);
+      return hasil;
+    }
+
     const city = extract.city?.trim() || cached?.city || null;
     if (!city) {
       this.cache.recordOutcome(conversationId, 'no_destination');
@@ -423,6 +577,12 @@ export class ShippingService {
     // satu giliran balasan memanggil grounding lebih dari sekali.
     if (result.status === 'ambiguous' || result.status === 'need_more_detail') {
       const ronde = this.cache.bumpAsk(conversationId, lastMsg.id);
+      // SELURUH kandidat disimpan (bukan cuma dua yang dibacakan) supaya
+      // "bukan kak, yang Pati" tetap ketemu tanpa panggilan API lagi.
+      this.cache.setPending(
+        conversationId,
+        result.status === 'ambiguous' ? result.candidates : [],
+      );
       this.cache.recordOutcome(
         conversationId,
         ronde > MAX_DESTINATION_ASKS ? 'destination_stuck' : result.status,
@@ -431,6 +591,7 @@ export class ShippingService {
     }
     // Tujuan akhirnya jelas (atau masalahnya bukan soal tujuan) → tangga direset.
     this.cache.resetAsks(conversationId);
+    this.cache.clearPending(conversationId);
     this.cache.recordOutcome(conversationId, result.status);
     return result;
   }
@@ -446,32 +607,57 @@ export class ShippingService {
     const cfg = await this.settings.shipping();
     if (!cfg.mengantarApiKey || !cfg.mengantarOriginId) return { status: 'not_configured' };
 
+    // Langkah 2b — tukar nama panggilan dengan nama resmi SEBELUM mencari.
+    // Kalau tidak ada aliasnya, `dicari` sama persis dengan yang diketik.
+    const dicari = terapkanAlias(input.keyword, cfg.destinationAliases);
+
     // Langkah 3 — Search Address + pengelompokan per provinsi+kota.
-    const rows = await this.mengantar.searchAddress(input.keyword);
+    const rows = await this.mengantar.searchAddress(dicari);
     if (rows === null) return { status: 'api_error' };
-    const match = resolveDestination(rows, input.keyword);
+    const urut = resolveDestination(rows, dicari);
     // Tidak ada kecocokan PERSIS di level manapun. Sering terjadi karena
     // pencarian Mengantar dipotong di 50 baris dan kota aslinya tenggelam
     // (diuji live: "Padang" & "Malang" tidak muncul sama sekali di 50 baris
     // itu). Meminta provinsi TIDAK menolong di kasus ini — saringan provinsi
     // atas hasil "padang" menyisakan nol baris. Yang terbukti menolong adalah
     // kecamatan: "Padang Barat"/"Klojen"/"Laweyan" semuanya resolve bersih.
-    if (!match) return { status: 'need_more_detail', keyword: input.keyword };
-    if (match.candidates.length > 3) return { status: 'need_more_detail', keyword: input.keyword };
-    if (match.candidates.length > 1) {
+    if (!urut.length) return { status: 'need_more_detail', keyword: input.keyword };
+    if (!kandidatDominan(urut)) {
+      // Tarif Mengantar seragam per kota/kabupaten (dibuktikan live), jadi _id
+      // mana pun dari kelompok ini boleh dipakai sebagai destination_id — dan
+      // karena itu destination_id-nya bisa ikut DISIMPAN sekarang, sebelum
+      // pelanggan menjawab. Jawabannya nanti tinggal dipetakan, tanpa cari lagi.
       return {
         status: 'ambiguous',
-        candidates: match.candidates.map((c) => ({
+        candidates: urut.map((c) => ({
           city: c.city,
           province: c.province,
-          label: labelKandidat(c, match.candidates),
+          label: labelKandidat(c, urut),
+          destinationId: c.ids[0],
         })),
       };
     }
-    const target = match.candidates[0];
-    // Tarif Mengantar seragam per kota/kabupaten (dibuktikan live), jadi _id
-    // mana pun dari kelompok ini boleh dipakai sebagai destination_id.
-    const destinationId = target.ids[0];
+    const menang = urut[0];
+    return this.quoteUntukTujuan(
+      { city: menang.city, province: menang.province, label: '', destinationId: menang.ids[0] },
+      input.items,
+    );
+  }
+
+  /**
+   * Langkah 4-9 — tujuan SUDAH pasti (punya destination_id), tinggal menghitung.
+   *
+   * Dipisah dari `quote()` supaya jawaban pelanggan atas pertanyaan tertutup
+   * ("Kota Bogor") bisa masuk lewat sini langsung, tanpa mengulang Langkah 3
+   * yang justru tidak akan menemukan apa-apa untuk teks seperti itu.
+   */
+  private async quoteUntukTujuan(
+    target: DestinationChoice,
+    items: ExtractedItem[],
+  ): Promise<ShippingResult> {
+    const cfg = await this.settings.shipping();
+    const destinationId = target.destinationId;
+    const input = { items };
 
     // Langkah 4 — berat & harga total order dari katalog (deterministik).
     // >>> ANGGA — dulu: tidak ada produk cocok => TIDAK ADA ANGKA SAMA SEKALI.
@@ -614,11 +800,14 @@ export class ShippingService {
         const lines = [
           t(SHIPPING_GROUNDING_INTRO, lang),
           `• Tujuan: ${q.city}, ${q.province}`,
-          `• Total kalau TRANSFER: Rp${formatIdr(q.transferTotal)} (kurir ${q.transferCourier}, sudah termasuk ongkir)`,
+          // >>> ANGGA: label sengaja menyebut "harga barang + ongkir". Kalimat
+          // lama cuma "sudah termasuk ongkir" — terbaca sebagai "ini ongkirnya",
+          // lalu model menambahkan lagi harga produk dari daftar stok.
+          `• Total kalau TRANSFER: Rp${formatIdr(q.transferTotal)} (kurir ${q.transferCourier} — SUDAH harga barang + ongkir, jangan ditambah apa pun)`,
         ];
         if (q.codTotal != null && q.codCourier) {
           lines.push(
-            `• Total kalau COD: Rp${formatIdr(q.codTotal)} (kurir ${q.codCourier}, sudah termasuk ongkir + biaya COD)`,
+            `• Total kalau COD: Rp${formatIdr(q.codTotal)} (kurir ${q.codCourier} — SUDAH harga barang + ongkir + biaya COD, jangan ditambah apa pun)`,
           );
         } else if (q.codBlockedReason === 'region') {
           lines.push('• COD TIDAK tersedia untuk wilayah ini (kebijakan toko). Tawarkan transfer saja.');
@@ -634,10 +823,16 @@ export class ShippingService {
         const ronde = this.cache.askCount(conversationId);
         if (ronde > MAX_DESTINATION_ASKS) return t(SHIPPING_GROUNDING_DESTINATION_STUCK, lang);
         if (ronde > 1) return t(SHIPPING_GROUNDING_ASK_DISTRICT, lang);
+        // Dibacakan HANYA dua teratas (rancangan Bossfren). Sisanya tetap
+        // tersimpan di `pending` — pelanggan boleh menyebut yang tidak
+        // disebutkan bot, dan tetap langsung ketemu.
         return (
           t(SHIPPING_GROUNDING_AMBIGUOUS, lang) +
           '\n' +
-          result.candidates.map((c) => `• ${c.label}`).join('\n')
+          result.candidates
+            .slice(0, MAX_CHOICES_ASKED)
+            .map((c) => `• ${c.label}`)
+            .join('\n')
         );
       }
       case 'need_more_detail': {

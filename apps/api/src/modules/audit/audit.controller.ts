@@ -18,6 +18,7 @@ export class AuditController {
   @Get()
   list(
     @Query('entity') entity?: string,
+    @Query('entityId') entityId?: string, // >>> ANGGA <<<
     @Query('action') action?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
@@ -26,6 +27,7 @@ export class AuditController {
   ) {
     return this.audit.list({
       entity,
+      entityId, // >>> ANGGA <<<
       action,
       from,
       to,

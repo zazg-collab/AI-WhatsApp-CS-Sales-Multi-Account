@@ -4,6 +4,8 @@ import {
   gramsToKg,
   resolveDestination,
   labelKandidat,
+  pilihKandidat,
+  terapkanAlias,
   passesCourierFilter,
   isCourierCodEligible,
   isRegionCodBlocked,
@@ -71,6 +73,7 @@ const CONFIG = {
   quoteCacheTtlMs: 21_600_000,
   discountMaxPerOrder: 5000,
   priceRoundingIncrement: 500,
+  destinationAliases: { solo: 'surakarta', malang: 'klojen' } as Record<string, string>,
 };
 
 function addr(province: string, city: string, id: string, district = 'X', opts: { si?: string; sub?: string } = {}) {
@@ -199,8 +202,8 @@ describe('§9.1 — kota ambigu: bot BERTANYA, bukan menebak', () => {
 
   it('kandidat beda provinsi → pembedanya provinsi', () => {
     const kand = [
-      { city: 'X', province: 'JAWA BARAT', cityLabel: 'Kab. X', ids: ['1'] },
-      { city: 'X', province: 'BANTEN', cityLabel: 'Kab. X', ids: ['2'] },
+      { city: 'X', province: 'JAWA BARAT', cityLabel: 'Kab. X', level: 'city' as const, rows: 1, ids: ['1'] },
+      { city: 'X', province: 'BANTEN', cityLabel: 'Kab. X', level: 'city' as const, rows: 1, ids: ['2'] },
     ];
     expect(labelKandidat(kand[0], kand)).toBe('Kab. X, JAWA BARAT');
   });
@@ -220,8 +223,8 @@ describe('§9.1 — kota ambigu: bot BERTANYA, bukan menebak', () => {
 
   it('cocok "mengandung" TIDAK dianggap cocok — Solo bukan SOLOK', () => {
     const rows = [addr('SUMATERA BARAT', 'SOLOK', 's1')];
-    expect(resolveDestination(rows as any, 'Solo')).toBeNull();
-    expect(resolveDestination(rows as any, 'Solok')?.candidates).toHaveLength(1);
+    expect(resolveDestination(rows as any, 'Solo')).toHaveLength(0);
+    expect(resolveDestination(rows as any, 'Solok')).toHaveLength(1);
   });
 
   it('tidak ada kecocokan persis → minta detail (kecamatan), tanpa angka', async () => {
@@ -237,12 +240,196 @@ describe('§9.1 — kota ambigu: bot BERTANYA, bukan menebak', () => {
     expect(text).not.toMatch(/\d{3,}/);
   });
 
-  it('lebih dari 3 kota bernama sama → minta detail, jangan sodorkan daftar', async () => {
+  /**
+   * >>> ANGGA — MENGGANTIKAN aturan ambang lama (1 auto / 2-3 tanya / >3 minta
+   * detail). Ambang itu sudah DIHAPUS dari kode, bukan dilewati: banyaknya
+   * kandidat tidak lagi menentukan apa pun. Empat kota senama tetap ditanyakan
+   * — cukup dua teratas yang dibacakan, sisanya disimpan diam-diam.
+   */
+  it('banyak kota bernama sama → tetap bertanya, tapi hanya DUA yang dibacakan', async () => {
     const h = harness({
       addresses: ['A', 'B', 'C', 'D'].map((p, i) => addr(`PROV ${p}`, 'SUKAMAJU', `s${i}`)),
       extract: { kota: 'Sukamaju', items: [{ nama: 'Golok Cordova', qty: 1 }] },
     });
-    expect((await h.svc.quoteForConversation('c1')).status).toBe('need_more_detail');
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ambiguous');
+    expect(res.candidates).toHaveLength(4);
+    const teks = await h.svc.getGroundingText('c1');
+    expect(teks.match(/^• /gm)).toHaveLength(2);
+    expect(teks).toContain('PROV A');
+    expect(teks).not.toContain('PROV C');
+  });
+
+  /**
+   * Bukti live 2026-08-03: "Purwokerto" → Kab. Banyumas (kecamatan, 27 baris)
+   * lawan Kab. Kendal (kelurahan, 2 baris). Rancangan lama melempar ini ke
+   * pertanyaan terbuka karena kandidatnya ada 6. Sekarang yang menang telak
+   * dipakai langsung.
+   */
+  it('kandidat teratas menang telak → dipakai langsung, tanpa bertanya', async () => {
+    const banyak = Array.from({ length: 27 }, (_, i) =>
+      addr('JAWA TENGAH', 'BANYUMAS', `bms-${i}`, `PURWOKERTO ${i}`, { si: 'Kab. Banyumas' }),
+    );
+    const h = harness({
+      addresses: [
+        ...banyak,
+        addr('JAWA TENGAH', 'KENDAL', 'kdl-1', 'BRANGSONG', { si: 'Kab. Kendal', sub: 'PURWOKERTO' }),
+        addr('JAWA TENGAH', 'KENDAL', 'kdl-2', 'PATEBON', { si: 'Kab. Kendal', sub: 'PURWOKERTO' }),
+      ],
+      extract: { kota: 'Purwokerto', items: [{ nama: 'Golok Cordova', qty: 1 }] },
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.city).toBe('BANYUMAS');
+    expect(h.mengantar.estimate).toHaveBeenCalledWith(
+      expect.objectContaining({ destinationId: 'bms-0' }),
+    );
+  });
+
+  it('kandidat setara (belum 3x lipat) → tetap bertanya, jangan memilih diam-diam', async () => {
+    const h = harness({
+      addresses: [
+        ...Array.from({ length: 14 }, (_, i) =>
+          addr('JAWA BARAT', 'CIANJUR', `cjr-${i}`, 'CIBINONG', { si: 'Kab. Cianjur' }),
+        ),
+        ...Array.from({ length: 13 }, (_, i) =>
+          addr('JAWA BARAT', 'BOGOR', `bgr-${i}`, 'CIBINONG', { si: 'Kab. Bogor' }),
+        ),
+      ],
+      extract: { kota: 'Cibinong', items: [{ nama: 'Golok Cordova', qty: 1 }] },
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ambiguous');
+    expect(h.mengantar.estimate).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * >>> ANGGA — lapisan kosakata (alias tujuan), dijalankan SEBELUM Langkah 3.
+ *
+ * Semua kasus di bawah diambil dari pemeriksaan live 2026-08-03, bukan karangan.
+ */
+describe('ANGGA — alias tujuan: nama panggilan ditukar sebelum dicari', () => {
+  it('kata kunci ditukar UTUH, bukan per kata', () => {
+    const kamus = { solo: 'surakarta', 'ujung pandang': 'makassar' };
+    expect(terapkanAlias('Solo', kamus)).toBe('surakarta');
+    expect(terapkanAlias('  UJUNG   PANDANG ', kamus)).toBe('makassar');
+    // "solo baru" adalah nama kawasan tersendiri — jangan diobrak-abrik.
+    expect(terapkanAlias('solo baru', kamus)).toBe('solo baru');
+    expect(terapkanAlias('Medan', kamus)).toBe('Medan');
+    expect(terapkanAlias('Medan', {})).toBe('Medan');
+  });
+
+  it('yang DICARI ke Mengantar adalah nama resmi, bukan yang diketik', async () => {
+    const h = harness({
+      addresses: [addr('JAWA TENGAH', 'SURAKARTA', 'ska-1', 'LAWEYAN', { si: 'Kota Surakarta' })],
+      extract: { kota: 'Solo', items: [{ nama: 'Golok Cordova', qty: 1 }] },
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(h.mengantar.searchAddress).toHaveBeenCalledWith('surakarta');
+    expect(res.status).toBe('ok');
+    expect(res.quote.city).toBe('SURAKARTA');
+  });
+
+  /**
+   * Nilai alias TIDAK harus nama kota. "Malang" tenggelam karena hasil
+   * pencarian dipotong 50 baris (habis oleh SAMALANGA, GUNUNGMALANG,
+   * MALANG NENGAH), jadi ia dialihkan ke kecamatan pusatnya.
+   */
+  it('alias boleh menunjuk ke KECAMATAN, dan pencocokan levelnya tetap jalan', async () => {
+    const h = harness({
+      addresses: [
+        addr('JAWA TIMUR', 'MALANG', 'mlg-1', 'KLOJEN', { si: 'Kota Malang' }),
+        addr('JAWA TIMUR', 'MALANG', 'mlg-2', 'KLOJEN', { si: 'Kota Malang' }),
+      ],
+      extract: { kota: 'Malang', items: [{ nama: 'Golok Cordova', qty: 1 }] },
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(h.mengantar.searchAddress).toHaveBeenCalledWith('klojen');
+    expect(res.status).toBe('ok');
+    expect(res.quote.city).toBe('MALANG');
+  });
+
+  /**
+   * Kamus kosong = perilaku persis seperti sebelum fitur ini ada. Ini yang
+   * membuktikan lapisannya benar-benar terpisah, bukan menempel ke resolusi.
+   */
+  it('kamus kosong → tidak mengubah apa pun', async () => {
+    const h = harness({
+      config: { destinationAliases: {} },
+      addresses: [addr('SUMATERA UTARA', 'MEDAN', 'dest-medan')],
+    });
+    expect((await h.svc.quoteForConversation('c1')).status).toBe('ok');
+    expect(h.mengantar.searchAddress).toHaveBeenCalledWith('Medan');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * >>> ANGGA — pertanyaan tertutup harus benar-benar TERTUTUP.
+ *
+ * Ini bagian yang dulu bocor: bot bertanya "Kota Bogor atau Kab. Bogor?",
+ * pelanggan menjawab "Kota Bogor", lalu jawabannya dicari ulang ke Mengantar —
+ * dan GAGAL, karena CITY_NAME di sana "BOGOR", bukan "KOTA BOGOR". Pelanggan
+ * merasa sudah menjawab, bot bertanya lagi.
+ */
+describe('ANGGA — jawaban pelanggan dipetakan ke pilihan yang tadi ditawarkan', () => {
+  const bogorDua = {
+    addresses: [
+      addr('JAWA BARAT', 'BOGOR', 'kota-bgr', 'X', { si: 'Kota Bogor' }),
+      addr('JAWA BARAT', 'BOGOR', 'kab-bgr', 'Y', { si: 'Kab. Bogor' }),
+    ],
+    extract: { kota: 'Bogor', items: [{ nama: 'Golok Cordova', qty: 1 }] },
+  };
+
+  it('"kab bogor" → langsung dihitung, TANPA pencarian alamat kedua', async () => {
+    const h = harness(bogorDua);
+    expect((await h.svc.quoteForConversation('c1')).status).toBe('ambiguous');
+    expect(h.mengantar.searchAddress).toHaveBeenCalledTimes(1);
+
+    h.prisma.message.findFirst.mockResolvedValue({ id: 'm2', content: 'kab bogor kak' });
+    h.prisma.conversation.findUnique.mockResolvedValue({
+      bot: { language: 'id' },
+      messages: [{ senderType: 'customer', content: 'kab bogor kak' }],
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(h.mengantar.searchAddress).toHaveBeenCalledTimes(1); // tidak bertambah
+    expect(h.mengantar.estimate).toHaveBeenCalledWith(
+      expect.objectContaining({ destinationId: 'kab-bgr' }),
+    );
+    expect(h.svc.lastOutcome('c1')).toBe('ok');
+  });
+
+  it('"kabupaten" ditulis panjang tetap dikenali', () => {
+    const pilihan = [
+      { city: 'BOGOR', province: 'JAWA BARAT', label: 'Kota Bogor', destinationId: 'a' },
+      { city: 'BOGOR', province: 'JAWA BARAT', label: 'Kab. Bogor', destinationId: 'b' },
+    ];
+    expect(pilihKandidat(pilihan, 'kabupaten bogor')?.destinationId).toBe('b');
+    expect(pilihKandidat(pilihan, 'yang kota kak')?.destinationId).toBe('a');
+  });
+
+  it('jawaban yang tidak memilih apa pun → null, jangan menebak', () => {
+    const pilihan = [
+      { city: 'BOGOR', province: 'JAWA BARAT', label: 'Kota Bogor', destinationId: 'a' },
+      { city: 'BOGOR', province: 'JAWA BARAT', label: 'Kab. Bogor', destinationId: 'b' },
+    ];
+    // "bogor" muncul di KEDUA label → bukan kata pembeda → tidak dihitung.
+    expect(pilihKandidat(pilihan, 'bogor kak')).toBeNull();
+    expect(pilihKandidat(pilihan, 'bukan dua-duanya')).toBeNull();
+    expect(pilihKandidat([], 'kota')).toBeNull();
+  });
+
+  /** Rancangan Bossfren: pelanggan boleh menyebut kandidat yang TIDAK dibacakan. */
+  it('menyebut kandidat ketiga (yang tidak dibacakan) tetap ketemu', () => {
+    const pilihan = [
+      { city: 'X', province: 'JAWA TENGAH', label: 'Kab. Banyumas, JAWA TENGAH', destinationId: 'a' },
+      { city: 'X', province: 'JAWA TENGAH', label: 'Kab. Kendal, JAWA TENGAH', destinationId: 'b' },
+      { city: 'X', province: 'JAWA TENGAH', label: 'Kab. Pati, JAWA TENGAH', destinationId: 'c' },
+    ];
+    expect(pilihKandidat(pilihan, 'bukan kak, pati')?.destinationId).toBe('c');
   });
 });
 
@@ -267,7 +454,9 @@ describe('ANGGA — tangga pertanyaan tujuan (jangan pernah mengulang kalimat sa
     const teks = await giliran(h, 'm1', 'kirim ke bogor');
     expect(teks).toContain('Kota Bogor');
     expect(teks).toContain('Kab. Bogor');
-    expect(teks).not.toMatch(/KECAMATAN/i);
+    // Tangga 1 masih menyebut kecamatan, tapi hanya sebagai jalan keluar KALAU
+    // pelanggan menolak dua-duanya — bukan sebagai pertanyaan tangga 2.
+    expect(teks).not.toContain('JANGAN mengulang pertanyaan yang sama');
   });
 
   it('tangga 2 = minta kecamatan, BUKAN mengulang pertanyaan yang sama', async () => {
@@ -713,9 +902,10 @@ describe('pembantu murni & kontrak grounding', () => {
       addr('SUMATERA UTARA', 'MEDAN', 'b', 'MEDAN BARU'),
       addr('SUMATERA BARAT', 'PADANG', 'c'),
     ] as any, 'Medan');
-    expect(m!.level).toBe('city');
-    expect(m!.candidates).toHaveLength(1);
-    expect(m!.candidates[0].ids).toEqual(['a', 'b']);
+    expect(m).toHaveLength(1);
+    expect(m[0].level).toBe('city');
+    expect(m[0].rows).toBe(2);
+    expect(m[0].ids).toEqual(['a', 'b']);
   });
 
   it('grounding text hanya memuat angka akhir, tidak pernah rincian mentah', async () => {
@@ -727,6 +917,32 @@ describe('pembantu murni & kontrak grounding', () => {
     // TIDAK BOLEH bocor ke teks yang dilihat LLM.
     expect(text).not.toContain('37.600'); // estimatedSpecialPrice JNE
     expect(text).not.toContain('47.000'); // estimatedPrice mentah
+  });
+
+  /**
+   * >>> ANGGA — regresi insiden Fatih 2026-08-03: bot MENJUMLAH ULANG.
+   *
+   * Sistem memberi total 155.000 (transfer) & 160.000 (COD) untuk 1 pcs Bedog
+   * Betekok ke Purworejo. Bot menulis 294.000 & 299.000 — selisihnya PERSIS
+   * Rp139.000 di KEDUA angka, yaitu harga satuan barang di daftar stok.
+   * Polanya rapi: `total + harga barang`, padahal harga barang sudah ada di
+   * dalam total itu.
+   *
+   * Sebabnya kalimat lama, "Total ... sudah termasuk ongkir": ia menyebut
+   * ongkir, tapi TIDAK menyebut harga barang, jadi terbaca sebagai "ini
+   * ongkirnya" — dan menambahkan harga produk terasa masuk akal.
+   *
+   * Gerbang `checkPriceGrounding` menangkap akibatnya (terbukti di produksi).
+   * Tes ini menjaga PENYEBABNYA: teksnya harus menyatakan isi totalnya.
+   */
+  it('grounding menyatakan total SUDAH memuat harga barang, dan melarang menambah', async () => {
+    const h = harness();
+    await h.svc.quoteForConversation('c1');
+    const text = await h.svc.getGroundingText('c1');
+    expect(text).toMatch(/SUDAH harga barang \+ ongkir/);
+    expect(text).toMatch(/JANGAN menambahkan harga produk/i);
+    // Sumber godaannya disebut eksplisit: angka di daftar stok.
+    expect(text).toMatch(/daftar stok/i);
   });
 
   it('parseExtract toleran terhadap JSON berpagar & qty tidak wajar', () => {

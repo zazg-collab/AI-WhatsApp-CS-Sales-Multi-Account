@@ -93,6 +93,23 @@ export interface ShippingSettings {
   discountMaxPerOrder: number;
   /** §6 `shipping_price_rounding_increment` — Rule 11. */
   priceRoundingIncrement: number;
+  /**
+   * >>> ANGGA — kamus nama panggilan daerah → kata kunci yang DIKENAL Mengantar.
+   *
+   * Di luar tabel §6: ini kosakata, bukan aturan bisnis, dan isinya memang
+   * harus bisa berubah tanpa menyentuh kode — itu sebabnya ia di sini dan
+   * bukan konstanta di modul shipping.
+   *
+   * Alasannya nyata: data Mengantar memakai nama RESMI, sementara pelanggan
+   * WhatsApp memakai nama panggilan. Diuji live 2026-08-03 — "solo", "jogja",
+   * "tangsel", "sby", "malang" semuanya nol kandidat, sedangkan "surakarta",
+   * "yogyakarta", "tangerang selatan", "surabaya", "klojen" bersih satu kota.
+   *
+   * Kunci dicocokkan pada SELURUH kata kunci (bukan sebagian), huruf besar-kecil
+   * diabaikan. Nilainya bebas: boleh nama kota resmi, boleh nama kecamatan —
+   * yang penting Mengantar mengenalinya.
+   */
+  destinationAliases: Record<string, string>;
 }
 // <<< ANGGA
 

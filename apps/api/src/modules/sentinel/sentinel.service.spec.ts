@@ -110,6 +110,92 @@ describe('SentinelService', () => {
     });
   });
 
+  /**
+   * >>> ANGGA — regresi insiden Fatih 2026-08-03.
+   *
+   * Sentinel memblokir kutipan ongkir yang SAH: "Harga ongkir tidak konsisten
+   * dan tidak masuk akal", risk 80, confidence 30 → AI ikut dijeda. Padahal
+   * seluruh gerbang deterministik lolos (buktinya `reason` di layar tidak
+   * berawalan apa pun — tiap gerbang selalu menempelkan alasannya di depan).
+   *
+   * Akarnya: `llmReview` membuang SEMUA pesan system, termasuk blok data
+   * ongkir. Juri disuruh mencocokkan ke data, tanpa pernah diberi datanya.
+   */
+  describe('ANGGA — juri LLM harus melihat data ongkir', () => {
+    function pasangOngkir(teks: string) {
+      const shipping: any = {
+        getGroundingText: jest.fn().mockResolvedValue(teks),
+        getGroundingNumbers: jest.fn().mockResolvedValue('299000 294000'),
+        lastOutcome: jest.fn().mockReturnValue('ok'),
+      };
+      return {
+        shipping,
+        svc: new SentinelService(
+          prisma, provider, prompts, events, notifications, agent,
+          { sentinel: jest.fn().mockResolvedValue({ autoSendConfidenceMin: 90, draftConfidenceMin: 50, riskKeywords: '', defaultAiMode: 'ai_draft' }) } as any,
+          undefined,
+          shipping,
+        ),
+      };
+    }
+
+    /** Pesan yang dikirim ke provider untuk penilaian juri. */
+    const pesanJuri = () => provider.chat.mock.calls[0][0] as Array<{ role: string; content: string }>;
+
+    beforeEach(() => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', botId: 'b1', whatsappAccountId: 'a1',
+        bot: { language: 'id' },
+        messages: [{ content: 'kalau kirim ke pemalang berapa?' }],
+      });
+      prisma.sentinelReview.create.mockImplementation(({ data }: any) => Promise.resolve({ id: 'r1', ...data }));
+      provider.chat.mockResolvedValue(JSON.stringify({
+        decision: 'approve', confidence_score: 95, risk_score: 5,
+        risk_level: 'low', reason: 'ok', recommendation: '',
+      }));
+    });
+
+    it('angka ongkir ikut dikirim ke juri, beserta cara membacanya', async () => {
+      const { svc } = pasangOngkir('• Tujuan: PEMALANG, JAWA TENGAH\n• Total kalau TRANSFER: Rp294.000');
+      await svc.review('c1', 'Totalnya Rp294.000 kak');
+
+      const gabungan = pesanJuri().map((m) => m.content).join('\n');
+      expect(gabungan).toContain('294.000');
+      expect(gabungan).toContain('PEMALANG');
+      // Dua salah paham yang memicu insidennya, ditutup eksplisit.
+      expect(gabungan).toMatch(/COD memang LEBIH MAHAL/i);
+      expect(gabungan).toMatch(/Tujuan berbeda tentu ongkirnya berbeda/i);
+    });
+
+    it('persona & security directive TETAP dibuang dari juri', async () => {
+      prompts.buildForConversation.mockResolvedValue([
+        { role: 'system', content: 'PERSONA RAHASIA: sapa pelanggan dengan kak' },
+        { role: 'user', content: 'kirim ke pemalang' },
+      ]);
+      const { svc } = pasangOngkir('• Total kalau TRANSFER: Rp294.000');
+      // Draft sengaja TANPA angka: kalau "294.000" muncul di prompt juri, itu
+      // pasti datang dari blok acuan, bukan dari kutipan draftnya sendiri.
+      await svc.review('c1', 'siap kak, saya cek dulu ya');
+
+      const gabungan = pesanJuri().map((m) => m.content).join('\n');
+      expect(gabungan).not.toContain('PERSONA RAHASIA');
+      expect(gabungan).toContain('DATA ACUAN ONGKIR');
+      expect(gabungan).toContain('294.000');
+    });
+
+    it('tanpa data ongkir, tidak ada blok acuan yang dikarang', async () => {
+      const { svc } = pasangOngkir('');
+      await svc.review('c1', 'halo kak');
+      const gabungan = pesanJuri().map((m) => m.content).join('\n');
+      expect(gabungan).not.toMatch(/DATA ACUAN ONGKIR/);
+    });
+
+    it('modul ongkir tidak terpasang → review tetap jalan seperti biasa', async () => {
+      await service.review('c1', 'halo kak');
+      expect(provider.chat).toHaveBeenCalled();
+    });
+  });
+
   describe('botInsight', () => {
     it('throws when bot missing', async () => {
       prisma.bot.findUnique.mockResolvedValue(null);

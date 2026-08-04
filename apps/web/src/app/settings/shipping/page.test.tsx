@@ -10,7 +10,7 @@ vi.mock('@/lib/api', () => ({
 }));
 vi.mock('@/lib/socket', () => ({ getSocket: () => ({ on: vi.fn(), off: vi.fn() }) }));
 
-import ShippingSettingsPage, { parseList, parseItems, formatIdr } from './page';
+import ShippingSettingsPage, { parseList, parseItems, formatIdr, parseAliases, formatAliases } from './page';
 
 const SHIPPING = {
   mengantarApiKeySet: true,
@@ -23,6 +23,7 @@ const SHIPPING = {
   quoteCacheTtlMs: 21_600_000,
   discountMaxPerOrder: 5000,
   priceRoundingIncrement: 500,
+  destinationAliases: { solo: 'surakarta', jogja: 'yogyakarta' },
 };
 
 function mockApi(over: Record<string, unknown> = {}) {
@@ -49,6 +50,23 @@ describe('pembantu murni', () => {
     // Nama yang mengandung koma tidak boleh terpotong.
     expect(parseItems('Golok, Damaskus Edition, 3')).toEqual([{ name: 'Golok, Damaskus Edition', qty: 3 }]);
     expect(parseItems('\n  \n')).toEqual([]);
+  });
+
+  it('parseAliases membaca "dari = ke" per baris, kunci dinormalkan', () => {
+    expect(parseAliases('Solo = Surakarta\n  UJUNG  PANDANG = makassar ')).toEqual({
+      solo: 'Surakarta',
+      'ujung pandang': 'makassar',
+    });
+    // Baris setengah jadi & baris kosong diabaikan diam-diam, bukan bikin error.
+    expect(parseAliases('solo\n\n= kosong\njogja =')).toEqual({});
+    // Nilai boleh mengandung "=" (walau aneh); pemisahnya yang PERTAMA.
+    expect(parseAliases('a = b = c')).toEqual({ a: 'b = c' });
+  });
+
+  it('formatAliases bolak-balik tanpa kehilangan isi', () => {
+    const map = { solo: 'surakarta', jogja: 'yogyakarta' };
+    expect(parseAliases(formatAliases(map))).toEqual(map);
+    expect(formatAliases({})).toBe('');
   });
 
   it('formatIdr memakai titik sebagai pemisah ribuan', () => {
@@ -102,6 +120,31 @@ describe('ShippingSettingsPage', () => {
       // Kunci dibiarkan kosong → jangan sampai menimpa yang tersimpan.
       expect('mengantarApiKey' in body).toBe(false);
     });
+  });
+
+  it('kamus alias tampil sebagai teks & tersimpan sebagai objek', async () => {
+    render(<ShippingSettingsPage />);
+    const kotak = (await screen.findByLabelText(/Rewrite before searching/)) as HTMLTextAreaElement;
+    expect(kotak.value).toBe('solo = surakarta\njogja = yogyakarta');
+
+    fireEvent.change(kotak, { target: { value: 'solo = surakarta\nsby = surabaya' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/ }));
+    await waitFor(() => {
+      const put = apiMock.mock.calls.find((c) => c[0] === '/settings' && c[1]?.method === 'PUT');
+      expect(JSON.parse(put![1].body).shipping.destinationAliases).toEqual({
+        solo: 'surakarta',
+        sby: 'surabaya',
+      });
+    });
+  });
+
+  // Baris yang baru setengah diketik tidak boleh lenyap dari layar.
+  it('baris tanpa "=" tetap terlihat selagi diketik', async () => {
+    render(<ShippingSettingsPage />);
+    const kotak = (await screen.findByLabelText(/Rewrite before searching/)) as HTMLTextAreaElement;
+    fireEvent.change(kotak, { target: { value: 'solo = surakarta\nmalan' } });
+    expect((screen.getByLabelText(/Rewrite before searching/) as HTMLTextAreaElement).value)
+      .toBe('solo = surakarta\nmalan');
   });
 
   it('mengirim kunci baru hanya kalau kolomnya diisi', async () => {

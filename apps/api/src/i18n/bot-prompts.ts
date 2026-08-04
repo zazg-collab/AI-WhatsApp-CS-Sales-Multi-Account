@@ -325,6 +325,34 @@ export const LEAD_SCORE_USER = {
 
 // ── 6. Sentinel supervisor prompts ───────────────────────────────────────────
 
+/**
+ * >>> ANGGA — pengantar blok acuan ongkir untuk JURI (bukan untuk penulis).
+ *
+ * Teks di bawahnya adalah blok yang sama persis yang diberikan ke penulis
+ * draft, jadi pengantar ini perlu menjelaskan bahwa isinya data + instruksi
+ * penulis — bukan perintah untuk juri itu sendiri.
+ */
+export const SENTINEL_SHIPPING_FACTS = {
+  id: `DATA ACUAN ONGKIR — dihitung sistem dari tarif live ekspedisi, BUKAN karangan AI, dan sudah lolos pemeriksaan angka otomatis. Ini blok yang sama yang diberikan ke penulis draft.
+
+Cara memakainya:
+- Angka di draft yang COCOK dengan blok ini adalah angka SAH. Jangan sebut "tidak konsisten" atau "tidak masuk akal".
+- Total COD memang LEBIH MAHAL dari transfer — ada biaya COD dari ekspedisi. Selisih itu normal, bukan kesalahan.
+- Tujuan berbeda tentu ongkirnya berbeda. Beberapa nominal berbeda dalam satu percakapan itu wajar kalau pelanggan menanyakan beberapa kota atau dua cara bayar.
+- Yang justru harus kamu tandai: angka di draft yang TIDAK ADA di blok ini.
+- Kalau blok ini kosong/tidak ada, draft memang tidak boleh menyebut angka ongkir sama sekali.`,
+
+  en: `AUTHORITATIVE SHIPPING DATA — computed by the system from live carrier rates, NOT invented by the AI, and it already passed the automated number check. This is the same block the draft writer was given.
+
+How to use it:
+- Any number in the draft that MATCHES this block is valid. Do not call it "inconsistent" or "unreasonable".
+- The COD total is SUPPOSED to be higher than transfer — the carrier charges a COD fee. That gap is normal, not an error.
+- Different destinations naturally cost different amounts. Several different totals in one conversation are expected when the customer asks about several cities or both payment methods.
+- What you SHOULD flag: a number in the draft that is NOT in this block.
+- If this block is absent, the draft must not state any shipping figure at all.`,
+};
+// <<< ANGGA
+
 export const SENTINEL_SYSTEM = {
   id: `Kamu adalah Sentinel, AI supervisor untuk chatbot WhatsApp CS/Sales.
 
@@ -529,6 +557,7 @@ export const SHIPPING_EXTRACT_SYSTEM = {
 Balas HANYA JSON: {"kota": string|null, "items": [{"nama": string, "qty": number}]}
 Aturan:
 - "kota": nama kota/kabupaten/provinsi TUJUAN KIRIM yang disebut pelanggan. null kalau belum ada yang disebut.
+- Kalau pelanggan menyebut LEBIH DARI SATU tempat sepanjang percakapan, ambil yang PALING BARU — yang terakhir dia sebut. Tempat yang lebih dulu disebut DIBUANG, walau diulang berkali-kali sebelumnya. Contoh: pelanggan berkali-kali bilang "Purwokerto", lalu di pesan terakhir bilang "ya sudah, ke Purworejo saja" → jawabannya "Purworejo", bukan "Purwokerto".
 - "items": SEMUA barang yang pelanggan sebut ingin dibeli sejauh ini di percakapan ini. Salin nama produknya apa adanya seperti yang ditulis pelanggan; jangan diterjemahkan, jangan dikarang, jangan ditambah barang yang tidak disebut.
 - "qty": 1 kalau pelanggan tidak menyebut jumlah; ikuti angkanya kalau pelanggan menyebut jumlah/pcs/buah.
 - JANGAN menyebutkan harga, berat, atau ongkir dalam bentuk apa pun. Angka-angka itu diambil sistem dari katalog, bukan darimu.`,
@@ -537,6 +566,7 @@ Aturan:
 Reply ONLY with JSON: {"kota": string|null, "items": [{"nama": string, "qty": number}]}
 Rules:
 - "kota": the destination city/regency/province the customer mentioned. null if none mentioned yet.
+- If the customer named MORE THAN ONE place during the conversation, take the MOST RECENT one — the last they mentioned. Earlier places are DISCARDED even if repeated many times before. Example: the customer said "Purwokerto" several times, then in the latest message says "fine, send it to Purworejo instead" → the answer is "Purworejo", not "Purwokerto".
 - "items": ALL products the customer has said they want to buy so far in this conversation. Copy the product names verbatim as the customer wrote them; do not translate, invent, or add items that were not mentioned.
 - "qty": 1 when the customer gave no quantity; otherwise follow the number they gave.
 - NEVER output prices, weights, or shipping costs. Those come from the catalog, not from you.`,
@@ -547,9 +577,16 @@ export const SHIPPING_EXTRACT_USER = {
   en: 'Extract the destination city and the item list from the conversation above. Reply ONLY with JSON.',
 };
 
+// >>> ANGGA — larangan menjumlah ulang ditulis SANGAT tegas di sini karena
+// pernah dilanggar dengan pola yang rapi (insiden Fatih 2026-08-03):
+// sistem memberi total 155.000 & 160.000, bot menulis 294.000 & 299.000 —
+// selisihnya PERSIS harga barang Rp139.000 di kedua angka. Model membaca
+// "Total ... sudah termasuk ongkir" sebagai "ini ongkirnya", lalu menambahkan
+// harga produk dari blok stok. Padahal harga barang SUDAH di dalam total itu.
+// Karena itu kalimatnya sekarang menyebut isi totalnya secara gamblang.
 export const SHIPPING_GROUNDING_INTRO = {
-  id: 'DATA ONGKIR TERKINI & SAH (dihitung sistem dari tarif live ekspedisi untuk SELURUH barang yang disebut pelanggan). Pakai angka di bawah APA ADANYA. Jangan menghitung ulang, jangan menjumlah sendiri, jangan menampilkan rincian ongkir/biaya COD terpisah ke pelanggan, dan jangan menyebut angka lain yang tidak ada di sini.',
-  en: 'CURRENT AUTHORITATIVE SHIPPING DATA (computed by the system from live carrier rates for ALL items the customer mentioned). Use the numbers below AS-IS. Do not recompute, do not add them up yourself, do not show the shipping/COD fee breakdown to the customer, and never state a number that is not listed here.',
+  id: 'DATA ONGKIR TERKINI & SAH (dihitung sistem dari tarif live ekspedisi untuk SELURUH barang yang disebut pelanggan).\n\nPENTING — angka di bawah adalah TOTAL AKHIR yang tinggal dibayar pelanggan: HARGA BARANG + ONGKIR sudah dijumlahkan di dalamnya oleh sistem. JANGAN menambahkan harga produk apa pun ke angka ini. JANGAN menjumlahkannya dengan angka di daftar stok. Angka di daftar stok itu harga satuan barang saja, dan sudah ikut terhitung di sini.\n\nPakai angka di bawah APA ADANYA. Jangan menghitung ulang, jangan menampilkan rincian ongkir/biaya COD terpisah ke pelanggan, dan jangan menyebut angka lain yang tidak ada di sini.',
+  en: 'CURRENT AUTHORITATIVE SHIPPING DATA (computed by the system from live carrier rates for ALL items the customer mentioned).\n\nIMPORTANT — the figures below are the FINAL amount the customer pays: GOODS PRICE + SHIPPING are already added together inside them by the system. Do NOT add any product price to these figures. Do NOT sum them with anything from the stock list. Those stock prices are per-item prices and are already counted here.\n\nUse the numbers below AS-IS. Do not recompute, do not show the shipping/COD fee breakdown to the customer, and never state a number that is not listed here.',
 };
 
 export const SHIPPING_GROUNDING_UNKNOWN = {
@@ -557,14 +594,18 @@ export const SHIPPING_GROUNDING_UNKNOWN = {
   en: 'SHIPPING DATA: the shipping system could NOT determine a rate for this order. Do NOT state any shipping cost, total, or COD fee — and do not imply it is free/zero. Say honestly that you are checking the shipping cost with the team first.',
 };
 
+// >>> ANGGA: larangan mengarang lokasi ditempel DI SINI, bukan jadi aturan
+// terpisah. Insidennya nyata: untuk "Purwokerto" bot menulis "Purwokerto,
+// Banyumas, Jawa Tengah" dari pengetahuan umumnya sendiri — terdengar yakin,
+// padahal sistem sama sekali belum memastikan kabupatennya.
 export const SHIPPING_GROUNDING_AMBIGUOUS = {
-  id: 'DATA ONGKIR: nama kota yang disebut pelanggan cocok dengan lebih dari satu daerah. JANGAN menyebut angka ongkir apa pun dulu. Tanyakan dulu dengan bahasa santai yang mana yang dimaksud, dari pilihan berikut:',
-  en: 'SHIPPING DATA: the city the customer mentioned matches more than one place. Do NOT state any shipping cost yet. Ask casually which one they mean, from these options:',
+  id: 'DATA ONGKIR: nama daerah yang disebut pelanggan cocok dengan lebih dari satu kabupaten/kota. JANGAN menyebut angka ongkir apa pun dulu. Tanyakan dengan bahasa santai yang mana yang dimaksud, HANYA dari pilihan di bawah ini. Sebutkan pilihannya PERSIS seperti tertulis — jangan menambah, mengarang, atau menyebut nama kabupaten/provinsi lain dari pengetahuanmu sendiri. Kalau pelanggan bilang bukan dua-duanya, minta dia menyebutkan kabupaten atau kecamatannya.',
+  en: 'SHIPPING DATA: the place the customer mentioned matches more than one regency/city. Do NOT state any shipping cost yet. Ask casually which one they mean, using ONLY the options below. Quote them EXACTLY as written — do not add, invent, or name any other regency/province from your own knowledge. If the customer says it is neither, ask them to name the regency or district.',
 };
 
 export const SHIPPING_GROUNDING_NEED_DETAIL = {
-  id: 'DATA ONGKIR: nama daerah yang disebut pelanggan belum bisa dipastikan (tidak ketemu persis, atau cocok dengan terlalu banyak daerah). JANGAN menyebut angka ongkir apa pun. Minta KECAMATAN-nya — itu yang paling ampuh menemukan lokasinya. Kalau pelanggan terdengar bingung, boleh tawarkan menyebut provinsi atau kota terdekat sebagai gantinya. Jangan menyodorkan daftar panjang.',
-  en: 'SHIPPING DATA: the place the customer mentioned could not be pinned down (no exact match, or too many matches). Do NOT state any shipping cost. Ask for the DISTRICT (kecamatan) — that resolves the location most reliably. If the customer sounds unsure, offer the province or nearest city instead. Do not dump a long list.',
+  id: 'DATA ONGKIR: nama daerah yang disebut pelanggan tidak ketemu di data ekspedisi. JANGAN menyebut angka ongkir apa pun, dan JANGAN menebak sendiri daerah itu ada di kabupaten/provinsi mana — sistem belum memastikannya. Minta KECAMATAN-nya — itu yang paling ampuh menemukan lokasinya. Kalau pelanggan terdengar bingung, boleh tawarkan menyebut provinsi atau kota terdekat sebagai gantinya. Jangan menyodorkan daftar panjang.',
+  en: 'SHIPPING DATA: the place the customer mentioned was not found in the carrier data. Do NOT state any shipping cost, and do NOT guess which regency/province it belongs to — the system has not confirmed that. Ask for the DISTRICT (kecamatan) — that resolves the location most reliably. If the customer sounds unsure, offer the province or nearest city instead. Do not dump a long list.',
 };
 
 // Tangga 2 — pertanyaan tertutup sudah dicoba tapi tujuannya masih belum pasti.

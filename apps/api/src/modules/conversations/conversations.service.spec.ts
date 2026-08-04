@@ -28,6 +28,8 @@ describe('ConversationsService', () => {
         findFirst: jest.fn(),
         create: jest.fn().mockResolvedValue({ id: 'c1', status: 'open' }),
         update: jest.fn().mockResolvedValue({ id: 'c1' }),
+        // >>> ANGGA: klaim atomik markRead. Bawaan "berhasil klaim". <<< ANGGA
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       message: {
         create: jest.fn().mockResolvedValue({ id: 'm1' }),
@@ -424,13 +426,68 @@ describe('ConversationsService', () => {
   describe('markRead', () => {
     it('forwards recent inbound external ids to the gateway', async () => {
       prisma.conversation.findUnique.mockResolvedValue({
-        id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
+        id: 'c1', whatsappAccountId: 'a1', unreadCount: 2, customer: { phoneNumber: '628' },
       });
       prisma.message.findMany.mockResolvedValue([{ externalId: 'x1' }, { externalId: 'x2' }]);
       const r = await messaging.markRead('c1');
       expect(wa.markRead).toHaveBeenCalledWith('a1', '628', ['x1', 'x2']);
       expect(r).toEqual({ marked: 2 });
+      expect(events.emitToAccount).toHaveBeenCalledWith(
+        'a1', 'conversation:updated', { conversationId: 'c1', unreadCount: 0 },
+      );
     });
+
+    // >>> ANGGA: regresi loop inbox.
+    // Dulu markRead SELALU menyiarkan 'conversation:updated', termasuk saat
+    // tidak ada yang berubah. Klien menanggapi siaran itu dengan memuat ulang
+    // percakapan, dan pemuatan ulang itu mem-POST /read lagi — lingkaran yang
+    // tidak pernah berhenti (terukur 4 permintaan tiap ~540 ms) dan mengirim
+    // read receipt ke WhatsApp ~2x per detik.
+    it('klaim unreadCount dilakukan atomik (satu pernyataan, ada penjaga)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', unreadCount: 5, customer: { phoneNumber: '628' },
+      });
+      prisma.message.findMany.mockResolvedValue([{ externalId: 'x1' }]);
+      await messaging.markRead('c1');
+      expect(prisma.conversation.updateMany).toHaveBeenCalledWith({
+        where: { id: 'c1', unreadCount: { gt: 0 } },
+        data: { unreadCount: 0 },
+      });
+      // Penulisan unreadCount kedua yang lama sudah tidak ada lagi.
+      expect(prisma.conversation.update).not.toHaveBeenCalled();
+    });
+
+    it('percakapan yang sudah dibaca: tanpa siaran, tanpa read receipt ulang', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', unreadCount: 0, customer: { phoneNumber: '628' },
+      });
+      prisma.conversation.updateMany.mockResolvedValue({ count: 0 });
+      const r = await messaging.markRead('c1');
+      expect(r).toEqual({ marked: 0 });
+      expect(wa.markRead).not.toHaveBeenCalled();
+      expect(events.emitToAccount).not.toHaveBeenCalled();
+    });
+
+    it('dua permintaan bersamaan: hanya satu yang lolos klaim (anti balapan)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', unreadCount: 4, customer: { phoneNumber: '628' },
+      });
+      prisma.message.findMany.mockResolvedValue([{ externalId: 'x1' }]);
+      // Meniru Postgres: hanya pernyataan pertama yang menemukan unreadCount > 0.
+      prisma.conversation.updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 0 });
+      const [a, b] = await Promise.all([messaging.markRead('c1'), messaging.markRead('c1')]);
+      expect([a, b]).toEqual(expect.arrayContaining([{ marked: 1 }, { marked: 0 }]));
+      // Read receipt ke WhatsApp TIDAK dikirim dua kali untuk pesan yang sama.
+      expect(wa.markRead).toHaveBeenCalledTimes(1);
+      const siaran = events.emitToAccount.mock.calls.filter(
+        (c: unknown[]) => c[1] === 'conversation:updated',
+      );
+      expect(siaran).toHaveLength(1);
+    });
+    // <<< ANGGA
+
     it('throws when conversation missing', async () => {
       prisma.conversation.findUnique.mockResolvedValue(null);
       await expect(messaging.markRead('c1')).rejects.toThrow(NotFoundException);
@@ -513,6 +570,46 @@ describe('ConversationsService', () => {
   it('setAiMode updates mode', async () => {
     await service.setAiMode('c1', AiMode.ai_draft);
     expect(prisma.conversation.update.mock.calls[0][0].data.aiMode).toBe(AiMode.ai_draft);
+  });
+
+  /**
+   * >>> ANGGA — regresi "Needs review" yang nyangkut (2026-08-03).
+   *
+   * Sentinel menjeda dengan menyetel DUA hal: `aiMode: ai_paused` DAN
+   * `takeoverStatus: waiting_admin`. Melanjutkan lewat radio dulu cuma
+   * mengembalikan `aiMode`, jadi badge "Needs review" (yang dibaca dari
+   * `takeoverStatus === 'waiting_admin'`) menempel selamanya dan percakapannya
+   * terus muncul di filter "perlu perhatian" walau sudah beres.
+   */
+  describe('ANGGA — keluar dari ai_paused ikut menurunkan bendera admin', () => {
+    it('jeda → mode aktif: takeoverStatus ikut dilepas', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        aiMode: AiMode.ai_paused,
+        takeoverStatus: TakeoverStatus.waiting_admin,
+      });
+      await service.setAiMode('c1', AiMode.ai_on);
+      const data = prisma.conversation.update.mock.calls[0][0].data;
+      expect(data.aiMode).toBe(AiMode.ai_on);
+      expect(data.takeoverStatus).toBe(TakeoverStatus.returned_to_ai);
+    });
+
+    it('perpindahan mode BIASA tidak menyentuh takeoverStatus sama sekali', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        aiMode: AiMode.ai_draft,
+        takeoverStatus: TakeoverStatus.waiting_admin,
+      });
+      await service.setAiMode('c1', AiMode.ai_on);
+      expect('takeoverStatus' in prisma.conversation.update.mock.calls[0][0].data).toBe(false);
+    });
+
+    it('admin sedang takeover: benderanya jangan dilepas diam-diam', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        aiMode: AiMode.ai_paused,
+        takeoverStatus: TakeoverStatus.admin_takeover,
+      });
+      await service.setAiMode('c1', AiMode.ai_on);
+      expect('takeoverStatus' in prisma.conversation.update.mock.calls[0][0].data).toBe(false);
+    });
   });
 
   describe('update', () => {

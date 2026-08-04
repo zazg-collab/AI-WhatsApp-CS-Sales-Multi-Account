@@ -62,6 +62,22 @@ export interface ShippingQuote {
   items: Array<{ name: string; qty: number }>;
 }
 
+/**
+ * >>> ANGGA — satu pilihan tujuan yang SUDAH punya destination_id di tangan.
+ *
+ * Disimpan saat bot mengajukan pertanyaan tertutup ("Bogor-nya Kota atau
+ * Kabupaten?") supaya jawaban pelanggan bisa langsung dipetakan tanpa mencari
+ * ulang. Tanpa ini, jawaban "Kota Bogor" justru GAGAL: pencarian Mengantar
+ * mencocokkan CITY_NAME persis, dan CITY_NAME-nya "BOGOR" — bukan "KOTA BOGOR".
+ */
+export interface DestinationChoice {
+  city: string;
+  province: string;
+  /** Teks yang dibacakan ke pelanggan, mis. "Kab. Bogor" / "Kab. Tegal, JAWA TENGAH". */
+  label: string;
+  destinationId: string;
+}
+
 interface Entry {
   quote: ShippingQuote;
   expiresAt: number;
@@ -82,6 +98,8 @@ export class ShippingQuoteCache {
    * menaikkan tangga 2-3 sekaligus dan bot melompat langsung ke admin.
    */
   private readonly asks = new Map<string, { count: number; messageId: string }>();
+  /** Pilihan tujuan yang sedang ditawarkan ke pelanggan, per percakapan. */
+  private readonly pendings = new Map<string, DestinationChoice[]>();
   private hits = 0;
   private misses = 0;
 
@@ -163,6 +181,26 @@ export class ShippingQuoteCache {
     this.asks.delete(conversationId);
   }
 
+  /** Simpan pilihan yang sedang ditawarkan. SELURUH kandidat disimpan, bukan
+   *  cuma dua yang dibacakan — pelanggan sering menyebut yang ketiga. */
+  setPending(conversationId: string, choices: DestinationChoice[]): void {
+    this.pendings.delete(conversationId);
+    this.pendings.set(conversationId, choices);
+    while (this.pendings.size > MAX_QUOTE_ENTRIES) {
+      const oldest = this.pendings.keys().next().value;
+      if (oldest === undefined) break;
+      this.pendings.delete(oldest);
+    }
+  }
+
+  pending(conversationId: string): DestinationChoice[] {
+    return this.pendings.get(conversationId) ?? [];
+  }
+
+  clearPending(conversationId: string): void {
+    this.pendings.delete(conversationId);
+  }
+
   lastOutcome(conversationId: string): ShippingOutcome | null {
     const memo = this.outcomes.get(conversationId);
     if (!memo) return null;
@@ -187,6 +225,7 @@ export class ShippingQuoteCache {
     this.store.clear();
     this.outcomes.clear();
     this.asks.clear();
+    this.pendings.clear();
     this.hits = 0;
     this.misses = 0;
   }

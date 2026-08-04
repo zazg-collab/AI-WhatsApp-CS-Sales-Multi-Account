@@ -194,9 +194,35 @@ export class ConversationsService {
 
   async setAiMode(id: string, aiMode: AiMode, user?: ScopedUser) {
     await assertConversationScope(this.prisma, id, user);
+    // >>> ANGGA — melanjutkan AI harus ikut menurunkan benderanya.
+    //
+    // Sentinel menjeda dengan menyetel DUA hal sekaligus:
+    //   { aiMode: 'ai_paused', takeoverStatus: 'waiting_admin' }
+    // tapi dulu di sini cuma `aiMode` yang dikembalikan. Akibatnya percakapan
+    // yang sudah dilanjutkan tetap berlabel "Needs review" selamanya (badge itu
+    // dibaca dari `takeoverStatus === 'waiting_admin'`) dan terus nongkrong di
+    // filter "perlu perhatian" — padahal sudah tidak perlu diperhatikan.
+    //
+    // Baru ketahuan sekarang karena sebelum radio `ai_paused` diperbaiki,
+    // jalur ini memang tidak pernah bisa dilewati dari UI.
+    //
+    // Hanya berlaku untuk transisi KELUAR dari jeda; perpindahan mode biasa
+    // sengaja tidak menyentuh status takeover sama sekali.
+    const current = await this.prisma.conversation.findUnique({
+      where: { id },
+      select: { aiMode: true, takeoverStatus: true },
+    });
+    const keluarDariJeda =
+      current?.aiMode === AiMode.ai_paused &&
+      aiMode !== AiMode.ai_paused &&
+      current?.takeoverStatus === TakeoverStatus.waiting_admin;
+
     return this.prisma.conversation.update({
       where: { id },
-      data: { aiMode },
+      data: {
+        aiMode,
+        ...(keluarDariJeda ? { takeoverStatus: TakeoverStatus.returned_to_ai } : {}),
+      },
     });
   }
 

@@ -74,6 +74,64 @@ describe('rules.engine', () => {
     it('ignores short numbers (quantities, not prices)', () => {
       expect(checkPriceGrounding('Ada 2 hari pengiriman', 'Produk A 150000 5')).toBeNull();
     });
+
+    /**
+     * >>> ANGGA — regresi insiden Fatih 2026-08-03.
+     *
+     * Sistem menghitung Rp150.000 (transfer) & Rp155.000 (COD) untuk 1 pcs
+     * Bedog Betekok ke Purworejo — terbukti benar lewat alat uji ongkir dan
+     * tarif live JNE. Bot menuliskan Rp294.000 & Rp299.000: selisih Rp144.000
+     * yang SAMA PERSIS di dua angka, jadi bukan salah hitung modul, melainkan
+     * angka yang diubah sendiri oleh model.
+     *
+     * Cara lama menyambung semua digit jadi satu untaian lalu `includes()` —
+     * pencocokan potongan, bukan angka. Tes di bawah menjaga versi utuhnya.
+     */
+    const ACUAN_FATIH = '150000 139000 155000';
+
+    it('insiden Fatih: angka karangan ketahuan', () => {
+      const hit = checkPriceGrounding(
+        'Untuk 1 pcs Bedog Betekok ke Purworejo, total Rp294.000 (transfer) atau Rp299.000 (COD).',
+        'Bedog Betekok 139000 10',
+        ACUAN_FATIH,
+      );
+      expect(hit).not.toBeNull();
+      expect(hit!.reason).toContain('294000');
+      expect(hit!.reason).toContain('299000');
+    });
+
+    it('angka yang benar tetap lolos, walau ditulis pakai titik', () => {
+      expect(
+        checkPriceGrounding('Totalnya Rp150.000 kak, kalau COD Rp155.000.', '', ACUAN_FATIH),
+      ).toBeNull();
+    });
+
+    it('acuan yang ditulis berpemisah juga dikenali', () => {
+      expect(checkPriceGrounding('Harganya 139000', 'Bedog Betekok Rp139.000', '')).toBeNull();
+    });
+
+    /** Inti perbaikannya: potongan yang bersambung di perbatasan dua angka sah. */
+    it('digit yang cuma "nyambung" antar angka TIDAK dianggap sah', () => {
+      // "150000 139000" disambung jadi "150000139000"; cara lama meloloskan
+      // "000139" dan sejenisnya. Sekarang harus cocok sebagai angka utuh.
+      const hit = checkPriceGrounding('Totalnya Rp000.139 kak', '', ACUAN_FATIH);
+      expect(hit).not.toBeNull();
+    });
+
+    it('tahun & jumlah pcs tidak ikut tertuduh mengarang', () => {
+      expect(
+        checkPriceGrounding('Garansi sampai 2026, ambil 3 pcs ya kak', '', ACUAN_FATIH),
+      ).toBeNull();
+    });
+
+    // Batas "5 digit" saja akan meloloskan harga 4-digit yang dikarang. Penanda
+    // "Rp" menutup lubang itu tanpa perlu daftar pengecualian.
+    it('harga 4 digit tetap diperiksa kalau ditulis dengan Rp', () => {
+      expect(checkPriceGrounding('Ongkirnya Rp9000 kak', '', ACUAN_FATIH)).not.toBeNull();
+      expect(checkPriceGrounding('Ongkirnya Rp 9.000 kak', '', ACUAN_FATIH)).not.toBeNull();
+      // Dan yang memang ada di acuan tetap lolos.
+      expect(checkPriceGrounding('Ongkirnya Rp150.000 kak', '', ACUAN_FATIH)).toBeNull();
+    });
   });
 
   describe('checkKnowledgeGrounding', () => {

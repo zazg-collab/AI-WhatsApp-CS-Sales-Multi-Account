@@ -6,10 +6,33 @@ import {
   IsNumber,
   IsBoolean,
   IsIn,
+  IsObject,
   Min,
   Max,
+  Validate,
   ValidateNested,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface,
 } from 'class-validator';
+
+// >>> ANGGA: penjaga bentuk kamus alias tujuan — setiap nilai wajib string
+// tidak kosong. Tanpa ini, `{"solo": {"a":1}}` lolos `@IsObject()` dan baru
+// meledak jauh di dalam pencarian alamat.
+@ValidatorConstraint({ name: 'aliasDatar', async: false })
+class AliasDatarConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    if (value === undefined || value === null) return true;
+    if (typeof value !== 'object' || Array.isArray(value)) return false;
+    return Object.values(value as Record<string, unknown>).every(
+      (v) => typeof v === 'string' && v.trim().length > 0,
+    );
+  }
+
+  defaultMessage(): string {
+    return 'destinationAliases must map each name to a non-empty text';
+  }
+}
+// <<< ANGGA
 
 class AiSettingsDto {
   @IsOptional() @IsString()
@@ -132,6 +155,13 @@ class ShippingSettingsDto {
   // semua harga melompat ke kelipatan yang absurd.
   @IsOptional() @IsNumber() @Min(1) @Max(100_000)
   priceRoundingIncrement?: number;
+
+  // >>> ANGGA: kamus alias tujuan. Objek datar string→string; nilai non-string
+  // ditolak di sini supaya tidak ada yang aneh sampai ke pencarian alamat.
+  @IsOptional()
+  @IsObject()
+  @Validate(AliasDatarConstraint)
+  destinationAliases?: Record<string, string>;
 }
 // <<< ANGGA
 

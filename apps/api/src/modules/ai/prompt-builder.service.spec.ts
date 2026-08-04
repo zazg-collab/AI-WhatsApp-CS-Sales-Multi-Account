@@ -212,4 +212,70 @@ describe('PromptBuilderService', () => {
     const chars = turns.reduce((s, m) => s + m.content.length, 0);
     expect(chars).toBeLessThanOrEqual(MAX_CONTEXT_CHARS);
   });
+
+  /**
+   * >>> ANGGA — regresi insiden "Catatan keluar sebelum closing" (2026-08-03).
+   *
+   * Pelanggan menulis "1 aja, kirim ke purworejo berapa ya?" dan bot
+   * membacakan seluruh SOP pengiriman & COD padahal belum memilih apa pun.
+   * Pemicunya kata "kirim": dulu SETIAP kata dihitung sama beratnya, jadi kata
+   * yang muncul di hampir semua butir pun bisa memenangkan butir yang tidak
+   * relevan — dan butir itu memakan satu dari 12 slot.
+   *
+   * Fixture di bawah meniru bentuk knowledge base sungguhan: kata "kirim" ada
+   * di mana-mana, "betekok" cuma di satu butir.
+   */
+  describe('ANGGA — kata umum tidak boleh memenangkan butir yang tidak relevan', () => {
+    /**
+     * 24 butir "kirim" + 1 butir "betekok", dan butir target sengaja ditaruh
+     * PALING BELAKANG (paling lama diperbarui).
+     *
+     * Kata "kirim" ada di JUDUL semua butir umum, jadi dengan pembobotan lama
+     * ia bernilai +2 — sama persis dengan "betekok" di judul butir target.
+     * Seri, lalu urutan recency yang memutuskan, dan butir target tersingkir
+     * dari 12 slot. Itulah bentuk aslinya insiden kemarin.
+     */
+    function knowledgeBase() {
+      const umum = Array.from({ length: 24 }, (_, i) => ({
+        id: `k${i}`,
+        title: i === 0 ? 'SOP kirim & COD' : `Aturan kirim ${i}`,
+        productName: null,
+        content: 'Barang dikirim setelah pembayaran, lewat kurir, ke seluruh Indonesia.',
+      }));
+      return [
+        ...umum,
+        { id: 'target', title: 'Bedog Betekok', productName: 'Bedog Betekok', content: 'Cocok untuk cincang daging.' },
+      ];
+    }
+
+    async function ambilKnowledge(pertanyaan: string) {
+      prisma.knowledgeItem.findMany.mockResolvedValue(knowledgeBase());
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1',
+        customer,
+        bot: { persona: { soulMd: 'ramah' }, knowledgeBaseId: 'kb1', language: 'id' },
+        messages: [{ senderType: 'customer', content: pertanyaan }],
+      });
+      const msgs = await service.buildForConversation('c1');
+      return msgs.filter((m) => m.role === 'system').map((m) => m.content).join('\n');
+    }
+
+    it('butir langka menang atas 24 butir yang cuma memuat kata umum', async () => {
+      const teks = await ambilKnowledge('kirim betekok');
+      expect(teks).toContain('Bedog Betekok');
+    });
+
+    it('pertanyaan tanpa kata langka: SOP tetap boleh masuk (bukan diblokir)', async () => {
+      // Bobot rendah ≠ dilarang. Kalau memang tidak ada sinyal yang lebih kuat,
+      // butir umum tetap terpakai — tidak boleh sampai knowledge jadi kosong.
+      const teks = await ambilKnowledge('kirim');
+      expect(teks.length).toBeGreaterThan(0);
+    });
+
+    it('jumlah butir yang disuntik tetap dibatasi top-K', async () => {
+      const teks = await ambilKnowledge('kirim betekok purworejo');
+      const butir = teks.split('\n').filter((b) => b.startsWith('• '));
+      expect(butir.length).toBeLessThanOrEqual(KNOWLEDGE_MAX_ITEMS);
+    });
+  });
 });

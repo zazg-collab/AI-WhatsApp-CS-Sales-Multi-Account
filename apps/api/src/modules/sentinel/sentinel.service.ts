@@ -21,6 +21,7 @@ import {
   SENTINEL_SUPERVISOR_SYSTEM,
   SENTINEL_BOT_INSIGHT_SYSTEM,
   SENTINEL_BOT_INSIGHT_QUESTION,
+  SENTINEL_SHIPPING_FACTS, // >>> ANGGA <<<
   FALLBACK_PHRASE,
 } from '../../i18n/bot-prompts';
 
@@ -141,7 +142,25 @@ export class SentinelService {
     // <<< ANGGA
 
     // 2. LLM judgement.
-    const llm = await this.llmReview(conversationId, draftText);
+    // >>> ANGGA — insiden Fatih 2026-08-03: juri LLM memblokir kutipan ongkir
+    // yang SAH ("harga ongkir tidak konsisten dan tidak masuk akal", risk 80).
+    // Sebabnya bukan angkanya — seluruh gerbang deterministik di atas lolos —
+    // melainkan `llmReview` membuang SEMUA pesan system, termasuk blok data
+    // ongkir. Juri disuruh menilai kecocokan dengan data, tanpa pernah diberi
+    // datanya. Yang dilihatnya cuma empat nominal berbeda dalam satu
+    // percakapan (transfer vs COD, Purworejo vs Pemalang) — dan tanpa acuan,
+    // itu memang terbaca seperti harga ngawur.
+    //
+    // CAKUPAN SENGAJA DIBATASI ke data ongkir (ketok palu Bossfren). Knowledge
+    // & stok produk masih dibuang dari juri — cacat yang sama, sudah ada sejak
+    // commit upstream 8243939 (12 Juni), dicatat terpisah sebagai utang.
+    const shippingFacts = this.shipping
+      ? await this.shipping
+          .getGroundingText(conversationId, conversation.bot?.language ?? 'id')
+          .catch(() => '')
+      : '';
+    const llm = await this.llmReview(conversationId, draftText, shippingFacts);
+    // <<< ANGGA
 
     // 3. Merge — most restrictive wins; confidence gate applies too.
     let decision = mostRestrictive(
@@ -236,6 +255,7 @@ export class SentinelService {
   private async llmReview(
     conversationId: string,
     draftText: string,
+    shippingFacts = '', // >>> ANGGA <<<
   ): Promise<LlmReview> {
     const conv = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
@@ -250,10 +270,23 @@ export class SentinelService {
       ? `Draft jawaban AI yang akan dikirim:\n"""${draftText}"""\n\nNilai draft ini. Balas HANYA JSON.`
       : `AI draft reply to be sent:\n"""${draftText}"""\n\nReview this draft. Reply ONLY with JSON.`;
 
+    // >>> ANGGA: satu-satunya blok system yang boleh menemani juri. Persona &
+    // security directive tetap dibuang — juri tidak perlu ikut ber-persona,
+    // dia cuma perlu fakta untuk dicocokkan. Ditaruh SESUDAH riwayat, tepat
+    // sebelum draft, supaya yang dinilai dan acuannya berdampingan.
+    const factsBlock = shippingFacts.trim()
+      ? [{
+          role: 'system' as const,
+          content: `${t(SENTINEL_SHIPPING_FACTS, lang)}\n${shippingFacts.trim()}`,
+        }]
+      : [];
+    // <<< ANGGA
+
     const raw = await this.provider.chat(
       [
         { role: 'system', content: sentinelSystemPrompt(lang) },
         ...history,
+        ...factsBlock, // >>> ANGGA <<<
         { role: 'user', content: draftLabel },
       ],
       { temperature: 0, json: true, maxTokens: 350, model: await this.provider.sentinelModel() },
