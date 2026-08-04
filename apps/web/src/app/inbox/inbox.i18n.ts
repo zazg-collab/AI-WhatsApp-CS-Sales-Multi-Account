@@ -107,6 +107,14 @@ export const dict: Dict = {
   draftApprove: { id: 'Setujui', en: 'Approve' },
   draftEdit: { id: 'Edit', en: 'Edit' },
   draftBlock: { id: 'Blokir', en: 'Block' },
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): kartu peringatan gerbang
+  // uang, TERPISAH dari bubble draft (dulu alasannya ikut ditulis ke content).
+  draftMoneyGateTitle: { id: 'Gerbang uang menahan draft ini', en: 'Money gate is holding this draft' },
+  draftMoneyGateHint: {
+    id: 'Cek/perbaiki angka di draft sebelum kirim — pakai Edit, bukan Approve langsung.',
+    en: 'Check/fix the figures in the draft before sending — use Edit, not a direct Approve.',
+  },
+  draftMoneyGateApproveDisabled: { id: 'Edit dulu sebelum kirim', en: 'Edit first before sending' },
   // Destructive-action confirmation
   confirmRetractTitle: { id: 'Tarik pesan ini?', en: 'Retract this message?' },
   confirmRetractBody: { id: 'Pesan akan ditarik dari WhatsApp pelanggan. Tindakan ini tidak dapat dibatalkan.', en: 'The message will be retracted from the customer’s WhatsApp. This cannot be undone.' },

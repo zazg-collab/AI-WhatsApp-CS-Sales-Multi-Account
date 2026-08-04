@@ -26,6 +26,18 @@ export interface Message {
   deletedAt?: string | null;
   isStarred?: boolean;
   isPinned?: boolean;
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): review Sentinel MILIK
+  // pesan ini (relasi Message.sentinelReviewId di skema), bukan review
+  // terakhir se-percakapan. null = pesan ini belum pernah direview (mis.
+  // draft yang ditahan gerbang uang, atau belum sempat diaudit).
+  sentinelReview?: SentinelReview | null;
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): alasan penahanan
+  // gerbang uang, dipersist TERPISAH dari `content`. Sebelumnya prefiks
+  // "⚠️ [gerbang uang menahan: ...]" ikut ditulis ke content, artinya klik
+  // "Approve" tanpa "Edit" dulu akan mengirim teks debug internal itu apa
+  // adanya ke pelanggan. content sekarang SELALU bersih; array ini kosong/
+  // undefined kalau draft tidak pernah ditahan gerbang uang.
+  moneyGateIssues?: string[] | null;
 }
 
 export interface SentinelReview {

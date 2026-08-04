@@ -1093,9 +1093,18 @@ export function sameItems(a: ExtractedItem[], b: ExtractedItem[]): boolean {
  * Jendela 20 karakter (bukan seluruh teks) supaya kata "total" yang jauh
  * sebelumnya, dari klausa lain, tidak ikut menuduh penanda yang tidak
  * berkaitan dengannya.
+ *
+ * >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): pola awal cuma satu
+ * arah — "total ... {{token}}" (kata lebih dulu). Model juga bisa menulis
+ * urutan sebaliknya, "{{token}} ... total" (mis. "{{harga_satuan}} itu
+ * totalnya kak"), dan itu lolos tanpa terdeteksi. DUA arah sekarang
+ * diperiksa; sisi mana pun yang lebih dulu tetap kena jendela 20 karakter
+ * yang sama.
  */
 export function penjagaKata(text: string): string | null {
-  const larangan = /\b(total(nya)?|ongkir(nya)?|ongkos\s*kirim)\b[^{}\n]{0,20}\{\{(harga_satuan|subtotal_barang)\}\}/i;
+  const kata = '(total(nya)?|ongkir(nya)?|ongkos\\s*kirim)';
+  const token = '\\{\\{(harga_satuan|subtotal_barang)\\}\\}';
+  const larangan = new RegExp(`\\b${kata}\\b[^{}\\n]{0,20}${token}|${token}[^{}\\n]{0,20}\\b${kata}\\b`, 'i');
   const m = (text ?? '').match(larangan);
   return m ? m[0] : null;
 }

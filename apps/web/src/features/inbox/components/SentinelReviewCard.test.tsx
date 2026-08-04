@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { SentinelReviewCard } from './SentinelReviewCard';
-import type { ConvDetail, SentinelReview } from '../inbox.types';
+import type { ConvDetail, Message, SentinelReview } from '../inbox.types';
 
 function makeConversation(reviews: SentinelReview[]): ConvDetail {
   return {
@@ -29,6 +29,20 @@ function makeReview(overrides: Partial<SentinelReview> = {}): SentinelReview {
     riskLevel: 'low',
     reason: null,
     recommendation: null,
+    ...overrides,
+  };
+}
+
+function makeDraft(overrides: Partial<Message> = {}): Message {
+  return {
+    id: 'd1',
+    senderType: 'ai',
+    content: 'draft text',
+    messageType: 'text',
+    status: 'pending',
+    aiGenerated: true,
+    createdAt: '2026-08-04T00:00:00.000Z',
+    sentinelReview: null,
     ...overrides,
   };
 }
@@ -84,5 +98,62 @@ describe('SentinelReviewCard', () => {
     );
     expect(screen.getByText('99%')).toBeInTheDocument();
     expect(screen.queryByText('10%')).not.toBeInTheDocument();
+  });
+
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): kartu review pernah
+  // menampilkan review LAMA/tidak nyambung (mis. angka 5000/273000) saat
+  // draft yang sedang dilihat admin adalah draft yang lain sama sekali.
+  // Review kini harus milik draft yang aktif, bukan review terakhir
+  // se-percakapan.
+  describe('ANGGA — review milik draft aktif, bukan review terakhir se-percakapan', () => {
+    it('memakai review milik draft aktif, MENGABAIKAN review lama se-percakapan yang tidak nyambung', () => {
+      const staleReview = makeReview({ id: 'stale', confidenceScore: 40, reason: 'review basi dari topik lain' });
+      const draftReview = makeReview({ id: 'fresh', confidenceScore: 91, reason: 'review draft aktif' });
+      render(
+        <SentinelReviewCard
+          conversation={makeConversation([staleReview])}
+          draftMessages={[makeDraft({ sentinelReview: draftReview })]}
+        />,
+      );
+      expect(screen.getByText('91%')).toBeInTheDocument();
+      expect(screen.queryByText('review basi dari topik lain')).not.toBeInTheDocument();
+      expect(screen.getByText('review draft aktif')).toBeInTheDocument();
+    });
+
+    it('draft aktif belum direview → pesan "belum direview", BUKAN review lama se-percakapan', () => {
+      const staleReview = makeReview({ id: 'stale', reason: 'review basi dari topik lain' });
+      render(
+        <SentinelReviewCard
+          conversation={makeConversation([staleReview])}
+          draftMessages={[makeDraft({ sentinelReview: null })]}
+        />,
+      );
+      expect(screen.getByText(/belum direview sentinel/i)).toBeInTheDocument();
+      expect(screen.queryByText('review basi dari topik lain')).not.toBeInTheDocument();
+    });
+
+    it('tanpa draft aktif → tetap fallback ke review terakhir se-percakapan (perilaku lama)', () => {
+      render(
+        <SentinelReviewCard
+          conversation={makeConversation([makeReview({ confidenceScore: 77 })])}
+          draftMessages={[]}
+        />,
+      );
+      expect(screen.getByText('77%')).toBeInTheDocument();
+    });
+
+    it('burst: beberapa draft berbagi review yang sama → tetap dipakai (bukan dianggap "belum direview")', () => {
+      const sharedReview = makeReview({ id: 'shared', confidenceScore: 60 });
+      render(
+        <SentinelReviewCard
+          conversation={makeConversation([])}
+          draftMessages={[
+            makeDraft({ id: 'd1', sentinelReview: sharedReview }),
+            makeDraft({ id: 'd2', sentinelReview: sharedReview }),
+          ]}
+        />,
+      );
+      expect(screen.getByText('60%')).toBeInTheDocument();
+    });
   });
 });

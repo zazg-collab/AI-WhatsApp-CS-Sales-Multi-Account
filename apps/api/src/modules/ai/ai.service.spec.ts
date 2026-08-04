@@ -79,6 +79,117 @@ describe('AiService', () => {
       await expect(service.generateReply('c1')).rejects.toThrow('boom');
       expect(metrics.aiRequests.inc).toHaveBeenCalledWith({ outcome: 'error' });
     });
+
+    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): teks yang ditahan
+    // gerbang uang dulu ditempel prefiks "⚠️ [gerbang uang menahan: ...]"
+    // LANGSUNG ke `text` (= calon `content` pesan). Risikonya: kalau admin
+    // klik Approve tanpa Edit dulu, teks debug internal itu ikut terkirim ke
+    // pelanggan. Sekarang `text` harus BERSIH, alasannya pindah ke
+    // `moneyGateIssues` yang terpisah.
+    it('gerbang uang: text yang ditahan BERSIH tanpa prefiks "⚠️", alasan dipisah ke moneyGateIssues', async () => {
+      provider.chat.mockResolvedValue('Totalnya {{total_transfer}} kak, jadi 139000 juga oke');
+      const shipping = {
+        resolvePriceTokens: jest.fn().mockResolvedValue({
+          text: 'Totalnya Rp161.000 kak, jadi 139000 juga oke',
+          ok: false,
+          issues: ['Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000'],
+        }),
+      };
+      const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
+      const r = await svc.generateReply('c1');
+      expect(r.moneyBlocked).toBe(true);
+      expect(r.text).not.toMatch(/⚠️/);
+      expect(r.text).toBe('Totalnya Rp161.000 kak, jadi 139000 juga oke');
+      expect(r.moneyGateIssues).toEqual(['Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000']);
+    });
+
+    it('gerbang uang: tidak ditahan → moneyGateIssues tidak ada/kosong', async () => {
+      provider.chat.mockResolvedValue('Baik kak, ditunggu ya');
+      const shipping = {
+        resolvePriceTokens: jest.fn().mockResolvedValue({ text: 'Baik kak, ditunggu ya', ok: true, issues: [] }),
+      };
+      const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
+      const r = await svc.generateReply('c1');
+      expect(r.moneyBlocked).toBe(false);
+      expect(r.moneyGateIssues ?? []).toEqual([]);
+    });
+
+    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, audit gerbang uang #2):
+    // ditahan gerbang uang tidak lagi langsung jatuh ke draft manual — dicoba
+    // ULANG SEKALI dengan pesan koreksi konkret dulu. Kalau percobaan kedua
+    // lolos, balasannya dipakai TANPA ditahan sama sekali.
+    it('gerbang uang: percobaan ulang OTOMATIS lolos → balasan dipakai, tidak jadi ditahan', async () => {
+      provider.chat
+        .mockResolvedValueOnce('Bedog Betekok harganya Rp139.000, kak.')
+        .mockResolvedValueOnce('Bedog Betekok harganya {{harga_satuan}}, kak.');
+      const shipping = {
+        resolvePriceTokens: jest
+          .fn()
+          .mockResolvedValueOnce({
+            text: 'Bedog Betekok harganya Rp139.000, kak.',
+            ok: false,
+            issues: ['Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000'],
+          })
+          .mockResolvedValueOnce({ text: 'Bedog Betekok harganya Rp139.000, kak.', ok: true, issues: [] }),
+      };
+      const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
+      const r = await svc.generateReply('c1');
+      expect(provider.chat).toHaveBeenCalledTimes(2);
+      // Pesan koreksi ronde kedua menyertakan balasan yang ditahan + alasannya.
+      const retryMessages = provider.chat.mock.calls[1][0];
+      const lastMsg = retryMessages[retryMessages.length - 1];
+      expect(lastMsg.role).toBe('user');
+      expect(lastMsg.content).toMatch(/Rp139\.000/);
+      expect(lastMsg.content).toMatch(/Angka rupiah ditulis langsung/);
+      expect(r.moneyBlocked).toBe(false);
+      expect(r.text).toBe('Bedog Betekok harganya Rp139.000, kak.');
+      expect(r.moneyGateIssues ?? []).toEqual([]);
+    });
+
+    it('gerbang uang: percobaan ulang tetap ditahan → jatuh ke draft manual dengan alasan dari percobaan KEDUA', async () => {
+      provider.chat
+        .mockResolvedValueOnce('Bedog Betekok harganya Rp139.000, kak.')
+        .mockResolvedValueOnce('Bedog Betekok harganya Rp139.000 lagi, kak.');
+      const shipping = {
+        resolvePriceTokens: jest
+          .fn()
+          .mockResolvedValueOnce({
+            text: 'Bedog Betekok harganya Rp139.000, kak.',
+            ok: false,
+            issues: ['percobaan pertama: 139000'],
+          })
+          .mockResolvedValueOnce({
+            text: 'Bedog Betekok harganya Rp139.000 lagi, kak.',
+            ok: false,
+            issues: ['percobaan kedua: masih 139000'],
+          }),
+      };
+      const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
+      const r = await svc.generateReply('c1');
+      expect(provider.chat).toHaveBeenCalledTimes(2);
+      expect(r.moneyBlocked).toBe(true);
+      expect(r.text).not.toMatch(/⚠️/);
+      expect(r.text).toBe('Bedog Betekok harganya Rp139.000 lagi, kak.');
+      expect(r.moneyGateIssues).toEqual(['percobaan kedua: masih 139000']);
+    });
+
+    it('gerbang uang: kalau percobaan ulang sendiri gagal (provider error), tetap kembalikan hasil percobaan PERTAMA', async () => {
+      provider.chat
+        .mockResolvedValueOnce('Bedog Betekok harganya Rp139.000, kak.')
+        .mockRejectedValueOnce(new Error('provider down'));
+      const shipping = {
+        resolvePriceTokens: jest.fn().mockResolvedValueOnce({
+          text: 'Bedog Betekok harganya Rp139.000, kak.',
+          ok: false,
+          issues: ['percobaan pertama: 139000'],
+        }),
+      };
+      const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
+      const r = await svc.generateReply('c1');
+      expect(r.moneyBlocked).toBe(true);
+      expect(r.text).toBe('Bedog Betekok harganya Rp139.000, kak.');
+      expect(r.moneyGateIssues).toEqual(['percobaan pertama: 139000']);
+    });
   });
 
   describe('generateSegmentedReply', () => {

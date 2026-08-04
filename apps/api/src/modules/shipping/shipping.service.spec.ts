@@ -825,6 +825,26 @@ describe('§9.6 — angka bot harus cocok grounding & kelipatan pembulatan', () 
     expect(out.issues.join(' ')).toMatch(/label/i);
   });
 
+  it('resolvePriceTokens: penjaga kata — {{harga_satuan}} DIIKUTI "total" (arah sebaliknya) → ditahan juga (temuan Bossfren 2026-08-04)', async () => {
+    const h = harness({
+      products: [{ id: 'p1', sku: 'GLK-01', name: 'Golok Cordova', category: '', description: '', price: 145000, weightGrams: null, status: 'active' }],
+    });
+    await h.svc.quoteForConversation('c1');
+    const out = await h.svc.resolvePriceTokens('c1', '{{harga_satuan}} itu totalnya ya kak');
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toMatch(/label/i);
+  });
+
+  it('resolvePriceTokens: penjaga kata — {{subtotal_barang}} DIIKUTI "ongkirnya" (arah sebaliknya, penanda lain) → ditahan', async () => {
+    const h = harness({
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Cordova', qty: 1 }, { nama: 'Pisau Dapur Cordova', qty: 1 }] },
+    });
+    await h.svc.quoteForConversation('c1');
+    const out = await h.svc.resolvePriceTokens('c1', '{{subtotal_barang}} itu ongkirnya kak');
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toMatch(/label/i);
+  });
+
   it('roundTo membulatkan ke kelipatan TERDEKAT', () => {
     expect(roundTo(152324, 500)).toBe(152500);
     expect(roundTo(152100, 500)).toBe(152000);

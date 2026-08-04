@@ -222,6 +222,23 @@ export const PRODUCT_STOCK_INTRO = {
   en: 'CURRENT AUTHORITATIVE STOCK DATA (from warehouse system). For products listed here, answer availability/stock/price DIRECTLY — do NOT say "I\'ll check with the team". Stock > 0 → state available (you may mention quantity); OUT OF STOCK → say it\'s currently unavailable and offer alternatives. Never fabricate numbers.',
 };
 
+// >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, audit gerbang uang #1):
+// `PRODUCT_STOCK_INTRO` di atas bilang "jawab HARGA langsung" — tanpa
+// syarat. Itu bentrok sama `SHIPPING_MONEY_RULE` (blok TERAKHIR, "jangan
+// pernah tulis rupiah sendiri, pakai PENANDA") kalau kedua blok itu aktif
+// bersamaan untuk barang yang SAMA (pelanggan tanya harga + ongkir
+// sekaligus). Karena "model paling nurut ke blok system PERTAMA" (lihat
+// prompt-builder.service.ts), instruksi awal soal harga ini yang menang —
+// makanya model tetap menulis "Rp139.000" dkk walau penanda
+// {{harga_satuan}} sudah tersedia. Dipasang HANYA saat order berongkir
+// sedang aktif (`shippingGrounding` tidak kosong) — precedence ditulis
+// eksplisit di blok yang lebih diprioritaskan model, bukan cuma ditambah di
+// blok belakang yang sudah kalah pengaruh.
+export const PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE = {
+  id: 'PENTING — order berongkir sedang aktif di percakapan ini (lihat data ongkir & penanda di bawah): untuk HARGA barang yang termasuk order itu, WAJIB pakai PENANDA {{harga_satuan}}/{{subtotal_barang}} dari data ongkir — JANGAN tulis angka rupiah sendiri di sini, aturan gerbang uang menang. Ketersediaan/stok tetap boleh disebut langsung seperti biasa. Barang di luar order itu boleh tetap disebut harganya dari data stok ini.',
+  en: 'IMPORTANT — a shipping quote is active in this conversation (see the shipping data & placeholders below): for the price of items that are part of that quote, you MUST use the {{harga_satuan}}/{{subtotal_barang}} PLACEHOLDER from the shipping data — do NOT write the rupiah number yourself here, the money-gate rule wins. Availability/stock can still be stated directly as usual. Items outside that quote can still have their price stated from this stock data.',
+};
+
 export const PRODUCT_AVAILABLE = {
   id: 'TERSEDIA',
   en: 'IN STOCK',
@@ -558,7 +575,7 @@ Balas HANYA JSON: {"kota": string|null, "items": [{"nama": string, "qty": number
 Aturan:
 - "kota": nama kota/kabupaten/provinsi TUJUAN KIRIM yang disebut pelanggan. null kalau belum ada yang disebut.
 - Kalau pelanggan menyebut LEBIH DARI SATU tempat sepanjang percakapan, ambil yang PALING BARU — yang terakhir dia sebut. Tempat yang lebih dulu disebut DIBUANG, walau diulang berkali-kali sebelumnya. Contoh: pelanggan berkali-kali bilang "Purwokerto", lalu di pesan terakhir bilang "ya sudah, ke Purworejo saja" → jawabannya "Purworejo", bukan "Purwokerto".
-- "items": SEMUA barang yang pelanggan sebut ingin dibeli sejauh ini di percakapan ini. Salin nama produknya apa adanya seperti yang ditulis pelanggan; jangan diterjemahkan, jangan dikarang, jangan ditambah barang yang tidak disebut.
+- "items": barang yang pelanggan ingin beli — TAPI JANGAN asal menggabung barang dari topik yang berbeda. Kalau pelanggan menyebut satu barang BARU tanpa sinyal penyambung eksplisit (kata seperti "dan", "sama", "juga", "sekalian", "plus", "tambah", atau qty tambahan seperti "2 pcs lagi" — termasuk saat DUA barang disebut SEKALIGUS dalam satu kalimat dengan "dan"/"sama", mis. "Golok dan Pisau, kirim ke Solo berapa?", yang berarti KEDUANYA harus masuk "items") DAN barang itu berbeda sama sekali dari yang disebut sebelumnya, anggap itu PERTANYAAN BARU YANG BERDIRI SENDIRI — "items" HANYA berisi barang baru itu, JANGAN ikutkan barang-barang sebelumnya. Barang lama hanya boleh ikut ke "items" kalau ADA sinyal penyambung eksplisit itu. Contoh SALAH: pelanggan tanya "harga Golok Cordova berapa" lalu beberapa pesan kemudian tanya "kalau Pisau Dapur Cordova, kirim ke Solo berapa?" (tanpa kata penyambung) → "items" ikut memuat Golok Cordova juga — INI SALAH. Contoh BENAR untuk kasus yang sama: "items" hanya berisi Pisau Dapur Cordova. Contoh BENAR sebaliknya: pelanggan bilang "Pisau Dapur Cordova juga sekalian, kirim ke Solo berapa totalnya?" → "items" berisi KEDUA barang, karena ada kata "juga sekalian". Salin nama produknya apa adanya seperti yang ditulis pelanggan; jangan diterjemahkan, jangan dikarang, jangan ditambah barang yang tidak disebut.
 - "qty": 1 kalau pelanggan tidak menyebut jumlah; ikuti angkanya kalau pelanggan menyebut jumlah/pcs/buah.
 - JANGAN menyebutkan harga, berat, atau ongkir dalam bentuk apa pun. Angka-angka itu diambil sistem dari katalog, bukan darimu.`,
 
@@ -567,7 +584,7 @@ Reply ONLY with JSON: {"kota": string|null, "items": [{"nama": string, "qty": nu
 Rules:
 - "kota": the destination city/regency/province the customer mentioned. null if none mentioned yet.
 - If the customer named MORE THAN ONE place during the conversation, take the MOST RECENT one — the last they mentioned. Earlier places are DISCARDED even if repeated many times before. Example: the customer said "Purwokerto" several times, then in the latest message says "fine, send it to Purworejo instead" → the answer is "Purworejo", not "Purwokerto".
-- "items": ALL products the customer has said they want to buy so far in this conversation. Copy the product names verbatim as the customer wrote them; do not translate, invent, or add items that were not mentioned.
+- "items": products the customer wants to buy — but do NOT blindly merge items from different topics. If the customer mentions a NEW item with no explicit continuation cue (words like "and", "with", "also", "as well", "plus", "add", "X too", or extra qty like "2 more pcs" — including when TWO items are named TOGETHER in one sentence with "and", e.g. "Golok and Pisau, shipping to Solo?", which means BOTH belong in "items") AND that item is entirely different from what was mentioned before, treat it as a NEW, stand-alone question — "items" should contain ONLY that new item, do NOT carry over the earlier ones. Earlier items only carry over when there IS an explicit continuation cue. Example WRONG: the customer asks "how much is the Golok Cordova" then, several messages later, asks "what about the Pisau Dapur Cordova, shipping to Solo?" (no continuation word) → "items" still includes Golok Cordova too — THIS IS WRONG. Correct for the same case: "items" contains only Pisau Dapur Cordova. Correct the other way: the customer says "the Pisau Dapur Cordova too, what's the total shipped to Solo?" → "items" contains BOTH, because of "too". Copy product names verbatim as the customer wrote them; do not translate, invent, or add items that were not mentioned.
 - "qty": 1 when the customer gave no quantity; otherwise follow the number they gave.
 - NEVER output prices, weights, or shipping costs. Those come from the catalog, not from you.`,
 };
@@ -594,8 +611,33 @@ export const SHIPPING_EXTRACT_USER = {
 // ulang, larangan menampilkan rincian ongkir/COD, dst) jadi TIDAK RELEVAN —
 // model tidak pernah punya angka untuk dijumlah ulang atau disembunyikan.
 export const SHIPPING_MONEY_RULE = {
-  id: 'Jangan pernah menulis nominal rupiah sendiri untuk order ini — pakai PENANDA di bawah persis seperti tertulis (termasuk dua kurung kurawalnya), sistem yang mengisi nilai sesungguhnya sesudah kamu selesai menjawab.',
-  en: 'Never write a rupiah amount yourself for this order — use the PLACEHOLDER below exactly as written (including the double curly braces), the system fills in the real value after you finish answering.',
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, audit gerbang uang #3):
+  // ditambah contoh SALAH/BENAR — insidennya nyata (model menulis "Rp139.000"
+  // dkk apa adanya walau penanda tersedia), teks larangan abstrak saja
+  // terbukti tidak cukup diikuti. SENGAJA tanpa angka digit 3+ ATAU nama
+  // penanda spesifik (mis. {{harga_satuan}}) di sini — blok ini SELALU
+  // ditempel di depan grounding text apa pun kondisi ordernya (lihat
+  // `getGroundingText`), jadi nama penanda konkret di sini bisa salah/tidak
+  // tersedia untuk order yang penandanya beda (order shippingOnly, order
+  // >1 harga satuan yang menyembunyikan {{harga_satuan}}, dst) — dan angka
+  // digit di sini akan melanggar invarian "grounding text tidak pernah
+  // memuat angka rupiah" (tes: "grounding text TIDAK PERNAH memuat angka
+  // rupiah — hanya penanda {{token}}").
+  id: 'Jangan pernah menulis nominal rupiah sendiri untuk order ini — pakai PENANDA di bawah persis seperti tertulis (termasuk dua kurung kurawalnya), sistem yang mengisi nilai sesungguhnya sesudah kamu selesai menjawab. Contoh SALAH (DILARANG): menuliskan sendiri angka rupiahnya, misalnya "harganya Rp[diketik sendiri], kak." Contoh BENAR: sebutkan harganya pakai PENANDA yang memang tersedia di daftar di bawah ini, persis seperti tertulis — jangan mengetik angka atau membuat nama penanda sendiri.',
+  en: 'Never write a rupiah amount yourself for this order — use the PLACEHOLDER below exactly as written (including the double curly braces), the system fills in the real value after you finish answering. WRONG example (forbidden): writing the number yourself, e.g. "it is Rp[typed by you], kak." RIGHT example: state the price using a PLACEHOLDER that is actually listed below, exactly as written — never type the number yourself or invent your own placeholder name.',
+};
+
+// >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, audit gerbang uang #2):
+// kalau balasan pertama ditahan gerbang uang, dicoba SEKALI LAGI dengan
+// pesan koreksi konkret (bukan cuma tolak & serahkan admin langsung) —
+// dipanggil dari `AiService.gateMoneyTokens`'s caller. Kalau retry-nya juga
+// tetap ditahan, baru jatuh ke draft manual seperti sebelumnya (tidak ada
+// retry kedua — biaya panggilan LLM ekstra dijaga tetap satu kali saja).
+export const MONEY_GATE_RETRY_USER = {
+  id: (previousText: string, issues: string[]) =>
+    `Balasanmu barusan ditahan sistem karena melanggar aturan gerbang uang:\n${issues.map((s) => `- ${s}`).join('\n')}\n\nBalasan yang ditahan:\n"${previousText}"\n\nTulis ULANG balasan yang SAMA isinya, tapi untuk SEMUA nominal rupiah yang terkait order ini, WAJIB pakai PENANDA {{...}} yang sudah disediakan di atas — jangan tulis angka rupiah apa pun sendiri. Jangan minta maaf atau menyinggung soal sistem/gerbang ke pelanggan, langsung tulis balasan yang benar.`,
+  en: (previousText: string, issues: string[]) =>
+    `Your last reply was held by the system for violating the money-gate rule:\n${issues.map((s) => `- ${s}`).join('\n')}\n\nThe held reply:\n"${previousText}"\n\nRewrite the SAME reply, but for ALL rupiah amounts related to this order, you MUST use the {{...}} PLACEHOLDER already provided above — do not write any rupiah number yourself. Do not apologize or mention the system/gate to the customer, just write the corrected reply.`,
 };
 
 export const SHIPPING_GROUNDING_INTRO = {

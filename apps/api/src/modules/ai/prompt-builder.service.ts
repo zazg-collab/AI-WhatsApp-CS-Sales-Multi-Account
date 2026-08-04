@@ -25,6 +25,7 @@ import {
   PRODUCT_AVAILABLE,
   PRODUCT_OUT_OF_STOCK,
   PRODUCT_STOCK_INTRO,
+  PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE,
   SECURITY_DIRECTIVE,
   mediaPlaceholder,
   fenceData,
@@ -161,9 +162,16 @@ export class PromptBuilderService {
     ]);
     // <<< ANGGA
     const botLocale = localeFor(lang);
+    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, audit gerbang uang #1):
+    // kalau order berongkir sedang aktif (`shippingGrounding` tidak kosong —
+    // artinya `{{harga_satuan}}`/`{{subtotal_barang}}` dkk sungguhan
+    // tersedia), tempelkan aturan precedence di blok INI (bukan cuma di
+    // `SHIPPING_MONEY_RULE` yang posisinya belakangan & kalah pengaruh) —
+    // lihat komentar di `PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE`.
     const productBlock = products.length
       ? [
           t(PRODUCT_STOCK_INTRO, lang),
+          ...(shippingGrounding ? [t(PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE, lang)] : []),
           ...products.map((p) => {
             const price = p.price != null ? ` — ${formatProductPrice(p.price, p.currency, botLocale)}` : '';
             const stockLabel = p.stock > 0

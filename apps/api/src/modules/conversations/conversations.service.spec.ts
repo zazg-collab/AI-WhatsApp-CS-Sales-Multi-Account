@@ -141,6 +141,23 @@ describe('ConversationsService', () => {
       expect(args.take).toBe(101);
       expect(args.where.createdAt).toEqual({ lt: new Date('2024-06-01T00:00:00.000Z') });
     });
+
+    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): SentinelReviewCard di
+    // web hanya baca `conversation.sentinelReviews[0]` (review TERAKHIR
+    // se-percakapan), padahal draft yang sedang ditampilkan bisa jadi belum
+    // pernah direview sama sekali (mis. ditahan gerbang uang) atau direview
+    // beberapa giliran sebelumnya untuk topik yang beda — kartu review jadi
+    // menampilkan data yang tidak nyambung ke draft yang aktif. Perbaikannya:
+    // setiap Message bawa sentinelReview MILIKNYA SENDIRI (relasi
+    // `Message.sentinelReviewId` sudah ada di skema & sudah diisi
+    // wa-inbound.service.ts sejak awal — yang kurang cuma query ini belum
+    // pernah menariknya).
+    it('setiap message membawa sentinelReview miliknya sendiri (bukan cuma review terakhir se-percakapan)', async () => {
+      prisma.message.findMany.mockResolvedValue([]);
+      await service.getMessages('c1', { limit: 5 });
+      const args = prisma.message.findMany.mock.calls[0][0];
+      expect(args.include.sentinelReview).toBeDefined();
+    });
   });
 
   describe('send', () => {
@@ -396,6 +413,37 @@ describe('ConversationsService', () => {
       prisma.message.findFirst.mockResolvedValue(null);
       await expect(messaging.approveDraft('c1', 'd1', 'admin')).rejects.toThrow(NotFoundException);
       expect(wa.sendText).not.toHaveBeenCalled();
+    });
+    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): draft yang ditahan
+    // gerbang uang (Message.moneyGateIssues terisi) tidak boleh ke-approve
+    // langsung apa adanya — isinya belum diverifikasi. Wajib lewat Edit dulu
+    // (editedText terisi). Penjagaan server-side ini berlaku walau dipanggil
+    // di luar UI (DraftControls.tsx sudah mematikan tombol Approve-nya juga).
+    it('menolak approve langsung untuk draft yang ditahan gerbang uang (belum di-Edit)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
+      });
+      prisma.message.findFirst.mockResolvedValue({
+        id: 'd1',
+        content: 'Bedog Betekok harganya Rp139.000, kak.',
+        status: 'pending',
+        moneyGateIssues: ['Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000'],
+      });
+      await expect(messaging.approveDraft('c1', 'd1', 'admin')).rejects.toThrow(BadRequestException);
+      expect(wa.sendText).not.toHaveBeenCalled();
+    });
+    it('mengizinkan approve draft yang ditahan gerbang uang KALAU sudah di-Edit (editedText terisi)', async () => {
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1', whatsappAccountId: 'a1', customer: { phoneNumber: '628' },
+      });
+      prisma.message.findFirst.mockResolvedValue({
+        id: 'd1',
+        content: 'Bedog Betekok harganya Rp139.000, kak.',
+        status: 'pending',
+        moneyGateIssues: ['Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000'],
+      });
+      await messaging.approveDraft('c1', 'd1', 'admin', 'Bedog Betekok harganya sudah dikoreksi, kak.');
+      expect(wa.sendText).toHaveBeenCalledWith('a1', '628', 'Bedog Betekok harganya sudah dikoreksi, kak.', undefined);
     });
   });
 

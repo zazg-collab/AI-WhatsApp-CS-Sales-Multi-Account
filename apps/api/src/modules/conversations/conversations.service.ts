@@ -137,6 +137,23 @@ export class ConversationsService {
       take: take + 1,
       include: {
         quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } },
+        // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): review Sentinel
+        // MILIK PESAN INI, bukan review terakhir se-percakapan. Sebelumnya
+        // kartu review di web cuma baca `conversation.sentinelReviews[0]`,
+        // yang bisa jadi review untuk topik/draft lain sama sekali. Skema
+        // `Message.sentinelReviewId` sudah ada & sudah diisi sejak awal
+        // (wa-inbound.service.ts) — yang kurang cuma tarikan di sini.
+        sentinelReview: {
+          select: {
+            id: true,
+            decision: true,
+            confidenceScore: true,
+            riskScore: true,
+            riskLevel: true,
+            reason: true,
+            recommendation: true,
+          },
+        },
       },
     });
 

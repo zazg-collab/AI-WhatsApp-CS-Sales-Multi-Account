@@ -225,6 +225,60 @@ describe('PromptBuilderService', () => {
    * Fixture di bawah meniru bentuk knowledge base sungguhan: kata "kirim" ada
    * di mana-mana, "betekok" cuma di satu butir.
    */
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, audit gerbang uang #1):
+  // `PRODUCT_STOCK_INTRO` (blok stok produk, PRIMARY/awal) dulu bilang
+  // "jawab harga LANGSUNG" tanpa syarat — bentrok sama `SHIPPING_MONEY_RULE`
+  // (blok TERAKHIR, "pakai penanda, jangan tulis rupiah sendiri") kalau
+  // dua-duanya aktif bersamaan (pelanggan tanya harga + ongkir sekaligus).
+  // Karena model paling nurut ke blok PERTAMA, instruksi harga di sini yang
+  // menang — makanya model tetap menulis "Rp139.000" dkk walau penanda
+  // sudah tersedia. Tes ini memastikan precedence-nya ditulis eksplisit DI
+  // BLOK STOK PRODUK ITU SENDIRI, hanya ketika order berongkir memang aktif.
+  describe('ANGGA — audit gerbang uang #1: precedence harga vs penanda di blok stok produk', () => {
+    const productWithPrice = [
+      { name: 'Bedog Betekok', price: 139000, currency: 'IDR', stock: 5, unit: 'pcs', category: null },
+    ];
+
+    it('menempelkan aturan precedence gerbang uang di blok stok produk KALAU order berongkir sedang aktif', async () => {
+      const products = { relevantForQuery: jest.fn().mockResolvedValue(productWithPrice) };
+      const shipping = {
+        getGroundingText: jest
+          .fn()
+          .mockResolvedValue(
+            'Jangan pernah menulis nominal rupiah sendiri...\n• {{harga_satuan}} = harga satu barang',
+          ),
+      };
+      const svc = new PromptBuilderService(prisma, products as any, knowledgeIndex, shipping as any);
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1',
+        customer,
+        bot: { persona: { soulMd: 'Saya ramah' }, knowledgeBaseId: null, language: 'id' },
+        messages: [{ senderType: 'customer', content: 'harga bedog betekok berapa, kirim ke Mataram?' }],
+      });
+      const msgs = await svc.buildForConversation('c1');
+      const shared = msgs[1].content;
+      expect(shared).toContain('Bedog Betekok');
+      expect(shared).toMatch(/order berongkir sedang aktif/i);
+      expect(shared).toMatch(/WAJIB pakai PENANDA/i);
+    });
+
+    it('TIDAK menempelkan precedence text di blok stok produk kalau belum ada order berongkir aktif', async () => {
+      const products = { relevantForQuery: jest.fn().mockResolvedValue(productWithPrice) };
+      const shipping = { getGroundingText: jest.fn().mockResolvedValue('') }; // belum ada tujuan/order
+      const svc = new PromptBuilderService(prisma, products as any, knowledgeIndex, shipping as any);
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1',
+        customer,
+        bot: { persona: { soulMd: 'Saya ramah' }, knowledgeBaseId: null, language: 'id' },
+        messages: [{ senderType: 'customer', content: 'harga bedog betekok berapa?' }],
+      });
+      const msgs = await svc.buildForConversation('c1');
+      const shared = msgs[1].content;
+      expect(shared).toContain('Bedog Betekok');
+      expect(shared).not.toMatch(/order berongkir sedang aktif/i);
+    });
+  });
+
   describe('ANGGA — kata umum tidak boleh memenangkan butir yang tidak relevan', () => {
     /**
      * 24 butir "kirim" + 1 butir "betekok", dan butir target sengaja ditaruh

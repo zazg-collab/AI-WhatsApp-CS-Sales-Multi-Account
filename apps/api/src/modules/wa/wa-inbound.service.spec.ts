@@ -143,6 +143,31 @@ describe('WaInboundService auto-reply', () => {
     expect(notifications.send).toHaveBeenCalled();
   });
 
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): segmen burst yang
+  // ditahan gerbang uang sebelumnya cuma dapat notifikasi GENERIK ("beberapa
+  // pesan topik berbeda") — dan bahkan itu SAMA SEKALI TIDAK terkirim kalau
+  // mode-nya ai_draft. Sekarang wajib ada notifikasi KHUSUS gerbang uang,
+  // di SEMUA mode termasuk ai_draft, menyebut alasannya secara spesifik.
+  it('gerbang uang: segmen burst yang ditahan dapat notifikasi khusus, walau mode ai_draft', async () => {
+    conversation.aiMode = AiMode.ai_draft;
+    burstRows = [
+      { id: 'msgB', senderType: SenderType.customer, content: 'stok L ada?', messageType: MessageType.text },
+      { id: 'msgA', senderType: SenderType.customer, content: 'harga bedog betekok berapa?', messageType: MessageType.text },
+    ];
+    ai.generateSegmentedReply.mockResolvedValue([
+      { answersIndex: 1, text: 'Bedog Betekok harganya Rp139.000, kak.', moneyGateIssues: ['Angka rupiah ditulis langsung: 139000'] },
+      { answersIndex: 2, text: 'Stok L masih ada' },
+    ]);
+
+    (service as any).scheduleAutoReply('c1');
+    await jest.advanceTimersByTimeAsync(8_000);
+
+    expect(notifications.send).toHaveBeenCalledTimes(1);
+    const [msg] = notifications.send.mock.calls[0];
+    expect(msg).toMatch(/gerbang uang menahan/i);
+    expect(msg).toContain('Angka rupiah ditulis langsung: 139000');
+  });
+
   it('pauses the bot when the burst risk gate returns takeover_required', async () => {
     conversation.aiMode = AiMode.ai_on;
     burstRows = [
@@ -181,7 +206,7 @@ describe('WaInboundService auto-reply', () => {
     conversation.aiMode = AiMode.ai_on;
     // burstRows default = single customer message → not a burst
     ai.generateReply.mockResolvedValue({
-      text: '⚠️ [gerbang uang menahan: ...]\nTotalnya {{total_transfer}} kak',
+      text: 'Totalnya {{total_transfer}} kak',
       moneyBlocked: true,
     });
 
@@ -193,5 +218,54 @@ describe('WaInboundService auto-reply', () => {
     const created = prisma.message.create.mock.calls.map((c: any[]) => c[0].data);
     expect(created).toHaveLength(1);
     expect(created[0]).toMatchObject({ status: MessageStatus.pending, content: expect.stringContaining('total_transfer') });
+  });
+
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): alasan penahanan dulu
+  // ditempel LANGSUNG ke `content` sebagai prefiks "⚠️ [gerbang uang
+  // menahan: ...]" — kalau admin klik Approve tanpa Edit dulu, teks debug
+  // internal itu ikut terkirim ke pelanggan. Sekarang harus terpisah:
+  // `content` BERSIH, alasannya di `moneyGateIssues`.
+  it('gerbang uang: content BERSIH tanpa prefiks "⚠️", alasan dipersist terpisah ke moneyGateIssues', async () => {
+    conversation.aiMode = AiMode.ai_on;
+    ai.generateReply.mockResolvedValue({
+      text: 'Totalnya Rp161.000 kak, jadi 139000 juga oke',
+      moneyBlocked: true,
+      moneyGateIssues: ['Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000'],
+    });
+
+    (service as any).scheduleAutoReply('c1');
+    await jest.advanceTimersByTimeAsync(8_000);
+
+    const created = prisma.message.create.mock.calls.map((c: any[]) => c[0].data);
+    expect(created).toHaveLength(1);
+    expect(created[0].content).not.toMatch(/⚠️/);
+    expect(created[0].content).toBe('Totalnya Rp161.000 kak, jadi 139000 juga oke');
+    expect(created[0].moneyGateIssues).toEqual([
+      'Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000',
+    ]);
+  });
+
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): sebelum ini TIDAK ADA
+  // notifikasi push/WA sama sekali kalau gerbang uang menahan balasan tunggal
+  // — satu-satunya cara admin tahu adalah buka inbox manual. Sekarang wajib
+  // ada notifikasi, di SEMUA mode AI (bukan cuma mode yang biasanya tidak
+  // dijaga admin), karena ini sinyal bot HAMPIR kirim harga yang belum
+  // terverifikasi — beda dari draft rutin ai_draft yang memang selalu dicek.
+  it('gerbang uang: mengirim notifikasi admin (dulu tidak ada sama sekali) walau mode ai_draft', async () => {
+    conversation.aiMode = AiMode.ai_draft;
+    ai.generateReply.mockResolvedValue({
+      text: 'Bedog Betekok harganya Rp139.000, kak.',
+      moneyBlocked: true,
+      moneyGateIssues: ['Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000'],
+    });
+
+    (service as any).scheduleAutoReply('c1');
+    await jest.advanceTimersByTimeAsync(8_000);
+
+    expect(notifications.send).toHaveBeenCalledTimes(1);
+    const [msg] = notifications.send.mock.calls[0];
+    expect(msg).toMatch(/gerbang uang menahan/i);
+    expect(msg).toContain('6281234567890'); // convo.customer.phoneNumber dari harness
+    expect(msg).toContain('Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000');
   });
 });

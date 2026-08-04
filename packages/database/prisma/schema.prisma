@@ -457,6 +457,12 @@ model Message {
   status         MessageStatus @default(pending)
   aiGenerated    Boolean       @default(false) @map("ai_generated")
   sentinelReviewId String?       @unique @map("sentinel_review_id")
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): alasan penahanan gerbang
+  // uang dulu ditempel LANGSUNG ke `content` sebagai prefiks teks ("⚠️ [gerbang
+  // uang menahan: ...]") — kalau admin klik Approve tanpa edit dulu, teks debug
+  // internal itu ikut terkirim ke pelanggan. Sekarang disimpan terpisah di sini;
+  // `content` selalu bersih (cuma teks balasan asli). Kosong/null = tidak ditahan.
+  moneyGateIssues String[]      @default([]) @map("money_gate_issues")
   externalId     String?       @map("external_id")
   quotedMessageId String?      @map("quoted_message_id")
   reactions      Json?         // { "👍": ["628.."], ... } emoji → reactor jids

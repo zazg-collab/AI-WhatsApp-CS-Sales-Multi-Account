@@ -1,10 +1,18 @@
 'use client';
 
 import { Badge } from '@/components/ui/Badge';
-import type { ConvDetail } from '../inbox.types';
+import type { ConvDetail, Message } from '../inbox.types';
 
 interface SentinelReviewCardProps {
   conversation: ConvDetail;
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): draft yang sedang
+  // ditampilkan ke admin, kalau ada. Sebelumnya kartu ini SELALU baca
+  // `conversation.sentinelReviews[0]` (review TERAKHIR se-percakapan) —
+  // begitu ada draft baru yang belum direview (mis. ditahan gerbang uang)
+  // atau draft untuk topik lain, kartu menampilkan review basi yang tidak
+  // nyambung ke draft yang sedang dilihat admin. Opsional & default kosong
+  // supaya pemanggil lama (tanpa draft aktif) tetap jalan seperti sebelumnya.
+  draftMessages?: Message[];
 }
 
 const riskTone: Record<string, 'success' | 'review' | 'danger'> = {
@@ -14,8 +22,21 @@ const riskTone: Record<string, 'success' | 'review' | 'danger'> = {
   critical: 'danger',
 };
 
-export function SentinelReviewCard({ conversation }: SentinelReviewCardProps) {
-  const review = conversation.sentinelReviews[0];
+export function SentinelReviewCard({ conversation, draftMessages = [] }: SentinelReviewCardProps) {
+  // Draft paling baru yang sedang menunggu approval — kalau ada, review-nya
+  // SENDIRI yang relevan buat admin, bukan review lama se-percakapan.
+  const activeDraft = draftMessages.length ? draftMessages[draftMessages.length - 1] : null;
+  const review = activeDraft ? (activeDraft.sentinelReview ?? null) : (conversation.sentinelReviews[0] ?? null);
+
+  if (activeDraft && !review) {
+    return (
+      <div className="border-b border-gray-200 p-4 dark:border-gray-800">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Draft ini belum direview Sentinel.
+        </p>
+      </div>
+    );
+  }
 
   if (!review) {
     return (
@@ -30,7 +51,7 @@ export function SentinelReviewCard({ conversation }: SentinelReviewCardProps) {
   return (
     <div className="border-b border-gray-200 p-4 dark:border-gray-800">
       <h3 className="mb-3 text-xs font-semibold text-gray-900 dark:text-gray-100">
-        Sentinel AI review
+        Sentinel AI review{!activeDraft ? ' (riwayat)' : ''}
       </h3>
 
       {/* Scores */}

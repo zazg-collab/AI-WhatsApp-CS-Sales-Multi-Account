@@ -290,7 +290,7 @@ export class WaInboundService {
     }
 
     this.logger.debug(`maybeAutoReply: generating reply for ${conversationId}, mode=${convo.aiMode}`);
-    const { text, moneyBlocked } = await this.ai.generateReply(conversationId);
+    const { text, moneyBlocked, moneyGateIssues } = await this.ai.generateReply(conversationId);
     if (!text) { this.logger.debug(`maybeAutoReply: generateReply returned empty text`); return; }
 
     // TOCTOU guard: re-read after AI generation which can take >10s.
@@ -311,7 +311,20 @@ export class WaInboundService {
     // AiService.gateMoneyTokens untuk detail lengkap kenapa ini tidak bisa
     // hanya jadi gerbang Sentinel (post-send untuk AI ON).
     if (moneyBlocked) {
-      await this.storeDraft(conversationId, convo.whatsappAccountId, text);
+      await this.storeDraft(conversationId, convo.whatsappAccountId, text, undefined, undefined, moneyGateIssues);
+      // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): sebelum ini TIDAK
+      // ADA notifikasi sama sekali untuk balasan tunggal yang ditahan gerbang
+      // uang — satu-satunya cara admin tahu adalah buka inbox manual (dan
+      // sebelum perbaikan sebelumnya, "tahu"-nya cuma dari teks "⚠️ [...]"
+      // yang nempel di draft). Sekarang notifikasi dikirim di SEMUA mode AI
+      // (bukan cuma mode yang biasanya tidak dijaga admin) — soalnya ini
+      // bukan draft rutin, ini sinyal bot HAMPIR kirim harga/ongkir yang
+      // belum terverifikasi, layak diberi tahu langsung apa pun mode-nya.
+      this.notifications.send(
+        `⚠️ Gerbang uang menahan balasan
+${convo.customer.phoneNumber}: ${(moneyGateIssues ?? []).join('; ')}
+Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
+      );
       return;
     }
     // <<< ANGGA
@@ -433,12 +446,35 @@ export class WaInboundService {
     for (const segment of segments) {
       const quotedMessageId =
         segment.answersIndex != null ? burst[segment.answersIndex - 1]?.id ?? null : null;
-      await this.storeDraft(conversationId, convo.whatsappAccountId, segment.text, reviewId, quotedMessageId);
+      await this.storeDraft(
+        conversationId,
+        convo.whatsappAccountId,
+        segment.text,
+        reviewId,
+        quotedMessageId,
+        segment.moneyGateIssues,
+      );
+    }
+
+    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): sama seperti balasan
+    // tunggal, segmen burst yang ditahan gerbang uang layak diberi tahu di
+    // SEMUA mode (bukan cuma kalau bukan ai_draft) — ini bukan draft rutin,
+    // ini sinyal bot HAMPIR kirim harga/ongkir yang belum terverifikasi.
+    const moneyGatedSegments = segments.filter((s) => s.moneyGateIssues?.length);
+    if (moneyGatedSegments.length) {
+      const allIssues = moneyGatedSegments.flatMap((s) => s.moneyGateIssues ?? []);
+      this.notifications.send(
+        `⚠️ Gerbang uang menahan balasan
+${convo.customer.phoneNumber}: ${allIssues.join('; ')}
+Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
+      );
     }
 
     // ai_draft admins already watch every draft; only ping for modes that
-    // would normally not need a human (supervised/on).
-    if (fresh.aiMode !== AiMode.ai_draft) {
+    // would normally not need a human (supervised/on). Kalau notifikasi
+    // gerbang uang di atas SUDAH terkirim, tidak perlu dobel dengan yang
+    // generik ini.
+    if (fresh.aiMode !== AiMode.ai_draft && !moneyGatedSegments.length) {
       this.notifications.send(
         `📝 Balasan AI ditahan untuk approval\n${convo.customer.phoneNumber} mengirim beberapa pesan dengan topik berbeda — ${segments.length} draft balasan menunggu dicek admin sebelum kirim.`,
       );
@@ -495,6 +531,7 @@ export class WaInboundService {
     text: string,
     sentinelReviewId?: string,
     quotedMessageId?: string | null,
+    moneyGateIssues?: string[],
   ) {
     const message = await this.prisma.message.create({
       data: {
@@ -505,10 +542,33 @@ export class WaInboundService {
         aiGenerated: true,
         sentinelReviewId,
         quotedMessageId: quotedMessageId ?? undefined,
+        // Alasan penahanan gerbang uang dipersist TERPISAH dari content
+        // (koreksi 2026-08-04, temuan Bossfren) — sebelumnya prefiks
+        // "⚠️ [gerbang uang menahan: ...]" ikut ditulis ke content, artinya
+        // klik "Approve" tanpa "Edit" dulu akan mengirim teks debug internal
+        // itu apa adanya ke pelanggan. content sekarang SELALU bersih.
+        moneyGateIssues: moneyGateIssues?.length ? moneyGateIssues : undefined,
       },
       // Include the quoted source so the dashboard can show which customer
-      // message each segmented draft answers.
-      include: { quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } } },
+      // message each segmented draft answers, and this draft's OWN Sentinel
+      // review (koreksi 2026-08-04, temuan Bossfren) — null when the draft
+      // was created without one (mis. ditahan gerbang uang), which the web
+      // card must show as "belum direview", bukan review lama yang tidak
+      // nyambung.
+      include: {
+        quotedMessage: { select: { id: true, content: true, senderType: true, messageType: true } },
+        sentinelReview: {
+          select: {
+            id: true,
+            decision: true,
+            confidenceScore: true,
+            riskScore: true,
+            riskLevel: true,
+            reason: true,
+            recommendation: true,
+          },
+        },
+      },
     });
     this.logger.debug(`storeDraft: created draft ${message.id} for conversation ${conversationId}`);
     this.events.emitToAccount(accountId, 'message:draft', { conversationId, message });

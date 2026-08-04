@@ -36,9 +36,12 @@ export function DraftControls({
         <Badge tone="review" className="text-xs">
           {multi ? t('draftHeaderMulti', { count: drafts.length }) : t('draftHeader')}
         </Badge>
+        {/* "Setujui semua" cuma menyapu draft yang AMAN — draft yang ditahan
+            gerbang uang (temuan Bossfren 2026-08-04) wajib lewat Edit satu-satu,
+            jangan pernah ikut ter-approve borongan. */}
         {multi && onApprove && (
           <button
-            onClick={() => drafts.forEach((d) => onApprove(d.id))}
+            onClick={() => drafts.filter((d) => !d.moneyGateIssues?.length).forEach((d) => onApprove(d.id))}
             disabled={approving || blocking}
             className="shrink-0 text-xs font-medium text-yellow-700 hover:text-yellow-800 disabled:opacity-50 dark:text-yellow-300 dark:hover:text-yellow-200"
           >
@@ -61,10 +64,29 @@ export function DraftControls({
 
             <p className="text-sm text-gray-800 dark:text-gray-200">{draft.content}</p>
 
+            {/* >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): alasan penahanan
+                gerbang uang ditampilkan di SINI, terpisah dari bubble draft di atas
+                — dulu ikut ditulis sebagai prefiks "⚠️ [...]" di dalam content, jadi
+                klik Approve tanpa Edit dulu mengirim teks debug internal itu apa
+                adanya ke pelanggan. content sekarang selalu bersih; Approve langsung
+                dimatikan untuk draft begini, wajib Edit dulu. */}
+            {!!draft.moneyGateIssues?.length && (
+              <div className="mt-2 rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+                <p className="font-semibold">⚠️ {t('draftMoneyGateTitle')}</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  {draft.moneyGateIssues.map((issue, i) => (
+                    <li key={i}>{issue}</li>
+                  ))}
+                </ul>
+                <p className="mt-1">{t('draftMoneyGateHint')}</p>
+              </div>
+            )}
+
             <div className="mt-2.5 flex gap-2">
               <Button
                 size="sm"
-                disabled={approving || blocking}
+                disabled={approving || blocking || !!draft.moneyGateIssues?.length}
+                title={draft.moneyGateIssues?.length ? t('draftMoneyGateApproveDisabled') : undefined}
                 onClick={() => onApprove?.(draft.id)}
                 className="flex flex-1 items-center justify-center gap-1 whitespace-nowrap"
               >

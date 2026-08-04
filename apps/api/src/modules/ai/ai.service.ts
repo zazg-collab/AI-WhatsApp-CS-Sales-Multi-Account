@@ -31,6 +31,7 @@ import {
   SUMMARIZE_USER,
   SEGMENTED_REPLY_SYSTEM,
   SEGMENTED_REPLY_LIST,
+  MONEY_GATE_RETRY_USER,
   mediaPlaceholder,
   FALLBACK_PHRASE,
   stripDataFences,
@@ -51,6 +52,11 @@ export interface GeneratedReply {
   // yang biasanya kirim tanpa menunggu Sentinel — gerbang ini berjalan di sini
   // (bukan di Sentinel) justru supaya berlaku sama rata di semua mode.
   moneyBlocked?: boolean;
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): alasan penahanan, HANYA
+  // untuk metadata admin (kartu peringatan terpisah di UI) — TIDAK PERNAH
+  // digabung ke `text`. `text` di atas selalu bersih supaya klik Approve tanpa
+  // Edit tidak pernah mengirim teks debug internal ke pelanggan.
+  moneyGateIssues?: string[];
 }
 
 export interface LeadScoreResult {
@@ -131,14 +137,56 @@ export class AiService {
   private async gateMoneyTokens(
     conversationId: string,
     text: string,
-  ): Promise<{ text: string; blocked: boolean }> {
+    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, audit gerbang uang #2):
+    // kalau disediakan, satu percobaan ulang OTOMATIS dengan pesan koreksi
+    // konkret sebelum benar-benar jatuh ke draft manual — insiden nyatanya
+    // (harga Bedog Betekok) model cuma perlu diingatkan sekali soal penanda,
+    // bukan langsung diserahkan ke admin. Sengaja HANYA satu kali (bukan
+    // loop) supaya biaya panggilan LLM ekstra tetap terkontrol dan tidak ada
+    // risiko retry tanpa akhir kalau modelnya memang keras kepala.
+    retry?: { messages: ChatMessage[]; lang: string; model?: string },
+  ): Promise<{ text: string; blocked: boolean; issues?: string[] }> {
     if (!this.shipping) return { text, blocked: false };
     const rendered = await this.shipping.resolvePriceTokens(conversationId, text);
     if (rendered.ok) return { text: rendered.text, blocked: false };
     this.logger.warn(`Gerbang uang menahan balasan ${conversationId}: ${rendered.issues.join('; ')}`);
+
+    if (retry) {
+      this.logger.warn(`Gerbang uang: mencoba ulang sekali dengan koreksi untuk ${conversationId}`);
+      try {
+        const retryMessages: ChatMessage[] = [
+          ...retry.messages,
+          { role: 'assistant', content: rendered.text },
+          { role: 'user', content: t(MONEY_GATE_RETRY_USER, retry.lang)(rendered.text, rendered.issues) },
+        ];
+        let retryText = await this.provider.chat(retryMessages, { model: retry.model, maxTokens: 500 });
+        retryText = stripDataFences(retryText);
+        const retryRendered = await this.shipping.resolvePriceTokens(conversationId, retryText);
+        if (retryRendered.ok) {
+          this.logger.log(`Gerbang uang: percobaan ulang berhasil untuk ${conversationId}`);
+          return { text: retryRendered.text, blocked: false };
+        }
+        this.logger.warn(
+          `Gerbang uang: percobaan ulang tetap ditahan untuk ${conversationId}: ${retryRendered.issues.join('; ')}`,
+        );
+        // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): `text` TIDAK PERNAH
+        // lagi diberi prefiks "⚠️ [...]" — alasannya di `issues`, dipersist
+        // terpisah (`Message.moneyGateIssues`) oleh pemanggil.
+        return { text: retryRendered.text, blocked: true, issues: retryRendered.issues };
+      } catch (err) {
+        // Percobaan ulang sendiri gagal (mis. provider error) — jatuh ke hasil
+        // percobaan PERTAMA yang ditahan, jangan sampai balasannya hilang sama
+        // sekali gara-gara retry-nya yang bermasalah.
+        this.logger.warn(
+          `Gerbang uang: percobaan ulang gagal (${err instanceof Error ? err.message : err}) untuk ${conversationId}`,
+        );
+      }
+    }
+
     return {
-      text: `⚠️ [gerbang uang menahan: ${rendered.issues.join('; ')}]\n${rendered.text}`,
+      text: rendered.text,
       blocked: true,
+      issues: rendered.issues,
     };
   }
 
@@ -221,8 +269,11 @@ export class AiService {
 
     // >>> ANGGA — Fase 113: gerbang uang SEBELUM caching, supaya cache tidak
     // pernah menyimpan (dan mengulang ke pelanggan lain) jawaban yang masih
-    // menahan token/angka bermasalah.
-    const gated = await this.gateMoneyTokens(conversationId, text);
+    // menahan token/angka bermasalah. koreksi 2026-08-04 (audit gerbang uang
+    // #2): satu percobaan ulang otomatis dengan pesan koreksi sebelum jatuh
+    // ke draft manual — `messages`/`resolvedModel` sudah ada di scope ini.
+    const lang = await this.botLang(conversationId);
+    const gated = await this.gateMoneyTokens(conversationId, text, { messages, lang, model });
     text = gated.text;
     const moneyBlocked = gated.blocked;
     // <<< ANGGA
@@ -231,7 +282,7 @@ export class AiService {
       this.cache.set(botId, lastUser as string, text);
     }
 
-    return { text, model: resolvedModel, moneyBlocked };
+    return { text, model: resolvedModel, moneyBlocked, moneyGateIssues: gated.issues };
   }
 
   /**
@@ -247,7 +298,7 @@ export class AiService {
   async generateSegmentedReply(
     conversationId: string,
     burst: Array<{ index: number; content: string | null; messageType: string }>,
-  ): Promise<Array<{ answersIndex: number | null; text: string }>> {
+  ): Promise<Array<{ answersIndex: number | null; text: string; moneyGateIssues?: string[] }>> {
     const lang = await this.botLang(conversationId);
     const base = await this.prompts.buildForConversation(conversationId);
 
@@ -266,8 +317,8 @@ export class AiService {
       raw = await this.provider.chat(messages, { maxTokens: 700, json: true });
     } catch (err) {
       this.logger.warn(`Segmented reply generation failed: ${err}`);
-      const { text } = await this.generateReply(conversationId);
-      return [{ answersIndex: null, text }];
+      const single = await this.generateReply(conversationId);
+      return [{ answersIndex: null, text: single.text, moneyGateIssues: single.moneyGateIssues }];
     }
 
     const validIndexes = new Set(burst.map((m) => m.index));
@@ -289,12 +340,16 @@ export class AiService {
       // wa-inbound.service.ts), tapi tanpa ini admin bisa melihat draft yang
       // masih memuat {{...}} mentah — gerbangnya tetap wajib jalan supaya
       // penanda pendek "gerbang uang menahan" tampil kalau perlu.
+      const withGate: Array<{ answersIndex: number | null; text: string; moneyGateIssues?: string[] }> = [];
       for (const s of segments) {
-        const gated = await this.gateMoneyTokens(conversationId, s.text);
-        s.text = gated.text;
+        // >>> ANGGA — koreksi 2026-08-04 (audit gerbang uang #2): retry sekali
+        // juga untuk tiap segmen burst, sama seperti balasan tunggal —
+        // `base` (prompt dasar percakapan ini) sudah tersedia di scope ini.
+        const gated = await this.gateMoneyTokens(conversationId, s.text, { messages: base, lang, model: undefined });
+        withGate.push({ answersIndex: s.answersIndex, text: gated.text, moneyGateIssues: gated.issues });
       }
       // <<< ANGGA
-      return segments;
+      return withGate;
     } catch (err) {
       // >>> ANGGA: JANGAN pernah memakai `raw` sebagai teks balasan di sini.
       // Panggilan ini MEMINTA JSON; kalau yang datang bukan JSON, itu kegagalan
@@ -304,7 +359,7 @@ export class AiService {
       // Jalur mundur yang benar sudah ada: buat ulang sebagai balasan tunggal.
       this.logger.warn(`Segmented reply parse failed (${err}); falling back to single reply`);
       const single = await this.generateReply(conversationId);
-      return [{ answersIndex: null, text: single.text }];
+      return [{ answersIndex: null, text: single.text, moneyGateIssues: single.moneyGateIssues }];
     }
   }
 

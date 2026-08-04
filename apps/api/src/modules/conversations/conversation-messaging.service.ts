@@ -192,6 +192,19 @@ export class ConversationMessagingService {
     });
     if (!draft) throw new NotFoundException('Draft message not found or already sent');
 
+    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): gerbang uang menahan
+    // draft ini karena isinya BELUM diverifikasi (mis. model menulis angka
+    // rupiah sendiri di luar penanda) — jangan biarkan approve langsung
+    // mengirim apa adanya ke pelanggan. Wajib lewat Edit (editedText terisi)
+    // dulu; UI (DraftControls.tsx) sudah mematikan tombol Approve untuk draft
+    // begini, penjagaan di sini supaya tetap berlaku walau dipanggil lewat
+    // jalur lain (API langsung, dsb — bukan cuma UI).
+    if (draft.moneyGateIssues?.length && !editedText?.trim()) {
+      throw new BadRequestException(
+        'Draft ini ditahan gerbang uang — edit isinya dulu sebelum disetujui, jangan approve langsung.',
+      );
+    }
+
     const text = editedText?.trim() || draft.content || '';
     if (!text) throw new BadRequestException('Draft text is empty');
 

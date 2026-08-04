@@ -140,7 +140,7 @@ export function IntelligencePanel({
       <div key={conversation.id} className="scrollbar-thin flex-1 overflow-y-auto">
         <CustomerCard conversation={conversation} />
 
-        <SentinelReviewCard conversation={conversation} />
+        <SentinelReviewCard conversation={conversation} draftMessages={draftMessages} />
 
         <DraftControls
           draftMessages={draftMessages}
