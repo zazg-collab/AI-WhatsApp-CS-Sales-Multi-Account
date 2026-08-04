@@ -88,6 +88,18 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      # >>> ANGGA: Next MENANAM NEXT_PUBLIC_* ke bundel klien saat `next build`,
+      # jadi nilainya harus sampai sebagai BUILD ARG. `environment:` di bawah
+      # hanya berlaku saat runtime dan TIDAK pernah masuk ke bundel.
+      #
+      # Tanpa ini, `ARG NEXT_PUBLIC_API_URL` kosong → `ENV NEXT_PUBLIC_API_URL=`
+      # (string KOSONG, bukan undefined) → `process.env.X ?? fallback` di
+      # lib/api.ts TIDAK jatuh ke fallback, karena `??` cuma menangkap
+      # null/undefined. API_URL jadi "" → fetch("/auth/login") relatif ke
+      # localhost:3000 → Next tidak punya rute itu → **404 saat login**.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:-http://localhost:3001}
     container_name: hermes-web
     ports:
       - "3000:3000"
