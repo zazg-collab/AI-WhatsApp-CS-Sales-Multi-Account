@@ -22,6 +22,19 @@ export function jidToPhone(jid: string): string {
   return jid.split('@')[0].split(':')[0];
 }
 
+/**
+ * >>> ANGGA: buang akhiran perangkat dari sebuah JID —
+ * `6285722193049:0@s.whatsapp.net` → `6285722193049@s.whatsapp.net`,
+ * `27608184053792:14@lid` → `27608184053792@lid`.
+ *
+ * Baileys multi-device menempelkan nomor perangkat di banyak tempat (kontak
+ * riwayat, `getPNForLID`, event pemetaan LID). Aturan ini dulu ditulis ulang
+ * sebagai regex inline di dua tempat berbeda di contact-sync; sekarang satu.
+ */
+export function bareJid(jid: string): string {
+  return jid.replace(/^([^:@]+):\d+(@\S+)$/, '$1$2');
+}
+
 export function isDirectChatJid(jid: string): boolean {
   // @c.us is WAHA's standard; @s.whatsapp.net appears in some engines' internal
   // fields; @lid is the privacy identifier — accept all on input. Require at

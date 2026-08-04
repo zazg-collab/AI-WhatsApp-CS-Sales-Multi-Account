@@ -1,4 +1,4 @@
-import type { proto } from '@whiskeysockets/baileys';
+import type { proto, WAMessageKey } from '@whiskeysockets/baileys';
 
 /**
  * Engine-agnostic inbound message shape. The rest of the WA module
@@ -10,7 +10,20 @@ export interface WaMessageShape {
     remoteJid: string | null | undefined;
     fromMe: boolean | null | undefined;
     id: string | null | undefined;
-    /** Sender phone/jid in group chats (Baileys `key.participant`). */
+    /**
+     * >>> ANGGA: JID bernomor telepon yang MENYERTAI pesan ber-alamat @lid.
+     *
+     * Baileys 7 menaruhnya di `key.remoteJidAlt` (chat pribadi) atau
+     * `key.participantAlt` (grup). **Bukan** `key.senderPn` — field itu tidak
+     * ada sama sekali di Baileys 7; `sender_pn` hanya nama atribut stanza
+     * mentah yang sudah diterjemahkan Baileys jadi `…Alt` sebelum sampai ke
+     * kita. Membacanya dari nama yang salah membuat seluruh pemetaan LID mati
+     * tanpa satu pun error. Lihat `lid-duplikat.spec.ts` untuk kronologinya.
+     *
+     * Isinya disalin apa adanya, termasuk saat berisi LID (pada chat yang
+     * dialamatkan lewat nomor, arahnya berkebalikan). Yang memutuskan nilai
+     * ini nomor sah atau bukan cuma `ContactSyncService.resolveLidPhone`.
+     */
     senderPn?: string | null;
   };
   /** Display name of sender */
@@ -74,6 +87,7 @@ function unwrap(message: proto.IMessage | null | undefined): proto.IMessage | nu
 /** Normalise a Baileys proto.IWebMessageInfo into the engine-agnostic shape. */
 export function mapBaileysMessage(m: proto.IWebMessageInfo): WaMessageShape {
   if (!m.key) throw new Error('mapBaileysMessage: message missing key');
+  const kunci = m.key as WAMessageKey;
   const msg = unwrap(m.message);
 
   let wahaType = 'text';
@@ -131,7 +145,9 @@ export function mapBaileysMessage(m: proto.IWebMessageInfo): WaMessageShape {
       remoteJid: m.key.remoteJid,
       fromMe: m.key.fromMe,
       id: m.key.id,
-      senderPn: m.key.participant ?? undefined,
+      // >>> ANGGA: `key` sungguhnya bertipe WAMessageKey (IMessageKey + field
+      // …Alt opsional); proto.IWebMessageInfo saja tidak menampakkannya.
+      senderPn: kunci.remoteJidAlt ?? kunci.participantAlt ?? undefined,
     },
     pushName: m.pushName ?? undefined,
     messageTimestamp: toNumber(m.messageTimestamp as LongLike),

@@ -25,13 +25,13 @@ describe('ContactSyncService.mergeCustomerInto', () => {
 
   function service(tx: any) {
     const prisma: any = { $transaction: (fn: any) => fn(tx) };
-    return new ContactSyncService(prisma);
+    return new ContactSyncService(prisma, { getSock: () => undefined } as never);
   }
 
   it('no-ops when from === to', async () => {
     const tx = makeTx();
     const prisma: any = { $transaction: jest.fn() };
-    await new ContactSyncService(prisma).mergeCustomerInto('x', 'x');
+    await new ContactSyncService(prisma, { getSock: () => undefined } as never).mergeCustomerInto('x', 'x');
     expect(prisma.$transaction).not.toHaveBeenCalled();
     void tx;
   });

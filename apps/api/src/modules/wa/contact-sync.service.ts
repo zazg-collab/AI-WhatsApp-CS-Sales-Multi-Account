@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
-import { isDirectChatJid, jidToPhone } from './wa.util';
+import { bareJid, isDirectChatJid, jidToPhone } from './wa.util';
+import { WaSessionStore } from './wa-session.store';
 
 type ContactLike = {
   id?: string;
@@ -18,7 +19,14 @@ type ContactLike = {
 export class ContactSyncService {
   private readonly logger = new Logger(ContactSyncService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // >>> ANGGA: dipakai untuk membaca peta LID milik Baileys sendiri.
+    // WaSessionStore memang dibuat supaya socket bisa dibaca tanpa
+    // ketergantungan melingkar ke WaService — pola yang sama dipakai gateway
+    // dan mirror.
+    private readonly sessions: WaSessionStore,
+  ) {}
 
   /**
    * Merge a duplicate customer into the canonical one (same person, e.g. an
@@ -66,12 +74,85 @@ export class ContactSyncService {
   }
 
   /**
-   * Best-effort resolve a @lid JID to a real phone number by looking up the
-   * whatsapp_contacts table. Returns the phone number if found, or the
-   * original @lid string if unresolved.
+   * >>> ANGGA — SATU-SATUNYA jalan mengubah @lid jadi nomor telepon.
+   *
+   * WhatsApp memakai dua bentuk alamat bergantian untuk orang yang sama:
+   * nomor telepon (`628…@s.whatsapp.net`) dan LID, identitas privasi
+   * (`27608184053792@lid`). Selama LID tidak bisa dipetakan, kedua bentuk itu
+   * jatuh ke kunci unik `(phoneNumber, sourceAccountId)` yang berbeda — dan
+   * satu orang muncul sebagai dua pelanggan, dua percakapan, dua thread.
+   *
+   * Tiga sumber, berurut dari yang paling murah dan paling bisa dipercaya:
+   *
+   *   1. `petunjuk` — nomor yang DIBAWA pesan itu sendiri (`key.remoteJidAlt`
+   *      / `key.participantAlt`). Tanpa I/O, tanpa tebakan.
+   *   2. Peta LID milik Baileys (`signalRepository.lidMapping`). Ini sumber
+   *      resmi: Baileys mengisinya sendiri dari amplop tiap pesan, dari
+   *      sinkron riwayat (`lidPnMappings`), dan dari kueri USync, lalu
+   *      menyimpannya di folder sesi sebagai `lid-mapping-*.json`.
+   *   3. Cermin kita di `whatsapp_contacts` — jaring pengaman waktu socket
+   *      sedang mati (mis. backfill setelah proses restart).
+   *
+   * Hasil dari (1) dan (2) selalu DICATAT lewat `recordLidMapping`, yang
+   * sekaligus menggabungkan pelanggan @lid yang terlanjur lahir ke pelanggan
+   * bernomor asli. Jadi duplikat lama sembuh sendiri pada pesan berikutnya.
+   *
+   * Mengembalikan `lidJid` apa adanya kalau ketiganya gagal — lebih baik satu
+   * kontak berlabel @lid daripada nomor karangan.
+   *
+   * Sebelumnya urutan ini ditulis inline di `MessageIngestService.ingest` dan
+   * langkah (1)-nya membaca `key.senderPn`, field yang tidak pernah ada di
+   * Baileys 7 — sehingga (1) tidak pernah jalan, (2) tidak pernah ada, dan (3)
+   * selalu kosong karena tidak ada yang mengisinya.
    */
-  async resolveLidPhone(accountId: string, lidJid: string): Promise<string> {
+  async resolveLidPhone(accountId: string, lidJid: string, petunjuk?: string | null): Promise<string> {
     if (!lidJid.endsWith('@lid')) return lidJid;
+
+    const dariPesan = this.nomorDariJid(petunjuk);
+    if (dariPesan) return this.catatLaluPakai(accountId, lidJid, dariPesan);
+
+    const dariBaileys = this.nomorDariJid(await this.tanyaPetaBaileys(accountId, lidJid));
+    if (dariBaileys) return this.catatLaluPakai(accountId, lidJid, dariBaileys);
+
+    const dariCermin = await this.nomorDariCermin(accountId, lidJid);
+    if (dariCermin) return dariCermin;
+
+    // Menyerah TANPA jejak adalah bug yang tidak bisa didiagnosis: "belum ada
+    // chat masuk" dan "semua LID gagal dipetakan" sama-sama terlihat sebagai
+    // nol duplikat sampai duplikatnya muncul di layar. Satu baris per LID —
+    // jumlah kontak terbatas, jadi ini tidak akan jadi banjir log.
+    this.logger.warn(
+      `LID ${lidJid} tidak bisa dipetakan ke nomor telepon (petunjuk pesan, peta Baileys, ` +
+        `dan cermin kontak semuanya kosong) — kontaknya akan tampil sebagai @lid.`,
+    );
+    return lidJid;
+  }
+
+  /**
+   * Ambil digit nomor dari sebuah JID, atau null kalau itu bukan nomor.
+   * Menolak: LID lain (pada chat ber-alamat nomor, `remoteJidAlt` justru berisi
+   * LID), penanda arah tanpa digit, dan potongan terlalu pendek untuk jadi
+   * nomor telepon. Satu tempat, supaya aturan "apa itu nomor yang sah" tidak
+   * tercecer di beberapa berkas.
+   */
+  private nomorDariJid(jid?: string | null): string | null {
+    if (!jid || jid.endsWith('@lid')) return null;
+    const digit = jidToPhone(jid);
+    return /^\d{6,}$/.test(digit) ? digit : null;
+  }
+
+  private async tanyaPetaBaileys(accountId: string, lidJid: string): Promise<string | null> {
+    const sock = this.sessions.getSock(accountId);
+    if (!sock) return null;
+    try {
+      return await sock.signalRepository.lidMapping.getPNForLID(lidJid);
+    } catch (err) {
+      this.logger.warn(`Peta LID Baileys gagal dibaca untuk ${lidJid}: ${err}`);
+      return null;
+    }
+  }
+
+  private async nomorDariCermin(accountId: string, lidJid: string): Promise<string | null> {
     const lid = lidJid.split('@')[0];
     try {
       const contact = await this.prisma.whatsappContact.findFirst({
@@ -84,14 +165,18 @@ export class ContactSyncService {
         select: { phoneNumber: true },
         orderBy: { lastSyncedAt: 'desc' },
       });
-      if (contact?.phoneNumber) {
-        this.logger.debug(`Resolved LID ${lidJid} → ${contact.phoneNumber}`);
-        return contact.phoneNumber;
-      }
+      return contact?.phoneNumber ?? null;
     } catch (err) {
-      this.logger.warn(`LID resolution failed for ${lidJid}: ${err}`);
+      this.logger.warn(`Cermin kontak gagal dibaca untuk ${lidJid}: ${err}`);
+      return null;
     }
-    return lidJid;
+  }
+
+  private async catatLaluPakai(accountId: string, lidJid: string, phone: string): Promise<string> {
+    await this.recordLidMapping(accountId, lidJid, phone).catch((err) =>
+      this.logger.warn(`Pemetaan LID gagal disimpan untuk ${lidJid}: ${err}`),
+    );
+    return phone;
   }
 
   /**
@@ -165,7 +250,7 @@ export class ContactSyncService {
     // Baileys multi-device: history contacts can arrive with device suffix
     // like `628123:20@s.whatsapp.net`. Strip it so isDirectChatJid accepts
     // the JID and the upsert key matches the phonebook entry.
-    const jid = rawJid.replace(/^(\d+):\d+(@\S+)$/, '$1$2');
+    const jid = bareJid(rawJid);
     if (!isDirectChatJid(jid)) return;
 
     let phoneNumber = jidToPhone(jid);
@@ -258,9 +343,7 @@ export class ContactSyncService {
     // Normalize device-suffix before the isDirectChatJid filter — same as syncOneContact does.
     const valid = contacts.filter(c => {
       const raw = c.jid ?? c.id;
-      if (!raw) return false;
-      const jid = raw.replace(/^(\d+):\d+(@\S+)$/, '$1$2');
-      return isDirectChatJid(jid);
+      return raw ? isDirectChatJid(bareJid(raw)) : false;
     });
     const BATCH = 10;
     for (let i = 0; i < valid.length; i += BATCH) {

@@ -406,11 +406,9 @@ export class WaMirrorService {
     this.events.emitToAccount(accountId, 'message:new', { conversationId: conversation.id, message });
   }
 
-  async syncContacts(accountId: string, contacts: Parameters<ContactSyncService['syncContacts']>[1]) {
-    return this.contactSync.syncContacts(accountId, contacts);
-  }
-
-  async resolveLidPhone(accountId: string, lid: string) {
-    return this.contactSync.resolveLidPhone(accountId, lid);
-  }
+  // >>> ANGGA: dua penerus kosong (`syncContacts`, `resolveLidPhone`) dihapus
+  // di sini. Keduanya cuma meneruskan ke ContactSyncService dan TIDAK dipanggil
+  // siapa pun — `grep -rn "waMirror.syncContacts\|Mirror.*resolveLidPhone"` = 0.
+  // Pintu kedua ke resolver @lid persis yang bikin aturannya gampang bercabang
+  // diam-diam. Panggil ContactSyncService langsung.
 }

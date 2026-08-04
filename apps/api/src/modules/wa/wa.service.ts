@@ -33,6 +33,7 @@ import { ContactSyncService } from './contact-sync.service';
 import { logAudit } from '../../common/audit.util';
 import {
   backoffDelay,
+  bareJid,
   extForMimetype,
   isDirectChatJid,
   isGroupJid,
@@ -256,6 +257,19 @@ export class WaService implements OnModuleInit {
           this.logger.warn(`Ingest failed for ${m.key?.id}: ${err}`),
         );
       }
+    });
+
+    // >>> ANGGA: Baileys mengumumkan tiap kali ia BELAJAR pasangan LID ↔ nomor
+    // — dari amplop pesan, sinkron riwayat, atau pembaruan profil tertaut.
+    // Sebelum ini tidak ada yang mendengarkannya, jadi pengetahuan itu berhenti
+    // di dalam Baileys dan pelanggan @lid yang terlanjur lahir tidak pernah
+    // tergabung. `recordLidMapping` menyimpan petanya SEKALIGUS menggabungkan
+    // pelanggan @lid ke pelanggan bernomor asli — tanpa menunggu pesan baru.
+    sock.ev.on('lid-mapping.update', async ({ lid, pn }) => {
+      if (!lid || !pn) return;
+      await this.contactSync
+        .recordLidMapping(accountId, bareJid(lid), jidToPhone(bareJid(pn)))
+        .catch((err) => this.logger.warn(`Pemetaan LID dari event gagal disimpan: ${err}`));
     });
 
     sock.ev.on('contacts.upsert', async (contacts) => {

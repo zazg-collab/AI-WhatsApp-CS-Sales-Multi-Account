@@ -65,23 +65,12 @@ export class MessageIngestService {
     const groupChat = isGroupJid(msg.remoteJid);
     let phone = groupChat ? msg.remoteJid : jidToPhone(msg.remoteJid);
 
-    // Resolve @lid JIDs to real phone numbers. Prefer the phone Baileys put on
-    // the message key (senderPn); fall back to the contact-sync mapping table.
+    // >>> ANGGA: @lid diubah jadi nomor telepon oleh SATU resolver di
+    // ContactSyncService — urutan sumbernya, aturan "apa itu nomor yang sah",
+    // dan pencatatan hasilnya semua ada di sana. Dulu ketiganya ditulis inline
+    // di sini, dan langkah pertamanya membaca field Baileys yang salah nama.
     if (!groupChat && phone.endsWith('@lid')) {
-      const fromKey = msg.senderPn ? jidToPhone(msg.senderPn) : '';
-      // WAHA's WebJS engine sometimes puts a bare direction marker ("out"/"in")
-      // in the participant field instead of a real JID — guard against
-      // treating that as a phone number (it has no digits at all).
-      if (fromKey && /^\d+$/.test(fromKey) && !fromKey.endsWith('@lid')) {
-        phone = fromKey;
-        // Persist the lid → phone mapping so later lookups (and the WA Contacts
-        // page) resolve without needing the key again.
-        await this.contactSync
-          .recordLidMapping(msg.accountId, msg.remoteJid, phone)
-          .catch((err) => this.logger.warn(`LID mapping persist failed: ${err}`));
-      } else {
-        phone = await this.contactSync.resolveLidPhone(msg.accountId, phone);
-      }
+      phone = await this.contactSync.resolveLidPhone(msg.accountId, phone, msg.senderPn);
     }
 
     const fromMe = msg.fromMe === true;
