@@ -43,7 +43,8 @@ import { WaSessionStore } from './wa-session.store';
 import { WaGatewayService } from './wa-gateway.service';
 import { WaInboundService } from './wa-inbound.service';
 import { WaMirrorService, type GroupMetadataLike } from './wa-mirror.service';
-import { mapBaileysMessage, isDownloadableMedia } from './wa.types';
+import { mapBaileysMessage, isDownloadableMedia, baileysTimestamp } from './wa.types';
+import { shouldSuppressAutomation } from './inbound-automation.util'; // >>> ANGGA <<<
 import { LearningService } from '../learning/learning.service';
 
 /**
@@ -242,7 +243,16 @@ export class WaService implements OnModuleInit {
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
       if (type !== 'notify' && type !== 'append') return;
       for (const m of messages) {
-        await this.ingestBaileysMessage(accountId, m, type !== 'notify').catch((err) =>
+        // >>> ANGGA: dulu `type !== 'notify'` — menyamakan pesan HIDUP yang
+        // datang lewat `append` (lazim saat socket tersambung ulang) dengan
+        // riwayat, lalu menelannya diam-diam tanpa satu baris log pun.
+        // Sekarang yang menentukan umur pesannya. Lihat util-nya untuk kronologi
+        // insiden Fatih 2026-08-04.
+        const riwayat = shouldSuppressAutomation(type, baileysTimestamp(m));
+        if (riwayat && type !== 'notify') {
+          this.logger.debug(`Automation dilewati (append lama) untuk ${m.key?.id}`);
+        }
+        await this.ingestBaileysMessage(accountId, m, riwayat).catch((err) =>
           this.logger.warn(`Ingest failed for ${m.key?.id}: ${err}`),
         );
       }

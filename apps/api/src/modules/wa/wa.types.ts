@@ -47,6 +47,12 @@ function toNumber(v: LongLike): number | undefined {
   return undefined;
 }
 
+/** >>> ANGGA: waktu kirim (detik Unix) tanpa perlu memetakan seluruh pesan —
+ *  dipakai gerbang otomasi di `messages.upsert` sebelum ingest. */
+export function baileysTimestamp(m: { messageTimestamp?: unknown }): number | undefined {
+  return toNumber(m?.messageTimestamp as LongLike);
+}
+
 /** Strip ephemeral/viewOnce/edit wrappers to reach the real content node. */
 function unwrap(message: proto.IMessage | null | undefined): proto.IMessage | null | undefined {
   let msg = message;
