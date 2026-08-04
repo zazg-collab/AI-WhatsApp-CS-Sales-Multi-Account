@@ -941,6 +941,16 @@ export class ShippingService {
    * soal kenapa Sentinel — yang post-send untuk AI ON — tidak bisa jadi
    * satu-satunya penjaga untuk aturan mutlak "jangan pernah kirim {{...}}").
    */
+  /** Simpan penanda harga produk (`{{harga_produk_N}}`) untuk giliran ini —
+   *  dipanggil `PromptBuilderService` saat blok stok produk disuntik TANPA
+   *  kutipan ongkir aktif (pelanggan tanya harga/stok sebelum menyebut kota
+   *  tujuan). Diisi `resolvePriceTokens` sesudah model menjawab, pola yang
+   *  sama seperti kutipan ongkir (`quoteForConversation` -> `getGroundingText`
+   *  -> `resolvePriceTokens`) — cuma sumber datanya beda. */
+  cacheProductPriceTokens(conversationId: string, tokens: Record<string, string>): void {
+    this.cache.setProductPriceTokens(conversationId, tokens);
+  }
+
   async resolvePriceTokens(
     conversationId: string,
     text: string,
@@ -953,7 +963,14 @@ export class ShippingService {
     }
 
     const quote = this.cache.get(conversationId);
-    const tokens = quote ? buildPriceTokens(quote) : {};
+    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{139000}}"
+    // ronde 2): dua sumber token digabung, bukan saling menggantikan — penanda
+    // harga produk (`{{harga_produk_N}}`, giliran TANPA kutipan ongkir aktif,
+    // lihat `cacheProductPriceTokens`) dan penanda kutipan ongkir (giliran
+    // DENGAN kutipan ongkir aktif) bisa dipakai bersamaan pada satu balasan
+    // yang menyebut harga produk sekaligus ongkirnya. Namespace-nya tidak
+    // pernah tumpang tindih (`harga_produk_*` vs `harga_satuan`/`ongkir`/dst).
+    const tokens = { ...this.cache.getProductPriceTokens(conversationId), ...(quote ? buildPriceTokens(quote) : {}) };
 
     const inserted = new Set<string>();
     const substituted = text.replace(/\{\{([a-z_]+)\}\}/gi, (utuh, nama: string) => {

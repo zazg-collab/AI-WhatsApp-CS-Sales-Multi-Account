@@ -239,6 +239,25 @@ export const PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE = {
   en: 'IMPORTANT — a shipping quote is active in this conversation (see the shipping data & placeholders below): for the price of items that are part of that quote, you MUST use the {{harga_satuan}}/{{subtotal_barang}} PLACEHOLDER from the shipping data — do NOT write the rupiah number yourself here, the money-gate rule wins. Availability/stock can still be stated directly as usual. Items outside that quote can still have their price stated from this stock data.',
 };
 
+// >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{139000}}"
+// ronde 2): giliran TANPA order berongkir aktif tidak punya instruksi gerbang
+// uang APA PUN untuk item di blok stok produk (`PRODUCT_STOCK_PRICE_DEFER_TO_
+// MONEY_GATE` di atas HANYA dipasang kalau order berongkir memang aktif) —
+// padahal `PRODUCT_STOCK_INTRO` sendiri menyuruh model jawab harga LANGSUNG,
+// dan blok stok produk dulu menyuntik angka rupiah MENTAH ke model sebagai
+// data. Modelnya lalu membungkus angka itu jadi penanda palsu (mis.
+// `{{139000}}`) meniru pola token yang ia lihat di giliran lain, ketimbang
+// menuliskannya polos — gerbang uang tetap menahannya (radar angka mentah),
+// tapi admin harus Edit manual setiap kali pelanggan tanya harga sebelum
+// menyebut tujuan. Sekarang harga produk SELALU disebut lewat PENANDA
+// `{{harga_produk_x}}` yang tertulis di sebelah tiap produk berharga — model
+// tidak pernah lagi melihat angkanya sama sekali, sama seperti pola kutipan
+// ongkir.
+export const PRODUCT_PRICE_USE_TOKEN = {
+  id: 'Untuk HARGA produk pada daftar stok di bawah ini, WAJIB pakai PENANDA {{...}} yang tertulis di sebelah tiap produk — sistem yang mengisi nilai sesungguhnya sesudah kamu selesai menjawab. JANGAN pernah menulis angka rupiah sendiri di sini. Ketersediaan/stok tetap boleh disebut langsung seperti biasa.',
+  en: 'For the PRICE of products in the stock list below, you MUST use the {{...}} PLACEHOLDER written next to each priced product — the system fills in the real value after you finish answering. NEVER write a rupiah number yourself here. Availability/stock can still be stated directly as usual.',
+};
+
 export const PRODUCT_AVAILABLE = {
   id: 'TERSEDIA',
   en: 'IN STOCK',

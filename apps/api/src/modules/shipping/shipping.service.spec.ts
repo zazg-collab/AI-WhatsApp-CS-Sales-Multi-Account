@@ -808,6 +808,50 @@ describe('§9.6 — angka bot harus cocok grounding & kelipatan pembulatan', () 
     expect(out.ok).toBe(false);
   });
 
+
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{139000}}"
+  // ronde 2): pelanggan tanya harga/stok SEBELUM menyebut kota tujuan sama
+  // sekali -> belum ada kutipan ongkir aktif (`quoteForConversation` belum
+  // pernah dipanggil untuk percakapan ini) -- TAPI blok stok produk di
+  // prompt-builder.service.ts tetap menyuntik harga produk yang cocok,
+  // sekarang lewat penanda `{{harga_produk_N}}` (dicache lewat
+  // `cacheProductPriceTokens`, bukan lewat kutipan ongkir). Penanda ini
+  // HARUS tetap bisa diisi `resolvePriceTokens` walau tidak ada kutipan
+  // ongkir apa pun -- dua sumber token (produk & ongkir) digabung, bukan
+  // saling menggantikan.
+  describe('ANGGA — penanda harga produk tanpa kutipan ongkir aktif (cacheProductPriceTokens)', () => {
+    it('penanda produk terisi walau belum ada kutipan ongkir (belum ada tujuan)', async () => {
+      const h = harness();
+      h.svc.cacheProductPriceTokens('c1', { harga_produk_a: 'Rp139.000' });
+      const out = await h.svc.resolvePriceTokens('c1', 'Harganya {{harga_produk_a}}, kak.');
+      expect(out.ok).toBe(true);
+      expect(out.text).toBe('Harganya Rp139.000, kak.');
+      expect(out.text).not.toMatch(/\{\{/);
+    });
+
+    it('penanda produk & penanda kutipan ongkir bisa dipakai BERSAMAAN pada giliran yang sama', async () => {
+      const h = harness({
+        products: [{ id: 'p1', sku: 'GLK-01', name: 'Golok Cordova', category: '', description: '', price: 145000, weightGrams: null, status: 'active' }],
+      });
+      h.svc.cacheProductPriceTokens('c1', { harga_produk_a: 'Rp139.000' });
+      await h.svc.quoteForConversation('c1');
+      const out = await h.svc.resolvePriceTokens(
+        'c1',
+        'Bedog Betekok {{harga_produk_a}}, ongkirnya {{ongkir}} kak.',
+      );
+      expect(out.ok).toBe(true);
+      expect(out.text).toContain('Rp139.000');
+      expect(out.text).not.toMatch(/\{\{/);
+    });
+
+    it('penanda produk yang tidak dicache tetap ditahan sebagai tidak dikenal', async () => {
+      const h = harness();
+      const out = await h.svc.resolvePriceTokens('c1', 'Harganya {{harga_produk_a}}, kak.');
+      expect(out.ok).toBe(false);
+      expect(out.issues.join(' ')).toMatch(/tidak dikenal/i);
+    });
+  });
+
   it('resolvePriceTokens: teks tanpa penanda & tanpa angka uang → tidak ada yang ditahan', async () => {
     const h = harness();
     const out = await h.svc.resolvePriceTokens('c1', 'Baik kak, ditunggu ya');

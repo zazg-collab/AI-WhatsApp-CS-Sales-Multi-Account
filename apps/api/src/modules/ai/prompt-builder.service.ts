@@ -26,6 +26,7 @@ import {
   PRODUCT_OUT_OF_STOCK,
   PRODUCT_STOCK_INTRO,
   PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE,
+  PRODUCT_PRICE_USE_TOKEN,
   SECURITY_DIRECTIVE,
   mediaPlaceholder,
   fenceData,
@@ -168,12 +169,38 @@ export class PromptBuilderService {
     // tersedia), tempelkan aturan precedence di blok INI (bukan cuma di
     // `SHIPPING_MONEY_RULE` yang posisinya belakangan & kalah pengaruh) —
     // lihat komentar di `PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE`.
+    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{139000}}"
+    // ronde 2): kalau BELUM ada order berongkir aktif, harga produk juga
+    // TIDAK BOLEH lagi disuntik sebagai angka mentah — model tidak pernah
+    // dikasih instruksi gerbang uang apa pun untuk giliran ini (lihat
+    // `PRODUCT_PRICE_USE_TOKEN`), jadi ia dulu membungkus angka mentahnya
+    // sendiri jadi penanda palsu (mis. `{{139000}}`). Sekarang setiap produk
+    // berharga dapat penanda `{{harga_produk_x}}` (huruf, BUKAN angka — nama
+    // penanda cuma boleh `[a-z_]+`, lihat `resolvePriceTokens`), nilainya
+    // dicache lewat `cacheProductPriceTokens` supaya `resolvePriceTokens`
+    // bisa mengisinya sesudah model menjawab. Order berongkir aktif TIDAK
+    // disentuh sama sekali (precedence #1 di atas tetap seperti semula).
+    const productPriceTokens: Record<string, string> = {};
+    let productPriceTokenIndex = 0;
     const productBlock = products.length
       ? [
           t(PRODUCT_STOCK_INTRO, lang),
           ...(shippingGrounding ? [t(PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE, lang)] : []),
+          ...(!shippingGrounding && products.some((p) => p.price != null)
+            ? [t(PRODUCT_PRICE_USE_TOKEN, lang)]
+            : []),
           ...products.map((p) => {
-            const price = p.price != null ? ` — ${formatProductPrice(p.price, p.currency, botLocale)}` : '';
+            let price = '';
+            if (p.price != null) {
+              if (shippingGrounding) {
+                price = ` — ${formatProductPrice(p.price, p.currency, botLocale)}`;
+              } else {
+                const tokenName = `harga_produk_${String.fromCharCode(97 + productPriceTokenIndex)}`;
+                productPriceTokenIndex += 1;
+                productPriceTokens[tokenName] = formatProductPrice(p.price, p.currency, botLocale);
+                price = ` — {{${tokenName}}}`;
+              }
+            }
             const stockLabel = p.stock > 0
               ? `${t(PRODUCT_AVAILABLE, lang)} (${p.stock}${p.unit ? ` ${p.unit}` : ''})`
               : t(PRODUCT_OUT_OF_STOCK, lang);
@@ -181,6 +208,10 @@ export class PromptBuilderService {
           }),
         ].join('\n')
       : null;
+    if (Object.keys(productPriceTokens).length && this.shipping) {
+      this.shipping.cacheProductPriceTokens(conversationId, productPriceTokens);
+    }
+    // <<< ANGGA
 
     // So rule 12 ("only mention media that's actually available") is grounded
     // in real data, not just a promise the model might ignore.

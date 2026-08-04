@@ -264,7 +264,7 @@ describe('PromptBuilderService', () => {
 
     it('TIDAK menempelkan precedence text di blok stok produk kalau belum ada order berongkir aktif', async () => {
       const products = { relevantForQuery: jest.fn().mockResolvedValue(productWithPrice) };
-      const shipping = { getGroundingText: jest.fn().mockResolvedValue('') }; // belum ada tujuan/order
+      const shipping = { getGroundingText: jest.fn().mockResolvedValue(''), cacheProductPriceTokens: jest.fn() }; // belum ada tujuan/order
       const svc = new PromptBuilderService(prisma, products as any, knowledgeIndex, shipping as any);
       prisma.conversation.findUnique.mockResolvedValue({
         id: 'c1',
@@ -278,6 +278,95 @@ describe('PromptBuilderService', () => {
       expect(shared).not.toMatch(/order berongkir sedang aktif/i);
     });
   });
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{139000}}"
+  // ronde 2): kalau belum ada order berongkir aktif, blok stok produk DULU
+  // tetap menyuntik harga MENTAH ("IDR 139,000") sebagai data referensi ke
+  // model, walau tidak ada instruksi gerbang uang apa pun untuk giliran itu
+  // (lihat tes precedence di atas — precedence-nya HANYA dipasang kalau
+  // shippingGrounding tidak kosong). Modelnya sendiri masih "ingat" pola
+  // {{token}} dari giliran lain di percakapan yang sama, jadi ia membungkus
+  // angka mentah itu jadi penanda palsu `{{139000}}` -- lolos dari
+  // substitusi (nama penanda cuma boleh huruf/underscore) TAPI tetap
+  // tertangkap radar angka mentah `resolvePriceTokens`, jadi gerbang uang
+  // menahan draftnya (aman, tapi admin harus Edit manual setiap kali
+  // ditanya harga sebelum ada tujuan -- bug UX yang berulang persis pola
+  // yang sama). Perbaikannya: harga produk SEKARANG selalu lewat penanda
+  // `{{harga_produk_N}}` juga untuk kasus ini, dicache lewat
+  // `cacheProductPriceTokens` supaya `resolvePriceTokens` bisa mengisinya
+  // nanti -- model tidak pernah lagi melihat angka mentahnya sama sekali.
+  describe('ANGGA — penanda harga produk saat belum ada order berongkir aktif', () => {
+    const productWithPrice = [
+      { name: 'Bedog Betekok', price: 139000, currency: 'IDR', stock: 5, unit: 'pcs', category: null },
+    ];
+
+    it('blok stok produk memakai {{harga_produk_N}}, BUKAN angka mentah, kalau belum ada order berongkir', async () => {
+      const products = { relevantForQuery: jest.fn().mockResolvedValue(productWithPrice) };
+      const cacheProductPriceTokens = jest.fn();
+      const shipping = {
+        getGroundingText: jest.fn().mockResolvedValue(''), // belum ada tujuan/order
+        cacheProductPriceTokens,
+      };
+      const svc = new PromptBuilderService(prisma, products as any, knowledgeIndex, shipping as any);
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1',
+        customer,
+        bot: { persona: { soulMd: 'Saya ramah' }, knowledgeBaseId: null, language: 'id' },
+        messages: [{ senderType: 'customer', content: 'harga bedog betekok berapa?' }],
+      });
+      const msgs = await svc.buildForConversation('c1');
+      const shared = msgs[1].content;
+      expect(shared).toContain('Bedog Betekok');
+      expect(shared).toMatch(/\{\{harga_produk_[a-z]+\}\}/);
+      expect(shared).not.toContain('139,000');
+      expect(shared).not.toContain('139000');
+      expect(cacheProductPriceTokens).toHaveBeenCalledWith('c1', expect.objectContaining({}));
+      const [, tokens] = cacheProductPriceTokens.mock.calls[0];
+      const values = Object.values(tokens);
+      const expectedPrice = (139000).toLocaleString('en-US', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
+      expect(values).toContain(expectedPrice);
+    });
+
+    it('tidak ada produk berharga → cacheProductPriceTokens TIDAK dipanggil sama sekali', async () => {
+      const products = { relevantForQuery: jest.fn().mockResolvedValue([]) };
+      const cacheProductPriceTokens = jest.fn();
+      const shipping = { getGroundingText: jest.fn().mockResolvedValue(''), cacheProductPriceTokens };
+      const svc = new PromptBuilderService(prisma, products as any, knowledgeIndex, shipping as any);
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1',
+        customer,
+        bot: { persona: { soulMd: 'Saya ramah' }, knowledgeBaseId: null, language: 'id' },
+        messages: [{ senderType: 'customer', content: 'halo' }],
+      });
+      await svc.buildForConversation('c1');
+      expect(cacheProductPriceTokens).not.toHaveBeenCalled();
+    });
+
+    it('order berongkir SEDANG aktif → tetap pakai harga mentah seperti sebelumnya (tidak berubah), cacheProductPriceTokens tidak dipanggil', async () => {
+      const products = { relevantForQuery: jest.fn().mockResolvedValue(productWithPrice) };
+      const cacheProductPriceTokens = jest.fn();
+      const shipping = {
+        getGroundingText: jest
+          .fn()
+          .mockResolvedValue(
+            'Jangan pernah menulis nominal rupiah sendiri...\n• {{harga_satuan}} = harga satu barang',
+          ),
+        cacheProductPriceTokens,
+      };
+      const svc = new PromptBuilderService(prisma, products as any, knowledgeIndex, shipping as any);
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'c1',
+        customer,
+        bot: { persona: { soulMd: 'Saya ramah' }, knowledgeBaseId: null, language: 'id' },
+        messages: [{ senderType: 'customer', content: 'harga bedog betekok berapa, kirim ke Mataram?' }],
+      });
+      const msgs = await svc.buildForConversation('c1');
+      const shared = msgs[1].content;
+      expect(shared).toContain('139,000');
+      expect(shared).not.toMatch(/\{\{harga_produk_[a-z]+\}\}/);
+      expect(cacheProductPriceTokens).not.toHaveBeenCalled();
+    });
+  });
+
 
   describe('ANGGA — kata umum tidak boleh memenangkan butir yang tidak relevan', () => {
     /**

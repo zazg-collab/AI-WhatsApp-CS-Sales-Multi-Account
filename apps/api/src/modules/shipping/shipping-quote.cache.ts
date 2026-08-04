@@ -129,6 +129,13 @@ export class ShippingQuoteCache {
   private readonly asks = new Map<string, { count: number; messageId: string }>();
   /** Pilihan tujuan yang sedang ditawarkan ke pelanggan, per percakapan. */
   private readonly pendings = new Map<string, DestinationChoice[]>();
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{139000}}" ronde
+  // 2): penanda harga produk (`{{harga_produk_N}}`) untuk giliran balasan yang
+  // BELUM punya kutipan ongkir aktif (pelanggan tanya harga sebelum menyebut
+  // tujuan). Pola & TTL sama persis `outcomes` di atas — dibangun prompt-builder
+  // saat menulis draft, dibaca sebentar kemudian oleh `resolvePriceTokens` di
+  // proses yang sama, bukan sesuatu yang perlu diingat lama.
+  private readonly productPriceTokens = new Map<string, { tokens: Record<string, string>; at: number }>();
   private hits = 0;
   private misses = 0;
 
@@ -240,6 +247,31 @@ export class ShippingQuoteCache {
     return memo.outcome;
   }
 
+  /** Simpan penanda harga produk (mis. `{{harga_produk_1}}`) untuk giliran ini —
+   *  dipanggil prompt-builder saat blok stok produk disuntik TANPA kutipan
+   *  ongkir aktif (lihat komentar di atas field `productPriceTokens`). */
+  setProductPriceTokens(conversationId: string, tokens: Record<string, string>): void {
+    this.productPriceTokens.set(conversationId, { tokens, at: Date.now() });
+    while (this.productPriceTokens.size > MAX_QUOTE_ENTRIES) {
+      const oldest = this.productPriceTokens.keys().next().value;
+      if (oldest === undefined) break;
+      this.productPriceTokens.delete(oldest);
+    }
+  }
+
+  /** Penanda harga produk yang tersimpan untuk giliran ini, kalau masih segar
+   *  (TTL sama seperti `lastOutcome` — cukup untuk round-trip draft -> resolve
+   *  di proses yang sama). {} kalau tidak ada / sudah kedaluwarsa. */
+  getProductPriceTokens(conversationId: string): Record<string, string> {
+    const memo = this.productPriceTokens.get(conversationId);
+    if (!memo) return {};
+    if (Date.now() - memo.at > OUTCOME_MEMO_MS) {
+      this.productPriceTokens.delete(conversationId);
+      return {};
+    }
+    return memo.tokens;
+  }
+
   stats(): { size: number; hits: number; misses: number; hitRate: number } {
     const total = this.hits + this.misses;
     return {
@@ -255,6 +287,7 @@ export class ShippingQuoteCache {
     this.outcomes.clear();
     this.asks.clear();
     this.pendings.clear();
+    this.productPriceTokens.clear();
     this.hits = 0;
     this.misses = 0;
   }
