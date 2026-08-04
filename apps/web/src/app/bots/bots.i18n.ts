@@ -82,6 +82,15 @@ export const dict: Dict = {
   defaultMode: { id: 'Mode default', en: 'Default mode' },
   waAccounts: { id: 'Akun WhatsApp', en: 'WhatsApp accounts' },
   noAssignedAccounts: { id: 'Belum ada akun yang ditugaskan.', en: 'No accounts assigned yet.' },
+  // >>> ANGGA: keterangan chip mode akun di kartu bot.
+  accountModeHint: {
+    id: 'Mode yang sedang berlaku di akun ini — diwarisi percakapan baru.',
+    en: 'The mode currently in effect on this account — inherited by new conversations.',
+  },
+  accountModeDiffers: {
+    id: 'BERBEDA dari default bot. Akun inilah yang menentukan mode percakapan baru, bukan default bot.',
+    en: 'DIFFERENT from the bot default. This account decides new conversations, not the bot default.',
+  },
   pageTitle: { id: 'Automation Mode', en: 'Automation Mode' },
   pageSubtitle: { id: 'Atur otak chatbot (persona, knowledge, mode AI) dan tugaskan ke akun WhatsApp', en: 'Manage chatbot brains (persona, knowledge, AI mode) and assign them to WhatsApp accounts' },
   newBotBtn: { id: 'Bot baru', en: 'New bot' },

@@ -300,11 +300,32 @@ function BotCard({ bot, onEdit, onDelete }: { bot: Bot; onEdit: () => void; onDe
         <div>
           <p className="mb-1 text-xs text-gray-400">{t('waAccounts')}</p>
           <div className="flex flex-wrap gap-1">
-            {bot.accounts.map((a) => (
-              <span key={a.id} className="flex items-center gap-1 rounded-md bg-gray-50 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                {sessionDot(a.sessionStatus)}{a.accountName}
-              </span>
-            ))}
+            {/* >>> ANGGA: mode akun ditampilkan APA ADANYA di sebelah namanya.
+                Dulu kartu ini cuma menulis "Default mode: ai_supervised" lalu
+                "WhatsApp accounts: Yanvee" — dua baris yang masing-masing benar,
+                tapi berdampingan membuat orang menyimpulkan Yanvee jalan
+                supervised, padahal ia `ai_draft`. Sekarang kalau keduanya
+                berbeda, bedanya kelihatan; itu justru gunanya. */}
+            {bot.accounts.map((a) => {
+              const beda = !!a.aiMode && a.aiMode !== bot.defaultAiMode;
+              return (
+                <span key={a.id} className="flex items-center gap-1 rounded-md bg-gray-50 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                  {sessionDot(a.sessionStatus)}{a.accountName}
+                  {a.aiMode && (
+                    <span
+                      title={beda ? t('accountModeDiffers') : t('accountModeHint')}
+                      className={
+                        beda
+                          ? 'rounded px-1 font-medium text-review-700 dark:text-review-400'
+                          : 'rounded px-1 text-gray-400'
+                      }
+                    >
+                      {a.aiMode}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
           </div>
         </div>
       ) : (

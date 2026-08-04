@@ -14,7 +14,9 @@ export class BotsService {
       include: {
         persona: true,
         knowledgeBase: { select: { id: true, name: true } },
-        accounts: { select: { id: true, accountName: true, phoneNumber: true, sessionStatus: true } },
+        // >>> ANGGA: `aiMode` ikut dikirim supaya kartu bot bisa menampilkan
+        // mode akun yang SEBENARNYA berlaku, bukan cuma default botnya. <<<
+        accounts: { select: { id: true, accountName: true, phoneNumber: true, sessionStatus: true, aiMode: true } },
       },
     });
   }
@@ -25,7 +27,9 @@ export class BotsService {
       include: {
         persona: true,
         knowledgeBase: { select: { id: true, name: true, status: true } },
-        accounts: { select: { id: true, accountName: true, phoneNumber: true, sessionStatus: true } },
+        // >>> ANGGA: `aiMode` ikut dikirim supaya kartu bot bisa menampilkan
+        // mode akun yang SEBENARNYA berlaku, bukan cuma default botnya. <<<
+        accounts: { select: { id: true, accountName: true, phoneNumber: true, sessionStatus: true, aiMode: true } },
       },
     });
     if (!bot) throw new NotFoundException('Bot not found');
@@ -48,11 +52,37 @@ export class BotsService {
 
   async update(id: string, dto: UpdateBotDto) {
     await this.get(id);
-    return this.prisma.bot.update({
+    // >>> ANGGA — mengubah "Default AI mode" harus benar-benar berubah.
+    //
+    // INSIDEN (2026-08-04): kartu bot menampilkan `Default mode: ai_supervised`
+    // tepat di atas `WhatsApp accounts: Yanvee`, sementara akun Yanvee yang
+    // sesungguhnya masih `ai_draft`. Dua baris yang masing-masing benar, tapi
+    // berdampingan membentuk kesimpulan yang salah — dan Bossfren mengambil
+    // keputusan operasional berdasarkan kesimpulan itu.
+    //
+    // Sebabnya: `defaultAiMode` cuma mengalir ke akun saat PENUGASAN berubah
+    // (lihat `assignToAccount`). Bossfren membuat bot dengan mode draft,
+    // menugaskannya, lalu mengedit modenya jadi supervised — penugasannya tidak
+    // berubah, jadi editannya tidak pernah sampai ke mana pun.
+    //
+    // Sekarang menyimpan bot ikut menerapkannya ke akun yang SEDANG ditugaskan.
+    // Ini justru lebih setia pada keterangan yang sudah tertulis di form:
+    // "berlaku saat bot ditugaskan ke sebuah nomor" — botnya memang sedang
+    // ditugaskan. Kalimat keduanya tetap dipegang: percakapan yang sudah
+    // berjalan TIDAK disentuh, modenya diatur per percakapan di Inbox.
+    const bot = await this.prisma.bot.update({
       where: { id },
       data: dto,
       include: { persona: true, knowledgeBase: { select: { id: true, name: true } } },
     });
+    if (dto.defaultAiMode) {
+      await this.prisma.whatsappAccount.updateMany({
+        where: { assignedBotId: id },
+        data: { aiMode: dto.defaultAiMode },
+      });
+    }
+    return bot;
+    // <<< ANGGA
   }
 
   async delete(id: string) {

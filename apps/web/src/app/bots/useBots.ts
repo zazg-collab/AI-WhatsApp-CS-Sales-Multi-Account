@@ -25,6 +25,9 @@ export interface WaAccount {
   accountName: string;
   phoneNumber: string;
   sessionStatus: string;
+  /** >>> ANGGA: mode yang SEDANG berlaku di akun ini — inilah yang diwarisi
+   *  percakapan baru, bukan `Bot.defaultAiMode`. <<< */
+  aiMode?: string;
 }
 
 export interface Bot {

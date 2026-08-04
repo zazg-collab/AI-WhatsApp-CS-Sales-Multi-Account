@@ -102,6 +102,58 @@ describe('ANGGA — Bot.defaultAiMode dipakai saat assign ke akun', () => {
   });
 });
 
+/**
+ * >>> ANGGA — regresi "Default AI mode diedit tapi tidak berubah" (2026-08-04).
+ *
+ * Kartu bot menampilkan `Default mode: ai_supervised` tepat di atas
+ * `WhatsApp accounts: Yanvee`, sementara akun Yanvee sesungguhnya `ai_draft`.
+ * Dua baris yang masing-masing benar, tapi berdampingan membentuk kesimpulan
+ * yang salah — dan keputusan operasional diambil dari kesimpulan itu.
+ *
+ * Sebabnya: `defaultAiMode` cuma mengalir ke akun saat PENUGASAN berubah.
+ * Bossfren membuat bot bermode draft, menugaskannya, lalu mengedit modenya jadi
+ * supervised — penugasan tidak berubah, editannya tidak pernah sampai ke akun.
+ */
+describe('ANGGA — menyimpan bot menerapkan mode ke akun yang sedang ditugaskan', () => {
+  function buat() {
+    const prisma: any = {
+      bot: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'b1', defaultAiMode: AiMode.ai_draft }),
+        update: jest.fn().mockImplementation(({ data }: any) => Promise.resolve({ id: 'b1', ...data })),
+      },
+      whatsappAccount: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    };
+    return { prisma, svc: new BotsService(prisma) };
+  }
+
+  it('mengubah defaultAiMode ikut menyetel akun yang ditugaskan', async () => {
+    const { prisma, svc } = buat();
+    await svc.update('b1', { defaultAiMode: AiMode.ai_supervised } as never);
+    expect(prisma.whatsappAccount.updateMany).toHaveBeenCalledWith({
+      where: { assignedBotId: 'b1' },
+      data: { aiMode: AiMode.ai_supervised },
+    });
+  });
+
+  it('menyimpan field LAIN tidak menyentuh mode akun sama sekali', async () => {
+    const { prisma, svc } = buat();
+    await svc.update('b1', { botName: 'JPBot v2' } as never);
+    expect(prisma.whatsappAccount.updateMany).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Batas yang TETAP dipegang, sesuai kalimat kedua di form: "Conversations
+   * already running are NOT changed". Menaikkan puluhan percakapan aktif dari
+   * draft ke kirim-otomatis diam-diam justru bahaya yang lebih besar.
+   */
+  it('percakapan yang sudah berjalan TIDAK ikut diubah', async () => {
+    const { prisma, svc } = buat();
+    prisma.conversation = { updateMany: jest.fn() };
+    await svc.update('b1', { defaultAiMode: AiMode.ai_on } as never);
+    expect(prisma.conversation.updateMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('ANGGA — gerbang Bot.status di jalur auto-reply', () => {
   let service: any; let ai: any; let percakapan: any;
 
