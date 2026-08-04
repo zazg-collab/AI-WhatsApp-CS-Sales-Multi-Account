@@ -2,6 +2,11 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 COPY apps/web/package*.json ./apps/web/
+# >>> ANGGA: sama seperti Dockerfile api — postinstall root dipanggil npm
+# SEBELUM `COPY . .`, jadi berkasnya harus sudah ada di sini. Penjaga di
+# scripts/postinstall.js yang membuatnya berhenti tanpa db:generate (schema
+# Prisma memang tidak ikut ke build context web).
+COPY scripts/postinstall.js ./scripts/postinstall.js
 RUN npm ci
 COPY . .
 # Next.js inlines NEXT_PUBLIC_* into the client bundle at build time, so they
