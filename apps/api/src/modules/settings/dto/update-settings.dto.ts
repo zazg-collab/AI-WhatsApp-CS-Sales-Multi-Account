@@ -168,6 +168,37 @@ class ShippingSettingsDto {
   @IsObject()
   @Validate(AliasDatarConstraint)
   destinationAliases?: Record<string, string>;
+
+  // >>> ANGGA — Order Context Log (blueprint 2026-08-04): field kebijakan
+  // memori order. WAJIB terdaftar di sini — ValidationPipe global memakai
+  // forbidNonWhitelisted, jadi field yang tidak dideklarasikan DITOLAK
+  // ("property X should not exist") walau field-nya sudah ada di
+  // ShippingSettings (insiden nyata saat pertama disimpan dari
+  // /settings/shipping, 2026-08-04).
+  @IsOptional() @IsNumber() @Min(1) @Max(720)
+  orderContextStaleHours?: number;
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderCancelKeywords?: string[];
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderAggregateKeywords?: string[];
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderAffirmationKeywords?: string[];
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderNegationKeywords?: string[];
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderFillerWords?: string[];
+
+  @IsOptional() @IsString()
+  orderClosingNote?: string;
+
+  @IsOptional() @IsIn(['prompt_only', 'retry_once'])
+  orderBridgeEnforcement?: 'prompt_only' | 'retry_once';
+  // <<< ANGGA (Order Context Log)
 }
 // <<< ANGGA
 

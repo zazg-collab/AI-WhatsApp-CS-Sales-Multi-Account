@@ -276,6 +276,10 @@ export default function ShippingSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // >>> ANGGA — Order Context Log: state simpan terpisah utk section memori order.
+  const [savedOcMsg, setSavedOcMsg] = useState<string | null>(null);
+  const [savingOc, setSavingOc] = useState(false);
+  // <<< ANGGA
 
   // Uji ongkir
   const [testCity, setTestCity] = useState('');
@@ -306,6 +310,7 @@ export default function ShippingSettingsPage() {
   function patch<K extends keyof ShippingSettings>(key: K, value: ShippingSettings[K] | string) {
     setData((prev) => (prev ? { ...prev, [key]: value } : prev));
     setSavedMsg(null);
+    setSavedOcMsg(null); // >>> ANGGA — Order Context Log <<<
   }
 
   async function save() {
@@ -326,16 +331,11 @@ export default function ShippingSettingsPage() {
         priceRoundingIncrement: Number(data.priceRoundingIncrement),
         shippingDiscountPercentMax: Number(data.shippingDiscountPercentMax), // >>> ANGGA — Fase 113 <<<
         destinationAliases: parseAliases(aliasText), // >>> ANGGA <<<
-        // >>> ANGGA — Order Context Log
-        orderContextStaleHours: Number(data.orderContextStaleHours),
-        orderCancelKeywords: data.orderCancelKeywords,
-        orderAggregateKeywords: data.orderAggregateKeywords,
-        orderAffirmationKeywords: data.orderAffirmationKeywords,
-        orderNegationKeywords: data.orderNegationKeywords,
-        orderFillerWords: data.orderFillerWords,
-        orderClosingNote: data.orderClosingNote,
-        orderBridgeEnforcement: data.orderBridgeEnforcement,
-        // <<< ANGGA
+        // Field "Memori order percakapan" SENGAJA tidak ikut di sini —
+        // section itu punya tombol simpan sendiri (permintaan Bossfren
+        // 2026-08-04): kebijakan memori order tersimpan terpisah dari
+        // kredensial/aturan kurir, walau sama-sama kategori `shipping`
+        // (server melakukan partial merge per kategori).
       };
       // Kunci kosong = pertahankan yang tersimpan (server juga menjaga ini).
       if (apiKeyInput.trim()) payload.mengantarApiKey = apiKeyInput.trim();
@@ -355,6 +355,40 @@ export default function ShippingSettingsPage() {
       setSaving(false);
     }
   }
+
+  // >>> ANGGA — Order Context Log: simpan section "Memori order percakapan"
+  // TERPISAH dari section kredensial/kurir (permintaan Bossfren 2026-08-04).
+  // Server melakukan partial merge per kategori, jadi payload ini hanya
+  // membawa field memori order — kredensial tidak pernah ikut tersentuh.
+  async function saveOrderMemory() {
+    if (!data) return;
+    setSavingOc(true);
+    setError(null);
+    setSavedOcMsg(null);
+    try {
+      const payload = {
+        orderContextStaleHours: Number(data.orderContextStaleHours),
+        orderCancelKeywords: data.orderCancelKeywords,
+        orderAggregateKeywords: data.orderAggregateKeywords,
+        orderAffirmationKeywords: data.orderAffirmationKeywords,
+        orderNegationKeywords: data.orderNegationKeywords,
+        orderFillerWords: data.orderFillerWords,
+        orderClosingNote: data.orderClosingNote,
+        orderBridgeEnforcement: data.orderBridgeEnforcement,
+      };
+      const updated = await api<{ shipping: ShippingSettings }>('/settings', {
+        method: 'PUT',
+        body: JSON.stringify({ shipping: payload }),
+      });
+      setData(updated.shipping);
+      setSavedOcMsg(t('saved'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('saveError'));
+    } finally {
+      setSavingOc(false);
+    }
+  }
+  // <<< ANGGA
 
   async function runTest() {
     setTesting(true);
@@ -523,8 +557,24 @@ export default function ShippingSettingsPage() {
                   </Field>
                 </div>
 
-                {/* >>> ANGGA — Order Context Log (blueprint 2026-08-04) */}
-                <h2 className="pt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{t('ocTitle')}</h2>
+              </div>
+
+              <div className="mt-5 flex items-center gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">
+                <Button onClick={save} disabled={!canEdit || saving}>
+                  <FloppyDisk className="h-4 w-4" aria-hidden="true" />
+                  {saving ? t('saving') : t('save')}
+                </Button>
+                {savedMsg && <span className="text-[13px] font-medium text-channel-700 dark:text-channel-400">{savedMsg}</span>}
+              </div>
+            </Card>
+
+            {/* >>> ANGGA — Order Context Log (blueprint 2026-08-04): KARTU
+                TERPISAH dengan tombol simpan sendiri (permintaan Bossfren) —
+                menyimpan kebijakan memori order tidak menyentuh payload
+                kredensial/kurir di kartu atas. */}
+            <Card className="mt-4 p-4 sm:p-5">
+              <div className="space-y-4">
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('ocTitle')}</h2>
                 <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">{t('ocIntro')}</p>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Field label={t('ocStale')} hint={t('ocStaleHint')}>
@@ -572,17 +622,16 @@ export default function ShippingSettingsPage() {
                     onChange={(e) => patch('orderClosingNote', e.target.value)}
                   />
                 </Field>
-                {/* <<< ANGGA */}
               </div>
-
               <div className="mt-5 flex items-center gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">
-                <Button onClick={save} disabled={!canEdit || saving}>
+                <Button onClick={saveOrderMemory} disabled={!canEdit || savingOc}>
                   <FloppyDisk className="h-4 w-4" aria-hidden="true" />
-                  {saving ? t('saving') : t('save')}
+                  {savingOc ? t('saving') : t('save')}
                 </Button>
-                {savedMsg && <span className="text-[13px] font-medium text-channel-700 dark:text-channel-400">{savedMsg}</span>}
+                {savedOcMsg && <span className="text-[13px] font-medium text-channel-700 dark:text-channel-400">{savedOcMsg}</span>}
               </div>
             </Card>
+            {/* <<< ANGGA */}
 
             {/* Uji ongkir — pola "kolom uji pertanyaan" di menu Knowledge. */}
             <Card className="mt-4 p-4 sm:p-5">
