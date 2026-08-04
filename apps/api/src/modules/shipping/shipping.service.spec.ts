@@ -983,6 +983,27 @@ describe('§9.8 — cache 6 jam: tujuan sama tidak memicu panggilan API berulang
     expect(second.quote.goodsTotal).not.toBe(first.quote.goodsTotal);
   });
 
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, live testing): pelanggan
+  // tanya "kalau beli 2 gmn kak?" (mengubah qty barang YANG SAMA, tanpa kata
+  // "tambah"/"nambah"/"plus"/angka+satuan seperti "2 pcs") — ORDER_CHANGE_HINT
+  // lama tidak menangkap frasa "beli <angka>" sama sekali, jadi cache lama
+  // (qty=1) dipakai apa adanya dan modelnya terpaksa mengarang sendiri "2 x
+  // Rp139.000 = Rp139.000" (salah matematika) karena tidak ada penanda total
+  // qty=2 yang disediakan sistem. Insiden nyata di produksi.
+  it('pelanggan tanya "kalau beli 2 gmn kak?" → total dihitung ulang untuk qty baru, bukan pakai cache qty lama', async () => {
+    const h = harness();
+    const first: any = await h.svc.quoteForConversation('c1');
+    expect(first.quote.goodsTotal).toBe(150000); // qty=1 x Golok Cordova 150rb
+
+    h.prisma.message.findFirst.mockResolvedValue({ content: 'kalau beli 2 gmn kak? jadi berapa?' });
+    h.provider.chat.mockResolvedValue(JSON.stringify({
+      kota: 'Medan',
+      items: [{ nama: 'Golok Cordova', qty: 2 }],
+    }));
+    const second: any = await h.svc.quoteForConversation('c1');
+    expect(second.quote.goodsTotal).toBe(300000); // qty=2 x 150rb, BUKAN cache qty=1 lama
+  });
+
   it('cache kedaluwarsa setelah TTL', async () => {
     const h = harness({ config: { quoteCacheTtlMs: 1 } });
     await h.svc.quoteForConversation('c1');

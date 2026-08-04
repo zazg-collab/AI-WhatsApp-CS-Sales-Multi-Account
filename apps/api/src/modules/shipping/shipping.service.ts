@@ -68,9 +68,19 @@ export const PLACE_HINT =
  * hanya menyebut perubahan KOTA sebagai pemicu reset; kalau hanya itu yang
  * dicek, total transfer/COD yang di-cache jadi salah begitu pelanggan menambah
  * barang. Dicatat eksplisit sebagai penguatan sadar, bukan penyimpangan diam.
+ *
+ * >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden nyata di produksi):
+ * pola lama TIDAK menangkap "kalau beli 2 gmn kak?" sama sekali (bukan
+ * "tambah"/"nambah"/"plus"/"lagi", bukan "jadi <angka>" karena "jadi" di situ
+ * diikuti "berapa" bukan angka, bukan juga "<angka> pcs/buah/unit"). Cache
+ * qty=1 lama dipakai apa adanya, dan model terpaksa mengarang sendiri "2 x
+ * Rp139.000 = Rp139.000" (matematika salah) karena sistem tidak menyediakan
+ * penanda total untuk qty baru itu. Ditambahkan pola verba-beli + angka
+ * ("beli/pesan/ambil/order/mau <angka>") supaya frasa qty-change paling umum
+ * di bahasa sehari-hari ikut memicu reset & kutip ulang.
  */
 export const ORDER_CHANGE_HINT =
-  /(tambah|nambah|sekalian|plus|lagi|jadi\s*\d+|ganti|kurangi|batal(kan)?\s+(satu|yang)|\b\d+\s*(pcs|pc|buah|biji|unit|set|lusin)\b)/i;
+  /(tambah|nambah|sekalian|plus|lagi|jadi\s*\d+|ganti|kurangi|batal(kan)?\s+(satu|yang)|\b\d+\s*(pcs|pc|buah|biji|unit|set|lusin)\b|(beli|pesan|ambil|order|mau)\s*\d+)/i;
 
 /**
  * Ambang skor pencocokan nama produk ke katalog. `scoreProductMatch` memberi
