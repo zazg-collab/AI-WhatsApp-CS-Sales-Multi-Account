@@ -1175,3 +1175,28 @@ describe('pembantu murni & kontrak grounding', () => {
     expect(MengantarClient.redact(url, 'API-RAHASIA123')).toContain('***');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// >>> ANGGA — Order Context Log (blueprint 2026-08-04), Langkah 1 (T1):
+// riwayat yang dibaca extractor WAJIB bebas draft mati. Draft `pending` (belum
+// di-approve) dan `failed` (tersalip/ditolak) tidak pernah dilihat pelanggan —
+// tapi tersimpan sebagai baris Message biasa, dan sebelum fix ini ikut terkirim
+// ke LLM ekstraksi sebagai giliran "assistant", termasuk draft tertahan gerbang
+// uang yang masih memuat `{{token}}` literal (loop pencemaran diri, temuan
+// audit 2026-08-04).
+describe('Order Context Log — T1: riwayat extractor bebas draft mati', () => {
+  it('query riwayat menyaring pesan bot yang tidak pernah terkirim (pending/failed)', async () => {
+    const h = harness();
+    await h.svc.extractOrderTarget('c1');
+    const call = h.prisma.conversation.findUnique.mock.calls[0][0];
+    const msgSelect = call.select.messages;
+    // Pesan customer SELALU ikut; pesan non-customer hanya yang benar-benar
+    // sampai (sent/delivered/read).
+    expect(msgSelect.where).toEqual({
+      OR: [
+        { senderType: 'customer' },
+        { status: { in: ['sent', 'delivered', 'read'] } },
+      ],
+    });
+  });
+});

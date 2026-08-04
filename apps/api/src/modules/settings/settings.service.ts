@@ -167,6 +167,35 @@ export class SettingsService {
           malang: 'klojen',
           padang: 'padang barat',
         }),
+        // >>> ANGGA — Order Context Log (blueprint 2026-08-04): kebijakan
+        // memori order percakapan. Angka & daftar default = ketok/usulan yang
+        // disetujui Bossfren 2026-08-04; semuanya bisa diubah dari
+        // /settings/shipping tanpa deploy, kode tidak punya salinannya.
+        orderContextStaleHours: this.num(this.config.get('ORDER_CONTEXT_STALE_HOURS'), 24),
+        orderCancelKeywords: this.list(this.config.get('ORDER_CANCEL_KEYWORDS'), [
+          'batal', 'gak jadi', 'ga jadi', 'nggak jadi', 'tidak jadi', 'cancel',
+        ]),
+        orderAggregateKeywords: this.list(this.config.get('ORDER_AGGREGATE_KEYWORDS'), [
+          'semuanya', 'semua', 'seluruhnya', 'sekaligus', 'digabung', 'gabung',
+          'totalin semua', 'dua-duanya', 'tiga-tiganya', 'borong', 'sama yang tadi',
+        ]),
+        orderAffirmationKeywords: this.list(this.config.get('ORDER_AFFIRMATION_KEYWORDS'), [
+          'iya', 'iyaa', 'ya', 'yup', 'betul', 'bener', 'benar', 'itu',
+          'oke', 'ok', 'sip', 'gas', 'boleh', 'mau', 'jadi', 'lanjut',
+        ]),
+        orderNegationKeywords: this.list(this.config.get('ORDER_NEGATION_KEYWORDS'), [
+          'gak', 'ga', 'nggak', 'ngga', 'bukan', 'jangan', 'tidak', 'no',
+        ]),
+        orderFillerWords: this.list(this.config.get('ORDER_FILLER_WORDS'), [
+          'kak', 'ka', 'dong', 'deh', 'aja', 'sih', 'min', 'gan', 'bang',
+          'mas', 'mbak', 'pak', 'bu', 'nya', 'yg', 'yang', 'yaudah', 'udah',
+        ]),
+        orderClosingNote: (this.config.get<string>('ORDER_CLOSING_NOTE') ?? '').trim(),
+        orderBridgeEnforcement:
+          this.config.get<string>('ORDER_BRIDGE_ENFORCEMENT') === 'prompt_only'
+            ? 'prompt_only'
+            : 'retry_once',
+        // <<< ANGGA (Order Context Log)
       },
       // <<< ANGGA
     };

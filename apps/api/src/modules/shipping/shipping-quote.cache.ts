@@ -30,6 +30,7 @@ export type ShippingOutcome =
   | 'need_more_detail'
   | 'destination_stuck'
   | 'unresolved_items'
+  | 'item_ambiguous' // >>> ANGGA — Order Context Log: nama barang cocok >1 produk, bot bertanya <<<
   | 'no_courier'
   | 'api_error'
   | 'not_configured';
@@ -69,8 +70,10 @@ export interface ShippingQuote {
   // satunya pemakainya adalah `checkPriceGrounding`, yang juga dihapus).
   /** Rincian per barang yang cocok katalog — sumber {{rincian_order}} dan
    *  {{harga_satuan}} (yang terakhir HANYA ditawarkan kalau seluruh barang di
-   *  order ini satu harga; lihat `buildPriceTokens`). Kosong kalau shippingOnly. */
-  matchedItems: Array<{ name: string; qty: number; unitPrice: number; lineTotal: number }>;
+   *  order ini satu harga; lihat `buildPriceTokens`). Kosong kalau shippingOnly.
+   *  >>> ANGGA — Order Context Log: productId/sku ikut disimpan sebagai
+   *  identitas untuk snapshot log (merge per identitas, bukan per nama). <<< */
+  matchedItems: Array<{ productId?: string; sku?: string | null; name: string; qty: number; unitPrice: number; lineTotal: number }>;
   /** Ongkir TRANSFER saja (estimatedPrice kurir terpilih) — sumber {{ongkir}}. */
   shippingFee: number;
   /** Potongan ongkir TRANSFER, sudah dibulatkan ke BAWAH ke priceRoundingIncrement
@@ -107,6 +110,17 @@ export interface DestinationChoice {
   destinationId: string;
 }
 
+// >>> ANGGA — Order Context Log: pilihan BARANG yang sedang ditawarkan
+// ("Bedog Betekok maksudnya kak?"), padanan `DestinationChoice` untuk tangga
+// ambiguitas barang. `qty`/`city` dari konteks saat pertanyaan diajukan supaya
+// jawaban pelanggan tinggal dipetakan tanpa ekstraksi ulang.
+export interface ItemChoicePending {
+  candidates: Array<{ productId: string; name: string }>;
+  qty: number;
+  city: string | null;
+}
+// <<< ANGGA
+
 interface Entry {
   quote: ShippingQuote;
   expiresAt: number;
@@ -136,6 +150,17 @@ export class ShippingQuoteCache {
   // saat menulis draft, dibaca sebentar kemudian oleh `resolvePriceTokens` di
   // proses yang sama, bukan sesuatu yang perlu diingat lama.
   private readonly productPriceTokens = new Map<string, { tokens: Record<string, string>; at: number }>();
+  // >>> ANGGA — Order Context Log (blueprint 2026-08-04):
+  // `itemPendings` = pilihan BARANG yang sedang ditawarkan ke pelanggan
+  // (tangga ambiguitas barang, meniru `pendings` kota di atas — menambal bug
+  // laten `sort[0]` yang memilih diam-diam saat skor produk seri).
+  // `assumeds` = penanda bahwa kutipan giliran ini dihitung dari ASUMSI order
+  // terakhir / gabungan log (bukan sebutan eksplisit pelanggan di pesan itu) —
+  // dibaca `resolvePriceTokens` untuk enforcement bridge-validasi. TTL pendek
+  // (OUTCOME_MEMO_MS): draft dibuat lalu diresolve dalam hitungan detik.
+  private readonly itemPendings = new Map<string, ItemChoicePending>();
+  private readonly assumeds = new Map<string, { productNames: string[]; aggregate: boolean; at: number }>();
+  // <<< ANGGA
   private hits = 0;
   private misses = 0;
 
@@ -272,6 +297,50 @@ export class ShippingQuoteCache {
     return memo.tokens;
   }
 
+  // >>> ANGGA — Order Context Log: tangga ambiguitas barang + penanda asumsi.
+  setPendingItems(conversationId: string, pending: ItemChoicePending): void {
+    this.itemPendings.delete(conversationId);
+    this.itemPendings.set(conversationId, pending);
+    while (this.itemPendings.size > MAX_QUOTE_ENTRIES) {
+      const oldest = this.itemPendings.keys().next().value;
+      if (oldest === undefined) break;
+      this.itemPendings.delete(oldest);
+    }
+  }
+
+  pendingItems(conversationId: string): ItemChoicePending | null {
+    return this.itemPendings.get(conversationId) ?? null;
+  }
+
+  clearPendingItems(conversationId: string): void {
+    this.itemPendings.delete(conversationId);
+  }
+
+  /** Tandai kutipan giliran ini hasil ASUMSI (default-ke-terbaru / agregat). */
+  setAssumed(conversationId: string, productNames: string[], aggregate: boolean): void {
+    this.assumeds.set(conversationId, { productNames, aggregate, at: Date.now() });
+    while (this.assumeds.size > MAX_QUOTE_ENTRIES) {
+      const oldest = this.assumeds.keys().next().value;
+      if (oldest === undefined) break;
+      this.assumeds.delete(oldest);
+    }
+  }
+
+  assumed(conversationId: string): { productNames: string[]; aggregate: boolean } | null {
+    const memo = this.assumeds.get(conversationId);
+    if (!memo) return null;
+    if (Date.now() - memo.at > OUTCOME_MEMO_MS) {
+      this.assumeds.delete(conversationId);
+      return null;
+    }
+    return { productNames: memo.productNames, aggregate: memo.aggregate };
+  }
+
+  clearAssumed(conversationId: string): void {
+    this.assumeds.delete(conversationId);
+  }
+  // <<< ANGGA
+
   stats(): { size: number; hits: number; misses: number; hitRate: number } {
     const total = this.hits + this.misses;
     return {
@@ -288,6 +357,8 @@ export class ShippingQuoteCache {
     this.asks.clear();
     this.pendings.clear();
     this.productPriceTokens.clear();
+    this.itemPendings.clear(); // >>> ANGGA — Order Context Log <<<
+    this.assumeds.clear(); // >>> ANGGA — Order Context Log <<<
     this.hits = 0;
     this.misses = 0;
   }

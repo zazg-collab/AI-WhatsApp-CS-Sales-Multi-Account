@@ -134,6 +134,50 @@ const dict: Dict = {
     en: 'Calculated from the SHIPPING FEE (not the total), rounded down so it never exceeds this cap. The system computes and writes the amount via the {{diskon_ongkir}} placeholder — the bot never invents a discount figure itself.',
   },
 
+  // >>> ANGGA — Order Context Log (blueprint 2026-08-04)
+  ocTitle: { id: 'Memori order percakapan', en: 'Conversation order memory' },
+  ocIntro: {
+    id: 'Bot mengingat barang/qty/tujuan yang sedang dibahas per percakapan (log order). Semua kebijakan di bawah dibaca sistem secara deterministik — bukan tebakan model.',
+    en: 'The bot remembers the items/qty/destination under discussion per conversation (order log). Every policy below is read deterministically by the system — not model guesswork.',
+  },
+  ocStale: { id: 'Umur segar entri log (jam)', en: 'Log entry freshness (hours)' },
+  ocStaleHint: {
+    id: 'Lebih tua dari ini, entri tidak dipakai menjawab angka — hanya boleh dipakai menyusun pertanyaan konfirmasi ("yang kemarin Golok itu ya kak?").',
+    en: 'Older entries are never used to answer figures — only to phrase a confirmation question ("the Golok from yesterday, right?").',
+  },
+  ocCancel: { id: 'Kata pembatalan order utuh', en: 'Whole-order cancel words' },
+  ocCancelHint: {
+    id: 'Berlaku hanya kalau seluruh pesan cuma berisi kata ini + kata pengisi. "batal yang golok aja" = pembatalan parsial, ditangani sebagai perubahan order biasa.',
+    en: 'Applies only when the whole message is just these words + fillers. "cancel just the golok" is a partial cancel, handled as a normal order change.',
+  },
+  ocAggregate: { id: 'Kata makna gabungan', en: 'Aggregate-intent words' },
+  ocAggregateHint: {
+    id: '"total semuanya" → bot menjumlah SEMUA order segar di log dan WAJIB membacakan daftar barangnya sekalian, supaya pelanggan bisa koreksi.',
+    en: '"total for everything" → the bot sums ALL fresh log entries and MUST read the item list back so the customer can correct it.',
+  },
+  ocAffirm: { id: 'Kata afirmasi pilihan barang', en: 'Item-choice affirmation words' },
+  ocAffirmHint: {
+    id: 'Jawaban "iya yg itu" atas pertanyaan pilihan barang. Hanya dihitung kalau SELURUH pesan terdiri dari kata ini + pengisi, dan bot memang sedang menawarkan pilihan.',
+    en: 'Answers like "yes that one" to an item-choice question. Counted only when the WHOLE message is these words + fillers, and a choice is actually pending.',
+  },
+  ocNegation: { id: 'Kata negasi', en: 'Negation words' },
+  ocNegationHint: { id: 'Membatalkan afirmasi ("gak", "bukan").', en: 'Cancels an affirmation ("no", "not").' },
+  ocFiller: { id: 'Kata pengisi netral', en: 'Neutral filler words' },
+  ocFillerHint: { id: 'Diabaikan pencocok whole-message ("kak", "deh", "dong").', en: 'Ignored by the whole-message matcher.' },
+  ocClosingNote: { id: 'Catatan penutup order (S&K COD & pemesanan)', en: 'Order closing note (COD & ordering T&C)' },
+  ocClosingNoteHint: {
+    id: 'Nilai penanda {{catatan_sk}} — bot menaruh penandanya, sistem menempel teks ini apa adanya (tidak pernah diparafrase model). Terkirimnya pesan berisi teks ini = order dianggap SELESAI dan memori order mulai bersih. Kosong = fitur penutupan otomatis mati (order selesai hanya lewat resolve percakapan).',
+    en: 'The value of the {{catatan_sk}} placeholder — the bot places the marker, the system pastes this text verbatim (never paraphrased). Sending a message containing it marks the order COMPLETED and resets the order memory. Empty = auto-closing off (orders complete only via resolving the conversation).',
+  },
+  ocBridge: { id: 'Enforcement bridge-validasi', en: 'Bridge-validation enforcement' },
+  ocBridgeHint: {
+    id: 'Saat bot menjawab pakai ASUMSI order terakhir, jawabannya wajib menyebut nama barangnya. retry_once: draft yang melanggar dikoreksi otomatis sekali, tetap gagal → ditahan jadi draft. prompt_only: cuma instruksi, tanpa penahanan.',
+    en: 'When the bot answers from the LATEST-order assumption it must name the item. retry_once: a violating draft is auto-corrected once, still failing → held as draft. prompt_only: instruction only, no hold.',
+  },
+  ocBridgeRetry: { id: 'retry_once — koreksi otomatis lalu tahan (disarankan)', en: 'retry_once — auto-correct then hold (recommended)' },
+  ocBridgePrompt: { id: 'prompt_only — instruksi saja', en: 'prompt_only — instruction only' },
+  // <<< ANGGA
+
   // Uji
   testTitle: { id: 'Uji hitung ongkir', en: 'Test a shipping quote' },
   testIntro: {
@@ -184,6 +228,16 @@ interface ShippingSettings {
   priceRoundingIncrement: number;
   shippingDiscountPercentMax: number; // >>> ANGGA — Fase 113 <<<
   destinationAliases: Record<string, string>; // >>> ANGGA <<<
+  // >>> ANGGA — Order Context Log (blueprint 2026-08-04)
+  orderContextStaleHours: number;
+  orderCancelKeywords: string[];
+  orderAggregateKeywords: string[];
+  orderAffirmationKeywords: string[];
+  orderNegationKeywords: string[];
+  orderFillerWords: string[];
+  orderClosingNote: string;
+  orderBridgeEnforcement: 'prompt_only' | 'retry_once';
+  // <<< ANGGA
 }
 
 interface QuoteOk {
@@ -272,6 +326,16 @@ export default function ShippingSettingsPage() {
         priceRoundingIncrement: Number(data.priceRoundingIncrement),
         shippingDiscountPercentMax: Number(data.shippingDiscountPercentMax), // >>> ANGGA — Fase 113 <<<
         destinationAliases: parseAliases(aliasText), // >>> ANGGA <<<
+        // >>> ANGGA — Order Context Log
+        orderContextStaleHours: Number(data.orderContextStaleHours),
+        orderCancelKeywords: data.orderCancelKeywords,
+        orderAggregateKeywords: data.orderAggregateKeywords,
+        orderAffirmationKeywords: data.orderAffirmationKeywords,
+        orderNegationKeywords: data.orderNegationKeywords,
+        orderFillerWords: data.orderFillerWords,
+        orderClosingNote: data.orderClosingNote,
+        orderBridgeEnforcement: data.orderBridgeEnforcement,
+        // <<< ANGGA
       };
       // Kunci kosong = pertahankan yang tersimpan (server juga menjaga ini).
       if (apiKeyInput.trim()) payload.mengantarApiKey = apiKeyInput.trim();
@@ -458,6 +522,57 @@ export default function ShippingSettingsPage() {
                       onChange={(e) => patch('shippingDiscountPercentMax', e.target.value)} />
                   </Field>
                 </div>
+
+                {/* >>> ANGGA — Order Context Log (blueprint 2026-08-04) */}
+                <h2 className="pt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{t('ocTitle')}</h2>
+                <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">{t('ocIntro')}</p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <Field label={t('ocStale')} hint={t('ocStaleHint')}>
+                    <input type="number" min="1" className={fieldCls} disabled={!canEdit}
+                      value={data.orderContextStaleHours}
+                      onChange={(e) => patch('orderContextStaleHours', e.target.value)} />
+                  </Field>
+                  <Field label={t('ocBridge')} hint={t('ocBridgeHint')}>
+                    <select className={fieldCls} disabled={!canEdit}
+                      value={data.orderBridgeEnforcement}
+                      onChange={(e) => patch('orderBridgeEnforcement', e.target.value as 'prompt_only' | 'retry_once')}>
+                      <option value="retry_once">{t('ocBridgeRetry')}</option>
+                      <option value="prompt_only">{t('ocBridgePrompt')}</option>
+                    </select>
+                  </Field>
+                </div>
+                <Field label={t('ocCancel')} hint={`${t('listHint')} ${t('ocCancelHint')}`}>
+                  <input className={fieldCls} disabled={!canEdit} value={data.orderCancelKeywords.join(', ')}
+                    onChange={(e) => patch('orderCancelKeywords', parseList(e.target.value))} />
+                </Field>
+                <Field label={t('ocAggregate')} hint={`${t('listHint')} ${t('ocAggregateHint')}`}>
+                  <input className={fieldCls} disabled={!canEdit} value={data.orderAggregateKeywords.join(', ')}
+                    onChange={(e) => patch('orderAggregateKeywords', parseList(e.target.value))} />
+                </Field>
+                <Field label={t('ocAffirm')} hint={`${t('listHint')} ${t('ocAffirmHint')}`}>
+                  <input className={fieldCls} disabled={!canEdit} value={data.orderAffirmationKeywords.join(', ')}
+                    onChange={(e) => patch('orderAffirmationKeywords', parseList(e.target.value))} />
+                </Field>
+                <Field label={t('ocNegation')} hint={`${t('listHint')} ${t('ocNegationHint')}`}>
+                  <input className={fieldCls} disabled={!canEdit} value={data.orderNegationKeywords.join(', ')}
+                    onChange={(e) => patch('orderNegationKeywords', parseList(e.target.value))} />
+                </Field>
+                <Field label={t('ocFiller')} hint={`${t('listHint')} ${t('ocFillerHint')}`}>
+                  <input className={fieldCls} disabled={!canEdit} value={data.orderFillerWords.join(', ')}
+                    onChange={(e) => patch('orderFillerWords', parseList(e.target.value))} />
+                </Field>
+                <Field label={t('ocClosingNote')} hint={t('ocClosingNoteHint')}>
+                  <textarea
+                    rows={5}
+                    spellCheck={false}
+                    aria-label={t('ocClosingNote')}
+                    className={`${fieldCls} h-auto resize-y py-2 leading-5`}
+                    disabled={!canEdit}
+                    value={data.orderClosingNote}
+                    onChange={(e) => patch('orderClosingNote', e.target.value)}
+                  />
+                </Field>
+                {/* <<< ANGGA */}
               </div>
 
               <div className="mt-5 flex items-center gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">

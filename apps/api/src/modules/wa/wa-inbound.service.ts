@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ModuleRef } from '@nestjs/core';
 import {
@@ -21,6 +21,7 @@ import { isGroupJid, isDirectChatJid, isSupportedChatJid, phoneToJid } from './w
 import { isWithinBusinessHours } from '../../common/business-hours.util';
 import type { AssetsService } from '../assets/assets.service';
 import { WaMessageShape } from './wa.types';
+import { OrderContextService } from '../shipping/order-context.service'; // >>> ANGGA — Order Context Log <<<
 
 /**
  * Processes inbound WhatsApp messages: ingests, triggers auto-away replies,
@@ -56,6 +57,12 @@ export class WaInboundService {
     private readonly gateway: WaGatewayService,
     private readonly moduleRef: ModuleRef,
     config: ConfigService,
+    // >>> ANGGA — Order Context Log: deteksi "selesai order" saat pesan
+    // closing (berisi substitusi {{catatan_sk}}) BENAR-BENAR terkirim.
+    // Optional supaya spec lama yang membangun service ini tanpa argumen
+    // tambahan tetap jalan.
+    @Optional() private readonly orderLog?: OrderContextService,
+    // <<< ANGGA
   ) {
     const cooldown = Number(config.get('AUTO_AWAY_COOLDOWN_MS'));
     this.awayCooldownMs = Number.isFinite(cooldown) && cooldown > 0 ? cooldown : 12 * 60 * 60 * 1000;
@@ -522,6 +529,12 @@ Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
       data: { lastMessage: text, lastMessageAt: new Date() },
     });
     this.events.emitToAccount(convo.whatsappAccountId, 'message:new', { conversationId: convo.id, message });
+    // >>> ANGGA — Order Context Log (v1.1 §12.3-11): penanda "selesai order"
+    // ditulis saat pesan closing BENAR-BENAR terkirim (bukan saat draft
+    // dibuat). Deteksinya deterministik: teks memuat catatan S&K hasil
+    // substitusi {{catatan_sk}}. Fire-and-forget — tidak boleh menunda kirim.
+    void this.orderLog?.noteOutboundSent(convo.id, text);
+    // <<< ANGGA
     return message;
   }
 

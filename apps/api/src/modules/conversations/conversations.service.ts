@@ -8,6 +8,7 @@ import {
   TakeoverStatus,
 } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrderContextService } from '../shipping/order-context.service'; // >>> ANGGA — Order Context Log <<<
 import { EventsGateway } from '../../realtime/events.gateway';
 import { WaService } from '../wa/wa.service';
 import { LearningMinerService } from '../learning/learning-miner.service';
@@ -50,6 +51,10 @@ export class ConversationsService {
     private readonly learningMiner: LearningMinerService,
     @Optional() private readonly webhooks: WebhooksService | undefined,
     config: ConfigService,
+    // >>> ANGGA — Order Context Log: resolve percakapan = fallback manual
+    // penanda "selesai order" (ketok Bossfren 2026-08-04).
+    @Optional() private readonly orderLog?: OrderContextService,
+    // <<< ANGGA
   ) {
     this.csatEnabled = String(config.get('CSAT_ENABLED') ?? '').toLowerCase() === 'true';
     this.csatMessage = config.get<string>('CSAT_MESSAGE') || DEFAULT_CSAT_MESSAGE;
@@ -312,6 +317,13 @@ export class ConversationsService {
     // Sentinel auto-learn (P1): on first resolve, mine this conversation for KB /
     // customer-memory proposals. Fire-and-forget — never blocks the resolve;
     // idempotent via conversation.learnedAt; opt-in via AI_AUTOLEARN.
+    // >>> ANGGA — Order Context Log: resolve pertama = penanda selesai-order
+    // (fallback manual di samping deteksi {{catatan_sk}}). Fire-and-forget.
+    if (justResolved) {
+      void this.orderLog?.recordMarker(id, 'completed', 'resolved');
+    }
+    // <<< ANGGA
+
     if (justResolved && this.autoLearnEnabled) {
       this.learningMiner
         .mineConversation(id)

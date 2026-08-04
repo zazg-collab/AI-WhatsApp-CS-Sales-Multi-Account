@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { MessageStatus, MessageType, SenderType } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
+import { OrderContextService } from '../shipping/order-context.service'; // >>> ANGGA — Order Context Log <<<
 import { EventsGateway } from '../../realtime/events.gateway';
 import { WaService } from '../wa/wa.service';
 import { MediaStorageService } from '../media/media-storage.service';
@@ -23,6 +24,11 @@ export class ConversationMessagingService {
     private readonly wa: WaService,
     private readonly events: EventsGateway,
     private readonly storage: MediaStorageService,
+    // >>> ANGGA — Order Context Log: deteksi "selesai order" saat pesan
+    // closing benar-benar terkirim (kirim manual admin maupun approve draft).
+    // Optional supaya spec lama tanpa argumen tambahan tetap jalan.
+    @Optional() private readonly orderLog?: OrderContextService,
+    // <<< ANGGA
   ) {}
 
   private async conversationRoute(id: string, user?: ScopedUser) {
@@ -137,6 +143,10 @@ export class ConversationMessagingService {
         text,
         quoted,
       );
+      // >>> ANGGA — Order Context Log (v1.1 §12.3-11): pesan terkirim sungguhan
+      // → cek penanda selesai-order (teks memuat catatan S&K {{catatan_sk}}).
+      void this.orderLog?.noteOutboundSent(conversation.id, text);
+      // <<< ANGGA
 
       const message = await this.prisma.message.update({
         where: { id: pendingMessage.id },
@@ -240,6 +250,10 @@ export class ConversationMessagingService {
         text,
         quoted,
       );
+      // >>> ANGGA — Order Context Log (v1.1 §12.3-11): pesan terkirim sungguhan
+      // → cek penanda selesai-order (teks memuat catatan S&K {{catatan_sk}}).
+      void this.orderLog?.noteOutboundSent(conversation.id, text);
+      // <<< ANGGA
 
       let updated;
       try {

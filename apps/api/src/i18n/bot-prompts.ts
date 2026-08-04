@@ -712,4 +712,64 @@ export const SHIPPING_GROUNDING_UNRESOLVED_ITEMS = {
   id: 'DATA ONGKIR: sistem belum bisa memastikan ongkir karena barang yang dimaksud pelanggan belum jelas/tidak cocok dengan katalog. JANGAN menyebut angka ongkir atau total apa pun. Pastikan dulu produk mana persisnya yang mau dipesan.',
   en: 'SHIPPING DATA: shipping cannot be quoted yet because the item the customer means is unclear or does not match the catalog. Do NOT state any shipping cost or total. Confirm exactly which product they want first.',
 };
+
+// >>> ANGGA — Order Context Log (blueprint 2026-08-04 + amendemen v1.1).
+
+/**
+ * Anchor "order aktif" untuk LLM ekstraksi (T3): mengubah tugas model dari
+ * "rekonstruksi order dari nol" menjadi "apa yang berubah dari INI". Kalimat
+ * anti-over-carry di akhir WAJIB ada (v1.1 §12.2-8: anchoring bias — anchor
+ * menekan lupa, tapi menaikkan risiko menyeret barang lama ke topik baru).
+ * TANPA angka uang apa pun, konsisten aturan terakhir SHIPPING_EXTRACT_SYSTEM.
+ */
+export const SHIPPING_EXTRACT_ANCHOR = {
+  id: (anchor: string) =>
+    `ORDER AKTIF SAAT INI menurut sistem (hasil percakapan sebelumnya): ${anchor}. Kalau pesan terakhir pelanggan TIDAK menyebut barang baru yang berdiri sendiri, pertahankan isi order aktif ini — perbarui hanya qty/kota kalau pelanggan menyebut angka atau tempat baru. Kalau pelanggan menyebut barang lain yang berdiri sendiri tanpa kata penyambung, ABAIKAN order aktif ini dan ikuti aturan utama di atas.`,
+  en: (anchor: string) =>
+    `CURRENT ACTIVE ORDER per the system (from earlier in this conversation): ${anchor}. If the customer's latest message does NOT name a new stand-alone product, keep this active order — only update qty/city when the customer gives a new number or place. If the customer names a different stand-alone product with no continuation cue, IGNORE this active order and follow the main rules above.`,
+};
+
+/** Tangga ambiguitas BARANG — padanan SHIPPING_GROUNDING_AMBIGUOUS untuk
+ *  produk: nama yang disebut pelanggan cocok >1 produk katalog dengan skor
+ *  seri (menambal pemilihan diam-diam `sort[0]`). Kandidat ditempel pemanggil. */
+export const SHIPPING_GROUNDING_ITEM_AMBIGUOUS = {
+  id: 'DATA ONGKIR: nama barang yang disebut pelanggan cocok dengan LEBIH DARI SATU produk katalog. JANGAN menyebut harga, ongkir, atau total apa pun dulu. Tanyakan dengan bahasa santai produk mana yang dimaksud, HANYA dari pilihan di bawah ini, sebutkan namanya PERSIS seperti tertulis — jangan menambah atau mengarang produk lain:',
+  en: 'SHIPPING DATA: the item name the customer used matches MORE THAN ONE catalog product. Do NOT state any price, shipping cost, or total yet. Casually ask which product they mean, using ONLY the options below, quoting the names EXACTLY as written — do not add or invent other products:',
+};
+
+/** Bridge-validasi (v1.1 §12.2-8): kutipan giliran ini dihitung dari ASUMSI
+ *  order terakhir/gabungan log, bukan sebutan eksplisit pelanggan di pesan itu.
+ *  Jawaban WAJIB menyebut barangnya supaya asumsi yang salah langsung terlihat
+ *  dan terkoreksi pelanggan dalam satu ronde. Ditegakkan kode di
+ *  `resolvePriceTokens` (bukan cuma instruksi ini) saat orderBridgeEnforcement
+ *  = retry_once. */
+export const SHIPPING_GROUNDING_ASSUMED = {
+  id: (names: string) =>
+    `PENTING: penanda harga di atas dihitung dari ASUMSI order yang sedang berjalan (${names}) — pelanggan tidak menyebut nama barangnya di pesan terakhir. WAJIB sebutkan nama barangnya di kalimat jawabanmu (atau pakai {{rincian_order}}), contoh pola: "Untuk [nama barang] ya kak — totalnya ...". Jangan hanya menyebut angka polos.`,
+  en: (names: string) =>
+    `IMPORTANT: the price placeholders above are computed from the ASSUMED ongoing order (${names}) — the customer did not name the item in their last message. You MUST name the item in your reply (or use {{rincian_order}}), e.g. "For [item name], the total is ...". Never give a bare number.`,
+};
+
+/** T4 — pola insiden "sistem kehilangan konteks": kutipan LENGKAP tiba-tiba
+ *  jatuh jadi ongkir-saja PADAHAL log masih punya order segar. Kemungkinan
+ *  besar barang yang disebut pelanggan tak cocok katalog / ekstraksi meleset —
+ *  bukan pelanggan batal. Bot disuruh mengkonfirmasi ulang barang lama secara
+ *  eksplisit, bukan menyodorkan ongkir polos. */
+export const SHIPPING_GROUNDING_CONTEXT_DOWNGRADE = {
+  id: (names: string) =>
+    `PERHATIAN: order yang sedang berjalan sebelumnya (${names}) TIDAK ikut terhitung di kutipan ini — kemungkinan sistem kehilangan konteks barangnya, bukan pelanggan batal. Sebelum menyebut ongkir apa pun, konfirmasi dulu dengan menyebut namanya: apakah maksud pelanggan masih order tersebut, atau barang lain.`,
+  en: (names: string) =>
+    `ATTENTION: the previously ongoing order (${names}) is NOT included in this quote — the system likely lost the item context; the customer did not cancel. Before stating any shipping cost, confirm by naming it: do they still mean that order, or something else.`,
+};
+
+/** Konteks basi (>jendela 24 jam) tapi pertanyaan menyinggung order lama:
+ *  entri basi HARAM dipakai menjawab angka, HALAL dipakai menyusun pertanyaan
+ *  (keputusan Bossfren 2026-08-04). */
+export const SHIPPING_GROUNDING_STALE_CONTEXT = {
+  id: (desc: string) =>
+    `DATA ONGKIR: tidak ada order aktif yang masih berlaku (sudah lewat batas waktu). Riwayat menunjukkan yang terakhir dibahas: ${desc}. JANGAN menyebut angka harga/ongkir/total apa pun dulu. Tanyakan dengan halus apakah maksudnya masih yang itu — sebutkan namanya — atau barang lain; setelah pelanggan menegaskan, sistem akan menghitung ulang.`,
+  en: (desc: string) =>
+    `SHIPPING DATA: there is no active order still within its validity window. History shows the last discussed order was: ${desc}. Do NOT state any price/shipping/total figure yet. Gently ask whether they still mean that one — name it — or something else; once confirmed, the system will recompute.`,
+};
+// <<< ANGGA (Order Context Log)
 // <<< ANGGA

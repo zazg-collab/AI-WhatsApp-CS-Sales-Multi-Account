@@ -122,6 +122,44 @@ export interface ShippingSettings {
    * yang penting Mengantar mengenalinya.
    */
   destinationAliases: Record<string, string>;
+
+  // >>> ANGGA — Order Context Log (blueprint 2026-08-04). Semua daftar kata &
+  // angka kebijakan modul memori order di AppSetting (ketok Bossfren) supaya
+  // bisa diubah dari /settings/shipping tanpa deploy; kode tidak boleh punya
+  // salinannya sendiri.
+  /** Jendela basi entri log order, dalam JAM (ketok Bossfren: 24). Entri lebih
+   *  tua dari ini HARAM dipakai menjawab angka — tapi HALAL dipakai menyusun
+   *  pertanyaan konfirmasi ("yang kemarin Golok itu ya kak?"). */
+  orderContextStaleHours: number;
+  /** Kata pembatalan ORDER UTUH. Dicocokkan whole-message (seluruh pesan hanya
+   *  berisi kata pembatalan + filler) — "batal yang golok aja" TIDAK termasuk:
+   *  itu pembatalan parsial = snapshot baru berisi item sisa, bukan reset
+   *  konteks (amendemen v1.1 §12.1-5). */
+  orderCancelKeywords: string[];
+  /** Kata pemicu makna AGREGAT ("total semuanya") → order GABUNGAN dari semua
+   *  entri segar, daftarnya dibacakan (gabung-dengan-bridge), bukan tanya-dulu.
+   *  Hanya dievaluasi di dalam konteks resolusi pertanyaan uang (v1.1 §12.2-7). */
+  orderAggregateKeywords: string[];
+  /** Kata afirmasi jawaban atas pertanyaan pilihan barang ("iya yg itu").
+   *  HANYA berlaku whole-message + saat ada pending pilihan barang dari giliran
+   *  bot sebelumnya (v1.1 §12.2-6). */
+  orderAffirmationKeywords: string[];
+  /** Kata negasi yang MEMBATALKAN afirmasi ("gak", "bukan"). */
+  orderNegationKeywords: string[];
+  /** Kata pengisi netral yang diabaikan pencocok whole-message ("kak","deh"). */
+  orderFillerWords: string[];
+  /** Teks catatan S&K COD + pemesanan untuk penutupan order — nilai penanda
+   *  GLOBAL `{{catatan_sk}}`, dikenal resolver TANPA kutipan aktif (v1.1
+   *  §12.1-3). Terkirimnya pesan berisi substitusi penanda ini = penanda
+   *  kejadian "selesai order" di log. Kosong = penanda tidak tersedia dan
+   *  deteksi selesai otomatis tidak pernah terpicu (fallback: resolve). */
+  orderClosingNote: string;
+  /** Level enforcement bridge-validasi saat jawaban memakai jalur asumsi
+   *  (default-ke-terbaru / agregat): 'prompt_only' = instruksi saja;
+   *  'retry_once' (default) = draft yang menyebut total tanpa menyebut nama
+   *  barang di-retry otomatis sekali, tetap gagal → ditahan jadi draft. */
+  orderBridgeEnforcement: 'prompt_only' | 'retry_once';
+  // <<< ANGGA
 }
 // <<< ANGGA
 

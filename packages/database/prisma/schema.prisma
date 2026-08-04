@@ -436,6 +436,7 @@ model Conversation {
   sentinelReviews SentinelReview[]
   followUps       FollowUp[]
   campaignRecipients CampaignRecipient[]
+  orderContextEvents OrderContextEvent[] // >>> ANGGA — Order Context Log <<<
 
   @@index([whatsappAccountId])
   @@index([customerId])
@@ -766,3 +767,32 @@ model WebhookEndpoint {
 
   @@map("webhook_endpoints")
 }
+
+// >>> ANGGA — Order Context Log (blueprint 2026-08-04): memori order per
+// percakapan, APPEND-ONLY — tidak pernah di-update/dihapus. `snapshot` =
+// potret order tervalidasi katalog (INPUT: productId/nama/qty + tujuan
+// ber-destinationId; TIDAK dipakai membacakan ulang angka uang — harga/ongkir
+// selalu dihitung ulang saat menjawab, amendemen v1.1 §12.1-2). `completed`/
+// `cancelled` = penanda kejadian lifecycle; entri sebelum penanda terakhir
+// keluar dari himpunan kandidat. Basi (> orderContextStaleHours) = filter
+// baca, bukan penghapusan.
+model OrderContextEvent {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  /// 'snapshot' | 'completed' | 'cancelled' — string biasa, bukan enum Prisma,
+  /// supaya penambahan jenis penanda baru tidak butuh migrasi enum.
+  type           String
+  /// Untuk snapshot: {city, province, destinationId, items:[{productId, sku,
+  /// name, qty}], source-message id}. Null untuk penanda lifecycle.
+  payload        Json?
+  /// Asal entri: 'extractor' | 'carryover' | 'confirmation' | 'closing' |
+  /// 'resolved' | 'cancel_keyword' | 'admin'.
+  source         String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("order_context_events")
+}
+// <<< ANGGA

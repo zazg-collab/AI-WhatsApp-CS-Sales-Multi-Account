@@ -13,6 +13,7 @@ import { ProductsModule } from '../products/products.module';
 import { ShippingService } from '../shipping/shipping.service';
 import { MengantarClient } from '../shipping/mengantar.client';
 import { ShippingQuoteCache } from '../shipping/shipping-quote.cache';
+import { OrderContextService } from '../shipping/order-context.service'; // >>> ANGGA — Order Context Log <<<
 // <<< ANGGA
 import { WebhooksModule } from '../webhooks/webhooks.module';
 
@@ -30,6 +31,7 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
     MengantarClient,
     ShippingQuoteCache,
     ShippingService,
+    OrderContextService, // >>> ANGGA — Order Context Log <<<
     // <<< ANGGA
   ],
   exports: [
@@ -40,6 +42,7 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
     EmbeddingService,
     KnowledgeIndexService,
     ShippingService, // >>> ANGGA <<<
+    OrderContextService, // >>> ANGGA — Order Context Log <<<
   ],
 })
 export class AiModule {}

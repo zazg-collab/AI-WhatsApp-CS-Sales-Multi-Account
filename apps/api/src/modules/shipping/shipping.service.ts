@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { SenderType } from '@sentinel/database';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { MessageStatus, SenderType } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { AiProviderService } from '../ai/ai-provider.service';
@@ -21,6 +21,13 @@ import {
   SHIPPING_GROUNDING_DESTINATION_STUCK,
   SHIPPING_GROUNDING_SHIPPING_ONLY,
   SHIPPING_GROUNDING_UNRESOLVED_ITEMS,
+  // >>> ANGGA — Order Context Log (blueprint 2026-08-04)
+  SHIPPING_EXTRACT_ANCHOR,
+  SHIPPING_GROUNDING_ITEM_AMBIGUOUS,
+  SHIPPING_GROUNDING_ASSUMED,
+  SHIPPING_GROUNDING_STALE_CONTEXT,
+  SHIPPING_GROUNDING_CONTEXT_DOWNGRADE,
+  // <<< ANGGA
 } from '../../i18n/bot-prompts';
 // >>> ANGGA — Fase 113: satu definisi "angka uang" dipakai ulang dari
 // rules.engine.ts, bukan diduplikasi di sini. rules.engine.ts tidak balik
@@ -37,9 +44,18 @@ import {
   ShippingQuoteCache,
   sameCity,
   type DestinationChoice,
+  type ItemChoicePending,
   type ShippingOutcome,
   type ShippingQuote,
 } from './shipping-quote.cache';
+// >>> ANGGA — Order Context Log (blueprint 2026-08-04): memori order
+// ter-persist; sumber kebenaran konteks, cache di atas tinggal memo performa.
+import {
+  OrderContextService,
+  mergeSnapshots,
+  type OrderContextEntry,
+} from './order-context.service';
+// <<< ANGGA
 
 /**
  * >>> ANGGA — Modul Shipping Service Mengantar (LAMPIRAN §2 Langkah 1-9).
@@ -108,6 +124,10 @@ export const EXTRACT_HISTORY_LIMIT = 20;
  */
 export const MAX_DESTINATION_ASKS = 2;
 
+/** >>> ANGGA — Order Context Log: batas entri memo per-giliran (padanan
+ *  MAX_QUOTE_ENTRIES di cache). Parameter teknis. <<< */
+export const MAX_TURN_MEMO_ENTRIES = 500;
+
 export interface ExtractedItem {
   name: string;
   qty: number;
@@ -124,6 +144,11 @@ export type ShippingResult =
   | { status: 'need_more_detail'; keyword: string }
   | { status: 'no_destination' }
   | { status: 'unresolved_items'; unmatched: string[] }
+  // >>> ANGGA — Order Context Log: nama barang cocok >1 produk katalog dengan
+  // skor SERI → bot bertanya tertutup, tidak memilih diam-diam (tambal bug
+  // laten `sort[0]`). Padanan status 'ambiguous' untuk barang.
+  | { status: 'item_ambiguous'; keyword: string; itemCandidates: Array<{ productId: string; name: string }> }
+  // <<< ANGGA
   | { status: 'no_courier' }
   | { status: 'api_error' }
   | { status: 'not_configured' };
@@ -472,7 +497,23 @@ export class ShippingService {
     private readonly provider: AiProviderService,
     private readonly mengantar: MengantarClient,
     private readonly cache: ShippingQuoteCache,
+    // >>> ANGGA — Order Context Log: opsional supaya seluruh spec lama yang
+    // membangun service ini dengan 5 argumen tetap jalan tanpa diubah (pola
+    // yang sama dengan `shipping` di PromptBuilderService). Tanpa service ini,
+    // seluruh perilaku log/carry-over mati dan alur lama berjalan apa adanya.
+    @Optional() private readonly orderLog?: OrderContextService,
+    // <<< ANGGA
   ) {}
+
+  // >>> ANGGA — Order Context Log, "satu giliran satu kebenaran" (v1.1
+  // §12.1-1): grounding terpanggil >1x per giliran (prompt-builder saat
+  // menulis draft, lalu Sentinel saat review) dan ekstraksi LLM tidak dijamin
+  // identik antar panggilan — tanpa memo ini, kutipan bisa BERUBAH di tengah
+  // giliran (katalog penanda yang dilihat model ≠ nilai yang disubstitusi
+  // gerbang). Kunci memo = id + isi pesan customer terakhir; percakapan yang
+  // sama selalu menimpa entrinya sendiri (satu entri per percakapan).
+  private readonly turnMemo = new Map<string, { key: string; lastText: string; result: ShippingResult }>();
+  // <<< ANGGA
 
   /** >>> ANGGA: true selama TIDAK ada produk aktif yang beratnya melebihi berat
    *  default toko. Selama itu benar, "ongkir 1 pcs" berlaku untuk seluruh
@@ -507,6 +548,21 @@ export class ShippingService {
       select: {
         bot: { select: { language: true } },
         messages: {
+          // >>> ANGGA — Order Context Log T1 (blueprint 2026-08-04): draft
+          // yang TIDAK PERNAH terkirim (pending = belum di-approve, failed =
+          // tersalip/ditolak) bukan bagian dari percakapan yang dilihat
+          // pelanggan — tapi tersimpan sebagai baris Message biasa. Tanpa
+          // saringan ini, draft tertahan gerbang uang yang masih memuat
+          // `{{token}}` literal ikut terkirim ulang ke LLM ekstraksi sebagai
+          // "ucapan bot" (loop pencemaran diri, temuan audit 2026-08-04).
+          // Pesan customer SELALU ikut apa pun statusnya.
+          where: {
+            OR: [
+              { senderType: SenderType.customer },
+              { status: { in: [MessageStatus.sent, MessageStatus.delivered, MessageStatus.read] } },
+            ],
+          },
+          // <<< ANGGA
           orderBy: { createdAt: 'desc' },
           take: EXTRACT_HISTORY_LIMIT,
           select: { senderType: true, content: true },
@@ -526,11 +582,29 @@ export class ShippingService {
       }));
     if (!history.length) return empty;
 
+    // >>> ANGGA — Order Context Log T3 (blueprint 2026-08-04): anchor "order
+    // aktif" dari log ter-persist. Tugas model berubah dari "rekonstruksi dari
+    // nol" jadi "apa yang berubah dari INI" — kelas tugas yang jauh lebih
+    // mudah untuk LLM kecil. TANPA angka uang (hanya nama barang, qty, kota).
+    // Kalimat anti-over-carry ada di prompt-nya (v1.1 §12.2-8).
+    const anchorEntry = await this.orderLog?.latestFresh(conversationId);
+    const anchorMsg = anchorEntry
+      ? [{
+          role: 'system' as const,
+          content: t(SHIPPING_EXTRACT_ANCHOR, lang)(
+            `${anchorEntry.snapshot.items.map((i) => `${i.qty} pcs ${i.name}`).join(', ')}` +
+              (anchorEntry.snapshot.city ? ` → ${anchorEntry.snapshot.city}` : ''),
+          ),
+        }]
+      : [];
+    // <<< ANGGA
+
     let raw: string;
     try {
       raw = await this.provider.chat(
         [
           { role: 'system', content: t(SHIPPING_EXTRACT_SYSTEM, lang) },
+          ...anchorMsg, // >>> ANGGA — Order Context Log T3 <<<
           ...history,
           { role: 'user', content: t(SHIPPING_EXTRACT_USER, lang) },
         ],
@@ -552,15 +626,95 @@ export class ShippingService {
       return { status: 'not_configured' };
     }
 
-    // Langkah 1 — cek cache dulu, deterministik, tanpa LLM.
     const lastMsg = await this.lastCustomerMessage(conversationId);
     const lastCustomerText = lastMsg.content;
+
+    // >>> ANGGA — Order Context Log, "satu giliran satu kebenaran" (v1.1
+    // §12.1-1): panggilan kedua+ untuk PESAN CUSTOMER YANG SAMA (prompt-builder
+    // lalu Sentinel di giliran yang sama) memakai hasil yang sudah diputuskan,
+    // bukan menghitung ulang — ekstraksi LLM tidak dijamin identik antar
+    // panggilan, dan kutipan tidak boleh berubah di tengah giliran. Kunci
+    // memo ikut ISI pesan (bukan cuma id) supaya perubahan teks selalu
+    // menghitung ulang. TTL menumpang OUTCOME_MEMO_MS: memo ini soal SATU
+    // giliran (detik), bukan penyimpanan.
+    const memoKey = `${lastMsg.id}:${lastCustomerText}`;
+    const memo = this.turnMemo.get(conversationId);
+    if (memo && memo.key === memoKey) return memo.result;
+    const finish = (result: ShippingResult): ShippingResult => {
+      this.turnMemo.set(conversationId, { key: memoKey, lastText: lastCustomerText, result });
+      while (this.turnMemo.size > MAX_TURN_MEMO_ENTRIES) {
+        const oldest = this.turnMemo.keys().next().value;
+        if (oldest === undefined) break;
+        this.turnMemo.delete(oldest);
+      }
+      return result;
+    };
+    // <<< ANGGA
+
+    // >>> ANGGA — Order Context Log (v1.1 §12.1-5): pembatalan ORDER UTUH —
+    // seluruh pesan hanya kata pembatalan + pengisi ("gak jadi deh kak") →
+    // penanda `cancelled` + konteks direset. Pembatalan PARSIAL ("batal yang
+    // golok aja") TIDAK cocok whole-message dan jatuh ke alur ekstraksi biasa
+    // (menghasilkan snapshot baru berisi item sisa).
+    if (this.orderLog && wholeMessageMatch(lastCustomerText, cfg.orderCancelKeywords, cfg.orderFillerWords)) {
+      this.cache.reset(conversationId);
+      this.cache.clearPending(conversationId);
+      this.cache.clearPendingItems(conversationId);
+      this.cache.clearAssumed(conversationId);
+      this.cache.resetAsks(conversationId);
+      await this.orderLog.recordMarker(conversationId, 'cancelled', 'cancel_keyword');
+      this.cache.recordOutcome(conversationId, 'no_destination');
+      return finish({ status: 'no_destination' });
+    }
+    // <<< ANGGA
+
+    // Langkah 1 — cek cache dulu, deterministik, tanpa LLM.
     const cached = this.cache.get(conversationId);
     const mayHaveChanged =
       PLACE_HINT.test(lastCustomerText) || ORDER_CHANGE_HINT.test(lastCustomerText);
-    if (cached && !mayHaveChanged) {
-      this.cache.recordOutcome(conversationId, 'ok');
-      return { status: 'ok', quote: cached };
+    if (!mayHaveChanged) {
+      if (cached) {
+        this.cache.recordOutcome(conversationId, 'ok');
+        return finish({ status: 'ok', quote: cached });
+      }
+      // >>> ANGGA — Order Context Log, jalur LOG-HIT (v1.1 §12.1-2): cache
+      // in-memory hilang saat proses restart, tapi log ter-persist. Snapshot
+      // segar menyimpan INPUT order (destinationId + barang) → hitung ulang
+      // deterministik TANPA LLM; angka tidak pernah dibaca dari log. Ini juga
+      // jalur "totalnya berapa?"/"total semuanya" (tanpa hint perubahan):
+      // kata agregat → GABUNGAN semua entri segar per identitas produk
+      // (v1.1 §12.1-4). Dua-duanya jalur ASUMSI → ditandai untuk
+      // bridge-validasi (jawaban wajib menyebut nama barang).
+      if (this.orderLog) {
+        const entries = (await this.orderLog.candidates(conversationId)).filter(
+          (e) => e.fresh && e.snapshot.items.length > 0 && e.snapshot.destinationId,
+        );
+        if (entries.length) {
+          const latest = entries[0];
+          const aggregateAsk = hasAggregateKeyword(lastCustomerText, cfg.orderAggregateKeywords);
+          const logItems = aggregateAsk
+            ? mergeSnapshots(entries.map((e) => e.snapshot)).map((m) => ({ name: m.name, qty: m.qty }))
+            : latest.snapshot.items.map((i) => ({ name: i.name, qty: i.qty }));
+          const hasil = await this.quoteUntukTujuan(
+            {
+              city: latest.snapshot.city,
+              province: latest.snapshot.province,
+              label: '',
+              destinationId: latest.snapshot.destinationId,
+            },
+            logItems,
+          );
+          if (hasil.status === 'ok') {
+            this.cache.set(conversationId, hasil.quote, cfg.quoteCacheTtlMs);
+            this.cache.setAssumed(conversationId, logItems.map((i) => i.name), aggregateAsk);
+          }
+          this.cache.recordOutcome(conversationId, hasil.status);
+          return finish(hasil);
+        }
+      }
+      // Tidak ada konteks sama sekali → lanjut alur lama (ekstraksi), perilaku
+      // persis seperti sebelum modul log ada.
+      // <<< ANGGA
     }
 
     // Langkah 2 — deteksi tujuan & item.
@@ -576,6 +730,136 @@ export class ShippingService {
       `extractOrderTarget('${conversationId}'): kota=${JSON.stringify(extract.city)} items=${JSON.stringify(extract.items)}`,
     );
 
+    // >>> ANGGA — Order Context Log, tangga BARANG (jawaban): kalau giliran
+    // sebelumnya bot menawarkan pilihan produk ("Bedog Betekok maksudnya
+    // kak?") dan pesan ini memilihnya — lewat kata pembeda ("yg betekok") atau
+    // afirmasi whole-message ("iya yg itu") — barang terpilih itulah isi order,
+    // TANPA bergantung pada ekstraksi ulang. Baru pada titik ini barang masuk
+    // log (lewat snapshot di `finalize`), sesuai gerbang konfirmasi Bossfren.
+    let itemsFromChoice: ExtractedItem[] | null = null;
+    let choiceCity: string | null = null;
+    const pendingItems = this.cache.pendingItems(conversationId);
+    if (pendingItems) {
+      const chosen = pilihBarang(pendingItems.candidates, lastCustomerText, cfg);
+      if (chosen) {
+        this.cache.clearPendingItems(conversationId);
+        itemsFromChoice = [{ name: chosen.name, qty: patchQty(lastCustomerText) ?? pendingItems.qty }];
+        choiceCity = pendingItems.city;
+      }
+    }
+    // <<< ANGGA
+
+    // >>> ANGGA — Order Context Log T2 (menyimetrikan fallback baris `city`
+    // di bawah — dulu kota jatuh ke konteks lama tapi BARANG tidak, akar
+    // insiden "COD deh kak. beli 2 ya"): ekstraksi tidak membawa barang DAN
+    // pesan tidak menyebut produk katalog apa pun (deteksi murah tanpa LLM)
+    // DAN ada entri log segar → pakai barang dari log. Pola angka pendek
+    // ("beli 2") mengubah qty DI KODE, bukan lewat LLM. Kata agregat
+    // ("total semuanya") → gabungan SEMUA entri segar per identitas produk
+    // (v1.1 §12.1-4, anti hitung-dobel). Dua-duanya ditandai ASUMSI untuk
+    // enforcement bridge-validasi di `resolvePriceTokens`.
+    let items = itemsFromChoice ?? extract.items;
+    let source = itemsFromChoice ? 'confirmation' : 'extractor';
+    let carriedEntry: OrderContextEntry | null = null;
+    let assumedNames: string[] | null = null;
+    let aggregate = false;
+    if (!items.length && this.orderLog) {
+      const products = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
+      if (!mentionsCatalogProduct(lastCustomerText, products)) {
+        const entries = (await this.orderLog.candidates(conversationId)).filter(
+          (e) => e.snapshot.items.length > 0,
+        );
+        const freshEntries = entries.filter((e) => e.fresh);
+        if (freshEntries.length && hasAggregateKeyword(lastCustomerText, cfg.orderAggregateKeywords)) {
+          const merged = mergeSnapshots(freshEntries.map((e) => e.snapshot));
+          items = merged.map((m) => ({ name: m.name, qty: m.qty }));
+          carriedEntry = freshEntries[0];
+          assumedNames = merged.map((m) => m.name);
+          aggregate = true;
+          source = 'carryover';
+        } else if (freshEntries.length) {
+          const latest = freshEntries[0];
+          items = latest.snapshot.items.map((i) => ({ name: i.name, qty: i.qty }));
+          const q = patchQty(lastCustomerText);
+          if (q != null && items.length === 1) items = [{ ...items[0], qty: q }];
+          carriedEntry = latest;
+          assumedNames = items.map((i) => i.name);
+          source = 'carryover';
+        }
+      }
+    }
+    if (assumedNames) this.cache.setAssumed(conversationId, assumedNames, aggregate);
+    else this.cache.clearAssumed(conversationId);
+    // <<< ANGGA
+
+    // >>> ANGGA — pasca-proses terpusat: cache, snapshot log, tangga
+    // pertanyaan, outcome — SATU tempat supaya semua jalur (jawaban pilihan
+    // kota, jalur carry-over, jalur ekstraksi) diperlakukan identik.
+    const finalize = async (result: ShippingResult): Promise<ShippingResult> => {
+      if (result.status === 'ok') {
+        this.cache.set(conversationId, result.quote, cfg.quoteCacheTtlMs);
+        this.cache.resetAsks(conversationId);
+        this.cache.clearPending(conversationId);
+        // Snapshot = INPUT order tervalidasi katalog; ongkir-saja tidak
+        // membawa barang, tidak ada yang layak diingat.
+        if (!result.quote.shippingOnly) {
+          await this.orderLog?.recordSnapshot(
+            conversationId,
+            lastMsg.id,
+            {
+              city: result.quote.city,
+              province: result.quote.province,
+              destinationId: result.quote.destinationId,
+              // Item tanpa productId (tidak seharusnya terjadi di jalur ini)
+              // dibuang — identitas produk wajib untuk merge log (v1.1 §12.1-4).
+              items: result.quote.matchedItems
+                .filter((m): m is typeof m & { productId: string } => !!m.productId)
+                .map((m) => ({
+                  productId: m.productId,
+                  sku: m.sku ?? null,
+                  name: m.name,
+                  qty: m.qty,
+                })),
+            },
+            source,
+          );
+        }
+        this.cache.recordOutcome(conversationId, 'ok');
+        return finish(result);
+      }
+      if (result.status === 'item_ambiguous') {
+        // Tangga BARANG: simpan pilihan, biarkan grounding menyuruh bertanya
+        // tertutup. Penanda uang TIDAK tersedia untuk giliran ini.
+        this.cache.setPendingItems(conversationId, {
+          candidates: result.itemCandidates,
+          qty: items.find((i) => i.name === result.keyword)?.qty ?? 1,
+          city: extract.city?.trim() || choiceCity || carriedEntry?.snapshot.city || cached?.city || null,
+        });
+        this.cache.recordOutcome(conversationId, 'item_ambiguous');
+        return finish(result);
+      }
+      if (result.status === 'ambiguous' || result.status === 'need_more_detail') {
+        const ronde = this.cache.bumpAsk(conversationId, lastMsg.id);
+        // SELURUH kandidat disimpan (bukan cuma dua yang dibacakan) supaya
+        // "bukan kak, yang Pati" tetap ketemu tanpa panggilan API lagi.
+        this.cache.setPending(
+          conversationId,
+          result.status === 'ambiguous' ? result.candidates : [],
+        );
+        this.cache.recordOutcome(
+          conversationId,
+          ronde > MAX_DESTINATION_ASKS ? 'destination_stuck' : result.status,
+        );
+        return finish(result);
+      }
+      // Tujuan akhirnya jelas (atau masalahnya bukan soal tujuan) → tangga direset.
+      this.cache.resetAsks(conversationId);
+      this.cache.clearPending(conversationId);
+      this.cache.recordOutcome(conversationId, result.status);
+      return finish(result);
+    };
+    // <<< ANGGA
+
     // >>> ANGGA — tangga 1 (jawaban): kalau giliran sebelumnya bot menawarkan
     // pilihan tertutup dan pesan ini memilih salah satunya, langsung pakai
     // destination_id yang sudah disimpan. Ini dijalankan SEBELUM pencarian
@@ -586,54 +870,48 @@ export class ShippingService {
       this.cache.clearPending(conversationId);
       this.cache.resetAsks(conversationId);
       this.cache.reset(conversationId);
-      const hasil = await this.quoteUntukTujuan(dipilih, extract.items);
-      if (hasil.status === 'ok') this.cache.set(conversationId, hasil.quote, cfg.quoteCacheTtlMs);
-      this.cache.recordOutcome(conversationId, hasil.status);
-      return hasil;
+      const hasil = await this.quoteUntukTujuan(dipilih, items);
+      return finalize(hasil);
     }
 
-    const city = extract.city?.trim() || cached?.city || null;
+    const city =
+      extract.city?.trim() || choiceCity || carriedEntry?.snapshot.city || cached?.city || null;
     if (!city) {
       this.cache.recordOutcome(conversationId, 'no_destination');
-      return { status: 'no_destination' };
+      return finish({ status: 'no_destination' });
     }
 
     // Kutipan lama masih sah kalau kota DAN isi order sama persis.
-    if (cached && sameCity(cached.city, city) && sameItems(cached.items, extract.items)) {
+    if (cached && sameCity(cached.city, city) && sameItems(cached.items, items)) {
       this.cache.recordOutcome(conversationId, 'ok');
-      return { status: 'ok', quote: cached };
+      return finish({ status: 'ok', quote: cached });
     }
     // Tujuan/isi berubah → reset (Rule 8: direset, bukan ditambah).
     this.cache.reset(conversationId);
 
-    const result = await this.quote({ keyword: city, items: extract.items });
-    if (result.status === 'ok') {
-      this.cache.set(conversationId, result.quote, cfg.quoteCacheTtlMs);
+    // >>> ANGGA — Order Context Log: kalau barang dibawa dari log dan kotanya
+    // tidak berubah, destination_id sudah di tangan — langsung hitung, tanpa
+    // mengulang pencarian alamat (yang bisa gagal untuk teks pendek).
+    if (
+      carriedEntry &&
+      carriedEntry.snapshot.destinationId &&
+      sameCity(carriedEntry.snapshot.city, city)
+    ) {
+      const hasil = await this.quoteUntukTujuan(
+        {
+          city: carriedEntry.snapshot.city,
+          province: carriedEntry.snapshot.province,
+          label: '',
+          destinationId: carriedEntry.snapshot.destinationId,
+        },
+        items,
+      );
+      return finalize(hasil);
     }
+    // <<< ANGGA
 
-    // >>> ANGGA — tangga pertanyaan tujuan. Hanya dua status ini yang berarti
-    // "bot harus bertanya lagi"; sisanya (ok / API mati / dsb) tidak menghitung.
-    // Penghitungnya naik SEKALI per pesan pelanggan (lihat `bumpAsk`), karena
-    // satu giliran balasan memanggil grounding lebih dari sekali.
-    if (result.status === 'ambiguous' || result.status === 'need_more_detail') {
-      const ronde = this.cache.bumpAsk(conversationId, lastMsg.id);
-      // SELURUH kandidat disimpan (bukan cuma dua yang dibacakan) supaya
-      // "bukan kak, yang Pati" tetap ketemu tanpa panggilan API lagi.
-      this.cache.setPending(
-        conversationId,
-        result.status === 'ambiguous' ? result.candidates : [],
-      );
-      this.cache.recordOutcome(
-        conversationId,
-        ronde > MAX_DESTINATION_ASKS ? 'destination_stuck' : result.status,
-      );
-      return result;
-    }
-    // Tujuan akhirnya jelas (atau masalahnya bukan soal tujuan) → tangga direset.
-    this.cache.resetAsks(conversationId);
-    this.cache.clearPending(conversationId);
-    this.cache.recordOutcome(conversationId, result.status);
-    return result;
+    const result = await this.quote({ keyword: city, items });
+    return finalize(result);
   }
 
   /**
@@ -715,7 +993,15 @@ export class ShippingService {
     // menyebutnya apa adanya — bukan diam-diam disodorkan sebagai total.
     const raw = input.items.length
       ? await this.resolveItems(input.items, cfg.defaultWeightGrams)
-      : { matched: [], unmatched: [], totalGrams: 0, totalPrice: 0 };
+      : { matched: [], unmatched: [], ambiguous: [], totalGrams: 0, totalPrice: 0 };
+    // >>> ANGGA — Order Context Log: sebutan cocok >1 produk berskor SERI →
+    // BERTANYA tertutup, jangan memilih diam-diam dan jangan diam-diam turun
+    // ke ongkir-saja (gerbang konfirmasi Bossfren, tambal bug laten `sort[0]`).
+    if (raw.ambiguous.length > 0) {
+      const first = raw.ambiguous[0];
+      return { status: 'item_ambiguous', keyword: first.name, itemCandidates: first.candidates };
+    }
+    // <<< ANGGA
     const semuaCocok = raw.matched.length > 0 && raw.unmatched.length === 0;
     const shippingOnly = !semuaCocok;
     const resolved = semuaCocok
@@ -825,6 +1111,8 @@ export class ShippingService {
       // >>> ANGGA — Fase 113: sumber katalog penanda `{{token}}`, TIDAK PERNAH
       // dibaca LLM langsung (lihat buildPriceTokens/katalogPenanda di bawah).
       matchedItems: resolved.matched.map((m) => ({
+        productId: m.productId, // >>> ANGGA — Order Context Log: identitas utk snapshot log <<<
+        sku: m.sku, // >>> ANGGA — Order Context Log <<<
         name: m.name,
         qty: m.qty,
         unitPrice: m.price,
@@ -880,6 +1168,22 @@ export class ShippingService {
           if (q.unmatchedNames?.length) {
             lines.push(`• Barang "${q.unmatchedNames.join('", "')}" belum cocok dengan katalog — pastikan dulu produknya.`);
           }
+          // >>> ANGGA — Order Context Log T4: kutipan LENGKAP jatuh jadi
+          // ongkir-saja PADAHAL log masih punya order segar = pola insiden
+          // "sistem kehilangan konteks" (bukan pelanggan batal). Bot disuruh
+          // konfirmasi ulang barang lama dengan menyebut namanya, dan admin
+          // dapat jejak warn di log server.
+          if (this.orderLog) {
+            const freshOld = await this.orderLog.latestFresh(conversationId);
+            if (freshOld?.snapshot.items.length) {
+              const names = freshOld.snapshot.items.map((i) => `${i.qty} pcs ${i.name}`).join(', ');
+              lines.push(t(SHIPPING_GROUNDING_CONTEXT_DOWNGRADE, lang)(names));
+              this.logger.warn(
+                `Downgrade konteks ${conversationId}: kutipan jatuh ke ongkir-saja padahal log masih segar (${names})`,
+              );
+            }
+          }
+          // <<< ANGGA
           return lines.join('\n');
         }
         const lines = [t(SHIPPING_MONEY_RULE, lang), t(SHIPPING_GROUNDING_INTRO, lang), ...katalogPenanda(q)];
@@ -888,8 +1192,31 @@ export class ShippingService {
         } else if (!q.codCourier) {
           lines.push('• COD tidak tersedia untuk tujuan ini. Tawarkan transfer saja.');
         }
+        // >>> ANGGA — Order Context Log: kutipan giliran ini dihitung dari
+        // ASUMSI order berjalan (carry-over/agregat) → jawaban wajib menyebut
+        // barangnya (bridge-validasi; ditegakkan kode di `resolvePriceTokens`,
+        // baris ini instruksinya).
+        const assumed = this.cache.assumed(conversationId);
+        if (assumed?.productNames.length) {
+          lines.push(t(SHIPPING_GROUNDING_ASSUMED, lang)(assumed.productNames.join(', ')));
+        }
+        // <<< ANGGA
         return lines.join('\n');
       }
+      // >>> ANGGA — Order Context Log: tangga BARANG — pertanyaan tertutup
+      // untuk sebutan yang cocok >1 produk. Penanda uang SENGAJA tidak
+      // disediakan untuk giliran ini (enforcement kode, bukan harapan).
+      case 'item_ambiguous': {
+        return (
+          t(SHIPPING_GROUNDING_ITEM_AMBIGUOUS, lang) +
+          '\n' +
+          result.itemCandidates
+            .slice(0, MAX_CHOICES_ASKED)
+            .map((c) => `• ${c.name}`)
+            .join('\n')
+        );
+      }
+      // <<< ANGGA
       case 'ambiguous': {
         // >>> ANGGA — tangga 1: pertanyaan tertutup. Label sudah dipilihkan
         // `labelKandidat` (provinsi kalau beda provinsi, "Kota/Kab." kalau
@@ -919,10 +1246,29 @@ export class ShippingService {
       }
       case 'unresolved_items':
         return t(SHIPPING_GROUNDING_UNRESOLVED_ITEMS, lang);
-      case 'no_destination':
+      case 'no_destination': {
+        // >>> ANGGA — Order Context Log (keputusan Bossfren 2026-08-04):
+        // konteks BASI haram dipakai menjawab angka, tapi HALAL dipakai
+        // menyusun pertanyaan. Pertanyaan berbau uang ("kemaren lusa total
+        // berapa?") saat semua entri sudah basi → suruh bot bertanya smooth
+        // dengan MENYEBUT order lama, tanpa angka apa pun.
+        if (this.orderLog) {
+          const lastText = this.turnMemo.get(conversationId)?.lastText ?? '';
+          if (/(total|ongkir|ongkos|harga|berapa|bayar)/i.test(lastText)) {
+            const entry = await this.orderLog.latestAny(conversationId);
+            if (entry && !entry.fresh) {
+              const desc =
+                entry.snapshot.items.map((i) => `${i.qty} pcs ${i.name}`).join(', ') +
+                (entry.snapshot.city ? ` → ${entry.snapshot.city}` : '');
+              return t(SHIPPING_GROUNDING_STALE_CONTEXT, lang)(desc);
+            }
+          }
+        }
+        // <<< ANGGA
         // Belum ada tujuan yang disebut sama sekali → tidak ada apa pun yang
         // perlu disuntik soal ongkir untuk giliran balasan ini.
         return '';
+      }
       case 'no_courier':
       case 'api_error':
       case 'not_configured':
@@ -972,6 +1318,34 @@ export class ShippingService {
       issues.push(`Penanda dipakai setelah kata yang bisa membuat labelnya salah: "${guard}"`);
     }
 
+    // >>> ANGGA — Order Context Log: config dibaca untuk (a) token GLOBAL
+    // `{{catatan_sk}}` (v1.1 §12.1-3 — WAJIB dikenal resolver TANPA kutipan
+    // aktif; tanpa ini draft closing ditahan gerbangnya sendiri saat cache
+    // dingin), dan (b) enforcement bridge-validasi di bawah.
+    const cfg = await this.settings.shipping();
+    const globalTokens: Record<string, string> = {};
+    if (cfg.orderClosingNote) globalTokens.catatan_sk = cfg.orderClosingNote;
+
+    // Bridge-validasi (v1.1 §12.2-8): kutipan giliran ini dihitung dari ASUMSI
+    // order berjalan → balasan yang menyebut harga/total WAJIB menyebut nama
+    // barangnya (atau memakai {{rincian_order}}) supaya asumsi yang salah
+    // terlihat & terkoreksi pelanggan dalam satu ronde. Pelanggarannya masuk
+    // `issues` → ikut mekanisme retry-sekali gerbang uang yang sudah ada.
+    if (cfg.orderBridgeEnforcement !== 'prompt_only') {
+      const assumed = this.cache.assumed(conversationId);
+      if (assumed?.productNames.length) {
+        const adaTokenUang =
+          /\{\{(total_transfer|total_cod|subtotal_barang|blok_total|harga_satuan|total_transfer_diskon|total_cod_diskon)\}\}/i.test(text);
+        const adaRincian = /\{\{rincian_order\}\}/i.test(text);
+        if (adaTokenUang && !adaRincian && !namaDisebut(text, assumed.productNames)) {
+          issues.push(
+            'Balasan memakai ASUMSI order yang sedang berjalan tapi tidak menyebut nama barangnya — sebutkan nama barangnya atau pakai {{rincian_order}} supaya pelanggan bisa mengoreksi kalau asumsinya salah.',
+          );
+        }
+      }
+    }
+    // <<< ANGGA
+
     const quote = this.cache.get(conversationId);
     // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{139000}}"
     // ronde 2): dua sumber token digabung, bukan saling menggantikan — penanda
@@ -980,7 +1354,7 @@ export class ShippingService {
     // DENGAN kutipan ongkir aktif) bisa dipakai bersamaan pada satu balasan
     // yang menyebut harga produk sekaligus ongkirnya. Namespace-nya tidak
     // pernah tumpang tindih (`harga_produk_*` vs `harga_satuan`/`ongkir`/dst).
-    const tokens = { ...this.cache.getProductPriceTokens(conversationId), ...(quote ? buildPriceTokens(quote) : {}) };
+    const tokens = { ...globalTokens, ...this.cache.getProductPriceTokens(conversationId), ...(quote ? buildPriceTokens(quote) : {}) };
 
     const inserted = new Set<string>();
     const substituted = text.replace(/\{\{([a-z_]+)\}\}/gi, (utuh, nama: string) => {
@@ -1040,14 +1414,19 @@ export class ShippingService {
     items: ExtractedItem[],
     defaultWeightGrams: number,
   ): Promise<{
-    matched: Array<{ name: string; qty: number; grams: number; price: number }>;
+    matched: Array<{ productId: string; sku: string | null; name: string; qty: number; grams: number; price: number }>;
     unmatched: string[];
+    // >>> ANGGA — Order Context Log: sebutan yang cocok >1 produk dengan skor
+    // SERI. Dulu `sort[0]` memilih diam-diam (arbitrer); sekarang dilaporkan
+    // sebagai ambiguitas supaya bot BERTANYA (gerbang konfirmasi Bossfren). <<<
+    ambiguous: Array<{ name: string; qty: number; candidates: Array<{ productId: string; name: string }> }>;
     totalGrams: number;
     totalPrice: number;
   }> {
-    const matched: Array<{ name: string; qty: number; grams: number; price: number }> = [];
+    const matched: Array<{ productId: string; sku: string | null; name: string; qty: number; grams: number; price: number }> = [];
     const unmatched: string[] = [];
-    if (!items.length) return { matched, unmatched, totalGrams: 0, totalPrice: 0 };
+    const ambiguous: Array<{ name: string; qty: number; candidates: Array<{ productId: string; name: string }> }> = [];
+    if (!items.length) return { matched, unmatched, ambiguous, totalGrams: 0, totalPrice: 0 };
 
     const products = await this.prisma.product.findMany({
       where: { status: 'active' },
@@ -1056,21 +1435,41 @@ export class ShippingService {
 
     for (const item of items) {
       const tokens = tokenizeForMatch(item.name);
-      const best = products
+      const scored = products
         .map((p) => ({ p, score: scoreProductMatch(p, tokens) }))
-        .sort((a, b) => b.score - a.score)[0];
+        .sort((a, b) => b.score - a.score);
+      const best = scored[0];
       if (!best || best.score < MIN_PRODUCT_MATCH_SCORE) {
         unmatched.push(item.name);
         continue;
       }
       const qty = Number.isFinite(item.qty) && item.qty > 0 ? Math.floor(item.qty) : 1;
+      // >>> ANGGA — Order Context Log: skor puncak SERI antar produk BERBEDA
+      // ("bedog" cocok sama kuat ke beberapa Bedog) → jangan memilih diam-diam.
+      const ties = scored.filter((s) => s.score === best.score);
+      if (ties.length > 1) {
+        ambiguous.push({
+          name: item.name,
+          qty,
+          candidates: ties.map((s) => ({ productId: (s.p as { id: string }).id, name: s.p.name })),
+        });
+        continue;
+      }
+      // <<< ANGGA
       const grams = (best.p as { weightGrams?: number | null }).weightGrams ?? defaultWeightGrams;
-      matched.push({ name: best.p.name, qty, grams, price: best.p.price ?? 0 });
+      matched.push({
+        productId: (best.p as { id: string }).id,
+        sku: (best.p as { sku?: string | null }).sku ?? null,
+        name: best.p.name,
+        qty,
+        grams,
+        price: best.p.price ?? 0,
+      });
     }
 
     const totalGrams = matched.reduce((sum, m) => sum + m.qty * m.grams, 0);
     const totalPrice = matched.reduce((sum, m) => sum + m.qty * m.price, 0);
-    return { matched, unmatched, totalGrams, totalPrice };
+    return { matched, unmatched, ambiguous, totalGrams, totalPrice };
   }
 }
 
@@ -1114,6 +1513,151 @@ export function sameItems(a: ExtractedItem[], b: ExtractedItem[]): boolean {
       .join('|');
   return key(a ?? []) === key(b ?? []);
 }
+
+// ── Order Context Log — pembantu murni deterministik ───────────────────────
+// >>> ANGGA — blueprint 2026-08-04 + amendemen v1.1. Semua diekspor supaya
+// bisa diuji tanpa Nest/DB; daftar katanya SELALU datang dari AppSetting
+// (parameter fungsi), tidak ada salinan di sini.
+
+/** Pisah pesan jadi kata: huruf kecil, tanpa tanda baca. */
+function kataPesan(text: string): string[] {
+  return (text ?? '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/** Batas panjang pesan yang masih dianggap "jawaban pendek" oleh pencocok
+ *  whole-message. Parameter teknis: afirmasi/pembatalan sungguhan di WhatsApp
+ *  nyaris selalu jauh lebih pendek dari ini. */
+export const WHOLE_MESSAGE_MAX_WORDS = 8;
+
+/**
+ * Pencocok WHOLE-MESSAGE (v1.1 §12.2-6): true hanya kalau SELURUH pesan
+ * terdiri dari kata-kata `keywords` + `fillers`, minimal satu kata keyword,
+ * dan (kalau `negations` diberikan) tanpa satu pun kata negasi. Ini yang
+ * membedakan "iya yg itu kak" (afirmasi) dari "jadi berapa totalnya?" (bukan) —
+ * pencocokan substring terbukti bocor untuk kata seperti "jadi".
+ * Frasa multi-kata di `keywords` ("gak jadi") dipecah jadi kata-katanya.
+ */
+export function wholeMessageMatch(
+  text: string,
+  keywords: string[],
+  fillers: string[],
+  negations?: string[],
+): boolean {
+  const words = kataPesan(text);
+  if (!words.length || words.length > WHOLE_MESSAGE_MAX_WORDS) return false;
+  const neg = new Set((negations ?? []).map((n) => n.toLowerCase()));
+  if (neg.size && words.some((w) => neg.has(w))) return false;
+  const kw = new Set((keywords ?? []).flatMap((k) => k.toLowerCase().split(/\s+/)).filter(Boolean));
+  const fill = new Set((fillers ?? []).map((f) => f.toLowerCase()));
+  let adaKeyword = false;
+  for (const w of words) {
+    if (kw.has(w)) {
+      adaKeyword = true;
+      continue;
+    }
+    if (fill.has(w)) continue;
+    return false;
+  }
+  return adaKeyword;
+}
+
+/** Adakah kata/frasa agregat ("total semuanya") di pesan? Frasa dicocokkan
+ *  utuh dengan batas kata. HANYA dipanggil di dalam konteks resolusi
+ *  pertanyaan uang (v1.1 §12.2-7) — bukan saringan global. */
+export function hasAggregateKeyword(text: string, keywords: string[]): boolean {
+  const norm = ` ${kataPesan(text).join(' ')} `;
+  return (keywords ?? []).some((k) => {
+    const frasa = kataPesan(k).join(' ');
+    return frasa.length > 0 && norm.includes(` ${frasa} `);
+  });
+}
+
+/**
+ * Qty baru dari pesan pendek ("beli 2", "jadi 3 aja", "2 pcs") — jalur patch
+ * qty deterministik untuk carry-over. Null kalau tidak ada pola qty yang
+ * meyakinkan. Batas 1..999 (di luar itu hampir pasti bukan qty).
+ */
+export function patchQty(text: string): number | null {
+  const t = (text ?? '').toLowerCase();
+  const m =
+    /(?:\b(?:beli|pesan|ambil|order|mau|jadi)\s*)(\d{1,3})\b/.exec(t) ??
+    /\b(\d{1,3})\s*(?:pcs|pc|buah|biji|unit|set|aja)\b/.exec(t);
+  if (!m) return null;
+  const qty = Number(m[1]);
+  return Number.isInteger(qty) && qty >= 1 && qty <= 999 ? qty : null;
+}
+
+/**
+ * Adakah produk katalog yang DISEBUT di pesan ini? Deteksi murah tanpa LLM
+ * (pakai pencocok yang sudah ada) — dipakai sebagai penjaga carry-over: kalau
+ * pelanggan menyebut barang baru, konteks lama TIDAK boleh dipaksakan.
+ */
+export function mentionsCatalogProduct(
+  text: string,
+  products: Array<Record<string, unknown>>,
+): boolean {
+  const tokens = tokenizeForMatch(text ?? '');
+  if (!tokens.size) return false;
+  return (products ?? []).some((p) => scoreProductMatch(p as never, tokens) >= MIN_PRODUCT_MATCH_SCORE);
+}
+
+/**
+ * Apakah `text` menyebut salah satu nama produk di `names`? Cukup SATU kata
+ * bermakna (≥3 huruf) dari nama produk yang muncul — "Untuk Golok Sembelih ya
+ * kak" menyebut "Golok Sembelih Multifungsi" lewat kata "golok"/"sembelih".
+ * Dipakai bridge-validasi; konservatif ke arah LOLOS (satu kata cukup) supaya
+ * gerbang tidak menahan kalimat yang sebenarnya sudah menyebut barang.
+ */
+export function namaDisebut(text: string, names: string[]): boolean {
+  const kata = new Set(kataPesan(text));
+  return (names ?? []).some((n) =>
+    kataPesan(n).some((w) => w.length >= 3 && kata.has(w)),
+  );
+}
+
+/**
+ * Petakan jawaban pelanggan ke salah satu pilihan BARANG yang tadi ditawarkan —
+ * padanan `pilihKandidat` untuk produk. Dua jalan masuk:
+ *  1. Kata pembeda nama produk ("yg betekok") — skor kata yang MEMBEDAKAN
+ *     antar kandidat, seri = null (jangan menebak).
+ *  2. Afirmasi whole-message ("iya yg itu") — HANYA kalau kandidat yang
+ *     ditawarkan tepat satu (kalau dua, "iya" tidak memilih apa-apa).
+ */
+export function pilihBarang(
+  candidates: Array<{ productId: string; name: string }>,
+  teks: string,
+  cfg: { orderAffirmationKeywords: string[]; orderNegationKeywords: string[]; orderFillerWords: string[] },
+): { productId: string; name: string } | null {
+  if (!candidates?.length) return null;
+  const jawaban = new Set(kataPesan(teks));
+  if (!jawaban.size) return null;
+
+  const perNama = candidates.map((c) => new Set(kataPesan(c.name)));
+  const frekuensi = new Map<string, number>();
+  for (const set of perNama) {
+    for (const w of set) frekuensi.set(w, (frekuensi.get(w) ?? 0) + 1);
+  }
+  const skor = perNama.map(
+    (set) => [...set].filter((w) => (frekuensi.get(w) ?? 0) < candidates.length && jawaban.has(w)).length,
+  );
+  const tertinggi = Math.max(...skor);
+  if (tertinggi > 0 && skor.filter((s) => s === tertinggi).length === 1) {
+    return candidates[skor.indexOf(tertinggi)];
+  }
+
+  if (
+    candidates.length === 1 &&
+    wholeMessageMatch(teks, cfg.orderAffirmationKeywords, cfg.orderFillerWords, cfg.orderNegationKeywords)
+  ) {
+    return candidates[0];
+  }
+  return null;
+}
+// <<< ANGGA (Order Context Log)
 
 // ── Fase 113 — model menulis KALIMAT, sistem menulis ANGKA UANG ────────────
 
