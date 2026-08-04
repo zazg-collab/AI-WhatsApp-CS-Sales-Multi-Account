@@ -125,7 +125,8 @@ describe('SentinelService', () => {
     function pasangOngkir(teks: string) {
       const shipping: any = {
         getGroundingText: jest.fn().mockResolvedValue(teks),
-        getGroundingNumbers: jest.fn().mockResolvedValue('299000 294000'),
+        // >>> ANGGA — Fase 113: getGroundingNumbers() dihapus dari ShippingService
+        // (satu-satunya pemakainya, checkPriceGrounding, juga dihapus).
         lastOutcome: jest.fn().mockReturnValue('ok'),
       };
       return {

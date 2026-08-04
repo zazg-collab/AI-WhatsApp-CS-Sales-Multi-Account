@@ -127,8 +127,13 @@ export class SettingsService {
         ),
         defaultWeightGrams: this.num(this.config.get('SHIPPING_DEFAULT_WEIGHT_GRAMS'), 1000),
         quoteCacheTtlMs: this.num(this.config.get('SHIPPING_QUOTE_CACHE_TTL_MS'), 21_600_000),
-        discountMaxPerOrder: this.num(this.config.get('SHIPPING_DISCOUNT_MAX_PER_ORDER'), 5000),
+        // >>> ANGGA — Fase 113 (2026-08-04): env var IKUT di-rename bersama field
+        // (ketok palu Bossfren) — SHIPPING_DISCOUNT_MAX_PER_ORDER lama di .env
+        // TIDAK lagi dibaca, harus diupdate ke SHIPPING_DISCOUNT_MAX_PER_PCS
+        // sebelum/saat deploy, kalau tidak field ini diam-diam balik ke default.
+        discountMaxPerPcs: this.num(this.config.get('SHIPPING_DISCOUNT_MAX_PER_PCS'), 5000),
         priceRoundingIncrement: this.num(this.config.get('SHIPPING_PRICE_ROUNDING_INCREMENT'), 500),
+        shippingDiscountPercentMax: this.num(this.config.get('SHIPPING_DISCOUNT_PERCENT_MAX'), 20), // >>> ANGGA — Fase 113 <<<
         // >>> ANGGA — daftar awal, SELURUHNYA diverifikasi live ke API Mengantar
         // 2026-08-03: setiap kunci di kiri terbukti nol kandidat (atau salah
         // kota), dan setiap nilai di kanan terbukti menghasilkan tepat satu kota

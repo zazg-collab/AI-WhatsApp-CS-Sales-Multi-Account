@@ -148,13 +148,19 @@ class ShippingSettingsDto {
   @IsOptional() @IsNumber() @Min(0) @Max(604_800_000)
   quoteCacheTtlMs?: number;
 
+  // >>> ANGGA — Fase 113 (2026-08-04): di-rename dari discountMaxPerOrder.
   @IsOptional() @IsNumber() @Min(0) @Max(1_000_000)
-  discountMaxPerOrder?: number;
+  discountMaxPerPcs?: number;
 
   // 1 = tanpa pembulatan. Batas atas 100.000 supaya salah ketik tidak membuat
   // semua harga melompat ke kelipatan yang absurd.
   @IsOptional() @IsNumber() @Min(1) @Max(100_000)
   priceRoundingIncrement?: number;
+
+  // >>> ANGGA — Fase 113: persen diskon ONGKIR maksimum (dari ongkir, bukan
+  // total). 0-100 wajar; di atas 100% tidak masuk akal untuk sebuah diskon.
+  @IsOptional() @IsNumber() @Min(0) @Max(100)
+  shippingDiscountPercentMax?: number;
 
   // >>> ANGGA: kamus alias tujuan. Objek datar string→string; nilai non-string
   // ditolak di sini supaya tidak ada yang aneh sampai ke pencarian alamat.

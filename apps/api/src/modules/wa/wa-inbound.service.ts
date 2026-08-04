@@ -290,7 +290,7 @@ export class WaInboundService {
     }
 
     this.logger.debug(`maybeAutoReply: generating reply for ${conversationId}, mode=${convo.aiMode}`);
-    const { text } = await this.ai.generateReply(conversationId);
+    const { text, moneyBlocked } = await this.ai.generateReply(conversationId);
     if (!text) { this.logger.debug(`maybeAutoReply: generateReply returned empty text`); return; }
 
     // TOCTOU guard: re-read after AI generation which can take >10s.
@@ -302,6 +302,19 @@ export class WaInboundService {
     if (fresh.takeoverStatus === TakeoverStatus.admin_takeover) return;
     if (fresh.aiMode === AiMode.ai_off || fresh.aiMode === AiMode.ai_paused) return;
     const effectiveMode = fresh.aiMode;
+
+    // >>> ANGGA — Fase 113 (2026-08-04): gerbang uang menahan balasan ini
+    // (token {{...}} tak terselesaikan, atau angka rupiah ditulis model
+    // sendiri) — paksa draft di SEMUA mode, didahulukan sebelum percabangan
+    // di bawah supaya ai_on tidak sempat kirim tanpa gerbang ini. "Jangan
+    // pernah kirim teks yang masih memuat {{...}}" berlaku mutlak; lihat
+    // AiService.gateMoneyTokens untuk detail lengkap kenapa ini tidak bisa
+    // hanya jadi gerbang Sentinel (post-send untuk AI ON).
+    if (moneyBlocked) {
+      await this.storeDraft(conversationId, convo.whatsappAccountId, text);
+      return;
+    }
+    // <<< ANGGA
 
     if (effectiveMode === AiMode.ai_draft) {
       await this.storeDraft(conversationId, convo.whatsappAccountId, text);

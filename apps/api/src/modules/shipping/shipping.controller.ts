@@ -39,7 +39,8 @@ export class ShippingController {
       codBlockedRegionKeywords: cfg.codBlockedRegionKeywords,
       defaultWeightGrams: cfg.defaultWeightGrams,
       quoteCacheTtlMs: cfg.quoteCacheTtlMs,
-      discountMaxPerOrder: cfg.discountMaxPerOrder,
+      discountMaxPerPcs: cfg.discountMaxPerPcs,
+      shippingDiscountPercentMax: cfg.shippingDiscountPercentMax,
       priceRoundingIncrement: cfg.priceRoundingIncrement,
       cache: this.shipping.cacheStats(),
     };

@@ -60,6 +60,35 @@ export interface ShippingQuote {
   /** Alasan COD tidak tersedia, untuk grounding text (bukan angka). */
   codBlockedReason: 'region' | 'no_eligible_courier' | null;
   items: Array<{ name: string; qty: number }>;
+
+  // >>> ANGGA — Fase 113 (2026-08-04): "model menulis KALIMAT, sistem menulis
+  // ANGKA UANG". Field di bawah TIDAK PERNAH dibaca LLM langsung — hanya
+  // dipakai `buildPriceTokens`/`katalogPenanda` di shipping.service.ts untuk
+  // menyusun katalog penanda `{{token}}` dan mengisi nilainya sesudah model
+  // menjawab. Menggantikan `getGroundingNumbers()` yang dihapus (dulu satu-
+  // satunya pemakainya adalah `checkPriceGrounding`, yang juga dihapus).
+  /** Rincian per barang yang cocok katalog — sumber {{rincian_order}} dan
+   *  {{harga_satuan}} (yang terakhir HANYA ditawarkan kalau seluruh barang di
+   *  order ini satu harga; lihat `buildPriceTokens`). Kosong kalau shippingOnly. */
+  matchedItems: Array<{ name: string; qty: number; unitPrice: number; lineTotal: number }>;
+  /** Ongkir TRANSFER saja (estimatedPrice kurir terpilih) — sumber {{ongkir}}. */
+  shippingFee: number;
+  /** Potongan ongkir TRANSFER, sudah dibulatkan ke BAWAH ke priceRoundingIncrement
+   *  (Rule diskon Fase 113 — supaya tidak pernah melewati plafon). 0 kalau
+   *  shippingOnly atau shippingDiscountPercentMax = 0. */
+  shippingDiscount: number;
+  /** transferTotal - shippingDiscount. 0 kalau shippingDiscount = 0 (tidak
+   *  ditawarkan sebagai penanda saat itu — lihat katalogPenanda). */
+  transferTotalDiscounted: number;
+  /** Ongkir COD saja (estimatedPrice kurir COD terpilih). Null kalau COD tidak
+   *  ditawarkan pada kutipan ini. */
+  codShippingFee: number | null;
+  /** Potongan ongkir COD, pembulatan sama seperti shippingDiscount. Null kalau
+   *  COD tidak ditawarkan. */
+  codDiscount: number | null;
+  /** codTotal - codDiscount. Null kalau COD tidak ditawarkan. */
+  codTotalDiscounted: number | null;
+  // <<< ANGGA
 }
 
 /**

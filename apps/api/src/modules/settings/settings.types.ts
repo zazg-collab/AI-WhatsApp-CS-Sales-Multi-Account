@@ -88,11 +88,23 @@ export interface ShippingSettings {
   defaultWeightGrams: number;
   /** §6 `shipping_quote_cache_ttl_ms` — Rule 8, default 6 jam. */
   quoteCacheTtlMs: number;
-  /** §6 `shipping_discount_max_per_order` — Rule 7. v1: DOKUMENTASI SAJA,
-   *  penegakannya masih kepatuhan LLM, bukan gate numerik. */
-  discountMaxPerOrder: number;
+  /** §6 `shipping_discount_max_per_pcs` — Rule 7 (diskon BARANG, belum
+   *  diimplementasikan). >>> ANGGA — Fase 113 (2026-08-04): di-rename dari
+   *  `discountMaxPerOrder`. Nama lamanya BERBOHONG: field ini didokumentasikan
+   *  "per order", padahal kebijakan Bossfren untuk diskon barang selalu per
+   *  PCS (Rp5.000/pcs, tanpa plafon per order). v1: DOKUMENTASI SAJA,
+   *  penegakannya masih kepatuhan LLM, bukan gate numerik — beda dengan
+   *  `shippingDiscountPercentMax` di bawah yang SUDAH ditegakkan sistem. */
+  discountMaxPerPcs: number;
   /** §6 `shipping_price_rounding_increment` — Rule 11. */
   priceRoundingIncrement: number;
+  /** >>> ANGGA — Fase 113: persen maksimum diskon ONGKIR (dihitung dari
+   *  ongkir, BUKAN dari total transfer/COD), dibulatkan ke BAWAH saat dipakai
+   *  (`floorTo` di shipping.service.ts) supaya tidak pernah melewati batas
+   *  ini. Default 20. Beda dari `discountMaxPerPcs` di atas: ini SUDAH
+   *  ditegakkan sistem (`ShippingService.buildPriceTokens`), bukan cuma
+   *  dokumentasi untuk LLM. */
+  shippingDiscountPercentMax: number;
   /**
    * >>> ANGGA — kamus nama panggilan daerah → kata kunci yang DIKENAL Mengantar.
    *

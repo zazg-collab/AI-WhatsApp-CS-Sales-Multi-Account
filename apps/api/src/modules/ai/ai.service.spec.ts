@@ -54,7 +54,10 @@ describe('AiService', () => {
     it('returns text + model', async () => {
       provider.chat.mockResolvedValue('hi there');
       const r = await service.generateReply('c1');
-      expect(r).toEqual({ text: 'hi there', model: 'default-model' });
+      // >>> ANGGA — Fase 113: moneyBlocked selalu false di sini karena
+      // ShippingService tidak di-inject di harness ini (opsional) — gateMoneyTokens
+      // jadi no-op. Dites lengkap dengan shipping asli di shipping.service.spec.ts.
+      expect(r).toEqual({ text: 'hi there', model: 'default-model', moneyBlocked: false });
     });
     it('uses provided model name', async () => {
       provider.chat.mockResolvedValue('x');

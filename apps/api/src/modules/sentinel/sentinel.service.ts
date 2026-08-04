@@ -31,7 +31,6 @@ import {
   checkKnowledgeGrounding,
   checkForbiddenWords, // >>> ANGGA <<<
   checkShippingEscalation, // >>> ANGGA <<<
-  checkPriceGrounding,
   decisionFromConfidence,
   evaluateRules,
   highestRisk,
@@ -108,32 +107,30 @@ export class SentinelService {
     // 1. Deterministic rules over customer message + draft.
     const ruleHit = evaluateRules(`${lastCustomerText}\n${draftText}`, sentinelConfig.riskKeywords);
 
-    // 1b. Deterministic groundedness check: does the draft state a price-like
-    // number that isn't anywhere in the actual knowledge/product data the bot
-    // was given? Catches fabrication a flaky LLM judge might still approve.
-    const groundingText = await this.prompts.getGroundingText(conversationId);
-    // >>> ANGGA: angka ongkir/COD yang sudah dibulatkan ikut jadi acuan sah,
-    // supaya total yang benar tidak salah ditandai "mengarang" — dan sebaliknya
-    // total yang TIDAK dihitung sistem tetap ketahan.
-    const shippingNumbers = this.shipping
-      ? await this.shipping.getGroundingNumbers(conversationId).catch(() => '')
-      : '';
-    const groundingHit = checkPriceGrounding(draftText, groundingText, shippingNumbers);
+    // >>> ANGGA — Fase 113 (2026-08-04): gerbang harga uang yang dulu di sini
+    // (`checkPriceGrounding`, atas nama "1b") DIHAPUS, bukan diganti versi
+    // lain di Sentinel. Untuk AI ON, Sentinel berjalan SESUDAH kirim — jadi ia
+    // tidak bisa jadi satu-satunya penjaga aturan mutlak "jangan pernah kirim
+    // teks yang masih memuat {{...}}". Gerbang uang sekarang berjalan lebih
+    // awal & tanpa syarat mode di `ShippingService.resolvePriceTokens`,
+    // dipanggil dari `AiService` sebelum teks ini sampai ke sini. Lihat
+    // komentar di kedua tempat itu untuk detail lengkapnya.
     // <<< ANGGA
 
-    // 1c. RAG discipline: nothing retrieved + bot didn't punt to the fallback
+    // 1b. RAG discipline: nothing retrieved + bot didn't punt to the fallback
     // phrase → it likely answered from outside the KB. Same n8n/Dify-style
     // "answer only from retrieved context" guarantee, enforced deterministically.
+    const groundingText = await this.prompts.getGroundingText(conversationId);
     const knowledgeHit = checkKnowledgeGrounding(draftText, groundingText, lastCustomerText);
 
-    // >>> ANGGA: 1d. Kata terlarang persona — hanya diperiksa pada teks balasan
+    // >>> ANGGA: 1c. Kata terlarang persona — hanya diperiksa pada teks balasan
     // bot, bukan pesan pelanggan.
     const forbiddenHit = checkForbiddenWords(
       draftText,
       conversation.bot?.persona?.forbiddenWords,
     );
 
-    // 1e. Sistem ongkir tidak bisa memberi angka PADAHAL pelanggan sudah
+    // 1d. Sistem ongkir tidak bisa memberi angka PADAHAL pelanggan sudah
     // mengarah ke checkout -> naikkan ke admin (LAMPIRAN §3 + Rule 10).
     const shippingHit = checkShippingEscalation(
       this.shipping?.lastOutcome(conversationId) ?? null,
@@ -174,12 +171,6 @@ export class SentinelService {
       decision = mostRestrictive(decision, ruleHit.decision);
       riskLevel = highestRisk(riskLevel, ruleHit.riskLevel);
       reason = `${ruleHit.reason}. ${reason}`;
-    }
-
-    if (groundingHit) {
-      decision = mostRestrictive(decision, groundingHit.decision);
-      riskLevel = highestRisk(riskLevel, groundingHit.riskLevel);
-      reason = `${groundingHit.reason}. ${reason}`;
     }
 
     if (knowledgeHit) {

@@ -1,6 +1,7 @@
 import {
   ShippingService,
   roundTo,
+  floorTo, // >>> ANGGA — Fase 113 <<<
   gramsToKg,
   resolveDestination,
   labelKandidat,
@@ -17,7 +18,7 @@ import {
 } from './shipping.service';
 import { ShippingQuoteCache } from './shipping-quote.cache';
 import { MengantarClient } from './mengantar.client';
-import { checkPriceGrounding, checkShippingEscalation } from '../sentinel/rules.engine';
+import { checkShippingEscalation } from '../sentinel/rules.engine';
 
 /**
  * >>> ANGGA — Kriteria uji §9 LAMPIRAN, satu per satu.
@@ -71,8 +72,9 @@ const CONFIG = {
   codBlockedRegionKeywords: ['papua', 'maluku'],
   defaultWeightGrams: 1000,
   quoteCacheTtlMs: 21_600_000,
-  discountMaxPerOrder: 5000,
+  discountMaxPerPcs: 5000, // >>> ANGGA — Fase 113: di-rename dari discountMaxPerOrder <<<
   priceRoundingIncrement: 500,
+  shippingDiscountPercentMax: 20, // >>> ANGGA — Fase 113 <<<
   destinationAliases: { solo: 'surakarta', malang: 'klojen' } as Record<string, string>,
 };
 
@@ -567,11 +569,15 @@ describe('§9.2 — qty > 1 dan/atau lebih dari satu produk berbeda', () => {
     expect(h.mengantar.estimate).toHaveBeenCalledWith(expect.objectContaining({ weightKg: 1 }));
     expect(res.quote.transferTotal).toBe(47000);
 
+    // >>> ANGGA — Fase 113: teks tidak lagi memuat angka jadi, cuma penanda.
     const text = await h.svc.getGroundingText('c1');
     expect(text).toContain('ONGKIR SAJA');
     expect(text).toContain('1 pcs');
-    // GAGAL kalau angka itu disodorkan sebagai total belanja.
-    expect(text).not.toContain('Total kalau TRANSFER');
+    expect(text).toContain('{{ongkir}}');
+    // GAGAL kalau kutipan ongkir-saja menawarkan penanda TOTAL — itu berarti
+    // total belanja dikutip padahal produknya belum dipastikan.
+    expect(text).not.toContain('{{total_transfer}}');
+    expect(text).not.toContain('{{subtotal_barang}}');
   });
 
   it('nama barang tidak cocok katalog → ongkir saja + sebutkan barang yang gagal', async () => {
@@ -581,7 +587,7 @@ describe('§9.2 — qty > 1 dan/atau lebih dari satu produk berbeda', () => {
     expect(res.quote.shippingOnly).toBe(true);
     const text = await h.svc.getGroundingText('c1');
     expect(text).toContain('kompor gas rinnai');
-    expect(text).not.toContain('Total kalau TRANSFER');
+    expect(text).not.toContain('{{total_transfer}}');
   });
 
   it('sebagian barang cocok, sebagian tidak → JANGAN kutip total yang bolong', async () => {
@@ -763,31 +769,60 @@ describe('§9.6 — angka bot harus cocok grounding & kelipatan pembulatan', () 
     expect(res.quote.codTotal).toBe(198500);
   });
 
-  it('checkPriceGrounding menerima angka ongkir yang SAH', async () => {
+  // >>> ANGGA — Fase 113 (2026-08-04): tiga tes `checkPriceGrounding` di atas
+  // DIHAPUS — bukan karena tidak bisa dijelaskan, tapi karena fungsi yang
+  // mereka uji dihapus juga (lihat rules.engine.ts). Akar masalahnya (model
+  // mengetik angka rupiah sendiri) sekarang dicegah lebih awal: model tidak
+  // pernah diberi angkanya. Gerbang penggantinya adalah `resolvePriceTokens`,
+  // diuji di bawah.
+  it('resolvePriceTokens: substitusi token sah → ok, angka sungguhan muncul, tidak ada {{...}} tersisa', async () => {
     const h = harness({
       products: [{ id: 'p1', sku: 'GLK-01', name: 'Golok Cordova', category: '', description: '', price: 145000, weightGrams: null, status: 'active' }],
     });
     const res: any = await h.svc.quoteForConversation('c1');
-    const numbers = await h.svc.getGroundingNumbers('c1');
-    const draft = `Totalnya Rp${formatIdr(res.quote.transferTotal)} kalau transfer ya kak`;
-    expect(checkPriceGrounding(draft, '', numbers)).toBeNull();
+    const out = await h.svc.resolvePriceTokens('c1', 'Totalnya {{total_transfer}} kalau transfer ya kak');
+    expect(out.ok).toBe(true);
+    expect(out.text).toContain(`Rp${formatIdr(res.quote.transferTotal)}`);
+    expect(out.text).not.toMatch(/\{\{/);
   });
 
-  it('checkPriceGrounding MENAHAN angka ongkir yang tidak dihitung sistem', async () => {
+  it('resolvePriceTokens: angka rupiah ditulis LANGSUNG oleh model (bukan lewat penanda) → ditahan', async () => {
+    const h = harness();
+    await h.svc.quoteForConversation('c1');
+    const out = await h.svc.resolvePriceTokens('c1', 'Totalnya Rp198.394 kak');
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toContain('198394');
+  });
+
+  it('resolvePriceTokens: penanda salah ketik/tidak dikenal → ditahan, {{...}} tidak pernah lolos ke teks akhir', async () => {
+    const h = harness();
+    await h.svc.quoteForConversation('c1');
+    const out = await h.svc.resolvePriceTokens('c1', 'Totalnya {{totall_transfer}} kak');
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toMatch(/tidak dikenal/i);
+  });
+
+  it('resolvePriceTokens: belum ada kutipan aktif (belum quoteForConversation) → penanda dianggap tak tersedia', async () => {
+    const h = harness();
+    const out = await h.svc.resolvePriceTokens('c1', 'Ongkirnya {{ongkir}} ya kak');
+    expect(out.ok).toBe(false);
+  });
+
+  it('resolvePriceTokens: teks tanpa penanda & tanpa angka uang → tidak ada yang ditahan', async () => {
+    const h = harness();
+    const out = await h.svc.resolvePriceTokens('c1', 'Baik kak, ditunggu ya');
+    expect(out.ok).toBe(true);
+    expect(out.text).toBe('Baik kak, ditunggu ya');
+  });
+
+  it('resolvePriceTokens: penjaga kata — {{harga_satuan}} didahului "total" → ditahan walau angkanya sah', async () => {
     const h = harness({
       products: [{ id: 'p1', sku: 'GLK-01', name: 'Golok Cordova', category: '', description: '', price: 145000, weightGrams: null, status: 'active' }],
     });
     await h.svc.quoteForConversation('c1');
-    const numbers = await h.svc.getGroundingNumbers('c1');
-    // Angka mentah sebelum pembulatan pun harus ketahan — bot tidak boleh
-    // menyebut angka apa pun selain yang dihitung & dibulatkan sistem.
-    const hit = checkPriceGrounding('Totalnya Rp198.394 kak', '', numbers);
-    expect(hit).not.toBeNull();
-    expect(hit!.reason).toContain('198394');
-  });
-
-  it('tanpa data ongkir & tanpa knowledge → tidak ada yang ditandai (perilaku lama utuh)', () => {
-    expect(checkPriceGrounding('Rp150.000', '', '')).toBeNull();
+    const out = await h.svc.resolvePriceTokens('c1', 'totalnya {{harga_satuan}} ya kak');
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toMatch(/label/i);
   });
 
   it('roundTo membulatkan ke kelipatan TERDEKAT', () => {
@@ -795,6 +830,59 @@ describe('§9.6 — angka bot harus cocok grounding & kelipatan pembulatan', () 
     expect(roundTo(152100, 500)).toBe(152000);
     expect(roundTo(152324, 1000)).toBe(152000);
     expect(roundTo(152324, 1)).toBe(152324);
+  });
+
+  it('floorTo SELALU membulatkan ke BAWAH (Fase 113: diskon tidak pernah melewati plafon)', () => {
+    // Contoh persis rancangan: 20% x 22.000 = 4.400 → 4.000 (BUKAN 4.500).
+    expect(floorTo(4400, 500)).toBe(4000);
+    expect(floorTo(4400, 1)).toBe(4400);
+    expect(floorTo(0, 500)).toBe(0);
+  });
+
+  it('Fase 113: diskon ongkir = persen x ongkir, dibulatkan ke BAWAH ke priceRoundingIncrement', async () => {
+    const h = harness(); // JNE recommended, estimatedPrice 47.000, diskon 20%
+    const res: any = await h.svc.quoteForConversation('c1');
+    // 20% x 47.000 = 9.400 → dibulatkan ke bawah ke kelipatan 500 = 9.000.
+    expect(res.quote.shippingDiscount).toBe(9000);
+    expect(res.quote.transferTotalDiscounted).toBe(res.quote.transferTotal - 9000);
+  });
+
+  it('Fase 113: shippingOnly tidak dapat diskon (belum ada total checkout untuk dipotong)', async () => {
+    const h = harness({ extract: { kota: 'Medan', items: [] } });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.quote.shippingOnly).toBe(true);
+    expect(res.quote.shippingDiscount).toBe(0);
+  });
+
+  it('Fase 113: >1 harga satuan berbeda → {{harga_satuan}} disembunyikan dari katalog penanda', async () => {
+    const h = harness({
+      extract: {
+        kota: 'Medan',
+        items: [{ nama: 'Golok Cordova', qty: 1 }, { nama: 'Pisau Dapur Cordova', qty: 1 }],
+      },
+    });
+    await h.svc.quoteForConversation('c1');
+    const text = await h.svc.getGroundingText('c1');
+    expect(text).not.toContain('{{harga_satuan}}');
+    expect(text).toContain('{{subtotal_barang}}');
+  });
+
+  it('Fase 113: seluruh barang satu harga → {{harga_satuan}} tersedia di katalog', async () => {
+    const h = harness({ extract: { kota: 'Medan', items: [{ nama: 'Golok Cordova', qty: 2 }] } });
+    await h.svc.quoteForConversation('c1');
+    const text = await h.svc.getGroundingText('c1');
+    expect(text).toContain('{{harga_satuan}}');
+  });
+
+  it('Fase 113: Transfer+COD sekaligus tersedia → katalog menawarkan {{blok_total}}, resolvePriceTokens mengisi dua baris berlabel LENGKAP', async () => {
+    const h = harness();
+    await h.svc.quoteForConversation('c1');
+    const text = await h.svc.getGroundingText('c1');
+    expect(text).toContain('{{blok_total}}');
+    const out = await h.svc.resolvePriceTokens('c1', 'Boleh kak, ini rinciannya:\n{{blok_total}}');
+    expect(out.ok).toBe(true);
+    expect(out.text).toMatch(/•\s*Transfer\s*:\s*Rp/);
+    expect(out.text).toMatch(/•\s*COD\s*:\s*Rp/);
   });
 });
 
@@ -908,42 +996,37 @@ describe('pembantu murni & kontrak grounding', () => {
     expect(m[0].ids).toEqual(['a', 'b']);
   });
 
-  it('grounding text hanya memuat angka akhir, tidak pernah rincian mentah', async () => {
-    const h = harness();
-    const res: any = await h.svc.quoteForConversation('c1');
-    const text = await h.svc.getGroundingText('c1');
-    expect(text).toContain(formatIdr(res.quote.transferTotal));
-    // Ongkir dasar, harga diskon platform (margin toko), dan codFee mentah
-    // TIDAK BOLEH bocor ke teks yang dilihat LLM.
-    expect(text).not.toContain('37.600'); // estimatedSpecialPrice JNE
-    expect(text).not.toContain('47.000'); // estimatedPrice mentah
-  });
-
   /**
-   * >>> ANGGA — regresi insiden Fatih 2026-08-03: bot MENJUMLAH ULANG.
-   *
-   * Sistem memberi total 155.000 (transfer) & 160.000 (COD) untuk 1 pcs Bedog
-   * Betekok ke Purworejo. Bot menulis 294.000 & 299.000 — selisihnya PERSIS
-   * Rp139.000 di KEDUA angka, yaitu harga satuan barang di daftar stok.
-   * Polanya rapi: `total + harga barang`, padahal harga barang sudah ada di
-   * dalam total itu.
-   *
-   * Sebabnya kalimat lama, "Total ... sudah termasuk ongkir": ia menyebut
-   * ongkir, tapi TIDAK menyebut harga barang, jadi terbaca sebagai "ini
-   * ongkirnya" — dan menambahkan harga produk terasa masuk akal.
-   *
-   * Gerbang `checkPriceGrounding` menangkap akibatnya (terbukti di produksi).
-   * Tes ini menjaga PENYEBABNYA: teksnya harus menyatakan isi totalnya.
+   * >>> ANGGA — Fase 113 (2026-08-04): MENGGANTIKAN tes lama "grounding text
+   * hanya memuat angka akhir" (dulu mengecek `text` mengandung
+   * `formatIdr(transferTotal)`). Sekarang grounding text TIDAK PERNAH memuat
+   * angka rupiah sama sekali — itulah intinya. Insiden 09:54 (4 Agt), 17:29
+   * (3 Agt), dan seterusnya semuanya berakar dari model memegang angka uang;
+   * kalau angkanya tidak pernah ada di context model, kelas bug itu berhenti
+   * secara struktural, bukan lewat larangan kalimat.
    */
-  it('grounding menyatakan total SUDAH memuat harga barang, dan melarang menambah', async () => {
+  it('Fase 113: grounding text TIDAK PERNAH memuat angka rupiah — hanya penanda {{token}}', async () => {
     const h = harness();
     await h.svc.quoteForConversation('c1');
     const text = await h.svc.getGroundingText('c1');
-    expect(text).toMatch(/SUDAH harga barang \+ ongkir/);
-    expect(text).toMatch(/JANGAN menambahkan harga produk/i);
-    // Sumber godaannya disebut eksplisit: angka di daftar stok.
-    expect(text).toMatch(/daftar stok/i);
+    // Tidak ada angka 3+ digit sama sekali (ongkir dasar, estimatedSpecialPrice,
+    // codFee, ATAU total akhir) — semuanya cuma jadi nama penanda.
+    expect(text).not.toMatch(/\d{3,}/);
+    expect(text).toMatch(/jangan pernah menulis nominal rupiah/i);
+    expect(text).toContain('{{total_transfer}}');
+    expect(text).toContain('{{ongkir}}');
   });
+
+  /**
+   * >>> ANGGA — Fase 113: tes lama "grounding menyatakan total SUDAH memuat
+   * harga barang, dan melarang menambah" DIHAPUS. Ia menguji paragraf
+   * anti-jumlah-ulang yang sengaja DIHAPUS dari SHIPPING_GROUNDING_INTRO
+   * (lihat bot-prompts.ts) — bukan diperlunak, dihapus, karena penyebabnya
+   * sudah tidak mungkin terjadi: model tidak pernah punya angka total untuk
+   * dijumlah dengan harga barang. Regresi insiden Fatih (17:29 3 Agt: `total +
+   * harga barang`) sekarang dijaga oleh tes di atas ("tidak pernah memuat
+   * angka rupiah") — kalau tidak ada angka, tidak ada yang bisa dijumlah ulang.
+   */
 
   it('parseExtract toleran terhadap JSON berpagar & qty tidak wajar', () => {
     expect(parseExtract('```json\n{"kota":"Medan","items":[{"nama":"Golok","qty":"3"}]}\n```'))

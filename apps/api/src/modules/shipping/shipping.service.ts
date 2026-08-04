@@ -11,6 +11,7 @@ import {
   t,
   SHIPPING_EXTRACT_SYSTEM,
   SHIPPING_EXTRACT_USER,
+  SHIPPING_MONEY_RULE, // >>> ANGGA — Fase 113 <<<
   SHIPPING_GROUNDING_INTRO,
   SHIPPING_GROUNDING_UNKNOWN,
   SHIPPING_GROUNDING_AMBIGUOUS,
@@ -21,6 +22,10 @@ import {
   SHIPPING_GROUNDING_SHIPPING_ONLY,
   SHIPPING_GROUNDING_UNRESOLVED_ITEMS,
 } from '../../i18n/bot-prompts';
+// >>> ANGGA — Fase 113: satu definisi "angka uang" dipakai ulang dari
+// rules.engine.ts, bukan diduplikasi di sini. rules.engine.ts tidak balik
+// bergantung ke modul shipping (arahnya searah, aman dari impor melingkar).
+import { angkaUtuh } from '../sentinel/rules.engine';
 import {
   MengantarClient,
   type CourierEstimate,
@@ -120,6 +125,21 @@ export function roundTo(value: number, increment: number): number {
   if (!Number.isFinite(value)) return 0;
   if (!Number.isFinite(increment) || increment <= 1) return Math.round(value);
   return Math.round(value / increment) * increment;
+}
+
+/**
+ * >>> ANGGA — Fase 113 (2026-08-04): varian `roundTo` yang SELALU membulatkan
+ * ke BAWAH. Dipakai KHUSUS untuk diskon ongkir, supaya nominalnya tidak
+ * pernah melewati plafon yang dikonfigurasi Bossfren — 20% dari ongkir
+ * Rp22.000 = Rp4.400; dibulatkan ke ATAS (atau ke TERDEKAT) jadi Rp4.500,
+ * sudah melebihi 20%. `roundTo()` TIDAK bisa dipakai ulang di sini: ia
+ * membulatkan ke TERDEKAT dan dipakai di tempat lain untuk Rule 11 (harga
+ * akhir) — mengubah perilakunya akan merusak pembulatan itu.
+ */
+export function floorTo(value: number, increment: number): number {
+  if (!Number.isFinite(value)) return 0;
+  if (!Number.isFinite(increment) || increment <= 1) return Math.floor(value);
+  return Math.floor(value / increment) * increment;
 }
 
 /**
@@ -715,11 +735,26 @@ export class ShippingService {
     const goodsTotal = resolved.totalPrice;
     const transferShipping = Number(estimates[transferCourier]?.estimatedPrice ?? 0);
     const transferRaw = goodsTotal + transferShipping;
+    const transferTotal = roundTo(transferRaw, cfg.priceRoundingIncrement);
+
+    // >>> ANGGA — Fase 113 (2026-08-04): diskon ONGKIR, opsi C ketok palu
+    // Bossfren. 20% dihitung dari ONGKIR (bukan dari total transfer/COD), dan
+    // dibulatkan ke BAWAH lewat `floorTo` — lihat komentar di sana kenapa
+    // `roundTo` tidak bisa dipakai ulang untuk ini. shippingOnly tidak dapat
+    // diskon: belum ada total checkout yang bisa dipotong, cuma ongkir 1 pcs.
+    const shippingDiscount = shippingOnly
+      ? 0
+      : floorTo(transferShipping * (cfg.shippingDiscountPercentMax / 100), cfg.priceRoundingIncrement);
+    const transferTotalDiscounted = shippingDiscount > 0 ? transferTotal - shippingDiscount : 0;
+    // <<< ANGGA
 
     // Langkah 8 — codFee akurat, SELALU dari API (Rule 6), tidak pernah dihitung
     // sendiri dengan persentase apa pun.
     let codTotal: number | null = null;
     let codCourierFinal: string | null = null;
+    let codShippingFee: number | null = null; // >>> ANGGA <<<
+    let codDiscount: number | null = null; // >>> ANGGA <<<
+    let codTotalDiscounted: number | null = null; // >>> ANGGA <<<
     if (codCourier) {
       const codShipping = Number(estimates[codCourier]?.estimatedPrice ?? 0);
       const codAmount = goodsTotal + codShipping;
@@ -729,6 +764,15 @@ export class ShippingService {
       if (codFee > 0) {
         codCourierFinal = codCourier;
         codTotal = roundTo(goodsTotal + codShipping + codFee, cfg.priceRoundingIncrement);
+        codShippingFee = codShipping; // >>> ANGGA <<<
+        // >>> ANGGA — Fase 113: diskon sisi COD dihitung dari ongkir COD-nya
+        // SENDIRI, simetris dengan sisi transfer — kurir transfer & COD bisa
+        // beda (tarif beda), jadi tidak boleh berbagi satu angka diskon.
+        if (!shippingOnly) {
+          codDiscount = floorTo(codShipping * (cfg.shippingDiscountPercentMax / 100), cfg.priceRoundingIncrement);
+          codTotalDiscounted = codDiscount > 0 ? codTotal - codDiscount : 0;
+        }
+        // <<< ANGGA
       }
       // codFee tidak masuk akal (<= 0) → jangan tawarkan COD, jangan tebak.
     }
@@ -741,7 +785,7 @@ export class ShippingService {
       weightKg,
       goodsTotal,
       transferCourier,
-      transferTotal: roundTo(transferRaw, cfg.priceRoundingIncrement),
+      transferTotal,
       codCourier: codCourierFinal,
       codTotal,
       codEligible: codCourierFinal !== null,
@@ -758,6 +802,21 @@ export class ShippingService {
         name: i.name,
         qty: Number.isFinite(i.qty) && i.qty > 0 ? Math.floor(i.qty) : 1,
       })),
+      // >>> ANGGA — Fase 113: sumber katalog penanda `{{token}}`, TIDAK PERNAH
+      // dibaca LLM langsung (lihat buildPriceTokens/katalogPenanda di bawah).
+      matchedItems: resolved.matched.map((m) => ({
+        name: m.name,
+        qty: m.qty,
+        unitPrice: m.price,
+        lineTotal: m.qty * m.price,
+      })),
+      shippingFee: transferShipping,
+      shippingDiscount,
+      transferTotalDiscounted,
+      codShippingFee,
+      codDiscount,
+      codTotalDiscounted,
+      // <<< ANGGA
     };
     return { status: 'ok', quote };
   }
@@ -765,11 +824,13 @@ export class ShippingService {
   // ── Langkah 10 — teks yang disuntik ke prompt ─────────────────────────────
 
   /**
-   * HANYA dua angka akhir yang sudah dibulatkan (plus status COD & nama kurir)
-   * yang masuk ke sini. Rincian mentah (price/estimatedSpecialPrice/codFee)
-   * SENGAJA tidak pernah ikut — supaya otomatis sejalan dengan aturan persona
-   * "jangan tunjukkan hitungan ke pelanggan", dan supaya margin ongkir toko
-   * (selisih estimatedPrice vs estimatedSpecialPrice) tidak pernah bocor.
+   * >>> ANGGA — Fase 113 (2026-08-04): kasus 'ok' tidak lagi merangkai angka
+   * jadi kalimat. Ia merangkai KATALOG PENANDA `{{token}}` yang tersedia untuk
+   * kutipan ini (lihat `katalogPenanda`) — model menaruh penandanya, sistem
+   * mengisi nilainya sesudah model selesai (`resolvePriceTokens`, dipanggil
+   * dari AiService). Rincian mentah (price/estimatedSpecialPrice/codFee) tetap
+   * TIDAK PERNAH ikut, sama seperti sebelumnya — cuma bentuknya yang berubah
+   * dari "angka jadi" menjadi "nama penanda".
    */
   async getGroundingText(conversationId: string, lang = 'id'): Promise<string> {
     let result: ShippingResult;
@@ -786,32 +847,25 @@ export class ShippingService {
         // >>> ANGGA: kutipan ONGKIR SAJA punya bentuk kalimat sendiri — angka
         // ini ongkir, BUKAN total belanja, dan bot harus menyebutnya begitu.
         if (q.shippingOnly) {
-          const dasar = q.transferTotal;
           const lines = [
+            t(SHIPPING_MONEY_RULE, lang),
             t(SHIPPING_GROUNDING_SHIPPING_ONLY, lang),
-            `• Tujuan: ${q.city}, ${q.province}`,
-            `• Ongkir ${this.beratSeragam ? '' : 'MULAI DARI '}Rp${formatIdr(dasar)} untuk 1 pcs (kurir ${q.transferCourier})`,
+            ...katalogPenanda(q),
           ];
+          if (!this.beratSeragam) {
+            lines.push(
+              '• PENTING: {{ongkir}} ini ongkir MULAI DARI (ada produk yang lebih berat dari standar 1 pcs) — sebut sebagai perkiraan, jangan sebagai angka pasti final.',
+            );
+          }
           if (q.unmatchedNames?.length) {
             lines.push(`• Barang "${q.unmatchedNames.join('", "')}" belum cocok dengan katalog — pastikan dulu produknya.`);
           }
           return lines.join('\n');
         }
-        const lines = [
-          t(SHIPPING_GROUNDING_INTRO, lang),
-          `• Tujuan: ${q.city}, ${q.province}`,
-          // >>> ANGGA: label sengaja menyebut "harga barang + ongkir". Kalimat
-          // lama cuma "sudah termasuk ongkir" — terbaca sebagai "ini ongkirnya",
-          // lalu model menambahkan lagi harga produk dari daftar stok.
-          `• Total kalau TRANSFER: Rp${formatIdr(q.transferTotal)} (kurir ${q.transferCourier} — SUDAH harga barang + ongkir, jangan ditambah apa pun)`,
-        ];
-        if (q.codTotal != null && q.codCourier) {
-          lines.push(
-            `• Total kalau COD: Rp${formatIdr(q.codTotal)} (kurir ${q.codCourier} — SUDAH harga barang + ongkir + biaya COD, jangan ditambah apa pun)`,
-          );
-        } else if (q.codBlockedReason === 'region') {
+        const lines = [t(SHIPPING_MONEY_RULE, lang), t(SHIPPING_GROUNDING_INTRO, lang), ...katalogPenanda(q)];
+        if (q.codBlockedReason === 'region') {
           lines.push('• COD TIDAK tersedia untuk wilayah ini (kebijakan toko). Tawarkan transfer saja.');
-        } else {
+        } else if (!q.codCourier) {
           lines.push('• COD tidak tersedia untuk tujuan ini. Tawarkan transfer saja.');
         }
         return lines.join('\n');
@@ -858,16 +912,58 @@ export class ShippingService {
   }
 
   /**
-   * Langkah 11 — angka (sudah dibulatkan) untuk memperluas `checkPriceGrounding`.
-   * Terpisah dari `getGroundingText` supaya teks naratif "belum bisa dipastikan"
-   * tidak ikut terhitung sebagai data grounding oleh `checkKnowledgeGrounding`.
+   * >>> ANGGA — Fase 113 (2026-08-04): MENGGANTIKAN `getGroundingNumbers()`
+   * (dihapus — satu-satunya pemakainya, `checkPriceGrounding` di Sentinel,
+   * juga dihapus). Gerbang uang sekarang di SINI, bukan lagi di Sentinel:
+   *
+   *  1. Penjaga kata: token angka (`{{harga_satuan}}`/`{{subtotal_barang}}`)
+   *     yang didahului kata "total"/"ongkir"/"ongkos kirim" → ditahan. Angka
+   *     yang dihasilkan tetap BENAR, tapi labelnya akan salah kalau dibiarkan
+   *     (mis. "totalnya {{harga_satuan}}").
+   *  2. Substitusi: setiap `{{token}}` yang DIKENAL diganti nilai sungguhan
+   *     dari kutipan aktif percakapan ini.
+   *  3. Sesudah substitusi: `{{...}}` yang TERSISA (penanda salah ketik/tidak
+   *     tersedia untuk kutipan ini) ATAU angka rupiah yang bukan hasil
+   *     substitusi (model menulis digit sendiri, melanggar SHIPPING_MONEY_RULE)
+   *     → ditahan.
+   *
+   * Dipanggil TANPA SYARAT mode AI dari `AiService` (lihat komentar di sana
+   * soal kenapa Sentinel — yang post-send untuk AI ON — tidak bisa jadi
+   * satu-satunya penjaga untuk aturan mutlak "jangan pernah kirim {{...}}").
    */
-  async getGroundingNumbers(conversationId: string): Promise<string> {
+  async resolvePriceTokens(
+    conversationId: string,
+    text: string,
+  ): Promise<{ text: string; ok: boolean; issues: string[] }> {
+    const issues: string[] = [];
+
+    const guard = penjagaKata(text);
+    if (guard) {
+      issues.push(`Penanda dipakai setelah kata yang bisa membuat labelnya salah: "${guard}"`);
+    }
+
     const quote = this.cache.get(conversationId);
-    if (!quote) return '';
-    const parts = [String(quote.transferTotal), String(quote.goodsTotal)];
-    if (quote.codTotal != null) parts.push(String(quote.codTotal));
-    return parts.join(' ');
+    const tokens = quote ? buildPriceTokens(quote) : {};
+
+    const inserted = new Set<string>();
+    const substituted = text.replace(/\{\{([a-z_]+)\}\}/gi, (utuh, nama: string) => {
+      const nilai = tokens[nama];
+      if (nilai === undefined) return utuh; // biar ketahan sebagai "tak dikenal" di bawah
+      for (const n of angkaUtuh(nilai)) inserted.add(n);
+      return nilai;
+    });
+
+    const sisaPenanda = substituted.match(/\{\{[a-z_]+\}\}/gi);
+    if (sisaPenanda) {
+      issues.push(`Penanda tidak dikenal/tidak tersedia untuk kutipan ini: ${sisaPenanda.join(', ')}`);
+    }
+
+    const angkaMentah = [...angkaUtuh(substituted, true)].filter((n) => !inserted.has(n));
+    if (angkaMentah.length) {
+      issues.push(`Angka rupiah ditulis langsung oleh model, bukan lewat penanda: ${angkaMentah.join(', ')}`);
+    }
+
+    return { text: substituted, ok: issues.length === 0, issues };
   }
 
   // ── Pembantu internal ────────────────────────────────────────────────────
@@ -980,4 +1076,129 @@ export function sameItems(a: ExtractedItem[], b: ExtractedItem[]): boolean {
       .sort()
       .join('|');
   return key(a ?? []) === key(b ?? []);
+}
+
+// ── Fase 113 — model menulis KALIMAT, sistem menulis ANGKA UANG ────────────
+
+/**
+ * >>> ANGGA — Fase 113 (2026-08-04): penjaga kata deterministik. Risiko sisa
+ * yang diakui di rancangan: angka BENAR tapi LABEL salah, mis. model menulis
+ * "totalnya {{harga_satuan}}" — nilainya sah (harga satuan sungguhan), tapi
+ * dibacakan seolah itu total. Hanya diperiksa untuk dua penanda yang paling
+ * mudah ketuker dengan "total": `{{harga_satuan}}` dan `{{subtotal_barang}}`.
+ * `{{total_transfer}}`/`{{total_cod}}` sendiri TIDAK perlu penjaga ini — nama
+ * penandanya sudah menyebut "total", jadi tidak ada label lain yang bisa
+ * ketuker dengannya.
+ *
+ * Jendela 20 karakter (bukan seluruh teks) supaya kata "total" yang jauh
+ * sebelumnya, dari klausa lain, tidak ikut menuduh penanda yang tidak
+ * berkaitan dengannya.
+ */
+export function penjagaKata(text: string): string | null {
+  const larangan = /\b(total(nya)?|ongkir(nya)?|ongkos\s*kirim)\b[^{}\n]{0,20}\{\{(harga_satuan|subtotal_barang)\}\}/i;
+  const m = (text ?? '').match(larangan);
+  return m ? m[0] : null;
+}
+
+/**
+ * >>> ANGGA — Fase 113: token → NILAI sungguhan, dipakai `resolvePriceTokens`
+ * untuk substitusi sesudah model menjawab. `{{harga_satuan}}` HANYA disertakan
+ * kalau SELURUH barang di order ini satu harga — order dengan >1 harga satuan
+ * tidak punya "satuan" tunggal yang aman untuk ditawarkan (keputusan Bossfren
+ * 2026-08-04: sembunyikan, bukan menebak barang mana yang dimaksud).
+ * `{{blok_total}}` HANYA ada kalau Transfer & COD dua-duanya tersedia — dua
+ * baris LENGKAP dengan labelnya, supaya risiko label Transfer↔COD tertukar
+ * benar-benar nol (keputusan Bossfren 2026-08-04: model tidak pernah mengetik
+ * kata "Transfer"/"COD" sendiri untuk kasus ini).
+ */
+export function buildPriceTokens(q: ShippingQuote): Record<string, string> {
+  const tokens: Record<string, string> = {
+    kota_tujuan: `${q.city}, ${q.province}`,
+  };
+
+  if (q.shippingOnly) {
+    tokens.ongkir = `Rp${formatIdr(q.transferTotal)}`;
+    tokens.kurir_transfer = q.transferCourier;
+    return tokens;
+  }
+
+  const satuanUnik = new Set(q.matchedItems.map((m) => m.unitPrice));
+  if (satuanUnik.size === 1 && q.matchedItems.length > 0) {
+    tokens.harga_satuan = `Rp${formatIdr(q.matchedItems[0].unitPrice)}`;
+  }
+  if (q.matchedItems.length) {
+    tokens.rincian_order = q.matchedItems.map((m) => `${m.qty} pcs ${m.name}`).join(', ');
+  }
+  tokens.subtotal_barang = `Rp${formatIdr(q.goodsTotal)}`;
+  tokens.ongkir = `Rp${formatIdr(q.shippingFee)}`;
+  tokens.kurir_transfer = q.transferCourier;
+  tokens.total_transfer = `Rp${formatIdr(q.transferTotal)}`;
+  if (q.shippingDiscount > 0) {
+    tokens.diskon_ongkir = `Rp${formatIdr(q.shippingDiscount)}`;
+    tokens.total_transfer_diskon = `Rp${formatIdr(q.transferTotalDiscounted)}`;
+  }
+
+  if (q.codTotal != null && q.codCourier) {
+    tokens.kurir_cod = q.codCourier;
+    tokens.total_cod = `Rp${formatIdr(q.codTotal)}`;
+    if (q.codDiscount != null && q.codDiscount > 0 && q.codTotalDiscounted != null) {
+      tokens.total_cod_diskon = `Rp${formatIdr(q.codTotalDiscounted)}`;
+    }
+    tokens.blok_total =
+      `• Transfer : Rp${formatIdr(q.transferTotal)}
+` +
+      `• COD      : Rp${formatIdr(q.codTotal)}  (kurir ${q.codCourier})`;
+  }
+
+  return tokens;
+}
+
+/**
+ * >>> ANGGA — Fase 113: katalog penanda yang ditampilkan ke MODEL (nama +
+ * deskripsi, TIDAK PERNAH nilainya — itu baru diisi `resolvePriceTokens`
+ * sesudah model menjawab). Kondisinya SAMA PERSIS dengan `buildPriceTokens`
+ * supaya model tidak pernah ditawari penanda yang ternyata tidak bisa diisi.
+ */
+export function katalogPenanda(q: ShippingQuote): string[] {
+  if (q.shippingOnly) {
+    return [
+      '• {{kota_tujuan}} = kota/kabupaten tujuan',
+      '• {{ongkir}} = ongkir untuk 1 pcs (produk belum dipastikan)',
+      '• {{kurir_transfer}} = nama kurirnya',
+    ];
+  }
+
+  const lines = [
+    '• {{kota_tujuan}} = kota/kabupaten tujuan',
+    '• {{rincian_order}} = daftar barang & jumlahnya (opsional, pakai kalau perlu — bukan wajib)',
+  ];
+  const satuanUnik = new Set(q.matchedItems.map((m) => m.unitPrice));
+  if (satuanUnik.size === 1 && q.matchedItems.length > 0) {
+    lines.push('• {{harga_satuan}} = harga satu barang');
+  }
+  lines.push(
+    '• {{subtotal_barang}} = total harga barang saja (belum termasuk ongkir)',
+    '• {{ongkir}} = ongkir saja',
+    '• {{kurir_transfer}} = kurir untuk TRANSFER',
+    '• {{total_transfer}} = total akhir TRANSFER (sudah termasuk ongkir)',
+  );
+  if (q.shippingDiscount > 0) {
+    lines.push(
+      '• {{diskon_ongkir}} = potongan ongkir — pakai HANYA sesuai aturan diskon di instruksi persona, jangan tawarkan sendiri tanpa alasan',
+      '• {{total_transfer_diskon}} = total TRANSFER sudah dipotong diskon ongkir',
+    );
+  }
+  if (q.codTotal != null && q.codCourier) {
+    lines.push(
+      '• {{kurir_cod}} = kurir untuk COD',
+      '• {{total_cod}} = total akhir COD (sudah termasuk ongkir + biaya COD)',
+    );
+    if (q.codDiscount != null && q.codDiscount > 0) {
+      lines.push('• {{total_cod_diskon}} = total COD sudah dipotong diskon ongkir');
+    }
+    lines.push(
+      '• {{blok_total}} = DUA BARIS "Transfer : ... / COD : ..." SIAP PAKAI, sudah lengkap dengan labelnya — WAJIB dipakai kalau menyebut Transfer dan COD sekaligus di kalimat yang sama, JANGAN mengetik kata "Transfer"/"COD" sendiri untuk kasus itu',
+    );
+  }
+  return lines;
 }

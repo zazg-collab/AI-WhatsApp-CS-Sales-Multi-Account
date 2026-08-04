@@ -170,4 +170,28 @@ describe('WaInboundService auto-reply', () => {
     expect(ai.generateSegmentedReply).not.toHaveBeenCalled();
     expect(gateway.sendText).toHaveBeenCalledTimes(1);
   });
+
+  /**
+   * >>> ANGGA — Fase 113 (2026-08-04): gerbang uang (AiService.gateMoneyTokens)
+   * harus menahan balasan jadi draft di SEMUA mode, termasuk ai_on yang biasanya
+   * kirim langsung tanpa Sentinel pre-send. Ini bukti bahwa gerbang berlaku
+   * SEBELUM percabangan mode, bukan hanya untuk ai_draft/ai_supervised.
+   */
+  it('gerbang uang menahan balasan jadi draft walau ai_on & bukan burst', async () => {
+    conversation.aiMode = AiMode.ai_on;
+    // burstRows default = single customer message → not a burst
+    ai.generateReply.mockResolvedValue({
+      text: '⚠️ [gerbang uang menahan: ...]\nTotalnya {{total_transfer}} kak',
+      moneyBlocked: true,
+    });
+
+    (service as any).scheduleAutoReply('c1');
+    await jest.advanceTimersByTimeAsync(8_000);
+
+    expect(gateway.sendText).not.toHaveBeenCalled();
+    expect(ai.generateSegmentedReply).not.toHaveBeenCalled();
+    const created = prisma.message.create.mock.calls.map((c: any[]) => c[0].data);
+    expect(created).toHaveLength(1);
+    expect(created[0]).toMatchObject({ status: MessageStatus.pending, content: expect.stringContaining('total_transfer') });
+  });
 });

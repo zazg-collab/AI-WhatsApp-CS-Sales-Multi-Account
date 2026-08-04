@@ -112,31 +112,18 @@ export function decisionFromConfidence(
 /**
  * >>> ANGGA — semua angka di sebuah teks, diambil UTUH dan dinormalkan.
  *
- * TERBUKTI DI PRODUKSI (insiden Fatih 2026-08-03): gerbang ini bekerja — ia
- * menangkap `294000, 299000` dan menahan draftnya. Jadi yang diperbaiki di
- * sini BUKAN kebocoran, melainkan dua sumber TUDUHAN PALSU yang membuatnya
- * menahan jawaban yang sebenarnya benar:
+ * Riwayat: sebelum Fase 113 fungsi ini dipakai `checkPriceGrounding` (gerbang
+ * himpunan-angka di Sentinel). Fase 113 (2026-08-04) MENGHAPUS gerbang itu —
+ * bukan menggantinya dengan versi lain di Sentinel — karena akar masalahnya
+ * (model mengetik angka rupiah sendiri) sekarang dicegah lebih awal: model
+ * tidak lagi diberi angkanya sama sekali, cuma penanda `{{token}}` yang diisi
+ * sistem sesudah generasi (lihat `ShippingService.resolvePriceTokens`, yang
+ * mengimpor fungsi INI untuk definisi "angka uang" yang sama, satu tempat).
+ * `angkaUtuh` sendiri tetap di sini karena masih dipakai lintas modul.
  *
- *  1. Sisi acuan dipecah per digit (`match(/\d+/g).join(' ')`), jadi harga
- *     yang ditulis berformat rupiah di knowledge base — "Rp139.000" — tersimpan
- *     sebagai "139 000". Draft yang menyebut 139000 lalu dituduh mengarang,
- *     padahal angkanya persis dari knowledge base itu sendiri.
- *  2. Ambangnya "4 digit ke atas" menyapu tahun ("Garansi 2026") dan nomor
- *     urut ikut tertuduh.
- *
- * Keduanya bikin jawaban benar mendarat di kotak draft, dan tiap draft palsu
- * mengikis kepercayaan pada gerbangnya sendiri.
- *
- * Satu fungsi ini MENGGANTIKAN pencocokan lama di kedua sisi (acuan & draft) —
- * bukan lapisan tambahan di atasnya. Semua ejaan ("150.000", "150 000",
- * "150000") mendarat di satu bentuk yang sama, lalu dibandingkan sebagai
- * anggota himpunan, bukan sebagai potongan teks.
- *
- * @param hanyaHarga untuk sisi DRAFT: hanya angka yang BERBENTUK uang yang
- * diperiksa — ditulis dengan pemisah ribuan, ATAU didahului "Rp", ATAU 5 digit
- * ke atas. Bukan daftar pengecualian, melainkan satu definisi "ini angka uang".
- * Sisi acuan sengaja mengambil SEMUA angka: makin luas acuannya, makin kecil
- * peluang menuduh yang benar.
+ * @param hanyaHarga hanya angka yang BERBENTUK uang yang diperiksa — ditulis
+ * dengan pemisah ribuan, ATAU didahului "Rp", ATAU 5 digit ke atas. Bukan
+ * daftar pengecualian, melainkan satu definisi "ini angka uang".
  */
 export function angkaUtuh(text: string, hanyaHarga = false): Set<string> {
   const out = new Set<string>();
@@ -153,30 +140,6 @@ export function angkaUtuh(text: string, hanyaHarga = false): Set<string> {
     out.add(bersih);
   }
   return out;
-}
-
-export function checkPriceGrounding(
-  draftText: string,
-  groundedText: string,
-  // >>> ANGGA: angka ongkir/total COD yang SUDAH DIBULATKAN dari modul shipping
-  // (Langkah 11 LAMPIRAN). Sengaja parameter terpisah & opsional, bukan
-  // digabung ke `groundedText`, karena `checkKnowledgeGrounding` memakai
-  // KOSONG/TIDAKNYA `groundedText` sebagai sinyal "tidak ada yang terambil dari
-  // knowledge base" — kalau teks ongkir ikut ke sana, aturan itu jadi lumpuh.
-  shippingNumbers = '',
-  // <<< ANGGA
-): RuleHit | null {
-  if (!groundedText.trim() && !shippingNumbers.trim()) return null; // >>> ANGGA <<<
-  // >>> ANGGA — dicocokkan sebagai ANGKA UTUH, bukan potongan teks.
-  const grounded = new Set([...angkaUtuh(groundedText), ...angkaUtuh(shippingNumbers)]);
-  const ungrounded = [...angkaUtuh(draftText, true)].filter((n) => !grounded.has(n));
-  if (ungrounded.length === 0) return null;
-  // <<< ANGGA
-  return {
-    decision: SentinelDecision.draft,
-    riskLevel: RiskLevel.medium,
-    reason: `Draft menyebut angka (${ungrounded.join(', ')}) yang tidak ditemukan di product knowledge/stok/ongkir — kemungkinan mengarang`,
-  };
 }
 
 /**

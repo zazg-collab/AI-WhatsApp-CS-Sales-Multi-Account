@@ -577,16 +577,30 @@ export const SHIPPING_EXTRACT_USER = {
   en: 'Extract the destination city and the item list from the conversation above. Reply ONLY with JSON.',
 };
 
-// >>> ANGGA — larangan menjumlah ulang ditulis SANGAT tegas di sini karena
-// pernah dilanggar dengan pola yang rapi (insiden Fatih 2026-08-03):
-// sistem memberi total 155.000 & 160.000, bot menulis 294.000 & 299.000 —
-// selisihnya PERSIS harga barang Rp139.000 di kedua angka. Model membaca
-// "Total ... sudah termasuk ongkir" sebagai "ini ongkirnya", lalu menambahkan
-// harga produk dari blok stok. Padahal harga barang SUDAH di dalam total itu.
-// Karena itu kalimatnya sekarang menyebut isi totalnya secara gamblang.
+// >>> ANGGA — Fase 113 (2026-08-04): "model menulis KALIMAT, sistem menulis
+// ANGKA UANG". Empat ronde perbaikan sebelumnya (Fase 110, 111#5, 111#6,
+// insiden 09:54 4 Agt) semua menambal SATU penyakit: model yang mengetik
+// angka uang sendiri (menjumlah ulang, salah label total↔ongkir, mengarang
+// angka meniru pola riwayat). Menambal kalimatnya lagi tidak akan pernah
+// menghabiskan kelas bug ini selama modelnya masih memegang digitnya.
+//
+// Solusinya: model tidak lagi diberi angka rupiah SAMA SEKALI di sini — ia
+// hanya diberi PENANDA `{{token}}` (dibangun `katalogPenanda` di
+// shipping.service.ts, isinya beda-beda tergantung kutipan apa yang tersedia)
+// dan menaruh penanda itu di kalimatnya. Sistem yang mengisi nilai
+// sesungguhnya SESUDAH model selesai menjawab (`ShippingService.resolvePriceTokens`,
+// dipanggil dari `AiService` sebelum teks sampai ke Sentinel/pelanggan). Semua
+// paragraf peringatan bertingkat yang dulu ada di sini (larangan menjumlah
+// ulang, larangan menampilkan rincian ongkir/COD, dst) jadi TIDAK RELEVAN —
+// model tidak pernah punya angka untuk dijumlah ulang atau disembunyikan.
+export const SHIPPING_MONEY_RULE = {
+  id: 'Jangan pernah menulis nominal rupiah sendiri untuk order ini — pakai PENANDA di bawah persis seperti tertulis (termasuk dua kurung kurawalnya), sistem yang mengisi nilai sesungguhnya sesudah kamu selesai menjawab.',
+  en: 'Never write a rupiah amount yourself for this order — use the PLACEHOLDER below exactly as written (including the double curly braces), the system fills in the real value after you finish answering.',
+};
+
 export const SHIPPING_GROUNDING_INTRO = {
-  id: 'DATA ONGKIR TERKINI & SAH (dihitung sistem dari tarif live ekspedisi untuk SELURUH barang yang disebut pelanggan).\n\nPENTING — angka di bawah adalah TOTAL AKHIR yang tinggal dibayar pelanggan: HARGA BARANG + ONGKIR sudah dijumlahkan di dalamnya oleh sistem. JANGAN menambahkan harga produk apa pun ke angka ini. JANGAN menjumlahkannya dengan angka di daftar stok. Angka di daftar stok itu harga satuan barang saja, dan sudah ikut terhitung di sini.\n\nPakai angka di bawah APA ADANYA. Jangan menghitung ulang, jangan menampilkan rincian ongkir/biaya COD terpisah ke pelanggan, dan jangan menyebut angka lain yang tidak ada di sini.',
-  en: 'CURRENT AUTHORITATIVE SHIPPING DATA (computed by the system from live carrier rates for ALL items the customer mentioned).\n\nIMPORTANT — the figures below are the FINAL amount the customer pays: GOODS PRICE + SHIPPING are already added together inside them by the system. Do NOT add any product price to these figures. Do NOT sum them with anything from the stock list. Those stock prices are per-item prices and are already counted here.\n\nUse the numbers below AS-IS. Do not recompute, do not show the shipping/COD fee breakdown to the customer, and never state a number that is not listed here.',
+  id: 'DATA ONGKIR TERKINI & SAH untuk order ini (dihitung sistem dari tarif live ekspedisi untuk barang yang disebut pelanggan). Penanda yang tersedia sekarang:',
+  en: 'CURRENT AUTHORITATIVE SHIPPING DATA for this order (computed by the system from live carrier rates for the items the customer mentioned). Placeholders available right now:',
 };
 
 export const SHIPPING_GROUNDING_UNKNOWN = {
@@ -627,8 +641,8 @@ export const SHIPPING_GROUNDING_DESTINATION_STUCK = {
 };
 
 export const SHIPPING_GROUNDING_SHIPPING_ONLY = {
-  id: 'DATA ONGKIR TERKINI & SAH — tapi produknya BELUM dipastikan, jadi angka di bawah adalah ONGKIR SAJA untuk 1 pcs, BUKAN total belanja. Sebutkan apa adanya sebagai ongkir, JANGAN pernah menyebutnya total atau menjumlahkannya dengan harga barang. Setelah itu tanyakan produk mana yang diinginkan supaya totalnya bisa dihitung.',
-  en: 'CURRENT AUTHORITATIVE SHIPPING DATA — but the product is NOT confirmed yet, so the number below is SHIPPING ONLY for 1 item, NOT an order total. State it as shipping cost, NEVER as a total and never add it to a product price yourself. Then ask which product they want so the total can be computed.',
+  id: 'DATA ONGKIR TERKINI & SAH — tapi produknya BELUM dipastikan, jadi penanda ongkir di bawah adalah ONGKIR SAJA untuk 1 pcs, BUKAN total belanja. Sebutkan sebagai ongkir, JANGAN pernah menyebutnya total. Setelah itu tanyakan produk mana yang diinginkan supaya totalnya bisa dihitung. Penanda yang tersedia sekarang:',
+  en: 'CURRENT AUTHORITATIVE SHIPPING DATA — but the product is NOT confirmed yet, so the placeholder below is SHIPPING ONLY for 1 item, NOT an order total. State it as shipping cost, NEVER as a total. Then ask which product they want so the total can be computed. Placeholders available right now:',
 };
 
 export const SHIPPING_GROUNDING_UNRESOLVED_ITEMS = {

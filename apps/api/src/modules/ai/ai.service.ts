@@ -43,6 +43,14 @@ const FALLBACK_MARKERS = Object.values(FALLBACK_PHRASE) as string[];
 export interface GeneratedReply {
   text: string;
   model: string;
+  // >>> ANGGA — Fase 113 (2026-08-04): true kalau gerbang uang (lihat
+  // `gateMoneyTokens` di bawah / `ShippingService.resolvePriceTokens`) menahan
+  // balasan ini — token `{{...}}` tak terselesaikan, atau angka rupiah yang
+  // ditulis model sendiri di luar penanda. Pemanggil (wa-inbound.service.ts)
+  // WAJIB memaksa draft kalau ini true, APA PUN mode AI-nya, termasuk ai_on
+  // yang biasanya kirim tanpa menunggu Sentinel — gerbang ini berjalan di sini
+  // (bukan di Sentinel) justru supaya berlaku sama rata di semua mode.
+  moneyBlocked?: boolean;
 }
 
 export interface LeadScoreResult {
@@ -111,6 +119,27 @@ export class AiService {
 
   cacheStats() {
     return this.cache.stats();
+  }
+
+  /**
+   * >>> ANGGA — Fase 113 (2026-08-04): gerbang uang, dipanggil TANPA SYARAT
+   * mode AI dari `generateReply`/`generateSegmentedReply` — lihat catatan di
+   * `GeneratedReply.moneyBlocked`. Kalau ditahan, balasan diberi penanda
+   * pendek di depan (ketok palu Bossfren) supaya admin yang membaca draftnya
+   * langsung tahu kenapa teksnya terlihat aneh, tanpa harus buka log Sentinel.
+   */
+  private async gateMoneyTokens(
+    conversationId: string,
+    text: string,
+  ): Promise<{ text: string; blocked: boolean }> {
+    if (!this.shipping) return { text, blocked: false };
+    const rendered = await this.shipping.resolvePriceTokens(conversationId, text);
+    if (rendered.ok) return { text: rendered.text, blocked: false };
+    this.logger.warn(`Gerbang uang menahan balasan ${conversationId}: ${rendered.issues.join('; ')}`);
+    return {
+      text: `⚠️ [gerbang uang menahan: ${rendered.issues.join('; ')}]\n${rendered.text}`,
+      blocked: true,
+    };
   }
 
   // >>> ANGGA: Langkah 2 LAMPIRAN — satu panggilan LLM kecil mode JSON yang
@@ -190,11 +219,19 @@ export class AiService {
     const outcome = FALLBACK_MARKERS.some((m) => text.includes(m)) ? 'fallback' : 'success';
     this.metrics?.aiRequests.inc({ outcome });
 
-    if (cacheable && botId) {
+    // >>> ANGGA — Fase 113: gerbang uang SEBELUM caching, supaya cache tidak
+    // pernah menyimpan (dan mengulang ke pelanggan lain) jawaban yang masih
+    // menahan token/angka bermasalah.
+    const gated = await this.gateMoneyTokens(conversationId, text);
+    text = gated.text;
+    const moneyBlocked = gated.blocked;
+    // <<< ANGGA
+
+    if (cacheable && botId && !moneyBlocked) {
       this.cache.set(botId, lastUser as string, text);
     }
 
-    return { text, model: resolvedModel };
+    return { text, model: resolvedModel, moneyBlocked };
   }
 
   /**
@@ -247,6 +284,16 @@ export class AiService {
         })
         .filter((s) => s.text.length > 0);
       if (segments.length === 0) throw new Error('no usable segments');
+      // >>> ANGGA — Fase 113: setiap segmen burst juga lewat gerbang uang.
+      // Burst SELALU jadi draft apa pun hasilnya (lihat handleBurstReply di
+      // wa-inbound.service.ts), tapi tanpa ini admin bisa melihat draft yang
+      // masih memuat {{...}} mentah — gerbangnya tetap wajib jalan supaya
+      // penanda pendek "gerbang uang menahan" tampil kalau perlu.
+      for (const s of segments) {
+        const gated = await this.gateMoneyTokens(conversationId, s.text);
+        s.text = gated.text;
+      }
+      // <<< ANGGA
       return segments;
     } catch (err) {
       // >>> ANGGA: JANGAN pernah memakai `raw` sebagai teks balasan di sini.
