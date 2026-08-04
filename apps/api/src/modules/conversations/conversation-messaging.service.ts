@@ -432,6 +432,30 @@ export class ConversationMessagingService {
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
 
+    // >>> ANGGA: markRead HARUS idempoten — kalau tidak, ia memberi makan
+    // lingkaran tak berujung:
+    //   loadConv() -> POST /read -> emit 'conversation:updated'
+    //     -> socket klien onConvUpdate -> scheduleConvReload (debounce 500 ms)
+    //     -> loadConv() lagi -> POST /read lagi -> ...
+    // Terukur di log produksi (2026-08-04): 4 permintaan tiap ~540 ms tanpa
+    // henti selama ada tab inbox terbuka, dan `wa.markRead` di bawah
+    // menembakkan `sendSeen` ke WhatsApp ~2x per detik — pola lalu lintas
+    // yang jelas melanggar disiplin anti-ban repo ini, dan kandidat kuat
+    // penyebab WA "sering disconnect" belakangan ini (beban tak henti di
+    // event loop yang sama dengan timer keepalive Baileys).
+    //
+    // Klaim atomik, pola yang sama seperti approveDraft/blockDraft di berkas
+    // ini: pembacaan dan penulisan dilakukan dalam SATU pernyataan, jadi dua
+    // permintaan yang datang bersamaan tidak bisa dua-duanya lolos. Klien
+    // memang mem-POST /read dua kali saat percakapan dibuka (`useInbox`
+    // loadConv + efek activeId), jadi balapannya terjadi tiap chat dibuka.
+    const claimed = await this.prisma.conversation.updateMany({
+      where: { id, unreadCount: { gt: 0 } },
+      data: { unreadCount: 0 },
+    });
+    if (claimed.count === 0) return { marked: 0 };
+    // <<< ANGGA
+
     const inbound = await this.prisma.message.findMany({
       where: { conversationId: id, senderType: SenderType.customer, externalId: { not: null } },
       orderBy: { createdAt: 'desc' },
@@ -440,10 +464,9 @@ export class ConversationMessagingService {
     });
     const externalIds = inbound.map((m) => m.externalId!).filter(Boolean);
     await this.wa.markRead(conversation.whatsappAccountId, conversation.customer.phoneNumber, externalIds);
-    await this.prisma.conversation.update({
-      where: { id },
-      data: { unreadCount: 0 },
-    });
+    // >>> ANGGA: `conversation.update({unreadCount: 0})` yang dulu di sini sudah
+    // dikerjakan oleh klaim atomik di atas — menulis ulang di sini cuma query
+    // kedua yang tidak menambah apa pun. <<< ANGGA
     // Tell every other connected admin the unread badge is cleared — without
     // this, a conversation read on one screen still shows unread elsewhere
     // until a full list reload.
