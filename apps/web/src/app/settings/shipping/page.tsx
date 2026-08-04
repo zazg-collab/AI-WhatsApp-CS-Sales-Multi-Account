@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/cn';
 import { useT, type Dict } from '@/lib/i18n';
+import { parseList, parseItems, parseAliases, formatAliases, formatIdr } from './shipping.utils';
 
 /**
  * >>> ANGGA — Pengaturan modul Shipping Service Mengantar.
@@ -117,10 +118,20 @@ const dict: Dict = {
     id: 'Selama ini, tujuan yang sama dalam satu percakapan tidak memanggil API lagi. Cache tetap direset kalau pelanggan menyebut kota lain atau menambah barang.',
     en: 'Within this window the same destination in one conversation skips the API. The cache still resets when the customer names another city or adds an item.',
   },
-  discountMax: { id: 'Batas diskon ongkir per order (rupiah)', en: 'Max shipping discount per order (rupiah)' },
+  // >>> ANGGA — Fase 113 (2026-08-04): di-rename dari "diskon ongkir per
+  // order" — nama & label lamanya BERBOHONG dua kali: field ini sebenarnya
+  // untuk diskon BARANG (belum diimplementasikan), dan kebijakan Bossfren
+  // untuk itu selalu per PCS, bukan per order. Diskon ongkir yang SUDAH
+  // ditegakkan sistem ada di field terpisah di bawah (shippingDiscountPercentMax).
+  discountMax: { id: 'Batas diskon barang per pcs (rupiah)', en: 'Max per-item goods discount (rupiah)' },
   discountMaxHint: {
-    id: 'v1: dokumentasi untuk bot saja — belum ditegakkan lewat gate numerik. Angka ini tidak memotong total secara otomatis.',
-    en: 'v1: guidance for the bot only — not yet enforced by a numeric gate. This does not deduct from totals automatically.',
+    id: 'v1: dokumentasi untuk bot saja — belum ditegakkan lewat gate numerik. Diskon ONGKIR (persen, ditegakkan sistem) diatur terpisah di bawah.',
+    en: 'v1: guidance for the bot only — not yet enforced by a numeric gate. Shipping discount (percentage, system-enforced) is configured separately below.',
+  },
+  shippingDiscountPercent: { id: 'Diskon ongkir maksimum (%)', en: 'Max shipping discount (%)' },
+  shippingDiscountPercentHint: {
+    id: 'Dihitung dari ONGKIR (bukan total), dibulatkan ke bawah supaya tidak pernah melewati batas ini. Sistem yang menghitung & menuliskan nominalnya lewat penanda {{diskon_ongkir}} — bot tidak pernah mengarang angka diskon sendiri.',
+    en: 'Calculated from the SHIPPING FEE (not the total), rounded down so it never exceeds this cap. The system computes and writes the amount via the {{diskon_ongkir}} placeholder — the bot never invents a discount figure itself.',
   },
 
   // Uji
@@ -169,8 +180,9 @@ interface ShippingSettings {
   codBlockedRegionKeywords: string[];
   defaultWeightGrams: number;
   quoteCacheTtlMs: number;
-  discountMaxPerOrder: number;
+  discountMaxPerPcs: number; // >>> ANGGA — Fase 113: di-rename dari discountMaxPerOrder <<<
   priceRoundingIncrement: number;
+  shippingDiscountPercentMax: number; // >>> ANGGA — Fase 113 <<<
   destinationAliases: Record<string, string>; // >>> ANGGA <<<
 }
 
@@ -198,53 +210,6 @@ const fieldCls =
 
 const HOUR_MS = 3_600_000;
 
-/** "a, b , ,c" → ["a","b","c"]. Entri kosong dibuang, bukan dikirim sebagai "". */
-export function parseList(raw: string): string[] {
-  return raw.split(',').map((v) => v.trim()).filter(Boolean);
-}
-
-/** "Golok Cordova, 2\nPisau, 1" → [{name,qty}]. qty default 1 kalau tidak wajar. */
-export function parseItems(raw: string): Array<{ name: string; qty: number }> {
-  return raw
-    .split('\n')
-    .map((line) => {
-      const parts = line.split(',');
-      const qtyRaw = parts.length > 1 ? Number(parts.pop()) : NaN;
-      const name = parts.join(',').trim();
-      if (!name) return null;
-      return { name, qty: Number.isFinite(qtyRaw) && qtyRaw > 0 ? Math.floor(qtyRaw) : 1 };
-    })
-    .filter((x): x is { name: string; qty: number } => x !== null);
-}
-
-/**
- * >>> ANGGA — kamus alias sebagai teks biasa, satu baris per nama:
- *   `solo = surakarta`
- * Dipilih ketimbang tabel dua kolom karena isinya sering ditempel sekaligus
- * dari catatan, dan baris tanpa `=` cukup diabaikan diam-diam saat mengetik
- * (jangan sampai baris setengah jadi menghapus baris lain).
- */
-export function parseAliases(raw: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const baris of raw.split('\n')) {
-    const i = baris.indexOf('=');
-    if (i <= 0) continue;
-    const dari = baris.slice(0, i).trim().toLowerCase().replace(/\s+/g, ' ');
-    const ke = baris.slice(i + 1).trim();
-    if (dari && ke) out[dari] = ke;
-  }
-  return out;
-}
-
-export function formatAliases(map: Record<string, string>): string {
-  return Object.entries(map ?? {})
-    .map(([dari, ke]) => `${dari} = ${ke}`)
-    .join('\n');
-}
-
-export function formatIdr(value: number): string {
-  return Math.round(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-}
 
 export default function ShippingSettingsPage() {
   const t = useT(dict);
@@ -303,8 +268,9 @@ export default function ShippingSettingsPage() {
         codBlockedRegionKeywords: data.codBlockedRegionKeywords,
         defaultWeightGrams: Number(data.defaultWeightGrams),
         quoteCacheTtlMs: Number(data.quoteCacheTtlMs),
-        discountMaxPerOrder: Number(data.discountMaxPerOrder),
+        discountMaxPerPcs: Number(data.discountMaxPerPcs), // >>> ANGGA — Fase 113 <<<
         priceRoundingIncrement: Number(data.priceRoundingIncrement),
+        shippingDiscountPercentMax: Number(data.shippingDiscountPercentMax), // >>> ANGGA — Fase 113 <<<
         destinationAliases: parseAliases(aliasText), // >>> ANGGA <<<
       };
       // Kunci kosong = pertahankan yang tersimpan (server juga menjaga ini).
@@ -483,8 +449,13 @@ export default function ShippingSettingsPage() {
                   </Field>
                   <Field label={t('discountMax')} hint={t('discountMaxHint')}>
                     <input type="number" min="0" className={fieldCls} disabled={!canEdit}
-                      value={data.discountMaxPerOrder}
-                      onChange={(e) => patch('discountMaxPerOrder', e.target.value)} />
+                      value={data.discountMaxPerPcs}
+                      onChange={(e) => patch('discountMaxPerPcs', e.target.value)} />
+                  </Field>
+                  <Field label={t('shippingDiscountPercent')} hint={t('shippingDiscountPercentHint')}>
+                    <input type="number" min="0" max="100" className={fieldCls} disabled={!canEdit}
+                      value={data.shippingDiscountPercentMax}
+                      onChange={(e) => patch('shippingDiscountPercentMax', e.target.value)} />
                   </Field>
                 </div>
               </div>

@@ -10,7 +10,8 @@ vi.mock('@/lib/api', () => ({
 }));
 vi.mock('@/lib/socket', () => ({ getSocket: () => ({ on: vi.fn(), off: vi.fn() }) }));
 
-import ShippingSettingsPage, { parseList, parseItems, formatIdr, parseAliases, formatAliases } from './page';
+import ShippingSettingsPage from './page';
+import { parseList, parseItems, formatIdr, parseAliases, formatAliases } from './shipping.utils';
 
 const SHIPPING = {
   mengantarApiKeySet: true,
@@ -21,8 +22,9 @@ const SHIPPING = {
   codBlockedRegionKeywords: ['papua', 'maluku'],
   defaultWeightGrams: 1000,
   quoteCacheTtlMs: 21_600_000,
-  discountMaxPerOrder: 5000,
+  discountMaxPerPcs: 5000, // >>> ANGGA — Fase 113: di-rename dari discountMaxPerOrder <<<
   priceRoundingIncrement: 500,
+  shippingDiscountPercentMax: 20, // >>> ANGGA — Fase 113 <<<
   destinationAliases: { solo: 'surakarta', jogja: 'yogyakarta' },
 };
 
