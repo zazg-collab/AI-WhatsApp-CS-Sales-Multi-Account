@@ -1048,6 +1048,42 @@ describe('§9.8 — cache 6 jam: tujuan sama tidak memicu panggilan API berulang
     expect(second.quote.goodsTotal).toBe(300000); // qty=2 x 150rb, BUKAN cache qty=1 lama
   });
 
+
+  // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{subtotal_barang}}
+  // tidak dikenal"): pelanggan sudah dikasih kutipan LENGKAP (item + total),
+  // lalu balas SINGKAT tanpa menyebut nama barang lagi ("COD deh kak. beli 2
+  // ya") — kalimat ini cocok ORDER_CHANGE_HINT ("beli 2"), jadi ekstraksi
+  // dijalankan ulang. KALAU ekstraksi (panggilan LLM, bukan kode ini) gagal
+  // membawa nama barang yang sedang dibahas (mengembalikan items KOSONG),
+  // kutipan turun jadi shippingOnly — {{subtotal_barang}}/{{harga_satuan}}/
+  // {{total_transfer}}/{{total_cod}} SEMUA hilang dari katalog. Modelnya
+  // sendiri (giliran balasan lain, di luar cakupan tes ini) masih menulis
+  // {{subtotal_barang}} meniru pola dari giliran sebelumnya yang berhasil —
+  // gerbang uang (resolvePriceTokens) tetap menahannya sebagai "tidak
+  // dikenal", TIDAK PERNAH meloloskan angka yang salah/kosong ke pelanggan.
+  // Tes ini MENDOKUMENTASIKAN perilaku aman itu (bukan "memperbaiki" gerbang
+  // uangnya — gerbangnya sudah benar). Perbaikan sungguhan untuk akar
+  // masalahnya (ekstraksi LLM tidak membawa nama barang) ada di prompt
+  // SHIPPING_EXTRACT_SYSTEM (bot-prompts.ts) — bagian yang tidak bisa
+  // dibuktikan RED→GREEN dengan tes deterministik karena bergantung pada
+  // perilaku model sungguhan, bukan kode di file ini.
+  it('ekstraksi gagal membawa nama barang (items kosong) setelah kutipan lengkap sebelumnya → turun ke shippingOnly, {{subtotal_barang}} tetap DITAHAN sebagai tidak dikenal (bukan meloloskan angka salah)', async () => {
+    const h = harness();
+    const first: any = await h.svc.quoteForConversation('c1');
+    expect(first.quote.shippingOnly).toBe(false);
+    expect(first.quote.goodsTotal).toBeGreaterThan(0);
+
+    h.prisma.message.findFirst.mockResolvedValue({ content: 'COD deh kak. beli 2 ya' });
+    h.provider.chat.mockResolvedValue(JSON.stringify({ kota: null, items: [] }));
+    const second: any = await h.svc.quoteForConversation('c1');
+    expect(second.quote.shippingOnly).toBe(true);
+
+    const out = await h.svc.resolvePriceTokens('c1', 'Totalnya menjadi {{subtotal_barang}}.');
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toMatch(/tidak dikenal/i);
+    expect(out.text).not.toMatch(/^Totalnya menjadi Rp/); // angka mentah TIDAK PERNAH lolos
+  });
+
   it('cache kedaluwarsa setelah TTL', async () => {
     const h = harness({ config: { quoteCacheTtlMs: 1 } });
     await h.svc.quoteForConversation('c1');

@@ -565,6 +565,16 @@ export class ShippingService {
 
     // Langkah 2 — deteksi tujuan & item.
     const extract = await this.extractOrderTarget(conversationId);
+    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{subtotal_barang}}
+    // tidak dikenal" — pelanggan konfirmasi COD + qty baru TANPA menyebut nama
+    // barang lagi): dulu tidak ada jejak sama sekali soal apa yang sungguh
+    // dikembalikan ekstraksi ini, jadi insiden seperti itu mustahil dikonfirmasi
+    // dari log — cuma bisa diduga. debug, bukan warn/log — dipanggil tiap kali
+    // grounding ongkir jalan (bisa sering), dan ini bukan sinyal masalah dengan
+    // sendirinya, cuma jejak buat ditelusuri KALAU ada insiden serupa lagi.
+    this.logger.debug(
+      `extractOrderTarget('${conversationId}'): kota=${JSON.stringify(extract.city)} items=${JSON.stringify(extract.items)}`,
+    );
 
     // >>> ANGGA — tangga 1 (jawaban): kalau giliran sebelumnya bot menawarkan
     // pilihan tertutup dan pesan ini memilih salah satunya, langsung pakai
