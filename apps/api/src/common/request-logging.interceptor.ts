@@ -10,6 +10,21 @@ import { Request, Response } from 'express';
 import { currentContext } from './request-context';
 import { MetricsService } from './metrics/metrics.service';
 
+// >>> ANGGA: rute yang di-poll sistem sendiri secara berkala, bukan hasil
+// perbuatan siapa pun. Sidebar dashboard memanggil /health tiap 30 detik untuk
+// menyalakan indikator "API online", dan Prometheus menarik /metrics dengan
+// jadwalnya sendiri. Barisnya menenggelamkan log permintaan yang sebenarnya —
+// nol nilai forensik, karena tidak ada yang bisa ditelusuri dari "sistem
+// menanyai dirinya sendiri, sehat".
+//
+// Label yang dipakai `Controller#handler`, BUKAN path mentah: path bisa
+// berubah/di-prefix, sedangkan label ini sudah dipakai di bawah untuk metrik
+// dan dijamin stabil.
+const SELF_POLL_ROUTES = new Set([
+  'HealthController#check',
+  'MetricsController#scrape',
+]);
+
 @Injectable()
 export class RequestLoggingInterceptor implements NestInterceptor {
   private readonly logger = new Logger(RequestLoggingInterceptor.name);
@@ -51,8 +66,17 @@ export class RequestLoggingInterceptor implements NestInterceptor {
     const status = String(response.statusCode);
     const method = request.method;
 
+    // Metrik Prometheus TETAP dicatat untuk rute self-poll — yang dibungkam
+    // hanya baris lognya. Kalau metriknya ikut dibuang, /health justru jadi
+    // titik buta: tidak kelihatan lagi kalau ia melambat atau mulai gagal.
     this.metrics?.httpDuration.observe({ method, route, status }, durationMs / 1000);
     this.metrics?.httpTotal.inc({ method, route, status });
+
+    // >>> ANGGA: self-poll yang SEHAT tidak usah dicatat. Yang GAGAL tetap
+    // dicatat — /health membalas 4xx/5xx justru sinyal paling penting di
+    // seluruh berkas ini, dan itu tidak boleh ikut hilang.
+    if (SELF_POLL_ROUTES.has(route) && response.statusCode < 400) return;
+    // <<< ANGGA
 
     this.logger.log(JSON.stringify({
       requestId,
