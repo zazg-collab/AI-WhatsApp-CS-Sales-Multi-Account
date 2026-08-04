@@ -68,6 +68,14 @@ data
 
 # Scripts (not needed in image)
 scripts
+# >>> ANGGA: SATU pengecualian. `package.json` root punya
+# "postinstall": "node scripts/postinstall.js", yang jalan otomatis tiap
+# `npm ci` — termasuk di dalam Docker. Karena seluruh folder `scripts` dibuang
+# dari build context, npm memanggil berkas yang tidak pernah ikut masuk:
+#   Error: Cannot find module '/app/scripts/postinstall.js'
+# Selama ini tidak ketahuan karena layer `npm ci` selalu kena cache Docker;
+# begitu cache-nya kedaluwarsa (2026-08-04), build dari nol langsung gagal.
+!scripts/postinstall.js
 
 # Misc
 eslint.config.mjs

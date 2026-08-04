@@ -4,6 +4,9 @@ RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
 COPY packages/database/package*.json ./packages/database/
 COPY apps/api/package*.json ./apps/api/
+# >>> ANGGA: postinstall root dipanggil npm SEBELUM `COPY . .`, jadi berkasnya
+# harus sudah ada di sini. Lihat catatan di .dockerignore.
+COPY scripts/postinstall.js ./scripts/postinstall.js
 RUN npm ci
 COPY . .
 RUN npm run db:generate
