@@ -139,6 +139,20 @@ const dict: Dict = {
   },
   negoKw: { id: 'Frasa nego', en: 'Nego phrases' },
   negoKwHint: { id: 'Pemicu tangga nego.', en: 'Triggers the nego ladder.' },
+  // >>> ANGGA — S1 (2026-08-05): telemetri gerbang uang.
+  gateStatsTitle: { id: 'Telemetri gerbang uang', en: 'Money gate telemetry' },
+  gateStatsIntro: {
+    id: 'Draft yang DITAHAN gerbang uang beserta alasannya (jendela {days} hari, dibaca dari draft tersimpan). Kalau satu alasan sering muncul untuk kalimat yang sebenarnya benar, itu kandidat pelonggaran berikutnya.',
+    en: 'Drafts HELD by the money gate and why ({days}-day window, read from stored drafts).',
+  },
+  gateStatsEmpty: { id: 'Tidak ada draft tertahan pada jendela ini.', en: 'No held drafts in this window.' },
+  gateStatsFail: { id: 'Telemetri belum bisa dibaca.', en: 'Telemetry could not be read.' },
+  gateReason_label_rancu: { id: 'Label rancu (penjaga kata)', en: 'Ambiguous label (word guard)' },
+  gateReason_token_tak_dikenal: { id: 'Penanda tak dikenal/tak tersedia', en: 'Unknown/unavailable placeholder' },
+  gateReason_digit_mentah: { id: 'Angka ditulis langsung oleh model', en: 'Raw digits written by model' },
+  gateReason_bridge_asumsi: { id: 'Pakai asumsi tanpa sebut nama barang', en: 'Assumption without item name' },
+  gateReason_lainnya: { id: 'Lainnya', en: 'Other' },
+  // <<< ANGGA
 };
 
 interface OrderContextSettings {
@@ -171,6 +185,15 @@ export default function OrderMemorySettingsPage() {
   // Kamus token disimpan MENTAH di state sendiri (pola aliasText di halaman
   // shipping): baris setengah-diketik tidak boleh hilang dari layar.
   const [tokensText, setTokensText] = useState('');
+  // >>> ANGGA — S1: telemetri gerbang uang (baca-saja; gagal → kartu diam).
+  const [gateStats, setGateStats] = useState<{
+    days: number;
+    totalDraftDitahan: number;
+    totalAlasan: number;
+    perAlasan: Record<string, number>;
+    gagalBaca?: boolean;
+  } | null>(null);
+  // <<< ANGGA
   const [error, setError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -182,6 +205,13 @@ export default function OrderMemorySettingsPage() {
         setTokensText(formatAliases(all.orderContext.orderGlobalTokens));
       })
       .catch((err) => setError(err instanceof Error ? err.message : t('loadError')));
+    // >>> ANGGA — S1: telemetri terpisah dari settings; gagal tidak mengganggu form.
+    api<{ days: number; totalDraftDitahan: number; totalAlasan: number; perAlasan: Record<string, number>; gagalBaca?: boolean }>(
+      '/shipping/money-gate-stats?days=7',
+    )
+      .then(setGateStats)
+      .catch(() => setGateStats(null));
+    // <<< ANGGA
   }, [t]);
 
   function patch<K extends keyof OrderContextSettings>(key: K, value: OrderContextSettings[K] | string) {
@@ -385,6 +415,36 @@ export default function OrderMemorySettingsPage() {
             </div>
           </Card>
         )}
+
+        {/* >>> ANGGA — S1 (2026-08-05): kartu telemetri gerbang uang, baca-saja */}
+        {gateStats && (
+          <Card className="mt-4 p-4 sm:p-5">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('gateStatsTitle')}</h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {t('gateStatsIntro').replace('{days}', String(gateStats.days))}
+            </p>
+            {gateStats.gagalBaca ? (
+              <p className="mt-3 text-[13px] text-gray-500 dark:text-gray-400">{t('gateStatsFail')}</p>
+            ) : gateStats.totalDraftDitahan === 0 ? (
+              <p className="mt-3 text-[13px] text-gray-500 dark:text-gray-400">{t('gateStatsEmpty')}</p>
+            ) : (
+              <div className="mt-3 space-y-1">
+                <p className="text-[13px] font-medium text-gray-800 dark:text-gray-200">
+                  {gateStats.totalDraftDitahan} draft · {gateStats.totalAlasan} alasan
+                </p>
+                {(['label_rancu', 'token_tak_dikenal', 'digit_mentah', 'bridge_asumsi', 'lainnya'] as const)
+                  .filter((k) => (gateStats.perAlasan[k] ?? 0) > 0)
+                  .map((k) => (
+                    <div key={k} className="flex items-center justify-between text-[13px] text-gray-700 dark:text-gray-300">
+                      <span>{t(`gateReason_${k}`)}</span>
+                      <span className="font-semibold">{gateStats.perAlasan[k]}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </Card>
+        )}
+        {/* <<< ANGGA */}
       </div>
     </AppLayout>
   );

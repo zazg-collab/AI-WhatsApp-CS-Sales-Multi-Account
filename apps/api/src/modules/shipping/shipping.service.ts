@@ -1541,10 +1541,54 @@ export class ShippingService {
     this.cache.setProductPriceTokens(conversationId, tokens);
   }
 
+  /**
+   * >>> ANGGA — S1 (2026-08-05, saran audit money gate): telemetri alasan
+   * hold — murni SISI-BACA dari `Message.moneyGateIssues` yang memang sudah
+   * dipersist `wa-inbound.storeDraft` sejak Fase 113. Nol jalur tulis baru,
+   * nol migrasi. Gunanya: whitelist `penjagaKata` berikutnya lahir dari data,
+   * bukan dari insiden. Gagal baca → nol + flag, tidak pernah melempar.
+   */
+  async moneyGateStats(days = 7): Promise<{
+    days: number;
+    totalDraftDitahan: number;
+    totalAlasan: number;
+    perAlasan: Record<string, number>;
+    gagalBaca?: boolean;
+  }> {
+    const d = Math.min(Math.max(Math.floor(Number(days) || 7), 1), 90);
+    try {
+      const rows = (await this.prisma.message.findMany({
+        where: {
+          createdAt: { gte: new Date(Date.now() - d * 86_400_000) },
+          NOT: { moneyGateIssues: { isEmpty: true } },
+        },
+        select: { moneyGateIssues: true },
+        take: 5000, // pagar wajar; jauh di atas volume CS normal
+      })) as Array<{ moneyGateIssues: string[] }>;
+      const perAlasan: Record<string, number> = {};
+      let totalAlasan = 0;
+      for (const r of rows) {
+        for (const issue of r.moneyGateIssues ?? []) {
+          const kelas = klasifikasiAlasanGate(issue);
+          perAlasan[kelas] = (perAlasan[kelas] ?? 0) + 1;
+          totalAlasan += 1;
+        }
+      }
+      return { days: d, totalDraftDitahan: rows.length, totalAlasan, perAlasan };
+    } catch (err) {
+      this.logger.warn(`Telemetri gerbang uang gagal dibaca: ${err instanceof Error ? err.message : err}`);
+      return { days: d, totalDraftDitahan: 0, totalAlasan: 0, perAlasan: {}, gagalBaca: true };
+    }
+  }
+  // <<< ANGGA
+
   async resolvePriceTokens(
     conversationId: string,
     text: string,
   ): Promise<{ text: string; ok: boolean; issues: string[] }> {
+    // >>> ANGGA — S1: teks-teks issue di bawah dibaca balik oleh
+    // `klasifikasiAlasanGate` (telemetri). Kalau mengubah kata-katanya,
+    // perbarui juga pencocokan di sana. <<<
     const issues: string[] = [];
 
     const guard = penjagaKata(text);
@@ -1579,10 +1623,13 @@ export class ShippingService {
       if (assumed?.productNames.length) {
         const adaTokenUang =
           /\{\{(total_transfer|total_cod|subtotal_barang|blok_total|harga_satuan|total_transfer_diskon|total_cod_diskon)\}\}/i.test(text);
-        const adaRincian = /\{\{rincian_order\}\}/i.test(text);
+        // >>> ANGGA — S2: {{rincian_tagihan}} juga memuat nama barang (blok
+        // sistem) → memenuhi bridge sama seperti {{rincian_order}}.
+        const adaRincian = /\{\{(rincian_order|rincian_tagihan)\}\}/i.test(text);
+        // <<< ANGGA
         if (adaTokenUang && !adaRincian && !namaDisebut(text, assumed.productNames)) {
           issues.push(
-            'Balasan memakai ASUMSI order yang sedang berjalan tapi tidak menyebut nama barangnya — sebutkan nama barangnya atau pakai {{rincian_order}} supaya pelanggan bisa mengoreksi kalau asumsinya salah.',
+            'Balasan memakai ASUMSI order yang sedang berjalan tapi tidak menyebut nama barangnya — sebutkan nama barangnya atau pakai {{rincian_order}}/{{rincian_tagihan}} supaya pelanggan bisa mengoreksi kalau asumsinya salah.',
           );
         }
       }
@@ -1949,7 +1996,26 @@ export const NAMA_TOKEN_CADANGAN = new Set([
   'ongkir', 'kurir_transfer', 'kurir_cod', 'total_transfer', 'total_cod',
   'blok_total', 'diskon_ongkir', 'total_transfer_diskon', 'total_cod_diskon',
   'diskon_barang', 'total_transfer_nego', 'total_cod_nego',
+  'rincian_tagihan', // >>> ANGGA — S2 (2026-08-05) <<<
 ]);
+
+/**
+ * >>> ANGGA — S1 (2026-08-05): klasifikasi alasan hold gerbang uang untuk
+ * telemetri. Mencocokkan FRASA STABIL dari string issue yang dibuat
+ * `resolvePriceTokens` (file yang sama — ada penanda silang di sana). String
+ * yang tidak dikenal jatuh ke 'lainnya', bukan salah hitung diam-diam.
+ */
+export function klasifikasiAlasanGate(
+  issue: string,
+): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'lainnya' {
+  const s = issue ?? '';
+  if (s.includes('membuat labelnya salah')) return 'label_rancu';
+  if (s.includes('tidak dikenal/tidak tersedia')) return 'token_tak_dikenal';
+  if (s.includes('ditulis langsung oleh model')) return 'digit_mentah';
+  if (s.includes('ASUMSI order yang sedang berjalan')) return 'bridge_asumsi';
+  return 'lainnya';
+}
+// <<< ANGGA
 
 export function penjagaKata(text: string): string | null {
   // >>> ANGGA — F3 (2026-08-05, insiden draft "total harga 2 x
@@ -2027,6 +2093,29 @@ export function buildPriceTokens(q: ShippingQuote): Record<string, string> {
       `• COD      : Rp${formatIdr(q.codTotal)}  (kurir ${q.codCourier})`;
   }
 
+  // >>> ANGGA — S2 (2026-08-05, saran audit money gate): BLOK rekap tagihan
+  // utuh disusun SISTEM — barang + perkaliannya, subtotal, ongkir, total.
+  // Satu penanda untuk seluruh rekap = permukaan salah-label model menyempit
+  // (lanjutan filosofi {{blok_total}}). Angka semua dari kutipan; perkalian
+  // per baris konsisten dengan goodsTotal karena goodsTotal memang Σ qty×harga
+  // (tanpa pembulatan; pembulatan hanya di total transfer/COD).
+  if (!q.shippingOnly && q.matchedItems.length) {
+    const baris = q.matchedItems.map(
+      (m) =>
+        `• ${m.qty} pcs ${m.name} — ${m.qty} x Rp${formatIdr(m.unitPrice)} = Rp${formatIdr(m.qty * m.unitPrice)}`,
+    );
+    baris.push(
+      `• Subtotal barang : Rp${formatIdr(q.goodsTotal)}`,
+      `• Ongkir (${q.transferCourier}) : Rp${formatIdr(q.shippingFee)}`,
+      `• Total TRANSFER : Rp${formatIdr(q.transferTotal)}`,
+    );
+    if (q.codTotal != null && q.codCourier) {
+      baris.push(`• Total COD (${q.codCourier}) : Rp${formatIdr(q.codTotal)} — sudah termasuk biaya COD`);
+    }
+    tokens.rincian_tagihan = baris.join('\n');
+  }
+  // <<< ANGGA
+
   return tokens;
 }
 
@@ -2049,6 +2138,13 @@ export function katalogPenanda(q: ShippingQuote): string[] {
     '• {{kota_tujuan}} = kota/kabupaten tujuan',
     '• {{rincian_order}} = daftar barang & jumlahnya (opsional, pakai kalau perlu — bukan wajib)',
   ];
+  // >>> ANGGA — S2 (2026-08-05): kondisi SAMA PERSIS dengan buildPriceTokens.
+  if (q.matchedItems.length) {
+    lines.push(
+      '• {{rincian_tagihan}} = BLOK rekap tagihan LENGKAP siap pakai (tiap barang + perkaliannya, subtotal, ongkir, total Transfer/COD) — WAJIB dipakai saat MEREKAP order, JANGAN menyusun rekap angka manual dari penanda satuan',
+    );
+  }
+  // <<< ANGGA
   const satuanUnik = new Set(q.matchedItems.map((m) => m.unitPrice));
   if (satuanUnik.size === 1 && q.matchedItems.length > 0) {
     lines.push('• {{harga_satuan}} = harga satu barang');

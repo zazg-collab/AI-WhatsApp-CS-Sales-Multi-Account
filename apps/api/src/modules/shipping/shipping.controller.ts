@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../../auth/roles';
@@ -45,6 +45,17 @@ export class ShippingController {
       cache: this.shipping.cacheStats(),
     };
   }
+
+  // >>> ANGGA — S1 (2026-08-05): telemetri gerbang uang. Murni sisi-baca dari
+  // Message.moneyGateIssues (dipersist sejak Fase 113); guard role sama dengan
+  // endpoint admin lain di controller ini; days dijepit 1–90 di service.
+  @ApiOperation({ summary: 'Telemetri gerbang uang: draft tertahan per alasan (jendela N hari)' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Get('money-gate-stats')
+  moneyGateStats(@Query('days') days?: string) {
+    return this.shipping.moneyGateStats(days ? Number(days) : 7);
+  }
+  // <<< ANGGA
 
   @ApiOperation({ summary: 'Uji hitung ongkir manual (tujuan + daftar barang)' })
   @Roles('admin', 'supervisor', 'owner')

@@ -625,3 +625,103 @@ describe('F3 — penjaga kata: perkalian eksplisit atas harga satuan itu SAH', (
   });
 });
 // <<< ANGGA
+
+// ─────────────────────────────────────────────────────────────────────────────
+// >>> ANGGA — S1+S2 (2026-08-05, ketok Bossfren pasca-audit money gate):
+// S1 telemetri alasan hold (murni sisi-BACA dari Message.moneyGateIssues yang
+// sudah dipersist — nol jalur tulis baru), S2 token blok {{rincian_tagihan}}
+// (rekap tagihan utuh disusun sistem — permukaan salah-label menyempit).
+// RED-first terhadap kode pra-S.
+
+describe('S2 — {{rincian_tagihan}}: blok rekap tagihan disusun sistem', () => {
+  it('rekap lengkap: perkalian per barang + subtotal + ongkir + total Transfer/COD', async () => {
+    const h = harness({
+      lastCustomerText: 'kirim ke medan ya, golok sembelih multifungsi 2',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 2 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const out = await h.svc.resolvePriceTokens('c1', 'Ini rinciannya kak:\n{{rincian_tagihan}}');
+    expect(out.ok).toBe(true);
+    // 2 × 150.000 = 300.000; transfer 300+47 = 347.000; COD 300+47+5 = 352.000
+    expect(out.text).toContain('2 x Rp150.000 = Rp300.000');
+    expect(out.text).toContain('Subtotal barang');
+    expect(out.text).toContain('Rp347.000');
+    expect(out.text).toContain('Rp352.000');
+    expect(out.text).not.toContain('{{'); // tidak ada penanda tersisa
+  });
+
+  it('bridge jalur asumsi: {{rincian_tagihan}} MEMENUHI wajib-sebut-nama-barang', async () => {
+    const h = harness({
+      lastCustomerText: 'totalnya berapa?',
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }])],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const out = await h.svc.resolvePriceTokens('c1', 'Totalnya {{total_transfer}} ya kak.\n{{rincian_tagihan}}');
+    expect(out.ok).toBe(true); // blok memuat nama barang → asumsi tetap terlihat pelanggan
+    expect(out.text).toContain('Golok Sembelih Multifungsi');
+  });
+
+  it('kamus global TIDAK bisa membajak rincian_tagihan (nama cadangan)', async () => {
+    const h = harness({ oc: { orderGlobalTokens: { rincian_tagihan: 'ANGKA PALSU' } } });
+    // Tanpa kutipan aktif → wajib tak dikenal & ditahan, BUKAN diisi kamus.
+    const out = await h.svc.resolvePriceTokens('c1', '{{rincian_tagihan}}');
+    expect(out.ok).toBe(false);
+    expect(out.text).not.toContain('ANGKA PALSU');
+  });
+
+  it('kutipan ongkir-saja: rincian_tagihan TIDAK ditawarkan/tersedia', async () => {
+    const h = harness({
+      lastCustomerText: 'kirim ke medan ya kak, parangnya',
+      extract: { kota: 'Medan', items: [{ nama: 'parang super xyz', qty: 1 }] },
+      logEntries: [],
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.shippingOnly).toBe(true);
+    const out = await h.svc.resolvePriceTokens('c1', '{{rincian_tagihan}}');
+    expect(out.ok).toBe(false); // barang belum pasti → tidak ada rekap tagihan
+  });
+});
+
+describe('S1 — telemetri alasan hold gerbang uang (sisi-baca)', () => {
+  // Impor lewat require DI DALAM tes supaya suite tetap jalan (RED di level
+  // assertion, bukan gagal compile) terhadap kode pra-S1.
+  it('klasifikasi alasan: 4 kelas dikenal + fallback lainnya', () => {
+    const { klasifikasiAlasanGate } = require('./shipping.service');
+    expect(klasifikasiAlasanGate('Penanda dipakai setelah kata yang bisa membuat labelnya salah: "total {{harga_satuan}}"')).toBe('label_rancu');
+    expect(klasifikasiAlasanGate('Penanda tidak dikenal/tidak tersedia untuk kutipan ini: {{total_codd}}')).toBe('token_tak_dikenal');
+    expect(klasifikasiAlasanGate('Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 434.000')).toBe('digit_mentah');
+    expect(klasifikasiAlasanGate('Balasan memakai ASUMSI order yang sedang berjalan tapi tidak menyebut nama barangnya — …')).toBe('bridge_asumsi');
+    expect(klasifikasiAlasanGate('alasan format masa depan yang belum dikenal')).toBe('lainnya');
+  });
+
+  it('moneyGateStats menghitung draft tertahan per alasan dari Message.moneyGateIssues', async () => {
+    const h = harness();
+    (h.prisma as any).message.findMany = jest.fn().mockResolvedValue([
+      { moneyGateIssues: ['Penanda tidak dikenal/tidak tersedia untuk kutipan ini: {{total_codd}}'] },
+      {
+        moneyGateIssues: [
+          'Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 434.000',
+          'Penanda dipakai setelah kata yang bisa membuat labelnya salah: "total {{harga_satuan}}"',
+        ],
+      },
+    ]);
+    const s = await (h.svc as any).moneyGateStats(7);
+    expect(s.totalDraftDitahan).toBe(2);
+    expect(s.perAlasan.token_tak_dikenal).toBe(1);
+    expect(s.perAlasan.digit_mentah).toBe(1);
+    expect(s.perAlasan.label_rancu).toBe(1);
+    // Kueri dibatasi jendela hari + hanya baris yang punya issue.
+    const arg = (h.prisma as any).message.findMany.mock.calls[0][0];
+    expect(arg.where.createdAt.gte).toBeInstanceOf(Date);
+  });
+
+  it('gagal baca DB → nol & tidak melempar (telemetri = penolong, bukan jalur kritis)', async () => {
+    const h = harness();
+    (h.prisma as any).message.findMany = jest.fn().mockRejectedValue(new Error('db down'));
+    const s = await (h.svc as any).moneyGateStats(7);
+    expect(s.totalDraftDitahan).toBe(0);
+    expect(s.gagalBaca).toBe(true);
+  });
+});
+// <<< ANGGA
