@@ -2347,6 +2347,38 @@ export class ShippingService {
       issues.push(`Angka rupiah ditulis langsung oleh model, bukan lewat penanda: ${angkaMentah.join(', ')}`);
     }
 
+    // >>> ANGGA — GERBANG PAKEM: REKENING (2026-08-06, insiden "sandubaya 1 pcs"
+    // — draft menulis BCA/BRI/Mandiri lengkap dengan NOMOR ASLINYA padahal
+    // metode belum ditanya): (a) deretan digit panjang (rekening/telepon) yang
+    // DIKETIK model sendiri di teks mentah = haram — angka begitu wajib lewat
+    // penanda kamus global (anti-fraud M2); (b) pakem Bossfren: rekening HANYA
+    // boleh keluar setelah pelanggan MEMILIH transfer.
+    const digitPanjang = text.match(/\b\d{8,}\b|\b\d[\d\- ]{9,}\d\b/g) ?? [];
+    if (digitPanjang.length) {
+      issues.push(
+        `Angka panjang (nomor rekening/telepon) ditulis langsung oleh model: ${digitPanjang.join(', ')} — angka kelas ini wajib lewat penanda kamus (mis. {{rekening_bca}}), jangan pernah diketik sendiri.`,
+      );
+    }
+    {
+      const teksGiliranR = this.turnMemo.get(conversationId)?.lastText ?? '';
+      const sebutRekening = /(rekening|\btransfer ke\b|\bno\.?\s*rek\b)/i.test(substituted);
+      if (sebutRekening) {
+        let metodeSudah = /\b(cod|tf)\b|transfer/i.test(teksGiliranR);
+        if (!metodeSudah && this.orderLog) {
+          try {
+            const asksR = await this.orderLog.funnelAsks(conversationId);
+            metodeSudah = (asksR['metode_terjawab'] ?? 0) >= 1;
+          } catch { /* log tak terbaca = anggap belum */ }
+        }
+        if (!metodeSudah) {
+          issues.push(
+            'Balasan melanggar alur penjualan wajib — menyodorkan rekening padahal pelanggan BELUM memilih metode bayar. Urutannya: sodorkan total, tanya "mau diproses COD atau transfer kak?", dan rekening HANYA setelah pelanggan memilih transfer.',
+          );
+        }
+      }
+    }
+    // <<< ANGGA
+
     // >>> ANGGA — E3 (2026-08-05, insiden "Mohon dicek kembali di chat ini
     // untuk informasi harga yang akurat" bocor ke draft): PENJAGA META —
     // model kadang MEMPARAFRASE instruksi internal jadi kalimat meta ke

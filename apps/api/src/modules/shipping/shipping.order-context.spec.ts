@@ -456,7 +456,14 @@ describe('Order Context Log — T3 anchor & T4 eskalasi downgrade', () => {
 describe('Addendum v2 — M2: kamus token global', () => {
   it('{{rekening_transfer}} dari kamus AppSetting resolve verbatim tanpa kutipan aktif', async () => {
     const rek = 'BCA 6765556680 a.n Cordova Digital Inovasi';
-    const h = harness({ oc: { orderGlobalTokens: { rekening_transfer: rek } } });
+    // >>> ANGGA — revisi sadar 2026-08-06 (GERBANG REKENING): rekening kini
+    // HANYA sah setelah pelanggan memilih transfer — giliran di tes ini
+    // dibuat sebagai jawaban "transfer aja kak" (dulu 'halo kak' pun lolos).
+    const h = harness({
+      lastCustomerText: 'transfer aja kak',
+      oc: { orderGlobalTokens: { rekening_transfer: rek } },
+    });
+    await h.svc.quoteForConversation('c1'); // isi memo giliran
     const out = await h.svc.resolvePriceTokens('c1', 'Silakan transfer ke:\n{{rekening_transfer}}');
     expect(out.ok).toBe(true);
     expect(out.text).toContain(rek); // digit rekening lolos gerbang HANYA via sisipan sistem
@@ -1602,6 +1609,52 @@ describe('Ganti tujuan urutan terbalik — REPLAY "ke purwokerto aja deh"', () =
     const res: any = await h.svc.quoteForConversation('c1');
     // Pra-fix: 'ok' berisi kutipan MEDAN → "ongkir ke Purwokerto Rp<medan>" (BAHAYA).
     expect(res.status).toBe('ambiguous'); // purwokerto 2 kandidat → tanya jujur
+  });
+});
+// <<< ANGGA
+
+// >>> ANGGA — GERBANG REKENING (2026-08-06, REPLAY insiden "sandubaya 1 pcs"):
+// draft menulis nomor BCA/BRI/Mandiri ASLI padahal metode bayar belum
+// ditanya-jawab. Pakem: rekening HANYA setelah pelanggan memilih transfer;
+// deretan digit panjang haram diketik model sendiri (wajib penanda kamus).
+
+describe('GERBANG REKENING — rekening hanya setelah pilih transfer', () => {
+  it('nomor rekening diketik mentah + metode belum dijawab → DITAHAN (dua pelanggaran)', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Ongkirnya {{ongkir}} ya kak untuk Golok Sembelih Multifungsi. Silakan transfer ke BCA 6765556680 ya kak 🙏 Mau ambil berapa pcs kak?',
+    );
+    expect(out.ok).toBe(false);
+    const gabung = out.issues.join(' ');
+    expect(gabung).toContain('ditulis langsung oleh model'); // digit panjang mentah
+    expect(gabung).toContain('BELUM memilih metode bayar');  // timing rekening
+  });
+
+  it('sebut "rekening" tanpa pilihan transfer → DITAHAN; setelah pelanggan bilang transfer → sah', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const buruk = await h.svc.resolvePriceTokens(
+      'c1',
+      'Nanti saya kirimkan rekening kami ya kak. Mau ambil berapa pcs kak?',
+    );
+    expect(buruk.ok).toBe(false);
+    expect(buruk.issues.join(' ')).toContain('BELUM memilih metode bayar');
+
+    pesanBaru(h, 'm2', 'transfer aja kak');
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok'); // cache
+    const baik = await h.svc.resolvePriceTokens(
+      'c1',
+      'Siap kak, untuk transfer nanti saya kirimkan detail rekeningnya ya 🙏',
+    );
+    expect(baik.ok).toBe(true);
   });
 });
 // <<< ANGGA
