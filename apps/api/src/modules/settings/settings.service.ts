@@ -239,7 +239,20 @@ export class SettingsService {
         // pelanggan (backstop deterministik; BASE_RULES #13 lapisan promptnya).
         orderMetaPhraseBlacklist: this.list(this.config.get('ORDER_META_PHRASE_BLACKLIST'), [
           'penanda', 'placeholder', 'instruksi sistem', 'gerbang uang', 'grounding',
-          'informasi harga yang akurat', 'dicek kembali di chat', 'cek chat ini',
+          'informasi harga yang akurat', 'informasi ongkir yang akurat',
+          'dicek kembali di chat', 'cek chat ini',
+        ]),
+        // <<< ANGGA
+        // >>> ANGGA — P2 (2026-08-05): frasa penyangkalan data. "admin" SENGAJA
+        // tidak masuk daftar — "saya bantu konfirmasi dulu ke admin" adalah
+        // jawaban resmi utk info yang memang tidak tersedia (BASE_RULES #3),
+        // dan eskalasi nego memakai "atasan". Daftar ini khusus pola insiden
+        // "tim/logistik/belum punya info" saat kutipan sebenarnya SUDAH ada.
+        orderContradictionPhrases: this.list(this.config.get('ORDER_CONTRADICTION_PHRASES'), [
+          'belum memiliki informasi', 'belum ada informasi', 'belum punya info',
+          'tidak memiliki informasi', 'belum bisa memastikan', 'akan saya cek dulu',
+          'cek dengan tim', 'tim logistik', 'menghubungkan dengan tim',
+          'akan segera memberikan informasi',
         ]),
         // <<< ANGGA
       },

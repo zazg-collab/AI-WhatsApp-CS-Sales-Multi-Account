@@ -255,6 +255,11 @@ class OrderContextSettingsDto {
   @IsOptional() @IsArray() @IsString({ each: true })
   orderMetaPhraseBlacklist?: string[];
   // <<< ANGGA
+
+  // >>> ANGGA — P2 (2026-08-05): frasa penyangkalan data (penjaga kontradiksi).
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderContradictionPhrases?: string[];
+  // <<< ANGGA
 }
 // <<< ANGGA
 

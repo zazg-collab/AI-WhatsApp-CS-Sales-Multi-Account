@@ -224,8 +224,13 @@ describe('§9.1 — kota ambigu: bot BERTANYA, bukan menebak', () => {
     expect(h.mengantar.estimate).not.toHaveBeenCalled();
     // Seprovinsi → pembedanya nama resmi Mengantar, bukan provinsi.
     expect(res.candidates.map((c: any) => c.label).sort()).toEqual(['Kab. Bogor', 'Kota Bogor']);
+    // >>> ANGGA — P0 (KETOK 2026-08-05): pertanyaan PERTAMA kini TERBUKA —
+    // kandidat TIDAK dibacakan (potongan 50 baris bisa menenggelamkan jawaban
+    // yang benar); format persis ketok Bossfren.
     const text = await h.svc.getGroundingText('c1');
-    expect(text).toContain('Kota Bogor');
+    expect(text).toContain('Bogornya mana ya kak');
+    expect(text).toContain('provinsinya');
+    // <<< ANGGA
     expect(text).not.toMatch(/\d{3,}/);
   });
 
@@ -270,12 +275,14 @@ describe('§9.1 — kota ambigu: bot BERTANYA, bukan menebak', () => {
   });
 
   /**
-   * >>> ANGGA — MENGGANTIKAN aturan ambang lama (1 auto / 2-3 tanya / >3 minta
-   * detail). Ambang itu sudah DIHAPUS dari kode, bukan dilewati: banyaknya
-   * kandidat tidak lagi menentukan apa pun. Empat kota senama tetap ditanyakan
-   * — cukup dua teratas yang dibacakan, sisanya disimpan diam-diam.
+   * >>> ANGGA — P0 (KETOK Bossfren 2026-08-05, merevisi ketok 2026-08-03):
+   * banyaknya kandidat tetap tidak menentukan apa pun, TAPI pertanyaan
+   * pertama kini TERBUKA — kandidat TIDAK dibacakan sama sekali (insiden
+   * "mataram": daftar kandidat bisa MENYESATKAN karena jawaban yang benar
+   * tenggelam di potongan 50 baris). Kandidat tetap disimpan diam-diam untuk
+   * memetakan jawaban.
    */
-  it('banyak kota bernama sama → tetap bertanya, tapi hanya DUA yang dibacakan', async () => {
+  it('banyak kota bernama sama → bertanya TERBUKA, kandidat tidak dibacakan', async () => {
     const h = harness({
       addresses: ['A', 'B', 'C', 'D'].map((p, i) => addr(`PROV ${p}`, 'SUKAMAJU', `s${i}`)),
       extract: { kota: 'Sukamaju', items: [{ nama: 'Golok Cordova', qty: 1 }] },
@@ -284,18 +291,22 @@ describe('§9.1 — kota ambigu: bot BERTANYA, bukan menebak', () => {
     expect(res.status).toBe('ambiguous');
     expect(res.candidates).toHaveLength(4);
     const teks = await h.svc.getGroundingText('c1');
-    expect(teks.match(/^• /gm)).toHaveLength(2);
-    expect(teks).toContain('PROV A');
+    expect(teks).toContain('Sukamajunya mana ya kak');
+    expect(teks).not.toContain('PROV A');
     expect(teks).not.toContain('PROV C');
   });
 
   /**
-   * Bukti live 2026-08-03: "Purwokerto" → Kab. Banyumas (kecamatan, 27 baris)
-   * lawan Kab. Kendal (kelurahan, 2 baris). Rancangan lama melempar ini ke
-   * pertanyaan terbuka karena kandidatnya ada 6. Sekarang yang menang telak
-   * dipakai langsung.
+   * >>> ANGGA — P0 (KETOK Bossfren 2026-08-05): MEMBALIK perilaku ketok
+   * 2026-08-03. Dulu "Purwokerto" (Kab. Banyumas, kecamatan, 27 baris lawan
+   * Kab. Kendal, kelurahan, 2 baris) menang telak → dipakai langsung. Insiden
+   * "mataram" membuktikan aturan menang-telak itu bisa percaya diri ke KOTA
+   * YANG SALAH (Kota Mataram NTB tenggelam total, "MATARAM BARU" Lampung
+   * menang level). Kini TANPA kecocokan persis level-kota yang tunggal,
+   * >1 kandidat = SELALU bertanya terbuka. Harga sadar: Purwokerto ditanya
+   * sekali — akurasi uang > satu balasan ekstra.
    */
-  it('kandidat teratas menang telak → dipakai langsung, tanpa bertanya', async () => {
+  it('menang telak level kecamatan TIDAK lagi dipakai diam-diam → bertanya terbuka', async () => {
     const banyak = Array.from({ length: 27 }, (_, i) =>
       addr('JAWA TENGAH', 'BANYUMAS', `bms-${i}`, `PURWOKERTO ${i}`, { si: 'Kab. Banyumas' }),
     );
@@ -308,11 +319,26 @@ describe('§9.1 — kota ambigu: bot BERTANYA, bukan menebak', () => {
       extract: { kota: 'Purwokerto', items: [{ nama: 'Golok Cordova', qty: 1 }] },
     });
     const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ambiguous');
+    expect(h.mengantar.estimate).not.toHaveBeenCalled();
+    const teks = await h.svc.getGroundingText('c1');
+    expect(teks).toContain('Purwokertonya mana ya kak');
+  });
+
+  /** >>> ANGGA — P0: pengecualian satu-satunya — kecocokan PERSIS level-kota
+   *  yang TUNGGAL tetap otomatis ("medan" tidak boleh ditanya cuma gara-gara
+   *  kecamatan MEDAN SATRIA di Bekasi ikut cocok kata-awalan). */
+  it('satu kecocokan persis level-kota + derau kecamatan senama → tetap otomatis', async () => {
+    const h = harness({
+      addresses: [
+        addr('SUMATERA UTARA', 'MEDAN', 'mdn-1', 'MEDAN BARU', { si: 'Kota Medan' }),
+        addr('JAWA BARAT', 'BEKASI', 'bks-1', 'MEDAN SATRIA', { si: 'Kota Bekasi' }),
+      ],
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Cordova', qty: 1 }] },
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
     expect(res.status).toBe('ok');
-    expect(res.quote.city).toBe('BANYUMAS');
-    expect(h.mengantar.estimate).toHaveBeenCalledWith(
-      expect.objectContaining({ destinationId: 'bms-0' }),
-    );
+    expect(res.quote.city).toBe('MEDAN');
   });
 
   it('kandidat setara (belum 3x lipat) → tetap bertanya, jangan memilih diam-diam', async () => {
@@ -478,13 +504,11 @@ describe('ANGGA — tangga pertanyaan tujuan (jangan pernah mengulang kalimat sa
     return h.svc.getGroundingText('c1');
   }
 
-  it('tangga 1 = pertanyaan tertutup Kota/Kab', async () => {
+  it('tangga 1 = pertanyaan TERBUKA format ketok (P0 2026-08-05)', async () => {
     const h = harness(bogor);
     const teks = await giliran(h, 'm1', 'kirim ke bogor');
-    expect(teks).toContain('Kota Bogor');
-    expect(teks).toContain('Kab. Bogor');
-    // Tangga 1 masih menyebut kecamatan, tapi hanya sebagai jalan keluar KALAU
-    // pelanggan menolak dua-duanya — bukan sebagai pertanyaan tangga 2.
+    expect(teks).toContain('Bogornya mana ya kak');
+    expect(teks).toContain('provinsinya');
     expect(teks).not.toContain('JANGAN mengulang pertanyaan yang sama');
   });
 
@@ -514,7 +538,7 @@ describe('ANGGA — tangga pertanyaan tujuan (jangan pernah mengulang kalimat sa
     const h = harness(bogor);
     await giliran(h, 'm1', 'kirim ke bogor');
     const teks = await giliran(h, 'm1', 'kirim ke bogor');
-    expect(teks).toContain('Kota Bogor');
+    expect(teks).toContain('Bogornya mana ya kak'); // >>> ANGGA — P0: format terbuka <<<
     expect(h.svc.lastOutcome('c1')).toBe('ambiguous');
   });
 
@@ -532,7 +556,7 @@ describe('ANGGA — tangga pertanyaan tujuan (jangan pernah mengulang kalimat sa
     h.mengantar.searchAddress.mockResolvedValue(bogor.addresses);
     h.provider.chat.mockResolvedValue(JSON.stringify(bogor.extract));
     const teks = await giliran(h, 'm4', 'eh kirim ke bogor aja deh');
-    expect(teks).toContain('Kota Bogor');
+    expect(teks).toContain('Bogornya mana ya kak'); // >>> ANGGA — P0: format terbuka <<<
   });
 
   it('kasus tanpa kecocokan: tangga 1 kecamatan, tangga 2 provinsi', async () => {
@@ -1177,11 +1201,13 @@ describe('pembantu murni & kontrak grounding', () => {
    */
 
   it('parseExtract toleran terhadap JSON berpagar & qty tidak wajar', () => {
+    // >>> ANGGA — P4 (2026-08-05): field `province` ikut (null bila tak disebut).
     expect(parseExtract('```json\n{"kota":"Medan","items":[{"nama":"Golok","qty":"3"}]}\n```'))
-      .toEqual({ city: 'Medan', items: [{ name: 'Golok', qty: 3 }] });
-    expect(parseExtract('{"kota":null,"items":[]}')).toEqual({ city: null, items: [] });
-    expect(parseExtract('bukan json')).toEqual({ city: null, items: [] });
+      .toEqual({ city: 'Medan', province: null, items: [{ name: 'Golok', qty: 3 }] });
+    expect(parseExtract('{"kota":null,"items":[]}')).toEqual({ city: null, province: null, items: [] });
+    expect(parseExtract('bukan json')).toEqual({ city: null, province: null, items: [] });
     expect(parseExtract('{"kota":"Medan","items":[{"nama":"Golok"}]}').items[0].qty).toBe(1);
+    expect(parseExtract('{"kota":"Mataram","provinsi":"NTB","items":[]}').province).toBe('NTB');
   });
 
   it('sameItems tidak peduli urutan', () => {

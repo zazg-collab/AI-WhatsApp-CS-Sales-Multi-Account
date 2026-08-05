@@ -151,6 +151,12 @@ const dict: Dict = {
     id: 'Balasan bot yang memuat frasa ini ditahan gerbang uang (bot menyebut "sistem/penanda" ke pelanggan). Tambah dari telemetri di bawah bila ada bocor baru.',
     en: 'Bot replies containing these phrases are held by the money gate (internal talk leaking to customers).',
   },
+  // >>> ANGGA — P2 (2026-08-05): frasa penyangkalan data.
+  contradictionKw: { id: 'Frasa penyangkalan data (kontradiksi)', en: 'Data-denial phrases (contradiction)' },
+  contradictionKwHint: {
+    id: 'Ditahan HANYA saat kutipan ongkir sudah dihitung DAN pelanggan memang bertanya uang/tempat — bot dilarang bilang "belum punya info / cek dengan tim" padahal datanya sudah ada.',
+    en: 'Held ONLY when a quote is computed AND the turn is about money/places — the bot must not deny data it already has.',
+  },
   // <<< ANGGA
   // >>> ANGGA — S1 (2026-08-05): telemetri gerbang uang.
   gateStatsTitle: { id: 'Telemetri gerbang uang', en: 'Money gate telemetry' },
@@ -165,6 +171,7 @@ const dict: Dict = {
   gateReason_digit_mentah: { id: 'Angka ditulis langsung oleh model', en: 'Raw digits written by model' },
   gateReason_bridge_asumsi: { id: 'Pakai asumsi tanpa sebut nama barang', en: 'Assumption without item name' },
   gateReason_istilah_internal: { id: 'Istilah internal bocor ke balasan', en: 'Internal phrasing leaked into reply' },
+  gateReason_kontradiksi_data: { id: 'Menyangkal data yang sudah tersedia', en: 'Denied data that was available' },
   gateReason_lainnya: { id: 'Lainnya', en: 'Other' },
   // <<< ANGGA
 };
@@ -188,6 +195,7 @@ interface OrderContextSettings {
   orderMoneyAskKeywords: string[];
   orderFormWelcomeTemplate: string;
   orderMetaPhraseBlacklist: string[];
+  orderContradictionPhrases: string[];
   // <<< ANGGA
 }
 
@@ -261,6 +269,7 @@ export default function OrderMemorySettingsPage() {
         // >>> ANGGA — E1+E3 (2026-08-05)
         orderFormWelcomeTemplate: data.orderFormWelcomeTemplate ?? '',
         orderMetaPhraseBlacklist: data.orderMetaPhraseBlacklist ?? [],
+        orderContradictionPhrases: data.orderContradictionPhrases ?? [],
         // <<< ANGGA
       };
       const updated = await api<{ orderContext: OrderContextSettings }>('/settings', {
@@ -409,6 +418,12 @@ export default function OrderMemorySettingsPage() {
                   value={(data.orderMetaPhraseBlacklist ?? []).join(', ')}
                   onChange={(e) => patch('orderMetaPhraseBlacklist', parseList(e.target.value))} />
               </Field>
+              {/* >>> ANGGA — P2 (2026-08-05): frasa penyangkalan data */}
+              <Field label={t('contradictionKw')} hint={`${t('listHint')} ${t('contradictionKwHint')}`}>
+                <input className={fieldCls} disabled={!canEdit}
+                  value={(data.orderContradictionPhrases ?? []).join(', ')}
+                  onChange={(e) => patch('orderContradictionPhrases', parseList(e.target.value))} />
+              </Field>
               {/* <<< ANGGA */}
 
               <h2 className="pt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{t('secTokens')}</h2>
@@ -470,7 +485,7 @@ export default function OrderMemorySettingsPage() {
                 <p className="text-[13px] font-medium text-gray-800 dark:text-gray-200">
                   {gateStats.totalDraftDitahan} draft · {gateStats.totalAlasan} alasan
                 </p>
-                {(['label_rancu', 'token_tak_dikenal', 'digit_mentah', 'bridge_asumsi', 'istilah_internal', 'lainnya'] as const)
+                {(['label_rancu', 'token_tak_dikenal', 'digit_mentah', 'bridge_asumsi', 'istilah_internal', 'kontradiksi_data', 'lainnya'] as const)
                   .filter((k) => (gateStats.perAlasan[k] ?? 0) > 0)
                   .map((k) => (
                     <div key={k} className="flex items-center justify-between text-[13px] text-gray-700 dark:text-gray-300">

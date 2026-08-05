@@ -43,7 +43,10 @@ const OC = {
   orderMoneyAskKeywords: ['total', 'ongkir', 'ongkos', 'harga', 'berapa', 'bayar', 'biaya', 'transfer', 'rekening', 'cod'],
   // <<< ANGGA
   // >>> ANGGA — E3 (2026-08-05): frasa internal yang haram sampai ke pelanggan.
-  orderMetaPhraseBlacklist: ['penanda', 'placeholder', 'instruksi sistem', 'gerbang uang', 'grounding', 'informasi harga yang akurat', 'dicek kembali di chat', 'cek chat ini'],
+  orderMetaPhraseBlacklist: ['penanda', 'placeholder', 'instruksi sistem', 'gerbang uang', 'grounding', 'informasi harga yang akurat', 'informasi ongkir yang akurat', 'dicek kembali di chat', 'cek chat ini'],
+  // <<< ANGGA
+  // >>> ANGGA — P2 (2026-08-05): frasa kontradiksi "menyangkal data yang tersedia".
+  orderContradictionPhrases: ['belum memiliki informasi', 'belum ada informasi', 'belum punya info', 'tidak memiliki informasi', 'belum bisa memastikan', 'akan saya cek dulu', 'cek dengan tim', 'tim logistik', 'menghubungkan dengan tim', 'akan segera memberikan informasi'],
   // <<< ANGGA
 };
 // <<< ANGGA
@@ -122,7 +125,7 @@ function offer(items: Array<{ productId: string; name: string }>, fresh = true) 
 
 interface Opts {
   lastCustomerText?: string;
-  extract?: { kota: string | null; items: Array<{ nama: string; qty: number }> };
+  extract?: { kota: string | null; provinsi?: string | null; items: Array<{ nama: string; qty: number }> };
   products?: any[];
   logEntries?: any[];
   addresses?: any[];
@@ -763,6 +766,143 @@ describe('E3 — penjaga meta: istilah internal tidak boleh sampai ke pelanggan'
     expect(
       klasifikasiAlasanGate('Balasan menyebut istilah internal sistem ("penanda") — tulis ulang tanpa menyinggung sistem.'),
     ).toBe('istilah_internal');
+  });
+});
+// <<< ANGGA
+
+// ─────────────────────────────────────────────────────────────────────────────
+// >>> ANGGA — P0/P2/P4/P5 (2026-08-05, KETOK Bossfren pasca-insiden "mataram"
+// resolve diam-diam ke Lampung Timur): dominansi 2026-08-03 DIBATALKAN — auto
+// hanya saat kandidat TUNGGAL, selebihnya SELALU bertanya terbuka; ekstraktor
+// pisah kota/provinsi + saringan provinsi; penjaga kontradiksi "menyangkal
+// data tersedia"; alat debug search keyword. RED-first.
+
+const ROWS_MATARAM = [
+  { _id: 'd-lamtim', PROVINCE_NAME: 'LAMPUNG', CITY_NAME: 'LAMPUNG TIMUR', CITY_NAME_SI: 'Kab. Lampung Timur', DISTRICT_NAME: 'MATARAM BARU', SUBDISTRICT_NAME: 'X' },
+  { _id: 'd-lamteng', PROVINCE_NAME: 'LAMPUNG', CITY_NAME: 'LAMPUNG TENGAH', CITY_NAME_SI: 'Kab. Lampung Tengah', DISTRICT_NAME: 'Y', SUBDISTRICT_NAME: 'MATARAM' },
+  { _id: 'd-oki', PROVINCE_NAME: 'SUMATERA SELATAN', CITY_NAME: 'OGAN KOMERING ILIR', CITY_NAME_SI: 'Kab. Ogan Komering Ilir', DISTRICT_NAME: 'Z', SUBDISTRICT_NAME: 'MATARAM' },
+];
+
+describe('P0 — dominansi dibatalkan: >1 kandidat SELALU bertanya terbuka', () => {
+  it('REPLAY mataram: level kecamatan "MATARAM BARU" TIDAK lagi menang diam-diam', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram berapa kak?',
+      extract: { kota: 'Mataram', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ambiguous'); // pra-P0: 'ok' ke Lampung Timur (BAHAYA)
+    const grounding = await h.svc.getGroundingText('c1');
+    // Format pertanyaan terbuka KETOK Bossfren 2026-08-05.
+    expect(grounding).toContain('mana ya kak');
+    expect(grounding).toContain('provinsinya');
+    expect(grounding).toContain('kecamatannya');
+    expect(grounding).not.toMatch(/\d{3,}/); // nol angka
+  });
+
+  it('jawaban provinsi yang mempersempit tapi belum tunggal → pertanyaan TERTUTUP dari subset', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram berapa kak?',
+      extract: { kota: 'Mataram', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+    pesanBaru(h, 'm2', 'yang lampung kak');
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ambiguous');
+    expect(res.candidates.map((c: any) => c.city).sort()).toEqual(['LAMPUNG TENGAH', 'LAMPUNG TIMUR']);
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('Lampung Timur'); // subset dibacakan tertutup
+  });
+
+  it('jawaban yang menunjuk kandidat unik → langsung dikutip', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram berapa kak?',
+      extract: { kota: 'Mataram', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+    pesanBaru(h, 'm2', 'yang lampung timur kak');
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.city).toBe('LAMPUNG TIMUR');
+  });
+});
+
+describe('P4 — ekstraktor pisah kota/provinsi + saringan provinsi', () => {
+  it('provinsi disebut & TIDAK cocok kandidat mana pun → tanya kecamatan (bukan salah kota)', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram nusa tenggara barat berapa kak?',
+      extract: { kota: 'Mataram', provinsi: 'Nusa Tenggara Barat', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('need_more_detail'); // sistem TAHU kotanya tenggelam
+  });
+
+  it('provinsi disebut & cocok SATU kandidat → langsung dikutip tanpa tanya', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram sumatera selatan berapa?',
+      extract: { kota: 'Mataram', provinsi: 'Sumatera Selatan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.province).toBe('SUMATERA SELATAN');
+  });
+
+  it('singkatan provinsi dikenal: "NTB" = Nusa Tenggara Barat', () => {
+    const { normalisasiProvinsi } = require('./shipping.service');
+    expect(normalisasiProvinsi('NTB')).toBe('nusa tenggara barat');
+    expect(normalisasiProvinsi('jabar')).toBe('jawa barat');
+  });
+});
+
+describe('P2 — penjaga kontradiksi: menyangkal data yang sudah tersedia', () => {
+  it('REPLAY: kutipan OK + "belum memiliki informasi ongkir… cek dengan tim logistik" → DITAHAN', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak?',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Mohon maaf, saya belum memiliki informasi ongkir ke Medan. Saya akan cek dengan tim logistik kami.',
+    );
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toContain('menyangkal');
+  });
+
+  it('giliran BUKAN uang → frasa yang sama tidak ditahan (cek garansi ke tim itu sah)', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak?',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    pesanBaru(h, 'm2', 'kalau garansinya gimana kak?');
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok'); // cache
+    const out = await h.svc.resolvePriceTokens('c1', 'Untuk garansi saya cek dengan tim dulu ya kak 🙏');
+    expect(out.ok).toBe(true);
+  });
+
+  it('telemetri mengenal kelas kontradiksi_data', () => {
+    const { klasifikasiAlasanGate } = require('./shipping.service');
+    expect(
+      klasifikasiAlasanGate('Balasan menyangkal data yang sudah tersedia ("tim logistik") — jawab langsung memakai penanda.'),
+    ).toBe('kontradiksi_data');
+  });
+});
+
+describe('P5 — alat debug search keyword (dipakai widget Settings Ongkir)', () => {
+  it('mengembalikan baris mentah + ringkasan kelompok ber-level', async () => {
+    const h = harness({ addresses: ROWS_MATARAM });
+    const out = await (h.svc as any).debugSearchAddress('mataram');
+    expect(out.total).toBe(3);
+    expect(out.rows[0]).toEqual(expect.objectContaining({ provinsi: 'LAMPUNG' }));
+    expect(out.groups.length).toBe(3);
+    expect(out.groups[0]).toEqual(
+      expect.objectContaining({ city: 'LAMPUNG TIMUR', level: 'district' }),
+    );
   });
 });
 // <<< ANGGA

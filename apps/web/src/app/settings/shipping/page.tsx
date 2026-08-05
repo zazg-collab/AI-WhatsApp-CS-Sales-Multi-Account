@@ -164,6 +164,21 @@ const dict: Dict = {
     en: 'Calculated with NO items — the numbers below are SHIPPING only (store default weight, 1 unit), not an order total. Fill the items box for a real total.',
   },
 
+  // >>> ANGGA — P5 (2026-08-05, ketok Bossfren): debug search keyword.
+  searchTitle: { id: 'Uji search keyword tujuan', en: 'Destination keyword search debug' },
+  searchIntro: {
+    id: 'Melihat PERSIS apa yang dilihat sistem untuk satu kata kunci tujuan: hasil mentah API Mengantar (maks 50 baris) + pengelompokan kandidat ber-level. Alias tujuan ikut diterapkan. Berguna melacak kota yang "tenggelam" (kasus Mataram NTB vs Lampung).',
+    en: 'Shows EXACTLY what the system sees for one destination keyword: raw Mengantar rows (max 50) + level-ranked candidate groups. Destination aliases apply.',
+  },
+  searchKwLabel: { id: 'Kata kunci', en: 'Keyword' },
+  searchRun: { id: 'Cari', en: 'Search' },
+  searchRunning: { id: 'Mencari…', en: 'Searching…' },
+  searchFail: { id: 'Gagal memanggil API search.', en: 'Search API call failed.' },
+  searchAliasNote: { id: 'Alias aktif — yang dicari:', en: 'Alias applied — searched for:' },
+  searchGroups: { id: 'Kelompok kandidat (urutan yang dipakai sistem)', en: 'Candidate groups (system order)' },
+  searchRowsT: { id: 'Baris mentah API', en: 'Raw API rows' },
+  searchEmpty: { id: 'Nol baris hasil.', en: 'Zero rows returned.' },
+  // <<< ANGGA
   stAmbiguous: { id: 'Nama kota cocok dengan beberapa daerah — bot akan bertanya dulu, tidak menebak.', en: 'The city name matches several places — the bot will ask first, never guess.' },
   stNeedDetail: {
     id: 'Nama daerahnya belum bisa dipastikan — bot akan minta KECAMATAN-nya (provinsi ditawarkan kalau pelanggan bingung).',
@@ -234,6 +249,19 @@ export default function ShippingSettingsPage() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<QuoteResult | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
+  // >>> ANGGA — P5 (2026-08-05): debug search keyword.
+  const [searchKw, setSearchKw] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchErr, setSearchErr] = useState<string | null>(null);
+  const [searchRes, setSearchRes] = useState<{
+    keyword: string;
+    dicari: string;
+    total: number;
+    gagal?: boolean;
+    rows: Array<{ kelurahan: string; kecamatan: string; kota: string; provinsi: string }>;
+    groups: Array<{ city: string; cityLabel: string; province: string; level: string; rows: number }>;
+  } | null>(null);
+  // <<< ANGGA
 
   function loadStatus() {
     api<{ configured: boolean; cache: { size: number } }>('/shipping/status')
@@ -319,6 +347,24 @@ export default function ShippingSettingsPage() {
       setTesting(false);
     }
   }
+
+  // >>> ANGGA — P5 (2026-08-05)
+  async function runSearch() {
+    setSearching(true);
+    setSearchRes(null);
+    setSearchErr(null);
+    try {
+      const r = await api<NonNullable<typeof searchRes>>(
+        `/shipping/search-address?keyword=${encodeURIComponent(searchKw.trim())}`,
+      );
+      setSearchRes(r);
+    } catch (err) {
+      setSearchErr(err instanceof Error ? err.message : t('searchFail'));
+    } finally {
+      setSearching(false);
+    }
+  }
+  // <<< ANGGA
 
   const statusNote: Record<string, string> = {
     ambiguous: t('stAmbiguous'),
@@ -561,6 +607,101 @@ export default function ShippingSettingsPage() {
                 )}
               </div>
             </Card>
+
+            {/* >>> ANGGA — P5 (2026-08-05, ketok Bossfren): debug search keyword */}
+            <Card className="mt-4 p-4 sm:p-5">
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">{t('searchTitle')}</h2>
+              <p className="mb-4 mt-1 text-xs text-gray-500 dark:text-gray-400">{t('searchIntro')}</p>
+              <div className="space-y-4">
+                <Field label={t('searchKwLabel')}>
+                  <input className={fieldCls} value={searchKw} placeholder="mataram"
+                    onChange={(e) => setSearchKw(e.target.value)} />
+                </Field>
+                <Button variant="outline" size="sm" onClick={runSearch} disabled={searching || !searchKw.trim()}>
+                  <MagnifyingGlass className="h-4 w-4" aria-hidden="true" />
+                  {searching ? t('searchRunning') : t('searchRun')}
+                </Button>
+
+                {searchErr && (
+                  <p className="text-[13px] font-medium text-danger-700 dark:text-danger-400">{searchErr}</p>
+                )}
+                {searchRes?.gagal && (
+                  <p className="text-[13px] font-medium text-danger-700 dark:text-danger-400">{t('searchFail')}</p>
+                )}
+                {searchRes && !searchRes.gagal && (
+                  <div className="space-y-3 text-[13px]">
+                    {searchRes.dicari.toLowerCase() !== searchRes.keyword.toLowerCase() && (
+                      <p className="text-xs text-review-700 dark:text-review-300">
+                        {t('searchAliasNote')} <span className="font-semibold">{searchRes.dicari}</span>
+                      </p>
+                    )}
+                    {searchRes.total === 0 ? (
+                      <p className="text-xs text-gray-500">{t('searchEmpty')}</p>
+                    ) : (
+                      <>
+                        <div>
+                          <p className="mb-1 font-medium text-gray-800 dark:text-gray-200">
+                            {t('searchGroups')} · {searchRes.groups.length}
+                          </p>
+                          <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                                <tr>
+                                  <th className="px-2 py-1.5">#</th>
+                                  <th className="px-2 py-1.5">Kandidat</th>
+                                  <th className="px-2 py-1.5">Provinsi</th>
+                                  <th className="px-2 py-1.5">Level cocok</th>
+                                  <th className="px-2 py-1.5 text-right">Baris</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {searchRes.groups.map((g, i) => (
+                                  <tr key={`${g.province}-${g.cityLabel}`} className="border-t border-gray-100 dark:border-gray-800">
+                                    <td className="px-2 py-1.5 text-gray-400">{i + 1}</td>
+                                    <td className="px-2 py-1.5">{g.cityLabel}</td>
+                                    <td className="px-2 py-1.5">{g.province}</td>
+                                    <td className="px-2 py-1.5">{g.level}</td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums">{g.rows}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="mb-1 font-medium text-gray-800 dark:text-gray-200">
+                            {t('searchRowsT')} · {searchRes.total}
+                          </p>
+                          <div className="max-h-64 overflow-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                            <table className="w-full text-left text-xs">
+                              <thead className="sticky top-0 bg-gray-50 text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                                <tr>
+                                  <th className="px-2 py-1.5">Kelurahan</th>
+                                  <th className="px-2 py-1.5">Kecamatan</th>
+                                  <th className="px-2 py-1.5">Kota/Kab.</th>
+                                  <th className="px-2 py-1.5">Provinsi</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {searchRes.rows.map((r, i) => (
+                                  <tr key={i} className="border-t border-gray-100 dark:border-gray-800">
+                                    <td className="px-2 py-1.5">{r.kelurahan}</td>
+                                    <td className="px-2 py-1.5">{r.kecamatan}</td>
+                                    <td className="px-2 py-1.5">{r.kota}</td>
+                                    <td className="px-2 py-1.5">{r.provinsi}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Card>
+            {/* <<< ANGGA */}
           </>
         )}
       </div>

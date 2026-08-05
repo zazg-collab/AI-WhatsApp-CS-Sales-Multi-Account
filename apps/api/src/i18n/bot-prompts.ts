@@ -592,9 +592,10 @@ export { t };
 // (kota tujuan + daftar item), pola sama persis LEAD_SCORE_SYSTEM/SENTIMENT_SYSTEM.
 export const SHIPPING_EXTRACT_SYSTEM = {
   id: `Kamu mengekstrak DATA PENGIRIMAN dari percakapan WhatsApp sebuah toko.
-Balas HANYA JSON: {"kota": string|null, "items": [{"nama": string, "qty": number}]}
+Balas HANYA JSON: {"kota": string|null, "provinsi": string|null, "items": [{"nama": string, "qty": number}]}
 Aturan:
-- "kota": nama kota/kabupaten/provinsi TUJUAN KIRIM yang disebut pelanggan. null kalau belum ada yang disebut.
+- "kota": nama KOTA/KABUPATEN tujuan kirim SAJA — TANPA provinsi. Kalau pelanggan menyebut keduanya sekaligus ("mataram nusa tenggara barat", "bogor jawa barat"), PISAHKAN: "kota" berisi kotanya saja ("Mataram"), "provinsi" berisi provinsinya ("Nusa Tenggara Barat"). null kalau belum ada yang disebut.
+- "provinsi": provinsi tujuan HANYA kalau pelanggan menyebutnya (boleh singkatan seperti "NTB"/"jabar" — salin apa adanya). null kalau tidak disebut. Kalau pelanggan HANYA menyebut provinsi tanpa kota, "kota" boleh diisi nama provinsi itu dan "provinsi" null (perilaku lama).
 - Kalau pelanggan menyebut LEBIH DARI SATU tempat sepanjang percakapan, ambil yang PALING BARU — yang terakhir dia sebut. Tempat yang lebih dulu disebut DIBUANG, walau diulang berkali-kali sebelumnya. Contoh: pelanggan berkali-kali bilang "Purwokerto", lalu di pesan terakhir bilang "ya sudah, ke Purworejo saja" → jawabannya "Purworejo", bukan "Purwokerto".
 - "items": barang yang pelanggan ingin beli — TAPI JANGAN asal menggabung barang dari topik yang berbeda. Kalau pelanggan menyebut satu barang BARU tanpa sinyal penyambung eksplisit (kata seperti "dan", "sama", "juga", "sekalian", "plus", "tambah", atau qty tambahan seperti "2 pcs lagi" — termasuk saat DUA barang disebut SEKALIGUS dalam satu kalimat dengan "dan"/"sama", mis. "Golok dan Pisau, kirim ke Solo berapa?", yang berarti KEDUANYA harus masuk "items") DAN barang itu berbeda sama sekali dari yang disebut sebelumnya, anggap itu PERTANYAAN BARU YANG BERDIRI SENDIRI — "items" HANYA berisi barang baru itu, JANGAN ikutkan barang-barang sebelumnya. Barang lama hanya boleh ikut ke "items" kalau ADA sinyal penyambung eksplisit itu. Contoh SALAH: pelanggan tanya "harga Golok Cordova berapa" lalu beberapa pesan kemudian tanya "kalau Pisau Dapur Cordova, kirim ke Solo berapa?" (tanpa kata penyambung) → "items" ikut memuat Golok Cordova juga — INI SALAH. Contoh BENAR untuk kasus yang sama: "items" hanya berisi Pisau Dapur Cordova. Contoh BENAR sebaliknya: pelanggan bilang "Pisau Dapur Cordova juga sekalian, kirim ke Solo berapa totalnya?" → "items" berisi KEDUA barang, karena ada kata "juga sekalian". Salin nama produknya apa adanya seperti yang ditulis pelanggan; jangan diterjemahkan, jangan dikarang, jangan ditambah barang yang tidak disebut.
 - "qty": 1 kalau pelanggan tidak menyebut jumlah; ikuti angkanya kalau pelanggan menyebut jumlah/pcs/buah.
@@ -602,9 +603,10 @@ Aturan:
 - JANGAN menyebutkan harga, berat, atau ongkir dalam bentuk apa pun. Angka-angka itu diambil sistem dari katalog, bukan darimu.`,
 
   en: `You extract SHIPPING DATA from a shop's WhatsApp conversation.
-Reply ONLY with JSON: {"kota": string|null, "items": [{"nama": string, "qty": number}]}
+Reply ONLY with JSON: {"kota": string|null, "provinsi": string|null, "items": [{"nama": string, "qty": number}]}
 Rules:
-- "kota": the destination city/regency/province the customer mentioned. null if none mentioned yet.
+- "kota": the destination CITY/REGENCY only — WITHOUT the province. If the customer mentions both ("mataram nusa tenggara barat"), SPLIT them: "kota" holds the city ("Mataram"), "provinsi" the province. null if none mentioned yet.
+- "provinsi": the destination province ONLY if the customer mentioned it (abbreviations like "NTB" are fine — copy verbatim). null otherwise. If the customer mentioned ONLY a province with no city, put it in "kota" and leave "provinsi" null (legacy behaviour).
 - If the customer named MORE THAN ONE place during the conversation, take the MOST RECENT one — the last they mentioned. Earlier places are DISCARDED even if repeated many times before. Example: the customer said "Purwokerto" several times, then in the latest message says "fine, send it to Purworejo instead" → the answer is "Purworejo", not "Purwokerto".
 - "items": products the customer wants to buy — but do NOT blindly merge items from different topics. If the customer mentions a NEW item with no explicit continuation cue (words like "and", "with", "also", "as well", "plus", "add", "X too", or extra qty like "2 more pcs" — including when TWO items are named TOGETHER in one sentence with "and", e.g. "Golok and Pisau, shipping to Solo?", which means BOTH belong in "items") AND that item is entirely different from what was mentioned before, treat it as a NEW, stand-alone question — "items" should contain ONLY that new item, do NOT carry over the earlier ones. Earlier items only carry over when there IS an explicit continuation cue. Example WRONG: the customer asks "how much is the Golok Cordova" then, several messages later, asks "what about the Pisau Dapur Cordova, shipping to Solo?" (no continuation word) → "items" still includes Golok Cordova too — THIS IS WRONG. Correct for the same case: "items" contains only Pisau Dapur Cordova. Correct the other way: the customer says "the Pisau Dapur Cordova too, what's the total shipped to Solo?" → "items" contains BOTH, because of "too". Copy product names verbatim as the customer wrote them; do not translate, invent, or add items that were not mentioned.
 - "qty": 1 when the customer gave no quantity; otherwise follow the number they gave.
@@ -680,6 +682,33 @@ export const SHIPPING_GROUNDING_UNKNOWN = {
 export const SHIPPING_GROUNDING_AMBIGUOUS = {
   id: 'DATA ONGKIR: nama daerah yang disebut pelanggan cocok dengan lebih dari satu kabupaten/kota. JANGAN menyebut angka ongkir apa pun dulu. Tanyakan dengan bahasa santai yang mana yang dimaksud, HANYA dari pilihan di bawah ini. Sebutkan pilihannya PERSIS seperti tertulis — jangan menambah, mengarang, atau menyebut nama kabupaten/provinsi lain dari pengetahuanmu sendiri. Kalau pelanggan bilang bukan dua-duanya, minta dia menyebutkan kabupaten atau kecamatannya.',
   en: 'SHIPPING DATA: the place the customer mentioned matches more than one regency/city. Do NOT state any shipping cost yet. Ask casually which one they mean, using ONLY the options below. Quote them EXACTLY as written — do not add, invent, or name any other regency/province from your own knowledge. If the customer says it is neither, ask them to name the regency or district.',
+};
+
+/** >>> ANGGA — P0 (KETOK Bossfren 2026-08-05): pertanyaan PERTAMA untuk
+ *  tujuan bermakna-ganda kini TERBUKA & JUJUR — daftar kandidat TIDAK
+ *  dibacakan, karena potongan 50 baris pencarian bisa menenggelamkan jawaban
+ *  yang benar (insiden "mataram": kandidat semua Lampung, padahal maksudnya
+ *  Kota Mataram NTB — membacakan kandidat justru menyesatkan). Format
+ *  pertanyaannya persis ketok. <<< */
+export const SHIPPING_GROUNDING_AMBIGUOUS_OPEN = {
+  id: (tempat: string) => {
+    const nama = (tempat ?? '').trim() || 'tujuannya';
+    const rapi = nama.charAt(0).toUpperCase() + nama.slice(1);
+    return `DATA ONGKIR: tempat "${rapi}" cocok dengan LEBIH DARI SATU daerah berbeda di sistem ekspedisi — dan daerah yang pelanggan maksud bisa saja belum terlihat sistem. JANGAN menebak, JANGAN menyebut angka ongkir/total apa pun, dan JANGAN menyebut nama kabupaten/provinsi kandidat mana pun. Bertanyalah dengan pola PERSIS seperti ini: "${rapi}nya mana ya kak? boleh sebut provinsinya, atau langsung kecamatannya 🙏"`;
+  },
+  en: (tempat: string) => {
+    const nama = (tempat ?? '').trim() || 'the destination';
+    return `SHIPPING DATA: "${nama}" matches MORE THAN ONE distinct area — and the one the customer means may not even be visible to the system yet. Do NOT guess, do NOT state any shipping cost, and do NOT name any candidate regency/province. Ask exactly in this shape: "Which ${nama} do you mean? feel free to mention the province, or just the district 🙏"`;
+  },
+};
+
+/** >>> ANGGA — P2 (2026-08-05, insiden "belum memiliki informasi ongkir…"
+ *  PADAHAL kutipan sudah dihitung): penegasan positif untuk kasus OK — model
+ *  dilarang menyangkal ketersediaan data / menjanjikan info menyusul.
+ *  Ditegakkan juga di kode (penjaga kontradiksi resolvePriceTokens). <<< */
+export const SHIPPING_GROUNDING_DATA_READY = {
+  id: 'PENTING: data ongkir/tagihan untuk giliran ini SUDAH TERSEDIA lewat penanda di bawah — JANGAN mengatakan "belum ada info", "akan saya cek dulu", "saya hubungi tim", atau menjanjikan info menyusul. Jawab LANGSUNG memakai penanda, seperti CS yang sudah memegang datanya.',
+  en: 'IMPORTANT: the shipping/billing data for this turn IS ALREADY AVAILABLE via the placeholders below — do NOT say "I do not have the info yet", "let me check first", "I will contact the team", or promise info later. Answer DIRECTLY using the placeholders, like an agent who already has the data.',
 };
 
 export const SHIPPING_GROUNDING_NEED_DETAIL = {

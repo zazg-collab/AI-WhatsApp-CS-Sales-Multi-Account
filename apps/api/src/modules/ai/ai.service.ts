@@ -196,7 +196,7 @@ export class AiService {
   // LEAD_SCORE_SYSTEM/SENTIMENT_SYSTEM: temperature 0, json: true, parse
   // toleran, tidak pernah melempar.
   async extractShippingOrder(conversationId: string): Promise<ShippingOrderExtract> {
-    if (!this.shipping) return { city: null, items: [] };
+    if (!this.shipping) return { city: null, province: null, items: [] }; // >>> ANGGA — P4 <<<
     return this.shipping.extractOrderTarget(conversationId);
   }
   // <<< ANGGA

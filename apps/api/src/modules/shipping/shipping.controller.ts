@@ -57,6 +57,17 @@ export class ShippingController {
   }
   // <<< ANGGA
 
+  // >>> ANGGA — P5 (2026-08-05, ketok Bossfren): debug SEARCH KEYWORD —
+  // persis rantai yang dilihat bot (alias → search → kelompok ber-level),
+  // baca-saja, tanpa estimate. Dipakai widget di Settings Ongkir.
+  @ApiOperation({ summary: 'Debug search keyword tujuan (baris mentah + kelompok kandidat)' })
+  @Roles('admin', 'supervisor', 'owner')
+  @Get('search-address')
+  searchAddress(@Query('keyword') keyword?: string) {
+    return this.shipping.debugSearchAddress((keyword ?? '').trim());
+  }
+  // <<< ANGGA
+
   @ApiOperation({ summary: 'Uji hitung ongkir manual (tujuan + daftar barang)' })
   @Roles('admin', 'supervisor', 'owner')
   @Post('test-quote')

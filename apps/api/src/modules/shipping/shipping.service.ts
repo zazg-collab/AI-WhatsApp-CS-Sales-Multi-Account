@@ -31,6 +31,10 @@ import {
   SHIPPING_GROUNDING_NEGO_OFFER,
   SHIPPING_GROUNDING_NEGO_STUCK,
   // <<< ANGGA
+  // >>> ANGGA — P0+P2 (2026-08-05)
+  SHIPPING_GROUNDING_AMBIGUOUS_OPEN,
+  SHIPPING_GROUNDING_DATA_READY,
+  // <<< ANGGA
 } from '../../i18n/bot-prompts';
 // >>> ANGGA — Fase 113: satu definisi "angka uang" dipakai ulang dari
 // rules.engine.ts, bukan diduplikasi di sini. rules.engine.ts tidak balik
@@ -140,12 +144,19 @@ export interface ExtractedItem {
 
 export interface ShippingOrderExtract {
   city: string | null;
+  /** >>> ANGGA — P4 (2026-08-05): provinsi DIPISAH dari kota — "mataram nusa
+   *  tenggara barat" dulu jadi satu keyword yang nol hasil; kini provinsi jadi
+   *  SARINGAN deterministik atas kelompok kandidat. <<< */
+  province: string | null;
   items: ExtractedItem[];
 }
 
 export type ShippingResult =
   | { status: 'ok'; quote: ShippingQuote }
-  | { status: 'ambiguous'; candidates: DestinationChoice[] }
+  // >>> ANGGA — P0 (2026-08-05): `keyword` = tempat yang pelanggan sebut
+  // (untuk pertanyaan terbuka "X-nya mana ya kak?"); `sempit` = kandidat hasil
+  // PENYEMPITAN jawaban pelanggan → dibacakan tertutup. <<<
+  | { status: 'ambiguous'; candidates: DestinationChoice[]; keyword?: string; sempit?: boolean }
   | { status: 'need_more_detail'; keyword: string }
   | { status: 'no_destination' }
   | { status: 'unresolved_items'; unmatched: string[] }
@@ -307,24 +318,37 @@ export function resolveDestination(
   );
 }
 
-/** Kandidat teratas harus seunggul ini (dalam jumlah baris) sebelum dipakai
- *  tanpa bertanya, kalau levelnya sama. Parameter teknis. */
+/** >>> ANGGA — TIDAK DIPAKAI sejak ketok 2026-08-05 (lihat kandidatDominan).
+ *  Disimpan sebagai catatan sejarah parameter rancangan 2026-08-03. <<< */
 export const DOMINANCE_RATIO = 3;
 
 /**
  * Bolehkah kandidat teratas dipakai langsung tanpa bertanya?
  *
- * Ya kalau ia satu-satunya, ATAU levelnya lebih tinggi dari pesaing terdekat,
- * ATAU barisnya minimal 3x lipat. Kalau setara — Cibinong 14 lawan 13,
- * Jatinegara 17 lawan 9, Bogor 30 lawan 20 — JANGAN memilih diam-diam, tanya.
+ * >>> ANGGA — KETOK BOSSFREN 2026-08-05, MEMBATALKAN rancangan dominansi
+ * 2026-08-03 (level lebih tinggi / 3x lipat baris → auto-pakai): insiden nyata
+ * "mataram" — Kota Mataram NTB TENGGELAM total di potongan 50 baris search,
+ * "MATARAM BARU" (Lampung Timur, level kecamatan via aturan kata-awalan)
+ * menang "sah" → ongkir kota yang SALAH dikutip percaya diri. Satu-satunya
+ * jalur yang bisa meloloskan angka salah melewati semua gerbang, karena
+ * angkanya "benar" untuk kota yang keliru.
+ *
+ * Kebijakan baru: auto HANYA kalau (a) kandidatnya TUNGGAL, atau (b) ada
+ * TEPAT SATU kecocokan PERSIS level-kota (kata pelanggan memang nama resmi
+ * satu kota/kab dan sistem MENEMUKANNYA — bukan tebakan ranking; tanpa
+ * pengecualian ini "medan" ikut ditanya gara-gara kecamatan MEDAN SATRIA di
+ * Bekasi). Selain itu → SELALU bertanya (terbuka & jujur, format ketok:
+ * "X-nya mana ya kak? boleh sebut provinsinya, atau langsung kecamatannya").
+ * Harga sadarnya: Purwokerto-class (27 lawan 2, level kecamatan) kini
+ * ditanya sekali — akurasi uang > satu balasan ekstra.
  */
 export function kandidatDominan(urut: DestinationCandidate[]): boolean {
-  if (urut.length === 0) return false;
-  if (urut.length === 1) return true;
-  const [satu, dua] = urut;
-  if (LEVEL_RANK[satu.level] < LEVEL_RANK[dua.level]) return true;
-  return satu.rows >= dua.rows * DOMINANCE_RATIO;
+  if (urut.length <= 1) return urut.length === 1;
+  // `urut` terurut level dulu — kecocokan level-kota selalu di depan.
+  const kotaPersis = urut.filter((c) => c.level === 'city');
+  return kotaPersis.length === 1;
 }
+// <<< ANGGA
 
 /**
  * Pilih pembeda yang BENAR-BENAR memisahkan kandidat, otomatis. Kalau
@@ -377,9 +401,23 @@ export function pilihKandidat(
   pilihan: DestinationChoice[],
   teks: string,
 ): DestinationChoice | null {
-  if (!pilihan.length) return null;
+  const cocok = kandidatCocok(pilihan, teks);
+  return cocok.length === 1 ? cocok[0] : null;
+}
+
+/**
+ * >>> ANGGA — P0 (2026-08-05): SEMUA kandidat berskor tertinggi (>0) untuk
+ * jawaban pelanggan. Dipakai `pilihKandidat` (tunggal → pilih) DAN jalur
+ * penyempitan: jawaban "yang lampung kak" mengenai 2 kandidat Lampung →
+ * subset itu dibacakan sebagai pertanyaan TERTUTUP, bukan diabaikan.
+ */
+export function kandidatCocok(
+  pilihan: DestinationChoice[],
+  teks: string,
+): DestinationChoice[] {
+  if (!pilihan.length) return [];
   const jawaban = new Set(kata(teks));
-  if (!jawaban.size) return null;
+  if (!jawaban.size) return [];
 
   const perLabel = pilihan.map((p) => new Set(kata(p.label)));
   const frekuensi = new Map<string, number>();
@@ -392,10 +430,10 @@ export function pilihKandidat(
       [...set].filter((w) => (frekuensi.get(w) ?? 0) < pilihan.length && jawaban.has(w)).length,
   );
   const tertinggi = Math.max(...skor);
-  if (tertinggi === 0) return null;
-  if (skor.filter((s) => s === tertinggi).length > 1) return null;
-  return pilihan[skor.indexOf(tertinggi)];
+  if (tertinggi === 0) return [];
+  return pilihan.filter((_, i) => skor[i] === tertinggi);
 }
+// <<< ANGGA
 
 /**
  * >>> ANGGA — LAPISAN KOSAKATA, dijalankan sebelum Langkah 3.
@@ -416,6 +454,38 @@ export function pilihKandidat(
  * Pencocokan sengaja SELURUH kata kunci, bukan per kata: "solo" ditukar,
  * "solo baru" tidak. Menukar sebagian kata akan merusak nama majemuk yang sah.
  */
+/** >>> ANGGA — P4 (2026-08-05): singkatan provinsi sehari-hari → nama resmi
+ *  (huruf kecil), untuk saringan provinsi. Data statis, bukan angka bisnis. */
+export const PROVINSI_ALIAS: Record<string, string> = {
+  ntb: 'nusa tenggara barat',
+  ntt: 'nusa tenggara timur',
+  jabar: 'jawa barat',
+  jateng: 'jawa tengah',
+  jatim: 'jawa timur',
+  sumut: 'sumatera utara',
+  sumsel: 'sumatera selatan',
+  sumbar: 'sumatera barat',
+  kalbar: 'kalimantan barat',
+  kaltim: 'kalimantan timur',
+  kalsel: 'kalimantan selatan',
+  kalteng: 'kalimantan tengah',
+  kaltara: 'kalimantan utara',
+  sulsel: 'sulawesi selatan',
+  sulut: 'sulawesi utara',
+  sulteng: 'sulawesi tengah',
+  sultra: 'sulawesi tenggara',
+  babel: 'kepulauan bangka belitung',
+  kepri: 'kepulauan riau',
+  diy: 'yogyakarta',
+  jogja: 'yogyakarta',
+};
+
+export function normalisasiProvinsi(v: string): string {
+  const k = (v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return PROVINSI_ALIAS[k] ?? k;
+}
+// <<< ANGGA
+
 export function terapkanAlias(keyword: string, aliases: Record<string, string>): string {
   const asli = (keyword ?? '').trim();
   const kunci = asli.toLowerCase().replace(/\s+/g, ' ');
@@ -550,7 +620,7 @@ export class ShippingService {
    * hanya nama & qty. Harga/berat dibaca dari katalog `Product`.
    */
   async extractOrderTarget(conversationId: string): Promise<ShippingOrderExtract> {
-    const empty: ShippingOrderExtract = { city: null, items: [] };
+    const empty: ShippingOrderExtract = { city: null, province: null, items: [] };
     const conv = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       select: {
@@ -766,7 +836,7 @@ export class ShippingService {
     // grounding ongkir jalan (bisa sering), dan ini bukan sinyal masalah dengan
     // sendirinya, cuma jejak buat ditelusuri KALAU ada insiden serupa lagi.
     this.logger.debug(
-      `extractOrderTarget('${conversationId}'): kota=${JSON.stringify(extract.city)} items=${JSON.stringify(extract.items)}`,
+      `extractOrderTarget('${conversationId}'): kota=${JSON.stringify(extract.city)} provinsi=${JSON.stringify(extract.province)} items=${JSON.stringify(extract.items)}`,
     );
 
     // >>> ANGGA — Order Context Log, tangga BARANG (jawaban): kalau giliran
@@ -1023,7 +1093,8 @@ export class ShippingService {
     // destination_id yang sudah disimpan. Ini dijalankan SEBELUM pencarian
     // ulang justru karena pencarian ulang-lah yang gagal untuk teks jawaban
     // ("Kota Bogor" tidak pernah cocok dengan CITY_NAME "BOGOR").
-    const dipilih = pilihKandidat(this.cache.pending(conversationId), lastCustomerText);
+    const pendingTujuan = this.cache.pending(conversationId);
+    const dipilih = pilihKandidat(pendingTujuan, lastCustomerText);
     if (dipilih) {
       this.cache.clearPending(conversationId);
       this.cache.resetAsks(conversationId);
@@ -1031,6 +1102,16 @@ export class ShippingService {
       const hasil = await this.quoteUntukTujuan(dipilih, items);
       return finalize(hasil);
     }
+    // >>> ANGGA — P0 (2026-08-05): jawaban yang MENYEMPITKAN tapi belum
+    // tunggal ("yang lampung kak" mengenai 2 kandidat Lampung) → subset itu
+    // jadi pertanyaan TERTUTUP berikutnya, bukan diabaikan lalu mencari ulang.
+    if (pendingTujuan.length > 1) {
+      const subset = kandidatCocok(pendingTujuan, lastCustomerText);
+      if (subset.length > 1 && subset.length < pendingTujuan.length) {
+        return finalize({ status: 'ambiguous', candidates: subset, sempit: true });
+      }
+    }
+    // <<< ANGGA
 
     const city =
       extract.city?.trim() || choiceCity || carriedEntry?.snapshot.city || cached?.city || null;
@@ -1068,7 +1149,9 @@ export class ShippingService {
     }
     // <<< ANGGA
 
-    const result = await this.quote({ keyword: city, items });
+    // >>> ANGGA — P4: provinsi hasil ekstraksi ikut sebagai saringan.
+    const result = await this.quote({ keyword: city, items, provinsi: extract.province });
+    // <<< ANGGA
     return finalize(result);
   }
 
@@ -1079,6 +1162,9 @@ export class ShippingService {
   async quote(input: {
     keyword: string;
     items: ExtractedItem[];
+    /** >>> ANGGA — P4: provinsi (kalau pelanggan menyebutnya) = saringan
+     *  deterministik atas kelompok kandidat. <<< */
+    provinsi?: string | null;
   }): Promise<ShippingResult> {
     const cfg = await this.settings.shipping();
     if (!cfg.mengantarApiKey || !cfg.mengantarOriginId) return { status: 'not_configured' };
@@ -1097,9 +1183,31 @@ export class ShippingService {
       this.logger.warn(`Ongkir gagal [api_error]: search alamat "${dicari}" mengembalikan null (HTTP/bentuk respons — lihat warn MengantarClient di dekat baris ini)`);
       return { status: 'api_error' };
     }
-    const urut = resolveDestination(rows, dicari);
+    let urut = resolveDestination(rows, dicari);
     if (!urut.length) {
       this.logger.warn(`Ongkir [need_more_detail]: "${dicari}" — ${rows.length} baris hasil search, nol kandidat kota/kabupaten yang cocok (kemungkinan tenggelam di potongan 50 baris; minta kecamatan)`);
+    }
+    // <<< ANGGA
+    // >>> ANGGA — P4 (2026-08-05): SARINGAN PROVINSI. Pelanggan yang sudah
+    // menyebut provinsi ("mataram NTB") tidak boleh diperlakukan seolah tidak
+    // menyebutnya. Cocok ≥1 kelompok → sempitkan; cocok NOL ("mataram" +
+    // "NTB" tapi semua kandidat Lampung/Sumsel) → sistem TAHU PASTI kota yang
+    // dimaksud tenggelam di potongan 50 baris → minta kecamatan, JANGAN
+    // pernah jatuh ke kandidat provinsi lain.
+    const prov = normalisasiProvinsi(input.provinsi ?? '');
+    if (prov && urut.length) {
+      const seprovinsi = urut.filter((c) => {
+        const p = normalisasiProvinsi(c.province);
+        return p.includes(prov) || prov.includes(p);
+      });
+      if (seprovinsi.length) {
+        urut = seprovinsi;
+      } else {
+        this.logger.warn(
+          `Ongkir [need_more_detail]: "${dicari}" provinsi "${prov}" — kandidat search semua di provinsi lain [${[...new Set(urut.map((c) => c.province))].join(', ')}]; kota tenggelam, minta kecamatan`,
+        );
+        return { status: 'need_more_detail', keyword: input.keyword };
+      }
     }
     // <<< ANGGA
     // Tidak ada kecocokan PERSIS di level manapun. Sering terjadi karena
@@ -1116,6 +1224,7 @@ export class ShippingService {
       // pelanggan menjawab. Jawabannya nanti tinggal dipetakan, tanpa cari lagi.
       return {
         status: 'ambiguous',
+        keyword: input.keyword, // >>> ANGGA — P0: bahan pertanyaan terbuka <<<
         candidates: urut.map((c) => ({
           city: c.city,
           province: c.province,
@@ -1364,6 +1473,7 @@ export class ShippingService {
         if (q.shippingOnly) {
           const lines = [
             t(SHIPPING_MONEY_RULE, lang),
+            t(SHIPPING_GROUNDING_DATA_READY, lang), // >>> ANGGA — P2 <<<
             t(SHIPPING_GROUNDING_SHIPPING_ONLY, lang),
             ...katalogPenanda(q),
           ];
@@ -1393,7 +1503,12 @@ export class ShippingService {
           // <<< ANGGA
           return lines.join('\n');
         }
-        const lines = [t(SHIPPING_MONEY_RULE, lang), t(SHIPPING_GROUNDING_INTRO, lang), ...katalogPenanda(q)];
+        const lines = [
+          t(SHIPPING_MONEY_RULE, lang),
+          t(SHIPPING_GROUNDING_DATA_READY, lang), // >>> ANGGA — P2 <<<
+          t(SHIPPING_GROUNDING_INTRO, lang),
+          ...katalogPenanda(q),
+        ];
         if (q.codBlockedReason === 'region') {
           lines.push('• COD TIDAK tersedia untuk wilayah ini (kebijakan toko). Tawarkan transfer saja.');
         } else if (!q.codCourier) {
@@ -1464,24 +1579,32 @@ export class ShippingService {
       }
       // <<< ANGGA
       case 'ambiguous': {
-        // >>> ANGGA — tangga 1: pertanyaan tertutup. Label sudah dipilihkan
-        // `labelKandidat` (provinsi kalau beda provinsi, "Kota/Kab." kalau
-        // seprovinsi). Tangga 2: minta kecamatan. Tangga 3: serahkan ke admin.
+        // >>> ANGGA — P0 (KETOK Bossfren 2026-08-05, membatalkan tangga
+        // tertutup 2026-08-03 sebagai pertanyaan PERTAMA): >1 kandidat →
+        // pertanyaan TERBUKA-JUJUR format ketok ("X-nya mana ya kak? boleh
+        // sebut provinsinya, atau langsung kecamatannya") — daftar kandidat
+        // TIDAK dibacakan, karena potongan 50 baris bisa menenggelamkan
+        // jawaban yang benar (insiden Mataram NTB vs Lampung). Pertanyaan
+        // TERTUTUP tetap dipakai untuk SUBSET hasil penyempitan jawaban
+        // ("yang lampung kak" → 2 kandidat Lampung dibacakan). Tangga lanjut:
+        // ronde 2 minta kecamatan, ronde 3 serahkan admin.
         const ronde = this.cache.askCount(conversationId);
         if (ronde > MAX_DESTINATION_ASKS) return t(SHIPPING_GROUNDING_DESTINATION_STUCK, lang);
+        if (result.sempit) {
+          // Penyempitan = kemajuan, bukan mentok — bacakan tertutup walau ronde ≥2.
+          return (
+            t(SHIPPING_GROUNDING_AMBIGUOUS, lang) +
+            '\n' +
+            result.candidates
+              .slice(0, MAX_CHOICES_ASKED)
+              .map((c) => `• ${c.label}`)
+              .join('\n')
+          );
+        }
         if (ronde > 1) return t(SHIPPING_GROUNDING_ASK_DISTRICT, lang);
-        // Dibacakan HANYA dua teratas (rancangan Bossfren). Sisanya tetap
-        // tersimpan di `pending` — pelanggan boleh menyebut yang tidak
-        // disebutkan bot, dan tetap langsung ketemu.
-        return (
-          t(SHIPPING_GROUNDING_AMBIGUOUS, lang) +
-          '\n' +
-          result.candidates
-            .slice(0, MAX_CHOICES_ASKED)
-            .map((c) => `• ${c.label}`)
-            .join('\n')
-        );
+        return t(SHIPPING_GROUNDING_AMBIGUOUS_OPEN, lang)(result.keyword ?? '');
       }
+      // <<< ANGGA
       case 'need_more_detail': {
         // Tidak ada pertanyaan tertutup yang bisa diajukan di sini, jadi
         // tangga 1 langsung kecamatan, tangga 2 tawarkan provinsi/kota besar.
@@ -1612,6 +1735,45 @@ export class ShippingService {
   }
   // <<< ANGGA
 
+  /**
+   * >>> ANGGA — P5 (2026-08-05, ketok Bossfren): alat debug SEARCH KEYWORD
+   * untuk widget Settings Ongkir — persis rantai yang dilihat bot (alias →
+   * search → pengelompokan ber-level), TANPA estimate (murah, baca-saja).
+   */
+  async debugSearchAddress(keyword: string): Promise<{
+    keyword: string;
+    dicari: string;
+    total: number;
+    gagal?: boolean;
+    rows: Array<{ kelurahan: string; kecamatan: string; kota: string; provinsi: string }>;
+    groups: Array<{ city: string; cityLabel: string; province: string; level: string; rows: number }>;
+  }> {
+    const cfg = await this.settings.shipping();
+    const dicari = terapkanAlias(keyword, cfg.destinationAliases);
+    const rows = await this.mengantar.searchAddress(dicari);
+    if (rows === null) return { keyword, dicari, total: 0, gagal: true, rows: [], groups: [] };
+    const urut = resolveDestination(rows, dicari);
+    return {
+      keyword,
+      dicari,
+      total: rows.length,
+      rows: rows.map((r) => ({
+        kelurahan: (r.SUBDISTRICT_NAME ?? '').trim(),
+        kecamatan: (r.DISTRICT_NAME ?? '').trim(),
+        kota: ((r.CITY_NAME_SI ?? '') || (r.CITY_NAME ?? '')).trim(),
+        provinsi: (r.PROVINCE_NAME ?? '').trim(),
+      })),
+      groups: urut.map((c) => ({
+        city: c.city,
+        cityLabel: c.cityLabel,
+        province: c.province,
+        level: c.level,
+        rows: c.rows,
+      })),
+    };
+  }
+  // <<< ANGGA
+
   async resolvePriceTokens(
     conversationId: string,
     text: string,
@@ -1709,6 +1871,34 @@ export class ShippingService {
       issues.push(
         `Balasan menyebut istilah internal sistem ("${frasaInternal}") — tulis ulang tanpa menyinggung sistem, penanda, atau proses internal ke pelanggan.`,
       );
+    }
+    // <<< ANGGA
+
+    // >>> ANGGA — P2 (2026-08-05, insiden draft "belum memiliki informasi
+    // ongkir… cek dengan tim logistik" PADAHAL kutipan sudah dihitung):
+    // PENJAGA KONTRADIKSI. Model bisa meneruskan narasi "akan cek dulu" dari
+    // riwayat giliran gagal sebelumnya walau data giliran ini sudah tersedia.
+    // Syarat menahan SENGAJA tiga lapis supaya tidak salah tangkap: (a) ada
+    // kutipan aktif, (b) giliran ini memang obrolan uang/tempat (pertanyaan
+    // garansi yang dijawab "saya cek ke tim dulu" itu sah), (c) frasa
+    // penyangkalan dari daftar AppSetting muncul di teks final.
+    if (quote) {
+      const teksGiliran = this.turnMemo.get(conversationId)?.lastText ?? '';
+      const giliranUang =
+        adaKataTanyaUang(teksGiliran, cfg.orderMoneyAskKeywords) ||
+        PLACE_HINT.test(teksGiliran) ||
+        ORDER_CHANGE_HINT.test(teksGiliran);
+      if (giliranUang) {
+        const sangkal = (cfg.orderContradictionPhrases ?? [])
+          .map((f) => (f ?? '').trim())
+          .filter((f) => f.length > 0)
+          .find((f) => substituted.toLowerCase().includes(f.toLowerCase()));
+        if (sangkal) {
+          issues.push(
+            `Balasan menyangkal data yang sudah tersedia ("${sangkal}") — kutipan ongkir/tagihan untuk giliran ini SUDAH dihitung sistem; jawab langsung memakai penanda, jangan bilang akan cek dulu.`,
+          );
+        }
+      }
     }
     // <<< ANGGA
 
@@ -1816,11 +2006,13 @@ export class ShippingService {
 
 
 export function parseExtract(raw: string): ShippingOrderExtract {
-  const empty: ShippingOrderExtract = { city: null, items: [] };
+  const empty: ShippingOrderExtract = { city: null, province: null, items: [] };
   try {
     const json = JSON.parse(extractFirstJson(raw) ?? '') as {
       kota?: unknown;
       city?: unknown;
+      provinsi?: unknown; // >>> ANGGA — P4 <<<
+      province?: unknown;
       items?: Array<{ nama?: unknown; name?: unknown; qty?: unknown }>;
     };
     const rawCity = json.kota ?? json.city;
@@ -1828,6 +2020,13 @@ export function parseExtract(raw: string): ShippingOrderExtract {
       typeof rawCity === 'string' && rawCity.trim() && rawCity.trim().toLowerCase() !== 'null'
         ? rawCity.trim()
         : null;
+    // >>> ANGGA — P4
+    const rawProv = json.provinsi ?? json.province;
+    const province =
+      typeof rawProv === 'string' && rawProv.trim() && rawProv.trim().toLowerCase() !== 'null'
+        ? rawProv.trim()
+        : null;
+    // <<< ANGGA
     const items = (Array.isArray(json.items) ? json.items : [])
       .map((i) => {
         const name = String(i?.nama ?? i?.name ?? '').trim();
@@ -1836,7 +2035,7 @@ export function parseExtract(raw: string): ShippingOrderExtract {
         return { name, qty };
       })
       .filter((i) => i.name.length > 0);
-    return { city, items };
+    return { city, province, items };
   } catch {
     return empty;
   }
@@ -2055,13 +2254,14 @@ export const NAMA_TOKEN_CADANGAN = new Set([
  */
 export function klasifikasiAlasanGate(
   issue: string,
-): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'lainnya' {
+): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'lainnya' {
   const s = issue ?? '';
   if (s.includes('membuat labelnya salah')) return 'label_rancu';
   if (s.includes('tidak dikenal/tidak tersedia')) return 'token_tak_dikenal';
   if (s.includes('ditulis langsung oleh model')) return 'digit_mentah';
   if (s.includes('ASUMSI order yang sedang berjalan')) return 'bridge_asumsi';
   if (s.includes('istilah internal')) return 'istilah_internal'; // >>> ANGGA — E3 <<<
+  if (s.includes('menyangkal data yang sudah tersedia')) return 'kontradiksi_data'; // >>> ANGGA — P2 <<<
   return 'lainnya';
 }
 // <<< ANGGA
@@ -2190,7 +2390,7 @@ export function katalogPenanda(q: ShippingQuote): string[] {
   // >>> ANGGA — S2 (2026-08-05): kondisi SAMA PERSIS dengan buildPriceTokens.
   if (q.matchedItems.length) {
     lines.push(
-      '• {{rincian_tagihan}} = BLOK rekap tagihan LENGKAP siap pakai (tiap barang + perkaliannya, subtotal, ongkir, total Transfer/COD) — WAJIB dipakai saat MEREKAP order, JANGAN menyusun rekap angka manual dari penanda satuan',
+      '• {{rincian_tagihan}} = BLOK rekap tagihan LENGKAP siap pakai (tiap barang + perkaliannya, subtotal, ongkir, total Transfer/COD). Saat MEREKAP order, tulis penanda ini LANGSUNG sebagai isi jawabanmu di baris sendiri — JANGAN menyusun rekap angka manual dari penanda satuan, JANGAN menjelaskan/menarasikan bahwa kamu "akan menggunakan" blok ini, dan JANGAN menaruhnya di tengah kalimat',
     );
   }
   // <<< ANGGA

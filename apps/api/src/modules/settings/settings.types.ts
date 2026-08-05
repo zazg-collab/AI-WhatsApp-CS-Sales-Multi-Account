@@ -188,6 +188,11 @@ export interface OrderContextSettings {
   /** E3 (2026-08-05) — frasa ISTILAH INTERNAL yang haram muncul di balasan
    *  ("penanda","instruksi sistem",…); kena → ditahan gerbang (retry-sekali). */
   orderMetaPhraseBlacklist: string[];
+  /** P2 (2026-08-05) — frasa PENYANGKALAN DATA ("belum memiliki informasi",
+   *  "cek dengan tim") yang ditahan HANYA saat kutipan aktif ada DAN giliran
+   *  ini obrolan uang/tempat — model dilarang bilang "akan cek dulu" padahal
+   *  datanya sudah dihitung sistem. */
+  orderContradictionPhrases: string[];
 }
 // <<< ANGGA
 
