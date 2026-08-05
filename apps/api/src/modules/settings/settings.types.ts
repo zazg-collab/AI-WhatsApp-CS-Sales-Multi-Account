@@ -181,6 +181,13 @@ export interface OrderContextSettings {
    *  dan directive rekap. Dicocokkan SUBSTRING (imbuhan: "totalnya" kena oleh
    *  "total"). Sapaan tanpa kata ini tidak pernah dijawab kutipan order. */
   orderMoneyAskKeywords: string[];
+  /** E1 (2026-08-05) — TEMPLATE sambutan pesan form funnel, dirender SISTEM
+   *  (bukan LLM) saat pesan form terdeteksi; sekali per percakapan. Placeholder:
+   *  {{nama_form}} {{produk_form}} {{harga_form}}. Kosong = fitur mati. */
+  orderFormWelcomeTemplate: string;
+  /** E3 (2026-08-05) — frasa ISTILAH INTERNAL yang haram muncul di balasan
+   *  ("penanda","instruksi sistem",…); kena → ditahan gerbang (retry-sekali). */
+  orderMetaPhraseBlacklist: string[];
 }
 // <<< ANGGA
 

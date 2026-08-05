@@ -307,7 +307,30 @@ export class WaInboundService {
     }
 
     this.logger.debug(`maybeAutoReply: generating reply for ${conversationId}, mode=${convo.aiMode}`);
-    const { text, moneyBlocked, moneyGateIssues } = await this.ai.generateReply(conversationId);
+    // >>> ANGGA — E1 (2026-08-05, ketok Bossfren): pesan FORM funnel dibalas
+    // TEMPLATE deterministik yang dirender sistem (OrderContextService.
+    // formWelcome) — LLM tidak dipanggil untuk giliran itu, wording pasti,
+    // angka harga ditulis sistem. Hasilnya masuk percabangan mode AI yang SAMA
+    // di bawah (ai_draft → draft, ai_on → kirim, supervised → review), sesuai
+    // ketok "ikut AI mode". Burst (form + pertanyaan lain sekaligus) sengaja
+    // tidak lewat sini — jalur segmented menanganinya via LLM + seed M3.
+    let sambutanForm: string | null = null;
+    try {
+      sambutanForm =
+        (await this.orderLog?.formWelcome(
+          conversationId,
+          burst[0]?.id ?? '',
+          burst[0]?.content ?? '',
+          (convo.customer as { name?: string | null }).name ?? null,
+        )) ?? null;
+    } catch (err) {
+      this.logger.warn(`Sambutan form gagal (lanjut ke LLM): ${err}`);
+      sambutanForm = null;
+    }
+    const { text, moneyBlocked, moneyGateIssues } = sambutanForm
+      ? { text: sambutanForm, moneyBlocked: false, moneyGateIssues: undefined as string[] | undefined }
+      : await this.ai.generateReply(conversationId);
+    // <<< ANGGA
     if (!text) { this.logger.debug(`maybeAutoReply: generateReply returned empty text`); return; }
 
     // TOCTOU guard: re-read after AI generation which can take >10s.

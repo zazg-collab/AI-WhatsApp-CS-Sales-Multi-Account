@@ -186,6 +186,42 @@ describe('WaInboundService auto-reply', () => {
     );
   });
 
+  // >>> ANGGA — E1 (2026-08-05, ketok Bossfren): pesan form funnel dijawab
+  // TEMPLATE deterministik (dirender sistem), LLM tidak dipanggil untuk
+  // giliran itu; hasilnya mengikuti mode AI seperti balasan biasa. RED-first.
+  it('E1: pesan form → sambutan template deterministik jadi draft, LLM TIDAK dipanggil', async () => {
+    burstRows = [{
+      id: 'cust9',
+      senderType: SenderType.customer,
+      content: 'Halo, saya sudah melakukan pemesanan Golok Sembelih Multifungsi- Fb - NFR , atas nama Fatih . Mohon segera diproses ya',
+      messageType: MessageType.text,
+    }];
+    (service as any).orderLog = {
+      formWelcome: jest.fn().mockResolvedValue('SAMBUTAN FORM DETERMINISTIK'),
+    };
+    (service as any).scheduleAutoReply('c1');
+    await jest.advanceTimersByTimeAsync(8_000);
+
+    expect((service as any).orderLog.formWelcome).toHaveBeenCalledWith(
+      'c1', 'cust9', expect.stringContaining('atas nama Fatih'), null, // fallback nama: mock tanpa customer.name
+    );
+    expect(ai.generateReply).not.toHaveBeenCalled();
+    expect(prisma.message.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ content: 'SAMBUTAN FORM DETERMINISTIK' }) }),
+    );
+  });
+
+  it('E1: formWelcome null (bukan form / sudah disambut) → alur LLM biasa utuh', async () => {
+    (service as any).orderLog = { formWelcome: jest.fn().mockResolvedValue(null) };
+    (service as any).scheduleAutoReply('c1');
+    await jest.advanceTimersByTimeAsync(8_000);
+    expect(ai.generateReply).toHaveBeenCalledTimes(1);
+    expect(prisma.message.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ content: 'satu balasan' }) }),
+    );
+  });
+  // <<< ANGGA
+
   it('sends directly when ai_on and there is no burst (single message)', async () => {
     conversation.aiMode = AiMode.ai_on;
     // burstRows default = single customer message → not a burst

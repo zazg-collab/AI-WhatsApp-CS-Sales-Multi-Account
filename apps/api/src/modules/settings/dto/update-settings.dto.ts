@@ -247,6 +247,14 @@ class OrderContextSettingsDto {
   @IsOptional() @IsArray() @IsString({ each: true })
   orderMoneyAskKeywords?: string[];
   // <<< ANGGA
+
+  // >>> ANGGA — E1+E3 (2026-08-05): template sambutan form + blacklist frasa internal.
+  @IsOptional() @IsString()
+  orderFormWelcomeTemplate?: string;
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderMetaPhraseBlacklist?: string[];
+  // <<< ANGGA
 }
 // <<< ANGGA
 

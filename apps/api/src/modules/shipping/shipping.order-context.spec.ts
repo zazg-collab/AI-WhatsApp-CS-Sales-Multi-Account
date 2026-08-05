@@ -42,6 +42,9 @@ const OC = {
   // >>> ANGGA — F1/F2 (2026-08-05): kata tanya-uang, pembuka jalur asumsi.
   orderMoneyAskKeywords: ['total', 'ongkir', 'ongkos', 'harga', 'berapa', 'bayar', 'biaya', 'transfer', 'rekening', 'cod'],
   // <<< ANGGA
+  // >>> ANGGA — E3 (2026-08-05): frasa internal yang haram sampai ke pelanggan.
+  orderMetaPhraseBlacklist: ['penanda', 'placeholder', 'instruksi sistem', 'gerbang uang', 'grounding', 'informasi harga yang akurat', 'dicek kembali di chat', 'cek chat ini'],
+  // <<< ANGGA
 };
 // <<< ANGGA
 
@@ -722,6 +725,44 @@ describe('S1 — telemetri alasan hold gerbang uang (sisi-baca)', () => {
     const s = await (h.svc as any).moneyGateStats(7);
     expect(s.totalDraftDitahan).toBe(0);
     expect(s.gagalBaca).toBe(true);
+  });
+});
+// <<< ANGGA
+
+// ─────────────────────────────────────────────────────────────────────────────
+// >>> ANGGA — E3 (2026-08-05, insiden "Mohon dicek kembali di chat ini untuk
+// informasi harga yang akurat" bocor ke draft): PENJAGA META deterministik —
+// frasa internal sistem (daftar AppSetting `orderMetaPhraseBlacklist`) yang
+// muncul di balasan → ditahan gerbang (ikut mekanisme retry-sekali). RED-first.
+
+describe('E3 — penjaga meta: istilah internal tidak boleh sampai ke pelanggan', () => {
+  it('REPLAY insiden: "…informasi harga yang akurat" → DITAHAN', async () => {
+    const h = harness();
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Harganya sudah tertera ya kak. Mohon dicek kembali di chat ini untuk informasi harga yang akurat.',
+    );
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toContain('istilah internal');
+  });
+
+  it('kata "penanda" bocor ke balasan → DITAHAN', async () => {
+    const h = harness();
+    const out = await h.svc.resolvePriceTokens('c1', 'Nanti penandanya saya isi ya kak');
+    expect(out.ok).toBe(false);
+  });
+
+  it('balasan CS normal → LOLOS (blacklist tidak menyenggol obrolan wajar)', async () => {
+    const h = harness();
+    const out = await h.svc.resolvePriceTokens('c1', 'Siap kak, pesanan diproses. Ditunggu ya 🙏');
+    expect(out.ok).toBe(true);
+  });
+
+  it('telemetri mengenal kelas istilah_internal', () => {
+    const { klasifikasiAlasanGate } = require('./shipping.service');
+    expect(
+      klasifikasiAlasanGate('Balasan menyebut istilah internal sistem ("penanda") — tulis ulang tanpa menyinggung sistem.'),
+    ).toBe('istilah_internal');
   });
 });
 // <<< ANGGA

@@ -139,6 +139,19 @@ const dict: Dict = {
   },
   negoKw: { id: 'Frasa nego', en: 'Nego phrases' },
   negoKwHint: { id: 'Pemicu tangga nego.', en: 'Triggers the nego ladder.' },
+  // >>> ANGGA — E1 (2026-08-05): template sambutan form.
+  formWelcome: { id: 'Template sambutan pesan form', en: 'Form-message welcome template' },
+  formWelcomeHint: {
+    id: 'Dibalas PERSIS seperti ini (dirender sistem, bukan AI) saat pesan form funnel terdeteksi — sekali per percakapan, ikut mode AI (draft/kirim). Placeholder: {{nama_form}} (dari "atas nama X"/profil WA), {{produk_form}} (produk katalog yang cocok), {{harga_form}} (harga katalog). Kosong = fitur mati.',
+    en: 'Sent VERBATIM (system-rendered, not AI) when a funnel form message is detected — once per conversation, follows AI mode. Placeholders: {{nama_form}}, {{produk_form}}, {{harga_form}}. Empty = off.',
+  },
+  // >>> ANGGA — E3 (2026-08-05): blacklist frasa internal.
+  metaBlacklist: { id: 'Frasa internal terlarang di balasan', en: 'Internal phrases banned in replies' },
+  metaBlacklistHint: {
+    id: 'Balasan bot yang memuat frasa ini ditahan gerbang uang (bot menyebut "sistem/penanda" ke pelanggan). Tambah dari telemetri di bawah bila ada bocor baru.',
+    en: 'Bot replies containing these phrases are held by the money gate (internal talk leaking to customers).',
+  },
+  // <<< ANGGA
   // >>> ANGGA — S1 (2026-08-05): telemetri gerbang uang.
   gateStatsTitle: { id: 'Telemetri gerbang uang', en: 'Money gate telemetry' },
   gateStatsIntro: {
@@ -151,6 +164,7 @@ const dict: Dict = {
   gateReason_token_tak_dikenal: { id: 'Penanda tak dikenal/tak tersedia', en: 'Unknown/unavailable placeholder' },
   gateReason_digit_mentah: { id: 'Angka ditulis langsung oleh model', en: 'Raw digits written by model' },
   gateReason_bridge_asumsi: { id: 'Pakai asumsi tanpa sebut nama barang', en: 'Assumption without item name' },
+  gateReason_istilah_internal: { id: 'Istilah internal bocor ke balasan', en: 'Internal phrasing leaked into reply' },
   gateReason_lainnya: { id: 'Lainnya', en: 'Other' },
   // <<< ANGGA
 };
@@ -172,6 +186,8 @@ interface OrderContextSettings {
   orderNegoKeywords: string[];
   // >>> ANGGA — F1/F2 (2026-08-05)
   orderMoneyAskKeywords: string[];
+  orderFormWelcomeTemplate: string;
+  orderMetaPhraseBlacklist: string[];
   // <<< ANGGA
 }
 
@@ -242,6 +258,9 @@ export default function OrderMemorySettingsPage() {
         orderNegoKeywords: data.orderNegoKeywords,
         // >>> ANGGA — F1/F2 (2026-08-05)
         orderMoneyAskKeywords: data.orderMoneyAskKeywords,
+        // >>> ANGGA — E1+E3 (2026-08-05)
+        orderFormWelcomeTemplate: data.orderFormWelcomeTemplate ?? '',
+        orderMetaPhraseBlacklist: data.orderMetaPhraseBlacklist ?? [],
         // <<< ANGGA
       };
       const updated = await api<{ orderContext: OrderContextSettings }>('/settings', {
@@ -372,6 +391,25 @@ export default function OrderMemorySettingsPage() {
                 <input className={fieldCls} disabled={!canEdit} value={data.orderReferenceKeywords.join(', ')}
                   onChange={(e) => patch('orderReferenceKeywords', parseList(e.target.value))} />
               </Field>
+              {/* >>> ANGGA — E1 (2026-08-05): template sambutan form */}
+              <Field label={t('formWelcome')} hint={t('formWelcomeHint')}>
+                <textarea
+                  rows={7}
+                  spellCheck={false}
+                  aria-label={t('formWelcome')}
+                  className={`${fieldCls} h-auto resize-y py-2 leading-5`}
+                  disabled={!canEdit}
+                  value={data.orderFormWelcomeTemplate ?? ''}
+                  onChange={(e) => patch('orderFormWelcomeTemplate', e.target.value)}
+                />
+              </Field>
+              {/* >>> ANGGA — E3 (2026-08-05): blacklist frasa internal */}
+              <Field label={t('metaBlacklist')} hint={`${t('listHint')} ${t('metaBlacklistHint')}`}>
+                <input className={fieldCls} disabled={!canEdit}
+                  value={(data.orderMetaPhraseBlacklist ?? []).join(', ')}
+                  onChange={(e) => patch('orderMetaPhraseBlacklist', parseList(e.target.value))} />
+              </Field>
+              {/* <<< ANGGA */}
 
               <h2 className="pt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{t('secTokens')}</h2>
               <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">{t('secTokensIntro')}</p>
@@ -432,7 +470,7 @@ export default function OrderMemorySettingsPage() {
                 <p className="text-[13px] font-medium text-gray-800 dark:text-gray-200">
                   {gateStats.totalDraftDitahan} draft · {gateStats.totalAlasan} alasan
                 </p>
-                {(['label_rancu', 'token_tak_dikenal', 'digit_mentah', 'bridge_asumsi', 'lainnya'] as const)
+                {(['label_rancu', 'token_tak_dikenal', 'digit_mentah', 'bridge_asumsi', 'istilah_internal', 'lainnya'] as const)
                   .filter((k) => (gateStats.perAlasan[k] ?? 0) > 0)
                   .map((k) => (
                     <div key={k} className="flex items-center justify-between text-[13px] text-gray-700 dark:text-gray-300">

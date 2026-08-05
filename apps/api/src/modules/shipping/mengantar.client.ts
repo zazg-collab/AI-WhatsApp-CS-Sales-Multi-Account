@@ -97,7 +97,13 @@ export class MengantarClient {
     if (!cfg.mengantarApiKey) return null;
     const url = `${cfg.baseUrl}/api/public/${encodeURIComponent(cfg.mengantarApiKey)}/address/search?keyword=${encodeURIComponent(keyword)}`;
     const json = await this.call<{ success?: boolean; data?: MengantarAddress[] }>(url, cfg.mengantarApiKey);
-    if (!json || !Array.isArray(json.data)) return null;
+    // >>> ANGGA — E4 (2026-08-05): respons kebaca tapi bentuknya asing dulunya
+    // null BISU → status api_error tanpa jejak. Sekarang meninggalkan warn.
+    if (!json || !Array.isArray(json.data)) {
+      if (json) this.logger.warn(`Mengantar search "${keyword}": respons tanpa data[] (bentuk tak dikenal)`);
+      return null;
+    }
+    // <<< ANGGA
     return json.data;
   }
 
@@ -127,7 +133,10 @@ export class MengantarClient {
     if (params.codAmount != null) qs.set('COD_AMOUNT', String(Math.round(params.codAmount)));
     const url = `${cfg.baseUrl}/api/order/allEstimatePublic?${qs.toString()}`;
     const json = await this.call<{ data?: EstimateData }>(url, cfg.mengantarApiKey);
-    if (!json || !json.data || typeof json.data !== 'object') return null;
+    if (!json || !json.data || typeof json.data !== 'object') {
+      if (json) this.logger.warn(`Mengantar estimate dest ${params.destinationId}: respons tanpa data (bentuk tak dikenal)`); // >>> ANGGA — E4 <<<
+      return null;
+    }
     return json.data;
   }
 
@@ -141,7 +150,10 @@ export class MengantarClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ city, allEstimateData }),
     });
-    if (!json || !json.data || !Array.isArray(json.data.couriers)) return null;
+    if (!json || !json.data || !Array.isArray(json.data.couriers)) {
+      if (json) this.logger.warn(`Mengantar performance "${city}": respons tanpa data.couriers[] (bentuk tak dikenal)`); // >>> ANGGA — E4 <<<
+      return null;
+    }
     return json.data;
   }
 }

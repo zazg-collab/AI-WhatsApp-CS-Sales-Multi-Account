@@ -12,8 +12,8 @@ import {
 
 const H = 3_600_000;
 const PRODUCTS = [
-  { id: 'p-golok', sku: 'GLK-02', name: 'Golok Sembelih Multifungsi', status: 'active' },
-  { id: 'p-gke', sku: 'GKE-40', name: 'GKE 40 Perak Duralium 2 - Fb - NFR', status: 'active' },
+  { id: 'p-golok', sku: 'GLK-02', name: 'Golok Sembelih Multifungsi', status: 'active', price: 150000 },
+  { id: 'p-gke', sku: 'GKE-40', name: 'GKE 40 Perak Duralium 2 - Fb - NFR', status: 'active', price: 199000 },
 ];
 
 function snap(items: Array<[string, string, number]>): OrderSnapshot {
@@ -25,7 +25,10 @@ function snap(items: Array<[string, string, number]>): OrderSnapshot {
   };
 }
 
-function harness(rows: Array<{ type: string; payload: unknown; createdAt: Date }> = []) {
+function harness(
+  rows: Array<{ type: string; payload: unknown; createdAt: Date }> = [],
+  ocOverride: Record<string, unknown> = {},
+) {
   const create = jest.fn().mockResolvedValue({});
   const findMany = jest.fn().mockResolvedValue(rows);
   const prisma: any = {
@@ -38,6 +41,7 @@ function harness(rows: Array<{ type: string; payload: unknown; createdAt: Date }
       orderOfferWindowMinutes: 60,
       orderClosingNote: '',
       orderFormHintKeywords: ['form pemesanan', 'sudah melakukan pemesanan', 'mengisi form'],
+      ...ocOverride,
     }),
     shipping: jest.fn().mockResolvedValue({}),
   };
@@ -133,6 +137,59 @@ describe('recentOffers — jendela & penanda (M1)', () => {
     expect(await h.svc.recentOffers('c1')).toEqual([]);
   });
 });
+
+// >>> ANGGA — E1 (2026-08-05, ketok Bossfren): SAMBUTAN FORM deterministik —
+// template AppSetting dirender SISTEM saat pesan form funnel terdeteksi
+// (deteksi = hook M3 yang sama), sekali per percakapan. RED-first.
+describe('formWelcome — sambutan form deterministik (E1)', () => {
+  const TPL =
+    'Hai kak {{nama_form}} 👋\nTerima kasih sudah mengisi form pemesanan {{produk_form}} di toko kami!\n💰 Harga: {{harga_form}}\nboleh diinfo alamat lengkapnya kak?';
+  const FORM_TEXT =
+    'Halo, saya sudah melakukan pemesanan GKE 40 Perak Duralium 2 - Fb - NFR , atas nama Putri . Mohon segera diproses ya';
+
+  it('pesan form + template terisi → render nama, produk funnel, harga katalog', async () => {
+    const h = harness([], { orderFormWelcomeTemplate: TPL });
+    const out = await (h.svc as any).formWelcome('c1', 'm1', FORM_TEXT, null);
+    expect(out).toContain('Hai kak Putri');
+    expect(out).toContain('GKE 40 Perak Duralium 2 - Fb - NFR');
+    expect(out).toContain('Rp199.000'); // harga KATALOG, ditulis sistem
+    expect(out).not.toContain('{{');
+    // Jejak persisten "sudah disambut" — sekali per percakapan.
+    expect(h.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ type: 'form_welcome' }),
+    }));
+  });
+
+  it('sudah pernah disambut (event form_welcome ada) → null, tidak menulis lagi', async () => {
+    const h = harness(
+      [{ type: 'form_welcome', payload: { messageId: 'm0' }, createdAt: new Date() }],
+      { orderFormWelcomeTemplate: TPL },
+    );
+    expect(await (h.svc as any).formWelcome('c1', 'm2', FORM_TEXT, null)).toBeNull();
+    expect(h.create).not.toHaveBeenCalled();
+  });
+
+  it('pesan biasa (bukan form) → null', async () => {
+    const h = harness([], { orderFormWelcomeTemplate: TPL });
+    expect(await (h.svc as any).formWelcome('c1', 'm1', 'GKE 40 Perak Duralium ada stok?', null)).toBeNull();
+  });
+
+  it('template kosong → fitur mati (null)', async () => {
+    const h = harness();
+    expect(await (h.svc as any).formWelcome('c1', 'm1', FORM_TEXT, null)).toBeNull();
+  });
+
+  it('tanpa "atas nama" → pakai nama fallback (profil WA)', async () => {
+    const h = harness([], { orderFormWelcomeTemplate: TPL });
+    const out = await (h.svc as any).formWelcome(
+      'c1', 'm1',
+      'Halo, saya sudah melakukan pemesanan GKE 40 Perak Duralium 2 - Fb - NFR, mohon diproses',
+      'Bapak Fatih',
+    );
+    expect(out).toContain('Hai kak Bapak Fatih');
+  });
+});
+// <<< ANGGA
 
 describe('candidatesWithCompleted — jangkauan referensi (M4)', () => {
   const now = Date.now();

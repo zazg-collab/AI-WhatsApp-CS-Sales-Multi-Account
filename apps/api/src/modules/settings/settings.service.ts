@@ -225,6 +225,17 @@ export class SettingsService {
           'transfer', 'rekening', 'cod',
         ]),
         // <<< ANGGA
+        // >>> ANGGA — E1 (2026-08-05): template sambutan form (kosong = mati;
+        // diisi dari dashboard, contoh siap pakai ada di dok 06 folder
+        // dokumentasi-order-context-log).
+        orderFormWelcomeTemplate: (this.config.get<string>('ORDER_FORM_WELCOME_TEMPLATE') ?? '').trim(),
+        // >>> ANGGA — E3 (2026-08-05): frasa internal yang haram bocor ke
+        // pelanggan (backstop deterministik; BASE_RULES #13 lapisan promptnya).
+        orderMetaPhraseBlacklist: this.list(this.config.get('ORDER_META_PHRASE_BLACKLIST'), [
+          'penanda', 'placeholder', 'instruksi sistem', 'gerbang uang', 'grounding',
+          'informasi harga yang akurat', 'dicek kembali di chat', 'cek chat ini',
+        ]),
+        // <<< ANGGA
       },
       // <<< ANGGA (Order Context)
     };

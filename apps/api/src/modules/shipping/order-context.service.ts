@@ -454,6 +454,73 @@ export class OrderContextService {
   }
   // <<< ANGGA (addendum v2)
 
+  // >>> ANGGA — E1 (2026-08-05, ketok Bossfren): SAMBUTAN FORM deterministik.
+  // Pesan form funnel = momen paling ter-skrip di alur CS (Aluna/Defa selalu
+  // balas template yang sama) → kontrak KODE, bukan harapan ke LLM: template
+  // AppSetting dirender SISTEM (nama dari "atas nama X" / profil WA, produk &
+  // harga dari KATALOG — harga promo cuma gimmick, ketok Bossfren), sekali per
+  // percakapan (jejak persisten event `form_welcome` di log yang sama).
+  // Angka ditulis sistem → gerbang uang tidak pernah terlibat. Return null =
+  // bukan momen form / sudah disambut / fitur mati → pemanggil lanjut ke LLM.
+  async formWelcome(
+    conversationId: string,
+    messageId: string,
+    text: string,
+    fallbackName?: string | null,
+  ): Promise<string | null> {
+    if (!conversationId || !text) return null;
+    try {
+      const cfg = await this.oc();
+      const template = (cfg.orderFormWelcomeTemplate ?? '').trim();
+      if (!template) return null;
+      const t = text.toLowerCase();
+      const isForm = (cfg.orderFormHintKeywords ?? []).some(
+        (k) => k && t.includes(k.toLowerCase()),
+      );
+      if (!isForm) return null;
+      const products = await (this.prisma as unknown as {
+        product: {
+          findMany(args: Record<string, unknown>): Promise<
+            Array<{ id: string; sku?: string | null; name: string; price?: unknown }>
+          >;
+        };
+      }).product.findMany({ where: { status: 'active' }, take: 500 });
+      const matches = catalogMatchesInText(text, products);
+      if (!matches.length) return null;
+      // Sekali per percakapan (ketok Bossfren) — pagar PERSISTEN, selamat
+      // dari restart, lewat event di log yang sama. Jenis event asing di luar
+      // snapshot/offer/marker di-skip pembaca lain (loop mereka `continue`).
+      const prior = await this.table.findMany({
+        where: { conversationId, type: 'form_welcome' },
+        take: 1,
+      });
+      if (prior.length) return null;
+      const nama =
+        /atas\s+nama\s+([^\n,.;]{2,40})/i.exec(text)?.[1]?.trim() ||
+        (fallbackName ?? '').trim() ||
+        'kak';
+      const prod = products.find((p) => p.id === matches[0].productId);
+      const harga = Number(prod?.price ?? 0);
+      const rendered = template
+        .replace(/\{\{nama_form\}\}/gi, nama)
+        .replace(/\{\{produk_form\}\}/gi, matches[0].name)
+        .replace(/\{\{harga_form\}\}/gi, harga > 0 ? `Rp${harga.toLocaleString('id-ID')}` : '');
+      await this.table.create({
+        data: {
+          conversationId,
+          type: 'form_welcome',
+          payload: { messageId } as unknown as object,
+          source: 'system',
+        },
+      });
+      return rendered;
+    } catch (err) {
+      this.logger.warn(`Gagal sambutan form ${conversationId}: ${err}`);
+      return null;
+    }
+  }
+  // <<< ANGGA
+
   /** Entri SEGAR terbaru yang punya barang — anchor default "order aktif". */
   async latestFresh(conversationId: string): Promise<OrderContextEntry | null> {
     const all = await this.candidates(conversationId);

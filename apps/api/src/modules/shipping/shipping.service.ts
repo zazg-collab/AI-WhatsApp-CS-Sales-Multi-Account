@@ -1089,8 +1089,19 @@ export class ShippingService {
 
     // Langkah 3 — Search Address + pengelompokan per provinsi+kota.
     const rows = await this.mengantar.searchAddress(dicari);
-    if (rows === null) return { status: 'api_error' };
+    // >>> ANGGA — E4 (2026-08-05, pelajaran insiden "ongkir mataram" yang tak
+    // terdiagnosa): SETIAP status gagal wajib meninggalkan jejak warn dengan
+    // sebabnya — Rule 10 dkk membuat bot menyerah dengan sopan ke pelanggan,
+    // tapi tanpa log, admin tidak pernah tahu KENAPA. Satu grep harus cukup.
+    if (rows === null) {
+      this.logger.warn(`Ongkir gagal [api_error]: search alamat "${dicari}" mengembalikan null (HTTP/bentuk respons — lihat warn MengantarClient di dekat baris ini)`);
+      return { status: 'api_error' };
+    }
     const urut = resolveDestination(rows, dicari);
+    if (!urut.length) {
+      this.logger.warn(`Ongkir [need_more_detail]: "${dicari}" — ${rows.length} baris hasil search, nol kandidat kota/kabupaten yang cocok (kemungkinan tenggelam di potongan 50 baris; minta kecamatan)`);
+    }
+    // <<< ANGGA
     // Tidak ada kecocokan PERSIS di level manapun. Sering terjadi karena
     // pencarian Mengantar dipotong di 50 baris dan kota aslinya tenggelam
     // (diuji live: "Padang" & "Malang" tidak muncul sama sekali di 50 baris
@@ -1171,21 +1182,37 @@ export class ShippingService {
 
     // Langkah 5 — cek ongkir TANPA COD dulu, lalu terapkan Rule 1.
     const estimates = await this.mengantar.estimate({ destinationId, weightKg });
-    if (estimates === null) return { status: 'api_error' };
+    // >>> ANGGA — E4: jejak warn untuk semua jalan keluar gagal di bawah.
+    if (estimates === null) {
+      this.logger.warn(`Ongkir gagal [api_error]: estimate ${target.city} (dest ${destinationId}, ${weightKg}kg) mengembalikan null`);
+      return { status: 'api_error' };
+    }
     const passing = Object.entries(estimates).filter(
       ([name, est]) =>
         est && typeof est === 'object' && passesCourierFilter(name, est, cfg.courierExclude),
     );
     // Rule 10 — API hidup tapi 0 kurir lolos: diperlakukan sama seperti API mati.
-    if (passing.length === 0) return { status: 'no_courier' };
+    if (passing.length === 0) {
+      this.logger.warn(
+        `Ongkir gagal [no_courier]: ${target.city} — kurir dari API: [${Object.keys(estimates).join(', ')}], semua gugur filter (exclude: [${(cfg.courierExclude ?? []).join(', ')}] / unsupported/tarif tak sah)`,
+      );
+      return { status: 'no_courier' };
+    }
 
     // Langkah 6 — pilih kurir, COD-aware.
     const perf = await this.mengantar.performance(target.city, estimates);
-    if (perf === null) return { status: 'api_error' };
+    if (perf === null) {
+      this.logger.warn(`Ongkir gagal [api_error]: performance API utk ${target.city} mengembalikan null/bentuk tak dikenal`);
+      return { status: 'api_error' };
+    }
 
     const passingNames = passing.map(([name]) => name);
     const transferCourier = pickCourier(passingNames, perf);
-    if (!transferCourier) return { status: 'no_courier' };
+    if (!transferCourier) {
+      this.logger.warn(`Ongkir gagal [no_courier]: ${target.city} — pickCourier nihil dari kandidat [${passingNames.join(', ')}]`);
+      return { status: 'no_courier' };
+    }
+    // <<< ANGGA
 
     // Langkah 7 — kelayakan COD: kebijakan toko dulu, baru kemampuan kurir.
     const regionBlocked = isRegionCodBlocked(target.province, cfg.codBlockedRegionKeywords);
@@ -1223,7 +1250,10 @@ export class ShippingService {
       const codShipping = Number(estimates[codCourier]?.estimatedPrice ?? 0);
       const codAmount = goodsTotal + codShipping;
       const withCod = await this.mengantar.estimate({ destinationId, weightKg, codAmount });
-      if (withCod === null) return { status: 'api_error' };
+      if (withCod === null) {
+        this.logger.warn(`Ongkir gagal [api_error]: estimate COD ${target.city} (dest ${destinationId}) mengembalikan null`); // >>> ANGGA — E4 <<<
+        return { status: 'api_error' };
+      }
       const codFee = Number(withCod[codCourier]?.codFee ?? 0);
       if (codFee > 0) {
         codCourierFinal = codCourier;
@@ -1664,6 +1694,24 @@ export class ShippingService {
       issues.push(`Angka rupiah ditulis langsung oleh model, bukan lewat penanda: ${angkaMentah.join(', ')}`);
     }
 
+    // >>> ANGGA — E3 (2026-08-05, insiden "Mohon dicek kembali di chat ini
+    // untuk informasi harga yang akurat" bocor ke draft): PENJAGA META —
+    // model kadang MEMPARAFRASE instruksi internal jadi kalimat meta ke
+    // pelanggan. Larangan prompt (BASE_RULES #13) menurunkan frekuensinya;
+    // ini backstop deterministik untuk frasa yang dikenal (daftar AppSetting,
+    // bisa ditambah dari telemetri tanpa deploy). Dicek SESUDAH substitusi =
+    // teks final yang benar-benar akan terkirim.
+    const frasaInternal = (cfg.orderMetaPhraseBlacklist ?? [])
+      .map((f) => (f ?? '').trim())
+      .filter((f) => f.length > 0)
+      .find((f) => substituted.toLowerCase().includes(f.toLowerCase()));
+    if (frasaInternal) {
+      issues.push(
+        `Balasan menyebut istilah internal sistem ("${frasaInternal}") — tulis ulang tanpa menyinggung sistem, penanda, atau proses internal ke pelanggan.`,
+      );
+    }
+    // <<< ANGGA
+
     return { text: substituted, ok: issues.length === 0, issues };
   }
 
@@ -2007,12 +2055,13 @@ export const NAMA_TOKEN_CADANGAN = new Set([
  */
 export function klasifikasiAlasanGate(
   issue: string,
-): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'lainnya' {
+): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'lainnya' {
   const s = issue ?? '';
   if (s.includes('membuat labelnya salah')) return 'label_rancu';
   if (s.includes('tidak dikenal/tidak tersedia')) return 'token_tak_dikenal';
   if (s.includes('ditulis langsung oleh model')) return 'digit_mentah';
   if (s.includes('ASUMSI order yang sedang berjalan')) return 'bridge_asumsi';
+  if (s.includes('istilah internal')) return 'istilah_internal'; // >>> ANGGA — E3 <<<
   return 'lainnya';
 }
 // <<< ANGGA
