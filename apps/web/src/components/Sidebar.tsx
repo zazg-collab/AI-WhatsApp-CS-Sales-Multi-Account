@@ -255,7 +255,7 @@ export function Sidebar() {
           </span>
           <span className="hidden min-w-0 lg:block">
             <span className="block truncate text-sm font-semibold tracking-tight text-gray-50">
-              Sentinel AI
+              Cordova AI
             </span>
             <span className="block truncate text-[11px] text-gray-400">{t('tagline')}</span>
           </span>

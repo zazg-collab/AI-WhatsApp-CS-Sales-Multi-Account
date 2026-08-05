@@ -177,7 +177,7 @@ export const dict: Dict = {
   unassign: { id: 'Lepas tugas', en: 'Unassign' },
   notAssigned: { id: 'Belum ditugaskan', en: 'Not assigned' },
   // Sentinel review
-  hermesReview: { id: 'Review Sentinel AI', en: 'Sentinel AI review' },
+  hermesReview: { id: 'Review Cordova AI', en: 'Cordova AI review' },
   confidenceScore: { id: 'Skor keyakinan', en: 'Confidence score' },
   riskScore: { id: 'Skor risiko', en: 'Risk score' },
   riskLevel: { id: 'Level risiko', en: 'Risk level' },

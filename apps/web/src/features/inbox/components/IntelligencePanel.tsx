@@ -54,7 +54,7 @@ interface IntelligencePanelProps {
  *
  * Responsibilities:
  * - Display customer CRM context (name, phone, avatar, lead score, tags, notes)
- * - Show Sentinel AI review (decision, confidence, risk, recommendation)
+ * - Show Cordova AI review (decision, confidence, risk, recommendation)
  * - Draft approval/blocking controls
  * - AI mode toggle (on/off/draft/supervised/paused)
  * - Bot selection dropdown

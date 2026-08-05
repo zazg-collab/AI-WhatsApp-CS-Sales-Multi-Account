@@ -51,7 +51,7 @@ export function SentinelReviewCard({ conversation, draftMessages = [] }: Sentine
   return (
     <div className="border-b border-gray-200 p-4 dark:border-gray-800">
       <h3 className="mb-3 text-xs font-semibold text-gray-900 dark:text-gray-100">
-        Sentinel AI review{!activeDraft ? ' (riwayat)' : ''}
+        Cordova AI review{!activeDraft ? ' (riwayat)' : ''}
       </h3>
 
       {/* Scores */}
