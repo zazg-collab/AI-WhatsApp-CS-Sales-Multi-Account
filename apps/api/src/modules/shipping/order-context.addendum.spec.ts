@@ -188,6 +188,12 @@ describe('formWelcome — sambutan form deterministik (E1)', () => {
     );
     expect(out).toContain('Hai kak Bapak Fatih');
   });
+
+  it('{{no_hp_form}} diisi nomor WA pengirim (ketok Bossfren)', async () => {
+    const h = harness([], { orderFormWelcomeTemplate: TPL + '\nNo HP: {{no_hp_form}}' });
+    const out = await (h.svc as any).formWelcome('c1', 'm1', FORM_TEXT, null, '6285722193049');
+    expect(out).toContain('No HP: 6285722193049');
+  });
 });
 // <<< ANGGA
 

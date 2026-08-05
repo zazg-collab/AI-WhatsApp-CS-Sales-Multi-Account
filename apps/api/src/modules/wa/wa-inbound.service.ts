@@ -322,6 +322,7 @@ export class WaInboundService {
           burst[0]?.id ?? '',
           burst[0]?.content ?? '',
           (convo.customer as { name?: string | null }).name ?? null,
+          convo.customer.phoneNumber ?? null,
         )) ?? null;
     } catch (err) {
       this.logger.warn(`Sambutan form gagal (lanjut ke LLM): ${err}`);

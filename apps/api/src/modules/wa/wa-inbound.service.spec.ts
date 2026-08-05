@@ -203,7 +203,9 @@ describe('WaInboundService auto-reply', () => {
     await jest.advanceTimersByTimeAsync(8_000);
 
     expect((service as any).orderLog.formWelcome).toHaveBeenCalledWith(
-      'c1', 'cust9', expect.stringContaining('atas nama Fatih'), null, // fallback nama: mock tanpa customer.name
+      'c1', 'cust9', expect.stringContaining('atas nama Fatih'),
+      null, // fallback nama: mock tanpa customer.name
+      '6281234567890', // {{no_hp_form}} = nomor WA pengirim (ketok Bossfren)
     );
     expect(ai.generateReply).not.toHaveBeenCalled();
     expect(prisma.message.create).toHaveBeenCalledWith(

@@ -467,6 +467,9 @@ export class OrderContextService {
     messageId: string,
     text: string,
     fallbackName?: string | null,
+    // Ketok Bossfren: baris "No HP" diisi nomor WA PENGIRIM (form backend tidak
+    // terjangkau bot) — placeholder {{no_hp_form}}.
+    phoneNumber?: string | null,
   ): Promise<string | null> {
     if (!conversationId || !text) return null;
     try {
@@ -504,7 +507,8 @@ export class OrderContextService {
       const rendered = template
         .replace(/\{\{nama_form\}\}/gi, nama)
         .replace(/\{\{produk_form\}\}/gi, matches[0].name)
-        .replace(/\{\{harga_form\}\}/gi, harga > 0 ? `Rp${harga.toLocaleString('id-ID')}` : '');
+        .replace(/\{\{harga_form\}\}/gi, harga > 0 ? `Rp${harga.toLocaleString('id-ID')}` : '')
+        .replace(/\{\{no_hp_form\}\}/gi, (phoneNumber ?? '').trim());
       await this.table.create({
         data: {
           conversationId,
