@@ -123,8 +123,20 @@ export interface ItemChoicePending {
   candidates: Array<{ productId: string; name: string }>;
   qty: number;
   city: string | null;
+  /** >>> ANGGA — Q-Chain (2026-08-05): 'keranjang' = pertanyaan KONKLUSI
+   *  ("dua-duanya atau salah satu?") — jawaban agregat memilih SEMUA. <<< */
+  mode?: 'barang' | 'keranjang';
 }
 // <<< ANGGA
+
+/** >>> ANGGA — Q-Chain (2026-08-05, MANDAT KERAS Bossfren): pertanyaan funnel
+ *  yang WAJIB ada di balasan giliran ini — dicatat saat directive disuntik,
+ *  ditagih `resolvePriceTokens` (gerbang). <<< */
+export interface FunnelExpect {
+  messageId: string;
+  step: string;
+  kalimat: string;
+}
 
 interface Entry {
   quote: ShippingQuote;
@@ -347,6 +359,28 @@ export class ShippingQuoteCache {
     this.itemPendings.delete(conversationId);
   }
 
+  // >>> ANGGA — Q-Chain (2026-08-05): memo pertanyaan funnel WAJIB per giliran.
+  private readonly funnelExpects = new Map<string, FunnelExpect>();
+
+  setFunnelExpect(conversationId: string, expect: FunnelExpect): void {
+    this.funnelExpects.delete(conversationId);
+    this.funnelExpects.set(conversationId, expect);
+    while (this.funnelExpects.size > MAX_QUOTE_ENTRIES) {
+      const oldest = this.funnelExpects.keys().next().value;
+      if (oldest === undefined) break;
+      this.funnelExpects.delete(oldest);
+    }
+  }
+
+  funnelExpect(conversationId: string): FunnelExpect | null {
+    return this.funnelExpects.get(conversationId) ?? null;
+  }
+
+  clearFunnelExpect(conversationId: string): void {
+    this.funnelExpects.delete(conversationId);
+  }
+  // <<< ANGGA
+
   /** Tandai kutipan giliran ini hasil ASUMSI (default-ke-terbaru / agregat). */
   setAssumed(conversationId: string, productNames: string[], aggregate: boolean): void {
     this.assumeds.set(conversationId, { productNames, aggregate, at: Date.now() });
@@ -391,6 +425,7 @@ export class ShippingQuoteCache {
     this.itemPendings.clear(); // >>> ANGGA — Order Context Log <<<
     this.assumeds.clear(); // >>> ANGGA — Order Context Log <<<
     this.negoAsks.clear(); // >>> ANGGA — addendum v2 P2 <<<
+    this.funnelExpects.clear(); // >>> ANGGA — Q-Chain <<<
     this.hits = 0;
     this.misses = 0;
   }

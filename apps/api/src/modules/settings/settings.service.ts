@@ -255,6 +255,16 @@ export class SettingsService {
           'akan segera memberikan informasi',
         ]),
         // <<< ANGGA
+        // >>> ANGGA — Q-Chain (2026-08-05, ketok Bossfren): funnel pertanyaan
+        // berantai. Wording default = ketok; ubah dari dashboard tanpa deploy.
+        orderFunnelEnabled: this.config.get<string>('ORDER_FUNNEL_ENABLED') !== 'false',
+        orderFunnelAskItem: (this.config.get<string>('ORDER_FUNNEL_ASK_ITEM') ?? 'produknya mau yang mana kak? 😊').trim(),
+        orderFunnelAskAddress: (this.config.get<string>('ORDER_FUNNEL_ASK_ADDRESS') ?? 'boleh diinfo alamat lengkapnya kak biar kami bantu hitung ongkirnya ya? 🙏').trim(),
+        orderFunnelAskBasket: (this.config.get<string>('ORDER_FUNNEL_ASK_BASKET') ?? 'jadinya mau ambil dua-duanya sekalian ({{daftar_produk}}) atau salah satu dulu kak? 😊').trim(),
+        orderFunnelAskBasketOpen: (this.config.get<string>('ORDER_FUNNEL_ASK_BASKET_OPEN') ?? 'produk yang mana aja kak yang jadi diambil? 😊').trim(),
+        orderFunnelAskQty: (this.config.get<string>('ORDER_FUNNEL_ASK_QTY') ?? 'mau ambil berapa pcs kak?').trim(),
+        orderFunnelAskPayment: (this.config.get<string>('ORDER_FUNNEL_ASK_PAYMENT') ?? 'mau diproses COD atau transfer kak? 😊').trim(),
+        // <<< ANGGA
       },
       // <<< ANGGA (Order Context)
     };

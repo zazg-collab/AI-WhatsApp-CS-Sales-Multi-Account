@@ -260,6 +260,29 @@ class OrderContextSettingsDto {
   @IsOptional() @IsArray() @IsString({ each: true })
   orderContradictionPhrases?: string[];
   // <<< ANGGA
+
+  // >>> ANGGA — Q-Chain (2026-08-05): funnel pertanyaan berantai.
+  @IsOptional() @IsBoolean()
+  orderFunnelEnabled?: boolean;
+
+  @IsOptional() @IsString()
+  orderFunnelAskItem?: string;
+
+  @IsOptional() @IsString()
+  orderFunnelAskAddress?: string;
+
+  @IsOptional() @IsString()
+  orderFunnelAskBasket?: string;
+
+  @IsOptional() @IsString()
+  orderFunnelAskBasketOpen?: string;
+
+  @IsOptional() @IsString()
+  orderFunnelAskQty?: string;
+
+  @IsOptional() @IsString()
+  orderFunnelAskPayment?: string;
+  // <<< ANGGA
 }
 // <<< ANGGA
 

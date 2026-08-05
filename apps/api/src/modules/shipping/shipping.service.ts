@@ -35,6 +35,10 @@ import {
   SHIPPING_GROUNDING_AMBIGUOUS_OPEN,
   SHIPPING_GROUNDING_DATA_READY,
   // <<< ANGGA
+  // >>> ANGGA — Q-Chain (2026-08-05)
+  SHIPPING_FUNNEL_DIRECTIVE,
+  SHIPPING_FUNNEL_TOTAL,
+  // <<< ANGGA
 } from '../../i18n/bot-prompts';
 // >>> ANGGA — Fase 113: satu definisi "angka uang" dipakai ulang dari
 // rules.engine.ts, bukan diduplikasi di sini. rules.engine.ts tidak balik
@@ -772,7 +776,12 @@ export class ShippingService {
     );
     // <<< ANGGA
     if (!mayHaveChanged) {
-      if (cached) {
+      // >>> ANGGA — Q-Chain: ada pertanyaan pilihan (barang/keranjang) yang
+      // sedang menunggu jawaban → JANGAN puas dengan cache/log-hit; jawaban
+      // pelanggan harus diproses tangga pilihan di bawah.
+      const adaPendingPilihan = !!this.cache.pendingItems(conversationId);
+      // <<< ANGGA
+      if (cached && !adaPendingPilihan) {
         this.cache.recordOutcome(conversationId, 'ok');
         return finish({ status: 'ok', quote: cached });
       }
@@ -794,7 +803,7 @@ export class ShippingService {
       // >>> ANGGA — F1: gerbang tanya-uang. Sapaan tanpa kata uang/agregat/
       // afirmasi jatuh ke alur lama (ekstraksi) — TIDAK dijawab kutipan
       // instan dari log.
-      if (this.orderLog && !adaTunjukAtauReferensi && (tanyaUang || afirmasiUtuh)) {
+      if (this.orderLog && !adaTunjukAtauReferensi && !adaPendingPilihan && (tanyaUang || afirmasiUtuh)) {
         const entries = (await this.orderLog.candidates(conversationId)).filter(
           (e) => e.fresh && e.snapshot.items.length > 0 && e.snapshot.destinationId,
         );
@@ -847,13 +856,42 @@ export class ShippingService {
     // log (lewat snapshot di `finalize`), sesuai gerbang konfirmasi Bossfren.
     let itemsFromChoice: ExtractedItem[] | null = null;
     let choiceCity: string | null = null;
+    // >>> ANGGA — Q-Chain: jawaban pertanyaan KONKLUSI keranjang menghasilkan
+    // snapshot berpenanda `konklusi` — funnel baru boleh maju ke qty/total.
+    let konklusiKeranjang = false;
+    // <<< ANGGA
     const pendingItems = this.cache.pendingItems(conversationId);
     if (pendingItems) {
-      const chosen = pilihBarang(pendingItems.candidates, lastCustomerText, oc);
-      if (chosen) {
+      // >>> ANGGA — Q-Chain (2026-08-05): pada mode 'keranjang', jawaban
+      // AGREGAT ("dua-duanya", "sekalian", "semuanya") = ambil SEMUA kandidat.
+      // Qty per produk diambil dari union memori (anti hitung-dobel yang sama
+      // dengan jalur agregat), fallback qty 1.
+      if (
+        pendingItems.mode === 'keranjang' &&
+        this.orderLog &&
+        hasAggregateKeyword(lastCustomerText, oc.orderAggregateKeywords)
+      ) {
         this.cache.clearPendingItems(conversationId);
-        itemsFromChoice = [{ name: chosen.name, qty: patchQty(lastCustomerText) ?? pendingItems.qty }];
+        const ids = new Set(pendingItems.candidates.map((c) => c.productId));
+        const union = mergeSnapshots(
+          (await this.orderLog.candidates(conversationId))
+            .filter((e) => e.fresh)
+            .map((e) => e.snapshot),
+        ).filter((m) => ids.has(m.productId));
+        itemsFromChoice = (union.length
+          ? union.map((m) => ({ name: m.name, qty: m.qty }))
+          : pendingItems.candidates.map((c) => ({ name: c.name, qty: 1 })));
         choiceCity = pendingItems.city;
+        konklusiKeranjang = true;
+      } else {
+        // <<< ANGGA
+        const chosen = pilihBarang(pendingItems.candidates, lastCustomerText, oc);
+        if (chosen) {
+          this.cache.clearPendingItems(conversationId);
+          itemsFromChoice = [{ name: chosen.name, qty: patchQty(lastCustomerText) ?? pendingItems.qty }];
+          choiceCity = pendingItems.city;
+          if (pendingItems.mode === 'keranjang') konklusiKeranjang = true; // >>> ANGGA — Q-Chain <<<
+        }
       }
     }
     // <<< ANGGA
@@ -930,6 +968,7 @@ export class ShippingService {
       tanyaUang ||
       afirmasiUtuh ||
       mayHaveChanged ||
+      patchQty(lastCustomerText) != null || // >>> ANGGA — Q-Chain: jawaban qty polos ("2 deh") <<<
       hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords);
     if (!items.length && this.orderLog && bicaraOrder) {
       // <<< ANGGA
@@ -1031,6 +1070,14 @@ export class ShippingService {
         // Snapshot = INPUT order tervalidasi katalog; ongkir-saja tidak
         // membawa barang, tidak ada yang layak diingat.
         if (!result.quote.shippingOnly) {
+          // >>> ANGGA — Q-Chain (2026-08-05): qtyPasti = pelanggan menyebut
+          // angka eksplisit di giliran ini, ATAU sudah pasti di snapshot yang
+          // dibawa carry-over (basket sama). konklusi = jawaban pertanyaan
+          // keranjang. Dua-duanya slot funnel.
+          const qtyEksplisit =
+            patchQty(lastCustomerText) != null ||
+            /\b\d{1,3}\s*(pcs|pc|buah|biji|unit|set)\b/i.test(lastCustomerText);
+          // <<< ANGGA
           await this.orderLog?.recordSnapshot(
             conversationId,
             lastMsg.id,
@@ -1038,6 +1085,10 @@ export class ShippingService {
               city: result.quote.city,
               province: result.quote.province,
               destinationId: result.quote.destinationId,
+              // >>> ANGGA — Q-Chain
+              qtyPasti: qtyEksplisit || carriedEntry?.snapshot.qtyPasti === true,
+              ...(konklusiKeranjang ? { konklusi: true } : {}),
+              // <<< ANGGA
               // Item tanpa productId (tidak seharusnya terjadi di jalur ini)
               // dibuang — identitas produk wajib untuk merge log (v1.1 §12.1-4).
               items: result.quote.matchedItems
@@ -1456,6 +1507,90 @@ export class ShippingService {
    * TIDAK PERNAH ikut, sama seperti sebelumnya — cuma bentuknya yang berubah
    * dari "angka jadi" menjadi "nama penanda".
    */
+  /**
+   * >>> ANGGA — Q-Chain (2026-08-05, KETOK + MANDAT KERAS Bossfren, blueprint
+   * dok 08 v2): pertanyaan funnel BERIKUTNYA untuk giliran JAWABAN UANG.
+   * Langkah TIDAK disimpan — diturunkan ulang dari data (memori order +
+   * kutipan), jadi belokan pelanggan otomatis "lompat ke slot kosong pertama".
+   * Urutan pakem: barang → alamat(ongkir saja) → konklusi keranjang (produk>1)
+   * → qty → total+metode. Anti-cerewet: satu langkah maks 2x per segmen
+   * (event `funnel_ask`). Return null = tidak ada directive (belokan, nego,
+   * pertanyaan wajib lain, funnel mati, atau sudah mentok cap).
+   */
+  private async funnelDirective(
+    conversationId: string,
+    lastMsgId: string,
+    lang: string,
+    opts: { quote?: ShippingQuote; hargaTurn?: boolean },
+  ): Promise<string | null> {
+    if (!this.orderLog) return null;
+    const oc = await this.settings.orderContext();
+    if (oc.orderFunnelEnabled === false) return null;
+
+    // Directive hanya untuk giliran JAWABAN UANG (harga/ongkir/qty/total) —
+    // belokan/basa-basi TIDAK didorong (ketok Bossfren: "ikuti alur customer").
+    const teksG = this.turnMemo.get(conversationId)?.lastText ?? '';
+    const jawabanUang =
+      opts.hargaTurn === true ||
+      adaKataTanyaUang(teksG, oc.orderMoneyAskKeywords) ||
+      hasAggregateKeyword(teksG, oc.orderAggregateKeywords) ||
+      PLACE_HINT.test(teksG) ||
+      ORDER_CHANGE_HINT.test(teksG) ||
+      patchQty(teksG) != null;
+    if (!jawabanUang) return null;
+
+    const entries = (await this.orderLog.candidates(conversationId)).filter(
+      (e) => e.fresh && e.snapshot.items.length > 0,
+    );
+    const produk = new Map<string, string>();
+    for (const e of entries) for (const it of e.snapshot.items) if (!produk.has(it.productId)) produk.set(it.productId, it.name);
+    if (opts.quote && !opts.quote.shippingOnly) {
+      for (const m of opts.quote.matchedItems) if (m.productId && !produk.has(m.productId)) produk.set(m.productId, m.name);
+    }
+    // Giliran HARGA (blok harga produk aktif): barang jelas sedang disebut
+    // pelanggan walau belum masuk log — jangan salah tanya "produknya mana".
+    const adaBarang = produk.size > 0 || opts.hargaTurn === true;
+    const adaAlamat =
+      (!!opts.quote?.destinationId && opts.quote.destinationId.length > 0) ||
+      entries.some((e) => e.snapshot.destinationId);
+    const latest = entries[0];
+    const perluKonklusi = produk.size > 1 && latest?.snapshot.konklusi !== true;
+    const qtyPasti = latest?.snapshot.qtyPasti === true;
+
+    const asks = await this.orderLog.funnelAsks(conversationId);
+    const pilih = (step: string, kalimat: string, total = false): string | null => {
+      const bersih = (kalimat ?? '').trim();
+      if (!bersih) return null; // template dikosongkan admin = langkah dimatikan
+      if ((asks[step] ?? 0) >= 2) return null; // anti-cerewet: maks 2x per segmen
+      void this.orderLog?.recordFunnelAsk(conversationId, step, lastMsgId);
+      this.cache.setFunnelExpect(conversationId, { messageId: lastMsgId, step, kalimat: bersih });
+      return t(total ? SHIPPING_FUNNEL_TOTAL : SHIPPING_FUNNEL_DIRECTIVE, lang)(bersih);
+    };
+
+    if (!adaBarang) return pilih('barang', oc.orderFunnelAskItem);
+    if (!adaAlamat) return pilih('alamat', oc.orderFunnelAskAddress);
+    if (perluKonklusi) {
+      const daftar = [...produk.values()].slice(0, 3).join(' + ');
+      const kalimat =
+        produk.size <= 2
+          ? (oc.orderFunnelAskBasket ?? '').replace(/\{\{daftar_produk\}\}/gi, daftar)
+          : oc.orderFunnelAskBasketOpen;
+      // Tangga jawaban: kandidat = produk aktif; jawaban agregat = ambil semua.
+      this.cache.setPendingItems(conversationId, {
+        candidates: [...produk].map(([productId, name]) => ({ productId, name })),
+        qty: 1,
+        city: latest?.snapshot.city ?? null,
+        mode: 'keranjang',
+      });
+      return pilih('keranjang', kalimat);
+    }
+    if (!qtyPasti) return pilih('qty', oc.orderFunnelAskQty);
+    // Semua slot terisi → sodorkan TOTAL + tanya metode (invariant Bossfren:
+    // metode TIDAK PERNAH ditanya sebelum total tersodor — satu giliran).
+    return pilih('metode', oc.orderFunnelAskPayment, true);
+  }
+  // <<< ANGGA
+
   async getGroundingText(conversationId: string, lang = 'id'): Promise<string> {
     let result: ShippingResult;
     try {
@@ -1499,6 +1634,15 @@ export class ShippingService {
                 `Downgrade konteks ${conversationId}: kutipan jatuh ke ongkir-saja padahal log masih segar (${names})`,
               );
             }
+          }
+          // <<< ANGGA
+          // >>> ANGGA — Q-Chain: jawaban ongkir-saja juga JAWABAN UANG —
+          // wajib menyeret pertanyaan funnel (paling sering: tanya barang).
+          {
+            const memoQ = this.turnMemo.get(conversationId);
+            const msgIdQ = (memoQ?.key ?? '').split(':')[0] || '';
+            const arah = await this.funnelDirective(conversationId, msgIdQ, lang, { quote: q });
+            if (arah) lines.push(arah);
           }
           // <<< ANGGA
           return lines.join('\n');
@@ -1545,8 +1689,10 @@ export class ShippingService {
         // sistem dari plafon AppSetting); ronde ≥2 → JANGAN berjanji, katakan
         // dicek ke atasan + notifikasi instan ke admin (pola notifikasi
         // gerbang uang; sekali per pesan lewat pagar bumpNego).
+        let adaNego = false; // >>> ANGGA — Q-Chain: nego punya kalimat lanjutan sendiri <<<
         if (memoNego) {
           if (hasAggregateKeyword(memoNego.lastText, oc.orderNegoKeywords)) {
+            adaNego = true; // >>> ANGGA — Q-Chain <<<
             const msgId = memoNego.key.split(':')[0] || memoNego.key;
             const ronde = this.cache.bumpNego(conversationId, msgId);
             const adaTokenNego = (q.goodsDiscount ?? 0) > 0 || q.shippingDiscount > 0;
@@ -1560,6 +1706,15 @@ export class ShippingService {
               );
             }
           }
+        }
+        // <<< ANGGA
+        // >>> ANGGA — Q-Chain (2026-08-05, MANDAT KERAS Bossfren): JAWABAN
+        // UANG wajib menutup dengan pertanyaan langkah funnel berikutnya —
+        // kecuali giliran nego (punya kalimat lanjutan sendiri).
+        if (!adaNego) {
+          const msgIdQ = (memoNego?.key ?? '').split(':')[0] || '';
+          const arah = await this.funnelDirective(conversationId, msgIdQ, lang, { quote: q });
+          if (arah) lines.push(arah);
         }
         // <<< ANGGA
         return lines.join('\n');
@@ -1635,6 +1790,28 @@ export class ShippingService {
                 entry.snapshot.items.map((i) => `${i.qty} pcs ${i.name}`).join(', ') +
                 (entry.snapshot.city ? ` → ${entry.snapshot.city}` : '');
               return t(SHIPPING_GROUNDING_STALE_CONTEXT, lang)(desc);
+            }
+          }
+        }
+        // <<< ANGGA
+        // >>> ANGGA — Q-Chain (2026-08-05): giliran HARGA — pelanggan bertanya
+        // harga (blok harga produk aktif) dan kutipan ongkir belum ada →
+        // jawaban harga WAJIB menutup dengan pertanyaan alamat (ongkir saja,
+        // revisi Bossfren: JANGAN menjanjikan "total kiriman" di tahap ini).
+        {
+          const tokensHarga = this.cache.getProductPriceTokens(conversationId);
+          if (Object.keys(tokensHarga ?? {}).length) {
+            const memoH = this.turnMemo.get(conversationId);
+            const teksH = memoH?.lastText ?? '';
+            const ocH = await this.settings.orderContext();
+            if (adaKataTanyaUang(teksH, ocH.orderMoneyAskKeywords)) {
+              const arah = await this.funnelDirective(
+                conversationId,
+                (memoH?.key ?? '').split(':')[0] || '',
+                lang,
+                { hargaTurn: true },
+              );
+              if (arah) return arah;
             }
           }
         }
@@ -1871,6 +2048,26 @@ export class ShippingService {
       issues.push(
         `Balasan menyebut istilah internal sistem ("${frasaInternal}") — tulis ulang tanpa menyinggung sistem, penanda, atau proses internal ke pelanggan.`,
       );
+    }
+    // <<< ANGGA
+
+    // >>> ANGGA — Q-Chain (2026-08-05, MANDAT KERAS Bossfren "alur wajib
+    // ditaati, tidak boleh dilanggar"): kalau giliran ini directive funnel
+    // disuntik, balasan WAJIB memuat kalimat tanya langkahnya (dinormalisasi:
+    // huruf kecil, tanpa emoji/tanda baca — biar 🙏 yang hilang tidak salah
+    // tahan). Melanggar → ikut mekanisme retry-sekali lalu hold.
+    {
+      const expectF = this.cache.funnelExpect(conversationId);
+      const msgIdNow = (this.turnMemo.get(conversationId)?.key ?? '').split(':')[0] || '';
+      if (expectF && msgIdNow && expectF.messageId === msgIdNow) {
+        const normF = (s: string) =>
+          (s ?? '').toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
+        if (!normF(substituted).includes(normF(expectF.kalimat))) {
+          issues.push(
+            `Balasan melanggar alur penjualan wajib — tidak menutup dengan pertanyaan langkah "${expectF.step}". Tulis ulang dan akhiri PERSIS dengan: "${expectF.kalimat}"`,
+          );
+        }
+      }
     }
     // <<< ANGGA
 
@@ -2138,7 +2335,13 @@ export function patchQty(text: string): number | null {
   const t = (text ?? '').toLowerCase();
   const m =
     /(?:\b(?:beli|pesan|ambil|order|mau|jadi)\s*)(\d{1,3})\b/.exec(t) ??
-    /\b(\d{1,3})\s*(?:pcs|pc|buah|biji|unit|set|aja)\b/.exec(t);
+    /\b(\d{1,3})\s*(?:pcs|pc|buah|biji|unit|set|aja)\b/.exec(t) ??
+    // >>> ANGGA — Q-Chain (2026-08-05): jawaban ANGKA POLOS untuk pertanyaan
+    // qty funnel ("2", "2 deh", "3 ya kak") — seluruh pesan cuma angka + kata
+    // ringan. Tanpa ini, jawaban paling wajar atas "mau ambil berapa pcs kak?"
+    // justru tidak tertangkap.
+    /^\s*(\d{1,3})\s*(?:pcs|pc|buah|biji|unit|set)?\s*(?:aja|deh|dulu|ya|yaa|kak|dong)?\s*(?:aja|deh|dulu|ya|yaa|kak|dong)?\s*$/i.exec(t);
+    // <<< ANGGA
   if (!m) return null;
   const qty = Number(m[1]);
   return Number.isInteger(qty) && qty >= 1 && qty <= 999 ? qty : null;
@@ -2254,7 +2457,7 @@ export const NAMA_TOKEN_CADANGAN = new Set([
  */
 export function klasifikasiAlasanGate(
   issue: string,
-): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'lainnya' {
+): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'funnel_dilanggar' | 'lainnya' {
   const s = issue ?? '';
   if (s.includes('membuat labelnya salah')) return 'label_rancu';
   if (s.includes('tidak dikenal/tidak tersedia')) return 'token_tak_dikenal';
@@ -2262,6 +2465,7 @@ export function klasifikasiAlasanGate(
   if (s.includes('ASUMSI order yang sedang berjalan')) return 'bridge_asumsi';
   if (s.includes('istilah internal')) return 'istilah_internal'; // >>> ANGGA — E3 <<<
   if (s.includes('menyangkal data yang sudah tersedia')) return 'kontradiksi_data'; // >>> ANGGA — P2 <<<
+  if (s.includes('melanggar alur penjualan wajib')) return 'funnel_dilanggar'; // >>> ANGGA — Q-Chain <<<
   return 'lainnya';
 }
 // <<< ANGGA

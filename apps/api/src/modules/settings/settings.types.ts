@@ -193,6 +193,17 @@ export interface OrderContextSettings {
    *  ini obrolan uang/tempat — model dilarang bilang "akan cek dulu" padahal
    *  datanya sudah dihitung sistem. */
   orderContradictionPhrases: string[];
+  /** >>> ANGGA — Q-Chain (2026-08-05, KETOK + MANDAT KERAS Bossfren): funnel
+   *  pertanyaan berantai — jawaban uang WAJIB menutup dengan pertanyaan
+   *  langkah berikutnya (barang→alamat→konklusi→qty→total+metode). Kalimat =
+   *  template verbatim; kosongkan satu template = langkah itu mati. <<< */
+  orderFunnelEnabled: boolean;
+  orderFunnelAskItem: string;
+  orderFunnelAskAddress: string;
+  orderFunnelAskBasket: string;
+  orderFunnelAskBasketOpen: string;
+  orderFunnelAskQty: string;
+  orderFunnelAskPayment: string;
 }
 // <<< ANGGA
 

@@ -42,6 +42,13 @@ export interface OrderSnapshot {
   province: string;
   destinationId: string;
   items: OrderSnapshotItem[];
+  /** >>> ANGGA — Q-Chain (2026-08-05): true kalau qty di snapshot ini berasal
+   *  dari SEBUTAN EKSPLISIT pelanggan (pola angka), bukan default 1. Slot
+   *  funnel "qty" dianggap terisi hanya kalau ini true. <<< */
+  qtyPasti?: boolean;
+  /** >>> ANGGA — Q-Chain: true kalau snapshot ini lahir dari jawaban
+   *  pertanyaan KONKLUSI keranjang — keranjang dianggap final utk funnel. <<< */
+  konklusi?: boolean;
 }
 
 export interface OrderContextEntry {
@@ -142,6 +149,8 @@ export class OrderContextService {
   /** >>> ANGGA — addendum v2 M1: pagar dedupe penawaran per pesan (bounded). */
   private readonly offerWrittenFor = new Set<string>();
   // <<< ANGGA
+  /** >>> ANGGA — Q-Chain: pagar dedupe funnel_ask per (langkah, pesan). <<< */
+  private readonly funnelAskWritten = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -243,6 +252,8 @@ export class OrderContextService {
           province: String(p.province ?? ''),
           destinationId: String(p.destinationId ?? ''),
           items,
+          qtyPasti: (p as { qtyPasti?: unknown }).qtyPasti === true, // >>> ANGGA — Q-Chain <<<
+          konklusi: (p as { konklusi?: unknown }).konklusi === true, // >>> ANGGA — Q-Chain <<<
         },
         createdAt: row.createdAt,
         fresh: now - new Date(row.createdAt).getTime() <= staleMs,
@@ -250,6 +261,52 @@ export class OrderContextService {
     }
     return out;
   }
+
+  // >>> ANGGA — Q-Chain (2026-08-05, MANDAT KERAS Bossfren): jejak pertanyaan
+  // funnel per segmen (append-only, tabel sama, nol migrasi). Anti-cerewet:
+  // satu langkah maks 2x per segmen — pembacanya `funnelAsks`.
+  async recordFunnelAsk(conversationId: string, step: string, messageId: string): Promise<void> {
+    if (!conversationId || !step) return;
+    const key = `${conversationId}:${step}:${messageId}`;
+    if (this.funnelAskWritten.has(key)) return; // grounding terpanggil ≥2x per giliran
+    this.funnelAskWritten.add(key);
+    while (this.funnelAskWritten.size > 1000) {
+      const oldest = this.funnelAskWritten.values().next().value;
+      if (oldest === undefined) break;
+      this.funnelAskWritten.delete(oldest);
+    }
+    try {
+      await this.table.create({
+        data: { conversationId, type: 'funnel_ask', payload: { step, messageId } as unknown as object, source: 'system' },
+      });
+    } catch (err) {
+      this.logger.warn(`Gagal menulis funnel_ask ${conversationId}: ${err}`);
+    }
+  }
+
+  /** Berapa kali tiap langkah funnel sudah ditanyakan di SEGMEN berjalan. */
+  async funnelAsks(conversationId: string): Promise<Record<string, number>> {
+    if (!conversationId) return {};
+    let rows: Array<{ type: string; payload: unknown; createdAt: Date }>;
+    try {
+      rows = await this.table.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        take: CANDIDATE_SCAN_LIMIT,
+      });
+    } catch {
+      return {};
+    }
+    const out: Record<string, number> = {};
+    for (const row of rows) {
+      if (row.type === 'completed' || row.type === 'cancelled') break;
+      if (row.type !== 'funnel_ask') continue;
+      const step = String((row.payload as { step?: unknown } | null)?.step ?? '');
+      if (step) out[step] = (out[step] ?? 0) + 1;
+    }
+    return out;
+  }
+  // <<< ANGGA
 
   /**
    * Deteksi "selesai order" dari pesan keluar yang BENAR-BENAR TERKIRIM:

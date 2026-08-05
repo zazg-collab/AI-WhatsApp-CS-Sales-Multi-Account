@@ -158,6 +158,20 @@ const dict: Dict = {
     en: 'Held ONLY when a quote is computed AND the turn is about money/places — the bot must not deny data it already has.',
   },
   // <<< ANGGA
+  // >>> ANGGA — Q-Chain (2026-08-05, ketok Bossfren): funnel pertanyaan berantai.
+  secFunnel: { id: 'Funnel pertanyaan berantai (Q-Chain)', en: 'Chained question funnel (Q-Chain)' },
+  secFunnelIntro: {
+    id: 'WAJIB & ditegakkan sistem: setiap jawaban uang ditutup pertanyaan langkah berikutnya — Barang → Alamat (ongkir saja) → Konklusi keranjang (produk >1) → Qty → Total + Metode. Kalimat dibacakan PERSIS seperti template; draft yang melanggar ditahan gerbang. Kosongkan satu template untuk mematikan langkah itu. Maks 2x tanya per langkah per order.',
+    en: 'ENFORCED: every money answer ends with the next funnel question. Templates are read VERBATIM; violating drafts are held. Empty template = step off. Max 2 asks per step per order.',
+  },
+  funnelEnabled: { id: 'Aktifkan funnel', en: 'Enable funnel' },
+  funnelAskItem: { id: 'Tanya produk (langkah 0)', en: 'Ask product (step 0)' },
+  funnelAskAddress: { id: 'Tanya alamat (setelah harga)', en: 'Ask address (after price)' },
+  funnelAskBasket: { id: 'Konklusi keranjang (2 produk) — {{daftar_produk}}', en: 'Basket conclusion (2 products)' },
+  funnelAskBasketOpen: { id: 'Konklusi keranjang (3+ produk)', en: 'Basket conclusion (3+ products)' },
+  funnelAskQty: { id: 'Tanya qty (setelah ongkir)', en: 'Ask qty (after shipping)' },
+  funnelAskPayment: { id: 'Tanya metode (menempel TOTAL)', en: 'Ask payment (with TOTAL)' },
+  // <<< ANGGA
   // >>> ANGGA — S1 (2026-08-05): telemetri gerbang uang.
   gateStatsTitle: { id: 'Telemetri gerbang uang', en: 'Money gate telemetry' },
   gateStatsIntro: {
@@ -172,6 +186,7 @@ const dict: Dict = {
   gateReason_bridge_asumsi: { id: 'Pakai asumsi tanpa sebut nama barang', en: 'Assumption without item name' },
   gateReason_istilah_internal: { id: 'Istilah internal bocor ke balasan', en: 'Internal phrasing leaked into reply' },
   gateReason_kontradiksi_data: { id: 'Menyangkal data yang sudah tersedia', en: 'Denied data that was available' },
+  gateReason_funnel_dilanggar: { id: 'Melanggar alur penjualan wajib', en: 'Violated mandatory sales flow' },
   gateReason_lainnya: { id: 'Lainnya', en: 'Other' },
   // <<< ANGGA
 };
@@ -196,6 +211,13 @@ interface OrderContextSettings {
   orderFormWelcomeTemplate: string;
   orderMetaPhraseBlacklist: string[];
   orderContradictionPhrases: string[];
+  orderFunnelEnabled: boolean;
+  orderFunnelAskItem: string;
+  orderFunnelAskAddress: string;
+  orderFunnelAskBasket: string;
+  orderFunnelAskBasketOpen: string;
+  orderFunnelAskQty: string;
+  orderFunnelAskPayment: string;
   // <<< ANGGA
 }
 
@@ -270,6 +292,14 @@ export default function OrderMemorySettingsPage() {
         orderFormWelcomeTemplate: data.orderFormWelcomeTemplate ?? '',
         orderMetaPhraseBlacklist: data.orderMetaPhraseBlacklist ?? [],
         orderContradictionPhrases: data.orderContradictionPhrases ?? [],
+        // >>> ANGGA — Q-Chain (2026-08-05)
+        orderFunnelEnabled: data.orderFunnelEnabled !== false,
+        orderFunnelAskItem: data.orderFunnelAskItem ?? '',
+        orderFunnelAskAddress: data.orderFunnelAskAddress ?? '',
+        orderFunnelAskBasket: data.orderFunnelAskBasket ?? '',
+        orderFunnelAskBasketOpen: data.orderFunnelAskBasketOpen ?? '',
+        orderFunnelAskQty: data.orderFunnelAskQty ?? '',
+        orderFunnelAskPayment: data.orderFunnelAskPayment ?? '',
         // <<< ANGGA
       };
       const updated = await api<{ orderContext: OrderContextSettings }>('/settings', {
@@ -451,6 +481,42 @@ export default function OrderMemorySettingsPage() {
                 />
               </Field>
 
+              {/* >>> ANGGA — Q-Chain (2026-08-05): funnel pertanyaan berantai */}
+              <h2 className="pt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{t('secFunnel')}</h2>
+              <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">{t('secFunnelIntro')}</p>
+              <label className="flex items-center gap-2 text-[13px] text-gray-700 dark:text-gray-200">
+                <input type="checkbox" disabled={!canEdit} checked={data.orderFunnelEnabled !== false}
+                  onChange={(e) => patch('orderFunnelEnabled', e.target.checked)} />
+                {t('funnelEnabled')}
+              </label>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label={t('funnelAskItem')}>
+                  <input className={fieldCls} disabled={!canEdit} value={data.orderFunnelAskItem ?? ''}
+                    onChange={(e) => patch('orderFunnelAskItem', e.target.value)} />
+                </Field>
+                <Field label={t('funnelAskAddress')}>
+                  <input className={fieldCls} disabled={!canEdit} value={data.orderFunnelAskAddress ?? ''}
+                    onChange={(e) => patch('orderFunnelAskAddress', e.target.value)} />
+                </Field>
+                <Field label={t('funnelAskBasket')}>
+                  <input className={fieldCls} disabled={!canEdit} value={data.orderFunnelAskBasket ?? ''}
+                    onChange={(e) => patch('orderFunnelAskBasket', e.target.value)} />
+                </Field>
+                <Field label={t('funnelAskBasketOpen')}>
+                  <input className={fieldCls} disabled={!canEdit} value={data.orderFunnelAskBasketOpen ?? ''}
+                    onChange={(e) => patch('orderFunnelAskBasketOpen', e.target.value)} />
+                </Field>
+                <Field label={t('funnelAskQty')}>
+                  <input className={fieldCls} disabled={!canEdit} value={data.orderFunnelAskQty ?? ''}
+                    onChange={(e) => patch('orderFunnelAskQty', e.target.value)} />
+                </Field>
+                <Field label={t('funnelAskPayment')}>
+                  <input className={fieldCls} disabled={!canEdit} value={data.orderFunnelAskPayment ?? ''}
+                    onChange={(e) => patch('orderFunnelAskPayment', e.target.value)} />
+                </Field>
+              </div>
+              {/* <<< ANGGA */}
+
               <h2 className="pt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">{t('secNego')}</h2>
               <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">{t('secNegoIntro')}</p>
               <Field label={t('negoKw')} hint={`${t('listHint')} ${t('negoKwHint')}`}>
@@ -485,7 +551,7 @@ export default function OrderMemorySettingsPage() {
                 <p className="text-[13px] font-medium text-gray-800 dark:text-gray-200">
                   {gateStats.totalDraftDitahan} draft · {gateStats.totalAlasan} alasan
                 </p>
-                {(['label_rancu', 'token_tak_dikenal', 'digit_mentah', 'bridge_asumsi', 'istilah_internal', 'kontradiksi_data', 'lainnya'] as const)
+                {(['label_rancu', 'token_tak_dikenal', 'digit_mentah', 'bridge_asumsi', 'istilah_internal', 'kontradiksi_data', 'funnel_dilanggar', 'lainnya'] as const)
                   .filter((k) => (gateStats.perAlasan[k] ?? 0) > 0)
                   .map((k) => (
                     <div key={k} className="flex items-center justify-between text-[13px] text-gray-700 dark:text-gray-300">

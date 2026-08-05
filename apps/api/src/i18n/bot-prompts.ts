@@ -712,6 +712,25 @@ export const SHIPPING_GROUNDING_DATA_READY = {
   en: 'IMPORTANT: the shipping/billing data for this turn IS ALREADY AVAILABLE via the placeholders below — do NOT say "I do not have the info yet", "let me check first", "I will contact the team", or promise info later. Answer DIRECTLY using the placeholders, like an agent who already has the data.',
 };
 
+/** >>> ANGGA — Q-Chain (2026-08-05, MANDAT KERAS Bossfren): setiap JAWABAN
+ *  UANG wajib menutup dengan pertanyaan langkah funnel berikutnya (urutan
+ *  pakem barang→harga→alamat→konklusi→qty→total→metode). Kalimatnya template
+ *  AppSetting, dibacakan VERBATIM; pelanggarannya DITAHAN gerbang
+ *  (`resolvePriceTokens`, kelas telemetri funnel_dilanggar). <<< */
+export const SHIPPING_FUNNEL_DIRECTIVE = {
+  id: (kalimat: string) =>
+    `ATURAN ALUR PENJUALAN — PERINGATAN KERAS, WAJIB DITAATI, TIDAK BOLEH DILANGGAR: balasanmu HARUS diakhiri dengan kalimat tanya berikut PERSIS APA ADANYA sebagai kalimat TERAKHIR: "${kalimat}" — JANGAN diterjemahkan, JANGAN diubah kata-katanya, JANGAN menambah pertanyaan lain setelahnya. Sistem otomatis MENAHAN balasan yang melanggar aturan ini.`,
+  en: (kalimat: string) =>
+    `SALES-FLOW RULE — HARD REQUIREMENT, MUST NOT BE VIOLATED: your reply MUST end with the following question VERBATIM as the LAST sentence: "${kalimat}" — do NOT translate it, do NOT rephrase it, do NOT add another question after it. The system automatically HOLDS replies that violate this.`,
+};
+
+export const SHIPPING_FUNNEL_TOTAL = {
+  id: (kalimat: string) =>
+    `ATURAN ALUR PENJUALAN — PERINGATAN KERAS, WAJIB DITAATI: semua data order sudah lengkap. SODORKAN TOTAL SEKARANG dengan menaruh penanda {{rincian_tagihan}} di baris tersendiri (JANGAN menarasikan blok itu), lalu akhiri balasanmu dengan kalimat tanya berikut PERSIS APA ADANYA: "${kalimat}" — jangan diterjemahkan/diubah. Sistem MENAHAN balasan yang melanggar.`,
+  en: (kalimat: string) =>
+    `SALES-FLOW RULE — HARD REQUIREMENT: the order data is complete. PRESENT THE TOTAL NOW by placing the {{rincian_tagihan}} placeholder on its own line (do NOT narrate the block), then end your reply with the following question VERBATIM: "${kalimat}" — no translation, no rephrasing. Violations are HELD by the system.`,
+};
+
 export const SHIPPING_GROUNDING_NEED_DETAIL = {
   id: 'DATA ONGKIR: nama daerah yang disebut pelanggan tidak ketemu di data ekspedisi. JANGAN menyebut angka ongkir apa pun, dan JANGAN menebak sendiri daerah itu ada di kabupaten/provinsi mana — sistem belum memastikannya. Minta KECAMATAN-nya — itu yang paling ampuh menemukan lokasinya. Kalau pelanggan terdengar bingung, boleh tawarkan menyebut provinsi atau kota terdekat sebagai gantinya. Jangan menyodorkan daftar panjang.',
   en: 'SHIPPING DATA: the place the customer mentioned was not found in the carrier data. Do NOT state any shipping cost, and do NOT guess which regency/province it belongs to — the system has not confirmed that. Ask for the DISTRICT (kecamatan) — that resolves the location most reliably. If the customer sounds unsure, offer the province or nearest city instead. Do not dump a long list.',

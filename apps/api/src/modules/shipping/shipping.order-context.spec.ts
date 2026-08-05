@@ -48,6 +48,15 @@ const OC = {
   // >>> ANGGA — P2 (2026-08-05): frasa kontradiksi "menyangkal data yang tersedia".
   orderContradictionPhrases: ['belum memiliki informasi', 'belum ada informasi', 'belum punya info', 'tidak memiliki informasi', 'belum bisa memastikan', 'akan saya cek dulu', 'cek dengan tim', 'tim logistik', 'menghubungkan dengan tim', 'akan segera memberikan informasi'],
   // <<< ANGGA
+  // >>> ANGGA — Q-Chain (2026-08-05, ketok Bossfren): funnel pertanyaan berantai.
+  orderFunnelEnabled: true,
+  orderFunnelAskItem: 'produknya mau yang mana kak? 😊',
+  orderFunnelAskAddress: 'boleh diinfo alamat lengkapnya kak biar kami bantu hitung ongkirnya ya? 🙏',
+  orderFunnelAskBasket: 'jadinya mau ambil dua-duanya sekalian ({{daftar_produk}}) atau salah satu dulu kak? 😊',
+  orderFunnelAskBasketOpen: 'produk yang mana aja kak yang jadi diambil? 😊',
+  orderFunnelAskQty: 'mau ambil berapa pcs kak?',
+  orderFunnelAskPayment: 'mau diproses COD atau transfer kak? 😊',
+  // <<< ANGGA
 };
 // <<< ANGGA
 
@@ -81,13 +90,20 @@ const BEDOG = {
   description: '', price: 139000, weightGrams: null, status: 'active',
 };
 
-function entry(items: Array<{ productId: string; name: string; qty: number }>, opts: { fresh?: boolean; city?: string } = {}) {
+function entry(
+  items: Array<{ productId: string; name: string; qty: number }>,
+  opts: { fresh?: boolean; city?: string; qtyPasti?: boolean; konklusi?: boolean } = {},
+) {
   return {
     snapshot: {
       city: opts.city ?? 'MEDAN',
       province: 'SUMATERA UTARA',
       destinationId: 'dest-medan',
       items,
+      // >>> ANGGA — Q-Chain (2026-08-05)
+      qtyPasti: opts.qtyPasti ?? false,
+      konklusi: opts.konklusi ?? false,
+      // <<< ANGGA
     },
     createdAt: new Date(),
     fresh: opts.fresh ?? true,
@@ -108,6 +124,10 @@ function fakeLog(entries: any[] = [], offers: any[] = [], lastCompleted: any[] =
     recordOffer: jest.fn().mockResolvedValue(undefined),
     recentOffers: jest.fn().mockResolvedValue(offers),
     candidatesWithCompleted: jest.fn(async () => ({ current: entries, lastCompleted })),
+    // <<< ANGGA
+    // >>> ANGGA — Q-Chain (2026-08-05)
+    recordFunnelAsk: jest.fn().mockResolvedValue(undefined),
+    funnelAsks: jest.fn().mockResolvedValue({}),
     // <<< ANGGA
   };
 }
@@ -892,6 +912,124 @@ describe('P2 — penjaga kontradiksi: menyangkal data yang sudah tersedia', () =
     ).toBe('kontradiksi_data');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// >>> ANGGA — Q-CHAIN (2026-08-05, KETOK + MANDAT KERAS Bossfren, blueprint
+// dok 08 v2): funnel pertanyaan berantai — jawaban uang WAJIB menutup dengan
+// pertanyaan langkah berikutnya; langkah diturunkan dari data; pelanggaran
+// DITAHAN gerbang. RED-first terhadap kode pra-Q-Chain.
+
+describe('Q-Chain — funnel pertanyaan berantai (urutan pakem)', () => {
+  it('TRACE 1: jawab HARGA (belum ada alamat) → wajib tanya alamat (ongkir saja)', async () => {
+    const h = harness({
+      lastCustomerText: 'harga golok sembelih multifungsi berapa kak?',
+      extract: { kota: null, items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    h.svc.cacheProductPriceTokens('c1', { harga_produk_1: 'Rp150.000' });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('no_destination');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('alamat lengkapnya kak biar kami bantu hitung ongkirnya');
+    expect(grounding).toContain('PERINGATAN KERAS');
+    expect(grounding).not.toContain('total kirimannya'); // revisi Bossfren: ongkir SAJA
+  });
+
+  it('TRACE 2: jawab ONGKIR (qty belum pasti) → wajib tanya qty', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('mau ambil berapa pcs kak?');
+  });
+
+  it('TRACE 3: qty pasti ("beli 2 ya") → sodorkan TOTAL ({{rincian_tagihan}}) + tanya metode', async () => {
+    const h = harness({
+      lastCustomerText: 'COD deh kak. beli 2 ya',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }], { qtyPasti: true })],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    // qtyPasti ikut tercatat di snapshot giliran ini.
+    expect(h.orderLog.recordSnapshot).toHaveBeenCalledWith(
+      'c1', 'm1', expect.objectContaining({ qtyPasti: true }), expect.anything(),
+    );
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('{{rincian_tagihan}}');
+    expect(grounding).toContain('mau diproses COD atau transfer kak?');
+  });
+
+  it('MANDAT KERAS: balasan tanpa kalimat funnel wajib → DITAHAN gerbang; dengan kalimatnya → lolos', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    await h.svc.getGroundingText('c1'); // directive tanya-qty tercatat utk giliran ini
+    const bandel = await h.svc.resolvePriceTokens('c1', 'Ongkirnya {{ongkir}} ya kak untuk Golok Sembelih Multifungsi.');
+    expect(bandel.ok).toBe(false);
+    expect(bandel.issues.join(' ')).toContain('melanggar alur penjualan wajib');
+    const taat = await h.svc.resolvePriceTokens(
+      'c1',
+      'Ongkirnya {{ongkir}} ya kak untuk Golok Sembelih Multifungsi. Mau ambil berapa pcs kak?',
+    );
+    expect(taat.ok).toBe(true);
+  });
+
+  it('KONKLUSI KERANJANG: 2 produk sudah dikutip → tanya "dua-duanya atau salah satu"; jawaban agregat → union', async () => {
+    const h = harness({
+      lastCustomerText: 'totalnya berapa kak?',
+      logEntries: [
+        entry([{ productId: 'p-bedog', name: 'Bedog Betekok', qty: 1 }]),
+        entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 2 }]),
+      ],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('dua-duanya sekalian');
+    expect(grounding).toContain('Bedog Betekok'); // {{daftar_produk}} diisi sistem
+
+    pesanBaru(h, 'm2', 'dua-duanya sekalian dong kak');
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.matchedItems).toHaveLength(2);
+    // Snapshot konklusi tercatat — funnel boleh maju.
+    expect(h.orderLog.recordSnapshot).toHaveBeenCalledWith(
+      'c1', 'm2', expect.objectContaining({ konklusi: true }), expect.anything(),
+    );
+  });
+
+  it('anti-cerewet: langkah yang sudah ditanya 2x → tidak ditanya lagi', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ qty: 2 });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).not.toContain('mau ambil berapa pcs kak?');
+  });
+
+  it('belokan (giliran non-uang) → TANPA dorongan funnel', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    pesanBaru(h, 'm2', 'oh iya kak, itu bahannya apa ya?');
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok'); // cache
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).not.toContain('PERINGATAN KERAS');
+  });
+
+  it('telemetri mengenal kelas funnel_dilanggar', () => {
+    const { klasifikasiAlasanGate } = require('./shipping.service');
+    expect(
+      klasifikasiAlasanGate('Balasan melanggar alur penjualan wajib — tidak menutup dengan pertanyaan langkah "qty".'),
+    ).toBe('funnel_dilanggar');
+  });
+});
+// <<< ANGGA
 
 describe('P5 — alat debug search keyword (dipakai widget Settings Ongkir)', () => {
   it('mengembalikan baris mentah + ringkasan kelompok ber-level', async () => {
