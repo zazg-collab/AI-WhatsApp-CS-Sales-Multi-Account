@@ -1226,6 +1226,72 @@ export class ShippingService {
       return finish({ status: 'api_error' });
     }
     // <<< ANGGA
+    // >>> ANGGA — JAWABAN KECAMATAN (2026-08-05, insiden "sandubaya kak" —
+    // TERBUKTI DARI LOG): kita bertanya "boleh sebut kecamatannya", pelanggan
+    // patuh menjawab "Sandubaya kak" — tapi ekstraktor memetakannya balik ke
+    // kota=Mataram → search "mataram" lagi → saringan provinsi menolak semua →
+    // need_more_detail SELAMANYA. Kata-kata JAWABAN pelanggan sendiri tidak
+    // pernah dijadikan kata kunci pencarian. Fix: pada giliran setelah kita
+    // bertanya tujuan (askCount > 0), coba search kata-kata jawaban (tanpa
+    // kata pengisi/afirmasi/generik) SEBELUM jatuh ke kota hasil ekstraksi;
+    // provinsi hasil ekstraksi tetap dipakai sebagai saringan (P4).
+    const jawabanPolosTujuan =
+      this.cache.askCount(conversationId) > 0 &&
+      !adaKataTanyaUang(lastCustomerText, oc.orderMoneyAskKeywords) &&
+      !PLACE_HINT.test(lastCustomerText) &&
+      !ORDER_CHANGE_HINT.test(lastCustomerText);
+    if (jawabanPolosTujuan) {
+      // Sebutan produk = bukan jawaban tujuan — jangan search nama golok jadi desa.
+      const produkKatalogL = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
+      if (!mentionsCatalogProduct(lastCustomerText, produkKatalogL)) {
+      const generik = new Set([
+        'kak', 'kk', 'ya', 'yaa', 'iya', 'betul', 'bener', 'benar', 'oke', 'ok', 'sip',
+        'dong', 'deh', 'itu', 'yang', 'yg', 'di', 'ke', 'kota', 'kabupaten', 'kab',
+        'provinsi', 'daerah', 'kecamatan', 'kelurahan', 'desa', 'aja', 'saja', 'mas', 'bang',
+        ...(oc.orderFillerWords ?? []).map((w) => (w ?? '').toLowerCase().trim()),
+        ...(oc.orderAffirmationKeywords ?? []).map((w) => (w ?? '').toLowerCase().trim()),
+      ]);
+      const kataJawaban = (lastCustomerText.toLowerCase().match(/[a-z]+/g) ?? [])
+        .filter((w) => w.length >= 4 && !generik.has(w))
+        .slice(0, 3);
+      for (const w of kataJawaban) {
+        const rows = await this.mengantar.searchAddress(terapkanAlias(w, cfg.destinationAliases));
+        if (!rows?.length) continue;
+        let urut = resolveDestination(rows, w);
+        if (!urut.length) continue;
+        const provJawab = normalisasiProvinsi(extract.province ?? '');
+        if (provJawab) {
+          const saring = urut.filter((c) => normalisasiProvinsi(c.province) === provJawab);
+          if (saring.length) urut = saring;
+        }
+        if (kandidatDominan(urut)) {
+          turnViaPilihan = true; // jawaban atas pertanyaan kita = giliran uang
+          this.cache.clearPending(conversationId);
+          this.cache.resetAsks(conversationId);
+          this.cache.reset(conversationId);
+          const menang = urut[0];
+          return finalize(
+            await this.quoteUntukTujuan(
+              { city: menang.city, province: menang.province, label: '', destinationId: menang.ids[0] },
+              items,
+            ),
+          );
+        }
+        turnViaPilihan = true;
+        return finalize({
+          status: 'ambiguous',
+          sempit: true,
+          candidates: urut.map((c) => ({
+            city: c.city,
+            province: c.province,
+            label: labelKandidat(c, urut),
+            destinationId: c.ids[0],
+          })),
+        });
+      }
+      }
+    }
+    // <<< ANGGA
     const city =
       extract.city?.trim() || choiceCity || carriedEntry?.snapshot.city || cached?.city || null;
     if (!city) {
@@ -1921,7 +1987,12 @@ export class ShippingService {
               .join('\n')
           );
         }
-        if (ronde > 1) return t(SHIPPING_GROUNDING_ASK_DISTRICT, lang);
+        if (ronde > 1) {
+          // >>> ANGGA — GERBANG PAKEM: giliran minta-kecamatan wajib benar-benar
+          // memintanya (insiden "sandubaya": draft malah "konfirmasi ke admin"). <<<
+          this.setExpectGiliran(conversationId, 'minta_kecamatan', 'kecamatan');
+          return t(SHIPPING_GROUNDING_ASK_DISTRICT, lang);
+        }
         // >>> ANGGA — GERBANG PAKEM (2026-08-05): pertanyaan terbuka tujuan
         // (format ketok) jadi KEWAJIBAN gerbang, bukan sekadar prompt.
         // Kalimatnya WAJIB cermin persis kutipan di SHIPPING_GROUNDING_
@@ -1944,6 +2015,9 @@ export class ShippingService {
         const ronde = this.cache.askCount(conversationId);
         if (ronde > MAX_DESTINATION_ASKS) return t(SHIPPING_GROUNDING_DESTINATION_STUCK, lang);
         if (ronde > 1) return t(SHIPPING_GROUNDING_ASK_PROVINCE, lang);
+        // >>> ANGGA — GERBANG PAKEM: wajib benar-benar meminta kecamatan,
+        // bukan menggantung "konfirmasi ke admin" (insiden "sandubaya"). <<<
+        this.setExpectGiliran(conversationId, 'minta_kecamatan', 'kecamatan');
         return t(SHIPPING_GROUNDING_NEED_DETAIL, lang);
       }
       case 'unresolved_items':

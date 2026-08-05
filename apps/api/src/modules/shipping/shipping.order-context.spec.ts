@@ -1488,6 +1488,54 @@ describe('GERBANG PAKEM — pakem & kejujuran jadi lapisan gerbang', () => {
 });
 // <<< ANGGA
 
+// >>> ANGGA — JAWABAN KECAMATAN (2026-08-05, REPLAY insiden "sandubaya kak",
+// TERBUKTI DARI LOG): kita minta kecamatan, pelanggan patuh menjawab
+// "Sandubaya kak" — tapi ekstraktor memetakan balik ke kota=Mataram → search
+// "mataram" → saringan provinsi menolak semua → need_more_detail selamanya.
+// Fix: kata-kata JAWABAN pelanggan dicoba sebagai kata kunci search sendiri.
+
+describe('JAWABAN KECAMATAN — REPLAY "sandubaya kak"', () => {
+  it('jawaban kecamatan dipakai sebagai kata kunci search → resolve Kota Mataram NTB + funnel lanjut', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram berapa kak?',
+      extract: { kota: 'Mataram', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    pesanBaru(h, 'm2', 'sandubaya kak');
+    // Persis log insiden: ekstraktor memetakan jawaban balik ke kota Mataram.
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Mataram', provinsi: 'Nusa Tenggara Barat', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) =>
+      /sandubaya/i.test(kw)
+        ? [{ _id: 'd-sdb', PROVINCE_NAME: 'NUSA TENGGARA BARAT', CITY_NAME: 'MATARAM', CITY_NAME_SI: 'Kota Mataram', DISTRICT_NAME: 'SANDUBAYA', SUBDISTRICT_NAME: 'X' }]
+        : ROWS_MATARAM,
+    );
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok'); // pra-fix: need_more_detail selamanya
+    expect(res.quote.province).toBe('NUSA TENGGARA BARAT');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('mau ambil berapa pcs kak?'); // funnel lanjut (viaPilihan)
+  });
+
+  it('giliran minta-kecamatan: draft menggantung "konfirmasi ke admin" → DITAHAN; minta kecamatan → sah', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram nusa tenggara barat berapa kak?',
+      extract: { kota: 'Mataram', provinsi: 'Nusa Tenggara Barat', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('need_more_detail');
+    await h.svc.getGroundingText('c1');
+    const buruk = await h.svc.resolvePriceTokens('c1', 'Untuk ongkirnya, saya akan bantu konfirmasi dulu ke admin ya kak 🙏');
+    expect(buruk.ok).toBe(false);
+    const baik = await h.svc.resolvePriceTokens('c1', 'Boleh sebut kecamatannya kak? biar ongkirnya langsung ketemu 🙏');
+    expect(baik.ok).toBe(true);
+  });
+});
+// <<< ANGGA
+
 describe('P5 — alat debug search keyword (dipakai widget Settings Ongkir)', () => {
   it('mengembalikan baris mentah + ringkasan kelompok ber-level', async () => {
     const h = harness({ addresses: ROWS_MATARAM });
