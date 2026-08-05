@@ -594,7 +594,16 @@ export class ShippingService {
   // giliran (katalog penanda yang dilihat model ≠ nilai yang disubstitusi
   // gerbang). Kunci memo = id + isi pesan customer terakhir; percakapan yang
   // sama selalu menimpa entrinya sendiri (satu entri per percakapan).
-  private readonly turnMemo = new Map<string, { key: string; lastText: string; result: ShippingResult }>();
+  private readonly turnMemo = new Map<string, {
+    key: string;
+    lastText: string;
+    result: ShippingResult;
+    /** >>> ANGGA — Q-Chain fix (2026-08-05, insiden "banyumas kak"): true =
+     *  giliran ini ME-RESOLVE pilihan (tujuan/barang/keranjang) — teksnya
+     *  polos tanpa kata uang, tapi ia bagian alur ongkir; penjaga funnel &
+     *  anti-kontradiksi WAJIB tetap menyala. <<< */
+    viaPilihan?: boolean;
+  }>();
   // <<< ANGGA
 
   /** >>> ANGGA: true selama TIDAK ada produk aktif yang beratnya melebihi berat
@@ -725,8 +734,11 @@ export class ShippingService {
     const memoKey = `${lastMsg.id}:${lastCustomerText}`;
     const memo = this.turnMemo.get(conversationId);
     if (memo && memo.key === memoKey) return memo.result;
+    // >>> ANGGA — Q-Chain fix (insiden "banyumas kak"): flag giliran-pilihan.
+    let turnViaPilihan = false;
+    // <<< ANGGA
     const finish = (result: ShippingResult): ShippingResult => {
-      this.turnMemo.set(conversationId, { key: memoKey, lastText: lastCustomerText, result });
+      this.turnMemo.set(conversationId, { key: memoKey, lastText: lastCustomerText, result, viaPilihan: turnViaPilihan });
       while (this.turnMemo.size > MAX_TURN_MEMO_ENTRIES) {
         const oldest = this.turnMemo.keys().next().value;
         if (oldest === undefined) break;
@@ -883,6 +895,7 @@ export class ShippingService {
           : pendingItems.candidates.map((c) => ({ name: c.name, qty: 1 })));
         choiceCity = pendingItems.city;
         konklusiKeranjang = true;
+        turnViaPilihan = true; // >>> ANGGA — Q-Chain fix <<<
       } else {
         // <<< ANGGA
         const chosen = pilihBarang(pendingItems.candidates, lastCustomerText, oc);
@@ -891,6 +904,7 @@ export class ShippingService {
           itemsFromChoice = [{ name: chosen.name, qty: patchQty(lastCustomerText) ?? pendingItems.qty }];
           choiceCity = pendingItems.city;
           if (pendingItems.mode === 'keranjang') konklusiKeranjang = true; // >>> ANGGA — Q-Chain <<<
+          turnViaPilihan = true; // >>> ANGGA — Q-Chain fix <<<
         }
       }
     }
@@ -1147,6 +1161,7 @@ export class ShippingService {
     const pendingTujuan = this.cache.pending(conversationId);
     const dipilih = pilihKandidat(pendingTujuan, lastCustomerText);
     if (dipilih) {
+      turnViaPilihan = true; // >>> ANGGA — Q-Chain fix (insiden "banyumas kak") <<<
       this.cache.clearPending(conversationId);
       this.cache.resetAsks(conversationId);
       this.cache.reset(conversationId);
@@ -1159,6 +1174,7 @@ export class ShippingService {
     if (pendingTujuan.length > 1) {
       const subset = kandidatCocok(pendingTujuan, lastCustomerText);
       if (subset.length > 1 && subset.length < pendingTujuan.length) {
+        turnViaPilihan = true; // >>> ANGGA — Q-Chain fix <<<
         return finalize({ status: 'ambiguous', candidates: subset, sempit: true });
       }
     }
@@ -1537,9 +1553,15 @@ export class ShippingService {
 
     // Directive hanya untuk giliran JAWABAN UANG (harga/ongkir/qty/total) —
     // belokan/basa-basi TIDAK didorong (ketok Bossfren: "ikuti alur customer").
-    const teksG = this.turnMemo.get(conversationId)?.lastText ?? '';
+    const memoG = this.turnMemo.get(conversationId);
+    const teksG = memoG?.lastText ?? '';
+    // >>> ANGGA — Q-Chain fix (2026-08-05, insiden "banyumas kak"): giliran
+    // yang ME-RESOLVE pilihan (jawaban atas pertanyaan tujuan/barang/keranjang
+    // kita sendiri) dihitung giliran uang WALAU teksnya tanpa kata uang —
+    // "banyumas kak" adalah jawaban ongkir, funnel wajib lanjut, bukan diam. <<<
     const jawabanUang =
       opts.hargaTurn === true ||
+      memoG?.viaPilihan === true ||
       adaKataTanyaUang(teksG, oc.orderMoneyAskKeywords) ||
       hasAggregateKeyword(teksG, oc.orderAggregateKeywords) ||
       PLACE_HINT.test(teksG) ||
@@ -1702,6 +1724,7 @@ export class ShippingService {
         const oc = await this.settings.orderContext();
         const teksTerakhir = memoNego?.lastText ?? '';
         const obrolanOrder =
+          memoNego?.viaPilihan === true || // >>> ANGGA — Q-Chain fix: jawaban pilihan = obrolan order <<<
           adaKataTanyaUang(teksTerakhir, oc.orderMoneyAskKeywords) ||
           hasAggregateKeyword(teksTerakhir, oc.orderAggregateKeywords) ||
           hasAggregateKeyword(teksTerakhir, oc.orderDeixisKeywords) ||
@@ -2109,8 +2132,14 @@ export class ShippingService {
     // garansi yang dijawab "saya cek ke tim dulu" itu sah), (c) frasa
     // penyangkalan dari daftar AppSetting muncul di teks final.
     if (quote) {
-      const teksGiliran = this.turnMemo.get(conversationId)?.lastText ?? '';
+      const memoGiliran = this.turnMemo.get(conversationId);
+      const teksGiliran = memoGiliran?.lastText ?? '';
+      // >>> ANGGA — Q-Chain fix (2026-08-05, insiden "banyumas kak"): jawaban
+      // pilihan tujuan/barang ("banyumas kak") tak punya kata uang, tapi
+      // kutipan giliran itu SUDAH dihitung — draft "saya akan cek dulu ya kak…
+      // konfirmasi ke admin" wajib ikut kena penjaga kontradiksi ini. <<<
       const giliranUang =
+        memoGiliran?.viaPilihan === true ||
         adaKataTanyaUang(teksGiliran, cfg.orderMoneyAskKeywords) ||
         PLACE_HINT.test(teksGiliran) ||
         ORDER_CHANGE_HINT.test(teksGiliran);

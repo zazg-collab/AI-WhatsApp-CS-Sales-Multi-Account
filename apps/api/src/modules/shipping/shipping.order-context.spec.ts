@@ -46,7 +46,10 @@ const OC = {
   orderMetaPhraseBlacklist: ['penanda', 'placeholder', 'instruksi sistem', 'gerbang uang', 'grounding', 'informasi harga yang akurat', 'informasi ongkir yang akurat', 'dicek kembali di chat', 'cek chat ini'],
   // <<< ANGGA
   // >>> ANGGA — P2 (2026-08-05): frasa kontradiksi "menyangkal data yang tersedia".
-  orderContradictionPhrases: ['belum memiliki informasi', 'belum ada informasi', 'belum punya info', 'tidak memiliki informasi', 'belum bisa memastikan', 'akan saya cek dulu', 'cek dengan tim', 'tim logistik', 'menghubungkan dengan tim', 'akan segera memberikan informasi'],
+  // >>> ANGGA — Q-Chain fix (2026-08-05, insiden "banyumas kak"): + varian
+  // urutan kata 'akan cek dulu'/'saya akan cek'/'akan konfirmasi ke admin'
+  // (cermin default settings.service; 'konfirmasi dulu ke admin' tetap sah).
+  orderContradictionPhrases: ['belum memiliki informasi', 'belum ada informasi', 'belum punya info', 'tidak memiliki informasi', 'belum bisa memastikan', 'akan saya cek dulu', 'cek dengan tim', 'tim logistik', 'menghubungkan dengan tim', 'akan segera memberikan informasi', 'akan cek dulu', 'saya akan cek', 'akan konfirmasi ke admin'],
   // <<< ANGGA
   // >>> ANGGA — Q-Chain (2026-08-05, ketok Bossfren): funnel pertanyaan berantai.
   orderFunnelEnabled: true,
@@ -1066,6 +1069,72 @@ describe('Q-Chain — funnel pertanyaan berantai (urutan pakem)', () => {
     expect(
       klasifikasiAlasanGate('Balasan melanggar alur penjualan wajib — tidak menutup dengan pertanyaan langkah "qty".'),
     ).toBe('funnel_dilanggar');
+  });
+});
+// <<< ANGGA
+
+// >>> ANGGA — Q-Chain fix (2026-08-05, REPLAY insiden "banyumas kak"): giliran
+// yang menjawab pertanyaan pilihan kita SENDIRI ("Purwokertonya mana ya kak?"
+// → "banyumas kak") tidak membawa kata uang, sehingga funnel directive, penjaga
+// kontradiksi P2, dan gerbang F2 semua melompatinya — draft "saya akan cek dulu
+// ya kak… konfirmasi ke admin" lolos TAK tertahan. Perbaikan: flag `viaPilihan`
+// di turnMemo (giliran resolusi pilihan = giliran uang) + varian frasa
+// kontradiksi beda urutan kata. RED-first terhadap kode pra-perbaikan.
+
+const ROWS_PURWOKERTO = [
+  { _id: 'd-bms', PROVINCE_NAME: 'JAWA TENGAH', CITY_NAME: 'BANYUMAS', CITY_NAME_SI: 'Kab. Banyumas', DISTRICT_NAME: 'PURWOKERTO UTARA', SUBDISTRICT_NAME: 'X' },
+  { _id: 'd-lamteng2', PROVINCE_NAME: 'LAMPUNG', CITY_NAME: 'LAMPUNG TENGAH', CITY_NAME_SI: 'Kab. Lampung Tengah', DISTRICT_NAME: 'PURWOKERTO', SUBDISTRICT_NAME: 'Y' },
+];
+
+describe('Q-Chain fix — REPLAY "banyumas kak": jawaban pilihan = giliran uang', () => {
+  it('jawaban pilihan tujuan → funnel TETAP maju (tanya qty) walau tanpa kata uang', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke purwokerto berapa kak?',
+      extract: { kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_PURWOKERTO,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    pesanBaru(h, 'm2', 'banyumas kak'); // persis jawaban pelanggan di insiden
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.city).toBe('BANYUMAS');
+    const grounding = await h.svc.getGroundingText('c1');
+    // Pra-fix: jawabanUang=false → directive absen → model bebas ngaco.
+    expect(grounding).toContain('mau ambil berapa pcs kak?');
+  });
+
+  it('draft ngaco insiden ("saya akan cek dulu… konfirmasi ke admin") → DITAHAN', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke purwokerto berapa kak?',
+      extract: { kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_PURWOKERTO,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+    pesanBaru(h, 'm2', 'banyumas kak');
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+
+    // Kutipan giliran ini SUDAH dihitung — draft di bawah (persis dari insiden)
+    // menyangkalnya. Pra-fix lolos: 'banyumas kak' tak berkata uang (P2 skip)
+    // dan 'saya akan cek dulu' beda urutan dari daftar 'akan saya cek dulu'.
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Baik kak, saya bantu cek ongkir ke Banyumas, Purwokerto 🙏 Untuk detail ongkir dan total biayanya, saya akan cek dulu ya kak. Nanti saya akan konfirmasi ke admin untuk memastikan biayanya.',
+    );
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toContain('menyangkal');
+  });
+
+  it('giliran BUKAN pilihan & bukan uang → frasa cek-dulu tetap sah (tidak salah tangkap)', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak?',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    pesanBaru(h, 'm2', 'kalau garansinya gimana kak?');
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok'); // cache
+    const out = await h.svc.resolvePriceTokens('c1', 'Untuk garansi, saya akan cek dulu ke tim ya kak 🙏');
+    expect(out.ok).toBe(true);
   });
 });
 // <<< ANGGA

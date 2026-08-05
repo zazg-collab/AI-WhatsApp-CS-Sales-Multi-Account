@@ -253,6 +253,13 @@ export class SettingsService {
           'tidak memiliki informasi', 'belum bisa memastikan', 'akan saya cek dulu',
           'cek dengan tim', 'tim logistik', 'menghubungkan dengan tim',
           'akan segera memberikan informasi',
+          // >>> ANGGA — Q-Chain fix (2026-08-05, insiden "banyumas kak"): draft
+          // nyata lolos karena urutan katanya beda ('saya AKAN CEK DULU ya kak',
+          // bukan 'akan saya cek dulu'). Varian di bawah menambal celah urutan
+          // kata; 'konfirmasi dulu ke admin' TIDAK dimasukkan — itu fallback sah
+          // BASE_RULES #3 saat data memang tidak ada.
+          'akan cek dulu', 'saya akan cek', 'akan konfirmasi ke admin',
+          // <<< ANGGA
         ]),
         // <<< ANGGA
         // >>> ANGGA — Q-Chain (2026-08-05, ketok Bossfren): funnel pertanyaan
