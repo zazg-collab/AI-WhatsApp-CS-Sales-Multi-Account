@@ -1367,6 +1367,53 @@ describe('Tangga BARANG terbuka — REPLAY "golok sembelih" → "konfirmasi ke a
 });
 // <<< ANGGA
 
+// >>> ANGGA — REPLAY insiden "GSM Naga Merah" (2026-08-05): percakapan lahir
+// dari FORM (penawaran Bedog) → "ongkir ke mataram?" → jawab qty "1 aja kak".
+// Pra-fix: (a) funnel tak menghitung penawaran form sebagai barang → tanya
+// "produknya mana" (bebal); (b) jawaban qty polos ditelan cache ongkir-doang →
+// sistem tak pernah tahu barangnya → model ngarang produk lain dari katalog.
+
+describe('Jalur FORM → ongkir → qty (REPLAY "GSM Naga Merah")', () => {
+  it('jawaban-pilihan kota → tanya QTY (bukan "produknya mana"); "1 aja kak" → kutipan penuh + TOTAL', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke purwokerto berapa?',
+      extract: { kota: 'Purwokerto', items: [] },
+      addresses: ROWS_PURWOKERTO,
+      offers: [offer([{ productId: 'p-bedog', name: 'Bedog Betekok' }])],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    // Jawaban pilihan kota — jalur yang TIDAK lewat carry/penawaran → ongkir-doang.
+    pesanBaru(h, 'm2', 'banyumas kak');
+    const r2: any = await h.svc.quoteForConversation('c1');
+    expect(r2.status).toBe('ok');
+    expect(r2.quote.shippingOnly).toBe(true);
+    const g2 = await h.svc.getGroundingText('c1');
+    expect(g2).toContain('mau ambil berapa pcs kak?'); // pra-fix: "produknya mau yang mana kak?" (bebal)
+    expect(g2).not.toContain('produknya mau yang mana kak?');
+
+    // Jawaban qty polos — pra-fix DITELAN cache ongkir-doang → model ngarang produk.
+    pesanBaru(h, 'm3', '1 aja kak');
+    (h.provider.chat as jest.Mock).mockResolvedValue(JSON.stringify({ kota: null, items: [] }));
+    const r3: any = await h.svc.quoteForConversation('c1');
+    expect(r3.status).toBe('ok');
+    expect(r3.quote.shippingOnly).toBe(false); // naik kelas: kutipan penuh dari penawaran form
+    expect(r3.quote.matchedItems).toEqual([
+      expect.objectContaining({ name: 'Bedog Betekok', qty: 1 }),
+    ]);
+
+    // Snapshot giliran ini ter-persist (qtyPasti dari "1 aja") — tiru untuk
+    // pembacaan funnel berikutnya (mock candidates statis).
+    (h.orderLog.candidates as jest.Mock).mockResolvedValue([
+      entry([{ productId: 'p-bedog', name: 'Bedog Betekok', qty: 1 }], { qtyPasti: true }),
+    ]);
+    const g3 = await h.svc.getGroundingText('c1');
+    expect(g3).toContain('{{rincian_tagihan}}'); // qty pasti → SODORKAN TOTAL
+    expect(g3).toContain('mau diproses COD atau transfer kak?');
+  });
+});
+// <<< ANGGA
+
 describe('P5 — alat debug search keyword (dipakai widget Settings Ongkir)', () => {
   it('mengembalikan baris mentah + ringkasan kelompok ber-level', async () => {
     const h = harness({ addresses: ROWS_MATARAM });

@@ -814,7 +814,11 @@ export class ShippingService {
         sebutProduk = mentionsCatalogProduct(lastCustomerText, produkAktif);
       }
       // <<< ANGGA
-      if (cached && !adaPendingPilihan && !sebutProduk) {
+      // >>> ANGGA — insiden "GSM Naga Merah" (2026-08-05): jawaban QTY polos
+      // ("1 aja kak") TIDAK boleh dijawab cache apa adanya — qty-nya berubah,
+      // kutipan wajib dihitung ulang (jalur carry/penawaran menerapkan qty
+      // baru; kutipan ongkir-doang naik kelas jadi kutipan penuh). <<<
+      if (cached && !adaPendingPilihan && !sebutProduk && patchQty(lastCustomerText) == null) {
         this.cache.recordOutcome(conversationId, 'ok');
         return finish({ status: 'ok', quote: cached });
       }
@@ -1619,6 +1623,21 @@ export class ShippingService {
     if (opts.quote && !opts.quote.shippingOnly) {
       for (const m of opts.quote.matchedItems) if (m.productId && !produk.has(m.productId)) produk.set(m.productId, m.name);
     }
+    // >>> ANGGA — insiden "GSM Naga Merah" (2026-08-05): PENAWARAN segar
+    // (seed form/M1) dihitung "barang sudah jelas". Tanpa ini, percakapan
+    // yang lahir dari form (jalur traffic utama) dianggap tanpa barang —
+    // funnel menanyakan "produknya mana" padahal form sudah menyebutnya,
+    // dan model bisa ngarang nama produk lain dari katalog.
+    if (produk.size === 0) {
+      try {
+        for (const o of (await this.orderLog.recentOffers(conversationId)).filter((x) => x.fresh)) {
+          for (const it of o.items ?? []) {
+            if (it.productId && !produk.has(it.productId)) produk.set(it.productId, it.name);
+          }
+        }
+      } catch { /* penawaran gagal dibaca = anggap tidak ada */ }
+    }
+    // <<< ANGGA
     // Giliran HARGA (blok harga produk aktif): barang jelas sedang disebut
     // pelanggan walau belum masuk log — jangan salah tanya "produknya mana".
     const adaBarang = produk.size > 0 || opts.hargaTurn === true;
