@@ -1536,6 +1536,47 @@ describe('JAWABAN KECAMATAN — REPLAY "sandubaya kak"', () => {
 });
 // <<< ANGGA
 
+// >>> ANGGA — VARIAN "KOTA <nama>" (2026-08-05, IDE BOSSFREN #2/#3): data
+// Mengantar menamai kota besar dengan awalan jenis → search polos menenggelamkan
+// kota aslinya. Varian "kota/kabupaten <nama>" memperkaya kandidat sehingga
+// pengecualian kecocokan-persis-level-kota akhirnya bisa melihat kotanya.
+
+describe('Varian "kota <nama>" — akar drama mataram', () => {
+  it('"mataram" polos tenggelam derau Lampung → varian menemukan Kota Mataram → resolve JUJUR', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Mataram', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) =>
+      /^kota mataram$/i.test(kw)
+        ? [{ _id: 'd-mtr', PROVINCE_NAME: 'NUSA TENGGARA BARAT', CITY_NAME: 'MATARAM', CITY_NAME_SI: 'Kota Mataram', DISTRICT_NAME: 'SANDUBAYA', SUBDISTRICT_NAME: 'X' }]
+        : ROWS_MATARAM,
+    );
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok'); // pra-fix: ambiguous — Kota Mataram tak pernah terlihat
+    expect(res.quote.province).toBe('NUSA TENGGARA BARAT');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('mau ambil berapa pcs kak?'); // funnel lanjut
+  });
+
+  it('tetap jujur: "bandung" = Kota vs Kab. Bandung → BERTANYA, bukan auto', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke bandung berapa kak?',
+      extract: { kota: 'Bandung', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) => {
+      if (/^kota bandung$/i.test(kw))
+        return [{ _id: 'd-kb', PROVINCE_NAME: 'JAWA BARAT', CITY_NAME: 'BANDUNG', CITY_NAME_SI: 'Kota Bandung', DISTRICT_NAME: 'COBLONG', SUBDISTRICT_NAME: 'X' }];
+      if (/^kabupaten bandung$/i.test(kw))
+        return [{ _id: 'd-kab', PROVINCE_NAME: 'JAWA BARAT', CITY_NAME: 'BANDUNG', CITY_NAME_SI: 'Kab. Bandung', DISTRICT_NAME: 'SOREANG', SUBDISTRICT_NAME: 'Y' }];
+      return []; // search polos: kota tenggelam total
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ambiguous'); // dua kecocokan level-kota → wajib bertanya
+  });
+});
+// <<< ANGGA
+
 describe('P5 — alat debug search keyword (dipakai widget Settings Ongkir)', () => {
   it('mengembalikan baris mentah + ringkasan kelompok ber-level', async () => {
     const h = harness({ addresses: ROWS_MATARAM });

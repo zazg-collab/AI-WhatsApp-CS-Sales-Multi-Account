@@ -1264,6 +1264,18 @@ export class ShippingService {
           const saring = urut.filter((c) => normalisasiProvinsi(c.province) === provJawab);
           if (saring.length) urut = saring;
         }
+        // >>> ANGGA — IDE BOSSFREN #1 (2026-08-05): SILANG dua lokasi — kota
+        // dari konteks/ekstraktor ("Mataram") dipakai menyaring kandidat
+        // jawaban kecamatan ("Sandubaya" cocok banyak tempat → yang kotanya
+        // memuat "mataram" itulah maksudnya). <<<
+        if (urut.length > 1 && extract.city) {
+          const kotaK = extract.city.trim().toLowerCase();
+          if (kotaK) {
+            const silang = urut.filter((c) => `${c.city} ${c.cityLabel}`.toLowerCase().includes(kotaK));
+            if (silang.length) urut = silang;
+          }
+        }
+        // <<< ANGGA
         if (kandidatDominan(urut)) {
           turnViaPilihan = true; // jawaban atas pertanyaan kita = giliran uang
           this.cache.clearPending(conversationId);
@@ -1363,6 +1375,37 @@ export class ShippingService {
       return { status: 'api_error' };
     }
     let urut = resolveDestination(rows, dicari);
+    // >>> ANGGA — VARIAN "KOTA/KABUPATEN <nama>" (2026-08-05, IDE BOSSFREN
+    // #2/#3, akar drama mataram/sandubaya): data Mengantar menamai banyak kota
+    // besar dengan awalan jenis ("Kota Mataram", "Kota Bandung") — search
+    // polos "mataram" MENENGGELAMKAN Kota Mataram di derau kelurahan Lampung
+    // (potongan 50 baris), jadi pengecualian kecocokan-persis-level-kota tidak
+    // pernah kebagian melihat kotanya. Kalau hasil polos belum dominan, cari
+    // juga varian "kota <nama>" & "kabupaten <nama>", nilai barisnya terhadap
+    // KEDUA bentuk kata kunci, gabungkan (dedupe per provinsi+kota+label).
+    // Tetap jujur: "bandung" (Kota vs Kab. = 2 kecocokan kota) tetap BERTANYA
+    // — kandidatDominan hanya auto saat kecocokan kotanya TEPAT SATU.
+    if (!kandidatDominan(urut)) {
+      const tampung = new Map<string, DestinationCandidate>();
+      const masuk = (c: DestinationCandidate) => {
+        const key = `${c.province}|${c.city}|${c.cityLabel}`.toLowerCase();
+        const ada = tampung.get(key);
+        if (!ada || LEVEL_RANK[c.level] < LEVEL_RANK[ada.level]) tampung.set(key, c);
+      };
+      for (const c of urut) masuk(c);
+      for (const varian of [`kota ${dicari}`, `kabupaten ${dicari}`]) {
+        try {
+          const rows2 = await this.mengantar.searchAddress(varian);
+          if (!rows2?.length) continue;
+          for (const c of resolveDestination(rows2, dicari)) masuk(c);
+          for (const c of resolveDestination(rows2, varian)) masuk(c);
+        } catch { /* varian gagal = abaikan, hasil polos tetap dipakai */ }
+      }
+      urut = Array.from(tampung.values()).sort(
+        (a, b) => LEVEL_RANK[a.level] - LEVEL_RANK[b.level] || b.rows - a.rows,
+      );
+    }
+    // <<< ANGGA
     if (!urut.length) {
       this.logger.warn(`Ongkir [need_more_detail]: "${dicari}" — ${rows.length} baris hasil search, nol kandidat kota/kabupaten yang cocok (kemungkinan tenggelam di potongan 50 baris; minta kecamatan)`);
     }
