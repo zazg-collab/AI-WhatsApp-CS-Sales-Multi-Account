@@ -1255,7 +1255,24 @@ export class ShippingService {
         .filter((w) => w.length >= 4 && !generik.has(w))
         .slice(0, 3);
       for (const w of kataJawaban) {
-        const rows = await this.mengantar.searchAddress(terapkanAlias(w, cfg.destinationAliases));
+        // >>> ANGGA — KETOK BOSSFREN (2026-08-05 malam, DIBUKTIKAN di API
+        // nyata via widget): saat stuck, GABUNGKAN jawaban kedua + konteks
+        // pertama jadi SATU keyword search — "sandubaya mataram" → 7 baris
+        // presisi Kota Mataram NTB, "purwokerto banyumas" → 27 baris Kab.
+        // Banyumas. Penilaian kandidat tetap memakai KATA JAWABAN (baris
+        // "SANDUBAYA (SANDUJAYA)" dinilai vs "sandubaya", bukan vs keyword
+        // gabungan yang tak akan pernah cocok utuh). Gabungan dicoba dulu,
+        // kata polos jadi cadangan. <<<
+        const kotaKonteks = (extract.city ?? '').trim().toLowerCase();
+        const cobaKeyword = [
+          ...(kotaKonteks && kotaKonteks !== w ? [`${w} ${kotaKonteks}`] : []),
+          w,
+        ];
+        let rows: MengantarAddress[] | null = null;
+        for (const kw of cobaKeyword) {
+          rows = await this.mengantar.searchAddress(terapkanAlias(kw, cfg.destinationAliases));
+          if (rows?.length) break;
+        }
         if (!rows?.length) continue;
         let urut = resolveDestination(rows, w);
         if (!urut.length) continue;
@@ -1375,37 +1392,12 @@ export class ShippingService {
       return { status: 'api_error' };
     }
     let urut = resolveDestination(rows, dicari);
-    // >>> ANGGA — VARIAN "KOTA/KABUPATEN <nama>" (2026-08-05, IDE BOSSFREN
-    // #2/#3, akar drama mataram/sandubaya): data Mengantar menamai banyak kota
-    // besar dengan awalan jenis ("Kota Mataram", "Kota Bandung") — search
-    // polos "mataram" MENENGGELAMKAN Kota Mataram di derau kelurahan Lampung
-    // (potongan 50 baris), jadi pengecualian kecocokan-persis-level-kota tidak
-    // pernah kebagian melihat kotanya. Kalau hasil polos belum dominan, cari
-    // juga varian "kota <nama>" & "kabupaten <nama>", nilai barisnya terhadap
-    // KEDUA bentuk kata kunci, gabungkan (dedupe per provinsi+kota+label).
-    // Tetap jujur: "bandung" (Kota vs Kab. = 2 kecocokan kota) tetap BERTANYA
-    // — kandidatDominan hanya auto saat kecocokan kotanya TEPAT SATU.
-    if (!kandidatDominan(urut)) {
-      const tampung = new Map<string, DestinationCandidate>();
-      const masuk = (c: DestinationCandidate) => {
-        const key = `${c.province}|${c.city}|${c.cityLabel}`.toLowerCase();
-        const ada = tampung.get(key);
-        if (!ada || LEVEL_RANK[c.level] < LEVEL_RANK[ada.level]) tampung.set(key, c);
-      };
-      for (const c of urut) masuk(c);
-      for (const varian of [`kota ${dicari}`, `kabupaten ${dicari}`]) {
-        try {
-          const rows2 = await this.mengantar.searchAddress(varian);
-          if (!rows2?.length) continue;
-          for (const c of resolveDestination(rows2, dicari)) masuk(c);
-          for (const c of resolveDestination(rows2, varian)) masuk(c);
-        } catch { /* varian gagal = abaikan, hasil polos tetap dipakai */ }
-      }
-      urut = Array.from(tampung.values()).sort(
-        (a, b) => LEVEL_RANK[a.level] - LEVEL_RANK[b.level] || b.rows - a.rows,
-      );
-    }
-    // <<< ANGGA
+    // >>> ANGGA — DICABUT 2026-08-05 malam (uji API NYATA Bossfren via widget):
+    // varian "kota <nama>"/"kabupaten <nama>" TIDAK berguna — search "kota
+    // mataram" mengembalikan NOL baris di API Mengantar. Solusi yang benar =
+    // GABUNG DUA JAWABAN di tangga jawaban ("sandubaya mataram" → 7 baris
+    // presisi Kota Mataram NTB), lihat tangga jawaban-polos di
+    // quoteForConversation. <<<
     if (!urut.length) {
       this.logger.warn(`Ongkir [need_more_detail]: "${dicari}" — ${rows.length} baris hasil search, nol kandidat kota/kabupaten yang cocok (kemungkinan tenggelam di potongan 50 baris; minta kecamatan)`);
     }
@@ -2238,7 +2230,16 @@ export class ShippingService {
     const dicari = terapkanAlias(keyword, cfg.destinationAliases);
     const rows = await this.mengantar.searchAddress(dicari);
     if (rows === null) return { keyword, dicari, total: 0, gagal: true, rows: [], groups: [] };
-    const urut = resolveDestination(rows, dicari);
+    let urut = resolveDestination(rows, dicari);
+    // >>> ANGGA — temuan widget Bossfren (2026-08-05): keyword GABUNGAN
+    // ("sandubaya mataram") memunculkan baris tapi NOL kelompok kandidat —
+    // pencocok level tak pernah cocok dengan frasa utuh. Nilai per kata. <<<
+    if (!urut.length && /\s/.test(dicari)) {
+      for (const w of dicari.split(/\s+/).filter((x) => x.length >= 4)) {
+        urut = resolveDestination(rows, w);
+        if (urut.length) break;
+      }
+    }
     return {
       keyword,
       dicari,

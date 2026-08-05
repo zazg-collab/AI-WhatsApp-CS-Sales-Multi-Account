@@ -441,10 +441,7 @@ describe('ANGGA — jawaban pelanggan dipetakan ke pilihan yang tadi ditawarkan'
   it('"kab bogor" → langsung dihitung, TANPA pencarian alamat kedua', async () => {
     const h = harness(bogorDua);
     expect((await h.svc.quoteForConversation('c1')).status).toBe('ambiguous');
-    // >>> ANGGA — revisi sadar 2026-08-05 (varian "kota/kabupaten <nama>", ide
-    // Bossfren): giliran pencarian awal kini boleh 3 panggilan (polos + 2
-    // varian). Inti tes ini tetap: giliran JAWABAN tidak mencari lagi.
-    expect(h.mengantar.searchAddress).toHaveBeenCalledTimes(3);
+    expect(h.mengantar.searchAddress).toHaveBeenCalledTimes(1);
 
     h.prisma.message.findFirst.mockResolvedValue({ id: 'm2', content: 'kab bogor kak' });
     h.prisma.conversation.findUnique.mockResolvedValue({
@@ -453,7 +450,7 @@ describe('ANGGA — jawaban pelanggan dipetakan ke pilihan yang tadi ditawarkan'
     });
     const res: any = await h.svc.quoteForConversation('c1');
     expect(res.status).toBe('ok');
-    expect(h.mengantar.searchAddress).toHaveBeenCalledTimes(3); // tidak bertambah
+    expect(h.mengantar.searchAddress).toHaveBeenCalledTimes(1); // tidak bertambah
     expect(h.mengantar.estimate).toHaveBeenCalledWith(
       expect.objectContaining({ destinationId: 'kab-bgr' }),
     );

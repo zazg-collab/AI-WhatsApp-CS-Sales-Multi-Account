@@ -1536,43 +1536,42 @@ describe('JAWABAN KECAMATAN — REPLAY "sandubaya kak"', () => {
 });
 // <<< ANGGA
 
-// >>> ANGGA — VARIAN "KOTA <nama>" (2026-08-05, IDE BOSSFREN #2/#3): data
-// Mengantar menamai kota besar dengan awalan jenis → search polos menenggelamkan
-// kota aslinya. Varian "kota/kabupaten <nama>" memperkaya kandidat sehingga
-// pengecualian kecocokan-persis-level-kota akhirnya bisa melihat kotanya.
+// >>> ANGGA — GABUNG DUA JAWABAN (2026-08-05 malam, KETOK BOSSFREN, dibuktikan
+// di API NYATA via widget): "kota mataram" = NOL baris (varian jenis-kota
+// DICABUT), tapi "sandubaya mataram" = 7 baris presisi Kota Mataram NTB.
+// Saat stuck: jawaban kedua + konteks pertama digabung jadi SATU keyword.
 
-describe('Varian "kota <nama>" — akar drama mataram', () => {
-  it('"mataram" polos tenggelam derau Lampung → varian menemukan Kota Mataram → resolve JUJUR', async () => {
+describe('GABUNG DUA JAWABAN — "sandubaya mataram" (data API nyata)', () => {
+  it('jawaban kecamatan digabung kota konteks → search presisi → resolve + funnel lanjut', async () => {
     const h = harness({
       lastCustomerText: 'ongkir ke mataram berapa kak? golok sembelih multifungsi',
       extract: { kota: 'Mataram', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
     });
-    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) =>
-      /^kota mataram$/i.test(kw)
-        ? [{ _id: 'd-mtr', PROVINCE_NAME: 'NUSA TENGGARA BARAT', CITY_NAME: 'MATARAM', CITY_NAME_SI: 'Kota Mataram', DISTRICT_NAME: 'SANDUBAYA', SUBDISTRICT_NAME: 'X' }]
-        : ROWS_MATARAM,
-    );
-    const res: any = await h.svc.quoteForConversation('c1');
-    expect(res.status).toBe('ok'); // pra-fix: ambiguous — Kota Mataram tak pernah terlihat
-    expect(res.quote.province).toBe('NUSA TENGGARA BARAT');
-    const grounding = await h.svc.getGroundingText('c1');
-    expect(grounding).toContain('mau ambil berapa pcs kak?'); // funnel lanjut
-  });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
 
-  it('tetap jujur: "bandung" = Kota vs Kab. Bandung → BERTANYA, bukan auto', async () => {
-    const h = harness({
-      lastCustomerText: 'ongkir ke bandung berapa kak?',
-      extract: { kota: 'Bandung', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
-    });
+    pesanBaru(h, 'm2', 'sandubaya kak');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Mataram', provinsi: 'Nusa Tenggara Barat', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    // Persis perilaku API nyata (widget Bossfren): gabungan presisi, kata
+    // polos sendirian TIDAK dites kemurahannya (dibuat gagal di mock ini
+    // supaya terbukti jalur GABUNGAN yang dipakai).
     (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) => {
-      if (/^kota bandung$/i.test(kw))
-        return [{ _id: 'd-kb', PROVINCE_NAME: 'JAWA BARAT', CITY_NAME: 'BANDUNG', CITY_NAME_SI: 'Kota Bandung', DISTRICT_NAME: 'COBLONG', SUBDISTRICT_NAME: 'X' }];
-      if (/^kabupaten bandung$/i.test(kw))
-        return [{ _id: 'd-kab', PROVINCE_NAME: 'JAWA BARAT', CITY_NAME: 'BANDUNG', CITY_NAME_SI: 'Kab. Bandung', DISTRICT_NAME: 'SOREANG', SUBDISTRICT_NAME: 'Y' }];
-      return []; // search polos: kota tenggelam total
+      if (/^sandubaya mataram$/i.test(kw))
+        return [
+          { _id: 'd-sdb1', PROVINCE_NAME: 'NUSA TENGGARA BARAT (NTB)', CITY_NAME: 'MATARAM', CITY_NAME_SI: 'Kota Mataram', DISTRICT_NAME: 'SANDUBAYA (SANDUJAYA)', SUBDISTRICT_NAME: 'DASAN CERMEN' },
+          { _id: 'd-sdb2', PROVINCE_NAME: 'NUSA TENGGARA BARAT (NTB)', CITY_NAME: 'MATARAM', CITY_NAME_SI: 'Kota Mataram', DISTRICT_NAME: 'SANDUBAYA (SANDUJAYA)', SUBDISTRICT_NAME: 'BERTAIS' },
+        ];
+      if (/^sandubaya$/i.test(kw)) return [];
+      return ROWS_MATARAM;
     });
     const res: any = await h.svc.quoteForConversation('c1');
-    expect(res.status).toBe('ambiguous'); // dua kecocokan level-kota → wajib bertanya
+    expect(res.status).toBe('ok'); // pra-ketok: need_more_detail selamanya
+    expect(res.quote.city).toBe('MATARAM');
+    expect(h.mengantar.searchAddress).toHaveBeenCalledWith('sandubaya mataram');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('mau ambil berapa pcs kak?');
   });
 });
 // <<< ANGGA
