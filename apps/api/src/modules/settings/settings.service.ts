@@ -167,6 +167,12 @@ export class SettingsService {
           // dialihkan ke kecamatan pusatnya yang bersih satu kota.
           malang: 'klojen',
           padang: 'padang barat',
+          // >>> ANGGA — 2026-08-05 (temuan live Bossfren): "mataram" malah
+          // resolve DOMINAN ke LAMPUNG TIMUR (banyak kelurahan "Mataram
+          // Baru" dkk di sana) — Kota Mataram NTB tenggelam. Kelas bug yang
+          // sama; dialihkan ke kecamatan pusat Kota Mataram yang namanya unik.
+          mataram: 'cakranegara',
+          // <<< ANGGA
         }),
       },
       // <<< ANGGA
