@@ -91,6 +91,11 @@ export interface ShippingQuote {
   codDiscount: number | null;
   /** codTotal - codDiscount. Null kalau COD tidak ditawarkan. */
   codTotalDiscounted: number | null;
+  // >>> ANGGA — addendum v2 P1: diskon BARANG per-pcs (opsional supaya kutipan
+  // lama di cache/fixture tetap sah). Sumber token {{diskon_barang}}/{{total_*_nego}}.
+  goodsDiscount?: number;
+  transferTotalNego?: number;
+  codTotalNego?: number | null;
   // <<< ANGGA
 }
 
@@ -218,6 +223,32 @@ export class ShippingQuoteCache {
       this.outcomes.delete(oldest);
     }
   }
+
+  // >>> ANGGA — addendum v2 P2: tangga NEGO, pola sama `asks` (sekali per
+  // pesan pelanggan). Ronde 1 → tawarkan token nego; ronde ≥2 → eskalasi admin.
+  private readonly negoAsks = new Map<string, { count: number; messageId: string }>();
+
+  bumpNego(conversationId: string, messageId: string): number {
+    const prev = this.negoAsks.get(conversationId);
+    if (prev && prev.messageId === messageId) return prev.count;
+    const next = { count: (prev?.count ?? 0) + 1, messageId };
+    this.negoAsks.set(conversationId, next);
+    while (this.negoAsks.size > MAX_QUOTE_ENTRIES) {
+      const oldest = this.negoAsks.keys().next().value;
+      if (oldest === undefined) break;
+      this.negoAsks.delete(oldest);
+    }
+    return next.count;
+  }
+
+  negoCount(conversationId: string): number {
+    return this.negoAsks.get(conversationId)?.count ?? 0;
+  }
+
+  resetNego(conversationId: string): void {
+    this.negoAsks.delete(conversationId);
+  }
+  // <<< ANGGA
 
   /** Naikkan penghitung SEKALI per pesan pelanggan. Mengembalikan ronde saat ini. */
   bumpAsk(conversationId: string, messageId: string): number {
@@ -359,6 +390,7 @@ export class ShippingQuoteCache {
     this.productPriceTokens.clear();
     this.itemPendings.clear(); // >>> ANGGA — Order Context Log <<<
     this.assumeds.clear(); // >>> ANGGA — Order Context Log <<<
+    this.negoAsks.clear(); // >>> ANGGA — addendum v2 P2 <<<
     this.hits = 0;
     this.misses = 0;
   }

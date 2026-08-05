@@ -78,6 +78,25 @@ const CONFIG = {
   destinationAliases: { solo: 'surakarta', malang: 'klojen' } as Record<string, string>,
 };
 
+// >>> ANGGA — addendum v2 M5: default kategori `orderContext` untuk harness.
+const OC_DEFAULTS = {
+  orderContextStaleHours: 24,
+  orderCancelKeywords: ['batal', 'gak jadi', 'ga jadi', 'nggak jadi', 'tidak jadi', 'cancel'],
+  orderAggregateKeywords: ['semuanya', 'semua', 'seluruhnya', 'sekaligus', 'digabung', 'gabung', 'totalin semua', 'dua-duanya', 'borong', 'sama yang tadi', 'sama yg tadi'],
+  orderAffirmationKeywords: ['iya', 'iyaa', 'ya', 'yup', 'betul', 'bener', 'benar', 'itu', 'oke', 'ok', 'sip', 'gas', 'boleh', 'mau', 'jadi', 'lanjut'],
+  orderNegationKeywords: ['gak', 'ga', 'nggak', 'ngga', 'bukan', 'jangan', 'tidak', 'no'],
+  orderFillerWords: ['kak', 'ka', 'dong', 'deh', 'aja', 'sih', 'min', 'gan', 'bang', 'mas', 'mbak', 'pak', 'bu', 'nya', 'yg', 'yang', 'yaudah', 'udah'],
+  orderClosingNote: '',
+  orderBridgeEnforcement: 'retry_once',
+  orderDeixisKeywords: ['yg ini', 'yang ini', 'yg itu', 'yang itu', 'ini aja', 'itu aja'],
+  orderOfferWindowMinutes: 60,
+  orderGlobalTokens: {} as Record<string, string>,
+  orderFormHintKeywords: ['form pemesanan', 'sudah melakukan pemesanan', 'mengisi form'],
+  orderReferenceKeywords: ['yang tadi', 'yg tadi', 'pesanan tadi', 'order tadi', 'yang kemarin', 'sebelumnya'],
+  orderNegoKeywords: ['diskon lagi', 'kurangin', 'murahin', 'free ongkir', 'gratis ongkir', 'nego', 'dikurangiin'],
+};
+// <<< ANGGA
+
 function addr(province: string, city: string, id: string, district = 'X', opts: { si?: string; sub?: string } = {}) {
   return {
     _id: id,
@@ -124,7 +143,12 @@ function harness(opts: HarnessOpts = {}) {
       count: jest.fn().mockResolvedValue(0),
     },
   };
-  const settings: any = { shipping: jest.fn().mockResolvedValue(cfg) };
+  // >>> ANGGA — addendum v2 M5: kebijakan memori order kini kategori sendiri.
+  const settings: any = {
+    shipping: jest.fn().mockResolvedValue(cfg),
+    orderContext: jest.fn().mockResolvedValue(OC_DEFAULTS),
+  };
+  // <<< ANGGA
   const provider: any = { chat: jest.fn().mockResolvedValue(JSON.stringify(extract)) };
 
   const estimate = jest.fn(async ({ codAmount }: any) => {

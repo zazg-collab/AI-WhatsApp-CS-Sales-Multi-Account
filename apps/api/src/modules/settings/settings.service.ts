@@ -10,6 +10,7 @@ import {
   SentinelSettings,
   CampaignSettings,
   ShippingSettings, // >>> ANGGA <<<
+  OrderContextSettings, // >>> ANGGA — addendum v2 M5 <<<
 } from './settings.types';
 
 /**
@@ -167,17 +168,21 @@ export class SettingsService {
           malang: 'klojen',
           padang: 'padang barat',
         }),
-        // >>> ANGGA — Order Context Log (blueprint 2026-08-04): kebijakan
-        // memori order percakapan. Angka & daftar default = ketok/usulan yang
-        // disetujui Bossfren 2026-08-04; semuanya bisa diubah dari
-        // /settings/shipping tanpa deploy, kode tidak punya salinannya.
+      },
+      // <<< ANGGA
+      // >>> ANGGA — Order Context Log (blueprint 2026-08-04 + addendum v2 M5
+      // 2026-08-05): kategori TERSENDIRI (ketok Bossfren — memori order bukan
+      // urusan kurir). Default = ketok/usulan yang disetujui; semuanya bisa
+      // diubah dari /settings/order-memory tanpa deploy.
+      orderContext: {
         orderContextStaleHours: this.num(this.config.get('ORDER_CONTEXT_STALE_HOURS'), 24),
         orderCancelKeywords: this.list(this.config.get('ORDER_CANCEL_KEYWORDS'), [
           'batal', 'gak jadi', 'ga jadi', 'nggak jadi', 'tidak jadi', 'cancel',
         ]),
         orderAggregateKeywords: this.list(this.config.get('ORDER_AGGREGATE_KEYWORDS'), [
           'semuanya', 'semua', 'seluruhnya', 'sekaligus', 'digabung', 'gabung',
-          'totalin semua', 'dua-duanya', 'tiga-tiganya', 'borong', 'sama yang tadi',
+          'totalin semua', 'dua-duanya', 'tiga-tiganya', 'borong',
+          'sama yang tadi', 'sama yg tadi',
         ]),
         orderAffirmationKeywords: this.list(this.config.get('ORDER_AFFIRMATION_KEYWORDS'), [
           'iya', 'iyaa', 'ya', 'yup', 'betul', 'bener', 'benar', 'itu',
@@ -193,11 +198,28 @@ export class SettingsService {
         orderClosingNote: (this.config.get<string>('ORDER_CLOSING_NOTE') ?? '').trim(),
         orderBridgeEnforcement:
           this.config.get<string>('ORDER_BRIDGE_ENFORCEMENT') === 'prompt_only'
-            ? 'prompt_only'
-            : 'retry_once',
-        // <<< ANGGA (Order Context Log)
+            ? ('prompt_only' as const)
+            : ('retry_once' as const),
+        // ── Addendum v2 (2026-08-05) ──
+        orderDeixisKeywords: this.list(this.config.get('ORDER_DEIXIS_KEYWORDS'), [
+          'yg ini', 'yang ini', 'yg itu', 'yang itu', 'ini aja', 'itu aja',
+          'yg td ditawarkan', 'yg tadi ditawarkan',
+        ]),
+        orderOfferWindowMinutes: this.num(this.config.get('ORDER_OFFER_WINDOW_MINUTES'), 60),
+        orderGlobalTokens: this.pairs(this.config.get('ORDER_GLOBAL_TOKENS'), {}),
+        orderFormHintKeywords: this.list(this.config.get('ORDER_FORM_HINT_KEYWORDS'), [
+          'form pemesanan', 'sudah melakukan pemesanan', 'mengisi form',
+        ]),
+        orderReferenceKeywords: this.list(this.config.get('ORDER_REFERENCE_KEYWORDS'), [
+          'yang tadi', 'yg tadi', 'pesanan tadi', 'order tadi', 'yang kemarin',
+          'yg kemarin', 'sebelumnya',
+        ]),
+        orderNegoKeywords: this.list(this.config.get('ORDER_NEGO_KEYWORDS'), [
+          'diskon lagi', 'kurangin', 'kurangi lagi', 'murahin', 'free ongkir',
+          'gratis ongkir', 'nego', 'dikurangiin',
+        ]),
       },
-      // <<< ANGGA
+      // <<< ANGGA (Order Context)
     };
   }
 
@@ -207,6 +229,22 @@ export class SettingsService {
     const merged = this.defaults();
     try {
       const rows = await this.prisma.appSetting.findMany();
+      // >>> ANGGA — addendum v2 M5, overlay LEGACY: sebelum kategori
+      // `orderContext` ada, field order* tersimpan di baris `shipping`.
+      // Nilai lama itu tetap dihormati (disalin ke orderContext DULU), lalu
+      // baris `orderContext` sendiri menimpanya kalau ada — tidak ada nilai
+      // Bossfren yang hilang, tanpa migrasi data.
+      const shippingRow = rows.find((r) => r.key === 'shipping');
+      if (shippingRow?.value && typeof shippingRow.value === 'object') {
+        const legacy: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(shippingRow.value as Record<string, unknown>)) {
+          if (k.startsWith('order')) legacy[k] = v;
+        }
+        if (Object.keys(legacy).length) {
+          merged.orderContext = { ...merged.orderContext, ...legacy } as never;
+        }
+      }
+      // <<< ANGGA
       for (const row of rows) {
         const cat = row.key as keyof AppSettings;
         if (cat in merged && row.value && typeof row.value === 'object') {
@@ -241,6 +279,10 @@ export class SettingsService {
   // >>> ANGGA
   async shipping(): Promise<ShippingSettings> {
     return (await this.getAll()).shipping;
+  }
+  /** Addendum v2 M5 — kategori memori order percakapan. */
+  async orderContext(): Promise<OrderContextSettings> {
+    return (await this.getAll()).orderContext;
   }
   // <<< ANGGA
 

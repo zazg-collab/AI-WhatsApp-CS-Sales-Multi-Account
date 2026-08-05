@@ -169,12 +169,34 @@ class ShippingSettingsDto {
   @Validate(AliasDatarConstraint)
   destinationAliases?: Record<string, string>;
 
-  // >>> ANGGA — Order Context Log (blueprint 2026-08-04): field kebijakan
-  // memori order. WAJIB terdaftar di sini — ValidationPipe global memakai
-  // forbidNonWhitelisted, jadi field yang tidak dideklarasikan DITOLAK
-  // ("property X should not exist") walau field-nya sudah ada di
-  // ShippingSettings (insiden nyata saat pertama disimpan dari
-  // /settings/shipping, 2026-08-04).
+  // >>> ANGGA — addendum v2 M5 (2026-08-05): field memori order PINDAH ke
+  // OrderContextSettingsDto di bawah (kategori sendiri, ketok Bossfren). <<<
+}
+// <<< ANGGA
+
+// >>> ANGGA — Order Context Log, kategori sendiri (addendum v2 M5, 2026-08-05).
+// Pelajaran insiden bc0bf94: field AppSetting baru WAJIB 3 tempat —
+// types + defaults + DTO whitelist ini (ValidationPipe forbidNonWhitelisted).
+
+// Kamus token global: kunci wajib [a-z_]+, nilai string tidak kosong. Nama yang
+// bentrok token uang/catatan_sk tetap DIABAIKAN resolver (lapis kedua), tapi
+// bentuknya dijaga di sini supaya salah ketik ketahuan saat simpan.
+@ValidatorConstraint({ name: 'kamusTokenDatar', async: false })
+class KamusTokenDatarConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    if (value === undefined || value === null) return true;
+    if (typeof value !== 'object' || Array.isArray(value)) return false;
+    return Object.entries(value as Record<string, unknown>).every(
+      ([k, v]) => /^[a-z_]+$/.test(k) && typeof v === 'string' && v.trim().length > 0,
+    );
+  }
+
+  defaultMessage(): string {
+    return 'orderGlobalTokens: nama token wajib huruf kecil/underscore, isi wajib teks tidak kosong';
+  }
+}
+
+class OrderContextSettingsDto {
   @IsOptional() @IsNumber() @Min(1) @Max(720)
   orderContextStaleHours?: number;
 
@@ -198,7 +220,27 @@ class ShippingSettingsDto {
 
   @IsOptional() @IsIn(['prompt_only', 'retry_once'])
   orderBridgeEnforcement?: 'prompt_only' | 'retry_once';
-  // <<< ANGGA (Order Context Log)
+
+  // ── Addendum v2 ──
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderDeixisKeywords?: string[];
+
+  @IsOptional() @IsNumber() @Min(1) @Max(10_080)
+  orderOfferWindowMinutes?: number;
+
+  @IsOptional()
+  @IsObject()
+  @Validate(KamusTokenDatarConstraint)
+  orderGlobalTokens?: Record<string, string>;
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderFormHintKeywords?: string[];
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderReferenceKeywords?: string[];
+
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderNegoKeywords?: string[];
 }
 // <<< ANGGA
 
@@ -224,5 +266,8 @@ export class UpdateSettingsDto {
   // >>> ANGGA
   @IsOptional() @ValidateNested() @Type(() => ShippingSettingsDto)
   shipping?: ShippingSettingsDto;
+
+  @IsOptional() @ValidateNested() @Type(() => OrderContextSettingsDto)
+  orderContext?: OrderContextSettingsDto; // >>> ANGGA — addendum v2 M5 <<<
   // <<< ANGGA
 }

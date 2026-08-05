@@ -123,43 +123,59 @@ export interface ShippingSettings {
    */
   destinationAliases: Record<string, string>;
 
-  // >>> ANGGA — Order Context Log (blueprint 2026-08-04). Semua daftar kata &
-  // angka kebijakan modul memori order di AppSetting (ketok Bossfren) supaya
-  // bisa diubah dari /settings/shipping tanpa deploy; kode tidak boleh punya
-  // salinannya sendiri.
+  // >>> ANGGA — Addendum v2 M5 (2026-08-05, ketok Bossfren): seluruh field
+  // memori order (order*) PINDAH ke kategori sendiri `OrderContextSettings`
+  // di bawah — memori order urusan PERCAKAPAN, bukan urusan kurir. Nilai lama
+  // yang terlanjur tersimpan di baris `shipping` tetap dibaca lewat overlay
+  // legacy di SettingsService.getAll(). <<< ANGGA
+}
+// <<< ANGGA
+
+// >>> ANGGA — Order Context Log (blueprint 2026-08-04 + addendum v2 M5,
+// 2026-08-05): kategori TERSENDIRI untuk memori order percakapan — dipisah
+// dari `shipping` (ketok Bossfren: memori order bukan urusan kurir). Semua
+// daftar kata & angka kebijakan di AppSetting supaya bisa diubah dari
+// /settings/order-memory tanpa deploy; kode tidak boleh punya salinannya.
+export interface OrderContextSettings {
   /** Jendela basi entri log order, dalam JAM (ketok Bossfren: 24). Entri lebih
-   *  tua dari ini HARAM dipakai menjawab angka — tapi HALAL dipakai menyusun
-   *  pertanyaan konfirmasi ("yang kemarin Golok itu ya kak?"). */
+   *  tua HARAM dipakai menjawab angka — HALAL untuk menyusun pertanyaan. */
   orderContextStaleHours: number;
-  /** Kata pembatalan ORDER UTUH. Dicocokkan whole-message (seluruh pesan hanya
-   *  berisi kata pembatalan + filler) — "batal yang golok aja" TIDAK termasuk:
-   *  itu pembatalan parsial = snapshot baru berisi item sisa, bukan reset
-   *  konteks (amendemen v1.1 §12.1-5). */
+  /** Kata pembatalan ORDER UTUH — whole-message; "batal yang golok aja" =
+   *  pembatalan parsial (snapshot baru), bukan reset (v1.1 §12.1-5). */
   orderCancelKeywords: string[];
-  /** Kata pemicu makna AGREGAT ("total semuanya") → order GABUNGAN dari semua
-   *  entri segar, daftarnya dibacakan (gabung-dengan-bridge), bukan tanya-dulu.
-   *  Hanya dievaluasi di dalam konteks resolusi pertanyaan uang (v1.1 §12.2-7). */
+  /** Kata makna AGREGAT ("total semuanya") → gabungan entri segar per identitas
+   *  produk, dibacakan (bridge); hanya di konteks resolusi uang (v1.1 §12.2-7). */
   orderAggregateKeywords: string[];
-  /** Kata afirmasi jawaban atas pertanyaan pilihan barang ("iya yg itu").
-   *  HANYA berlaku whole-message + saat ada pending pilihan barang dari giliran
-   *  bot sebelumnya (v1.1 §12.2-6). */
+  /** Kata afirmasi pilihan barang — whole-message + hanya saat ada pending. */
   orderAffirmationKeywords: string[];
-  /** Kata negasi yang MEMBATALKAN afirmasi ("gak", "bukan"). */
+  /** Kata negasi yang membatalkan afirmasi. */
   orderNegationKeywords: string[];
-  /** Kata pengisi netral yang diabaikan pencocok whole-message ("kak","deh"). */
+  /** Kata pengisi netral yang diabaikan pencocok whole-message. */
   orderFillerWords: string[];
-  /** Teks catatan S&K COD + pemesanan untuk penutupan order — nilai penanda
-   *  GLOBAL `{{catatan_sk}}`, dikenal resolver TANPA kutipan aktif (v1.1
-   *  §12.1-3). Terkirimnya pesan berisi substitusi penanda ini = penanda
-   *  kejadian "selesai order" di log. Kosong = penanda tidak tersedia dan
-   *  deteksi selesai otomatis tidak pernah terpicu (fallback: resolve). */
+  /** Teks catatan S&K — nilai penanda GLOBAL `{{catatan_sk}}`; terkirimnya
+   *  pesan berisi substitusinya = penanda selesai-order. Kosong = mati. */
   orderClosingNote: string;
-  /** Level enforcement bridge-validasi saat jawaban memakai jalur asumsi
-   *  (default-ke-terbaru / agregat): 'prompt_only' = instruksi saja;
-   *  'retry_once' (default) = draft yang menyebut total tanpa menyebut nama
-   *  barang di-retry otomatis sekali, tetap gagal → ditahan jadi draft. */
+  /** Enforcement bridge-validasi jalur asumsi: 'prompt_only' | 'retry_once'. */
   orderBridgeEnforcement: 'prompt_only' | 'retry_once';
-  // <<< ANGGA
+  // ── Addendum v2 (2026-08-05) ──
+  /** M1 — frasa TUNJUK ("yg ini","yg itu") yang me-resolve ke penawaran
+   *  terakhir (offer registry), dengan aturan interseksi kata generik. */
+  orderDeixisKeywords: string[];
+  /** M1 — umur maksimum penawaran (menit) untuk resolusi deixis/fallback. */
+  orderOfferWindowMinutes: number;
+  /** M2 — KAMUS token global: nama_token → teks verbatim yang ditempel sistem
+   *  (mis. rekening_transfer). Ditambah dari dashboard tanpa deploy; nama
+   *  bentrok token uang/catatan_sk diabaikan resolver. */
+  orderGlobalTokens: Record<string, string>;
+  /** M3 — frasa penanda pesan FORM funnel ("form pemesanan") → seed offer
+   *  deterministik tanpa LLM. */
+  orderFormHintKeywords: string[];
+  /** M4 — frasa REFERENSI eksplisit ("yang tadi","pesanan tadi") yang membuka
+   *  jangkauan 1 order completed terakhir (hitung ulang input + wajib bridge). */
+  orderReferenceKeywords: string[];
+  /** P2 — frasa NEGO ("diskon lagi","free ongkir") pemicu tangga nego:
+   *  tawaran token nego dulu, melewati plafon → eskalasi admin. */
+  orderNegoKeywords: string[];
 }
 // <<< ANGGA
 
@@ -171,6 +187,7 @@ export interface AppSettings {
   sentinel: SentinelSettings;
   campaign: CampaignSettings;
   shipping: ShippingSettings; // >>> ANGGA <<<
+  orderContext: OrderContextSettings; // >>> ANGGA — addendum v2 M5 <<<
 }
 
 export type SettingsCategory = keyof AppSettings;

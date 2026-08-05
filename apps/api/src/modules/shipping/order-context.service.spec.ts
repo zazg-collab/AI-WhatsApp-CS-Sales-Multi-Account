@@ -27,6 +27,14 @@ function harness(rows: Array<{ type: string; payload: unknown; createdAt: Date }
   const prisma: any = { orderContextEvent: { create, findMany } };
   const settings: any = {
     shipping: jest.fn().mockResolvedValue({ orderContextStaleHours: 24 }),
+    // >>> ANGGA — addendum v2 M5: kategori sendiri.
+    orderContext: jest.fn().mockResolvedValue({
+      orderContextStaleHours: 24,
+      orderOfferWindowMinutes: 60,
+      orderClosingNote: '',
+      orderFormHintKeywords: ['form pemesanan', 'sudah melakukan pemesanan', 'mengisi form'],
+    }),
+    // <<< ANGGA
   };
   const svc = new OrderContextService(prisma, settings);
   return { svc, create, findMany };

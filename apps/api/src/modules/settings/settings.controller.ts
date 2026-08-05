@@ -62,6 +62,9 @@ export class SettingsController {
       if (Object.keys(shipping).length) await this.settings.updateCategory('shipping', shipping);
     }
     // <<< ANGGA
+    // >>> ANGGA — addendum v2 M5: kategori memori order tersendiri.
+    if (dto.orderContext) await this.settings.updateCategory('orderContext', dto.orderContext);
+    // <<< ANGGA
 
     await logAudit(this.prisma, {
       userId: user.id,

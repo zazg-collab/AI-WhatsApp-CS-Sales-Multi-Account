@@ -27,6 +27,7 @@ import {
   PRODUCT_STOCK_INTRO,
   PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE,
   PRODUCT_PRICE_USE_TOKEN,
+  GLOBAL_TOKENS_INTRO, // >>> ANGGA — addendum v2 M2 <<<
   SECURITY_DIRECTIVE,
   mediaPlaceholder,
   fenceData,
@@ -155,11 +156,16 @@ export class PromptBuilderService {
     // LAMPIRAN: "jalan paralel dengan alur balasan utama"), bukan berurutan,
     // supaya tidak menambah latensi balasan. Gagal apa pun -> string kosong,
     // yang berarti tidak ada apa-apa yang disuntik soal ongkir.
-    const [products, shippingGrounding] = await Promise.all([
+    const [products, shippingGrounding, globalTokenNames] = await Promise.all([
       query ? this.products.relevantForQuery(query) : Promise.resolve([]),
       this.shipping
         ? this.shipping.getGroundingText(conversationId, lang).catch(() => '')
         : Promise.resolve(''),
+      // >>> ANGGA — addendum v2 M2: nama penanda global (kamus AppSetting +
+      // catatan_sk). Konstan per-bot → ikut blok system bersama yang cacheable.
+      // Optional-call: spec lama yang mock shipping tanpa method ini tetap jalan.
+      this.shipping?.globalTokenCatalog?.().catch(() => [] as string[]) ?? Promise.resolve([] as string[]),
+      // <<< ANGGA
     ]);
     // <<< ANGGA
     const botLocale = localeFor(lang);
@@ -241,6 +247,12 @@ export class PromptBuilderService {
       knowledge ? fenceData(knowledge, lang) : t(KNOWLEDGE_EMPTY_NOTE, lang),
       '',
       t(BASE_RULES, lang),
+      // >>> ANGGA — addendum v2 M2: penanda global (nama saja, nilai ditempel
+      // sistem sesudah model menjawab — lihat resolvePriceTokens).
+      ...(globalTokenNames.length
+        ? ['', t(GLOBAL_TOKENS_INTRO, lang)(globalTokenNames.map((n) => `{{${n}}}`).join(', '))]
+        : []),
+      // <<< ANGGA
       ...(productBlock ? ['', productBlock] : []),
       '',
       mediaBlock,

@@ -771,5 +771,28 @@ export const SHIPPING_GROUNDING_STALE_CONTEXT = {
   en: (desc: string) =>
     `SHIPPING DATA: there is no active order still within its validity window. History shows the last discussed order was: ${desc}. Do NOT state any price/shipping/total figure yet. Gently ask whether they still mean that one — name it — or something else; once confirmed, the system will recompute.`,
 };
+/** >>> ANGGA — addendum v2 P2: tangga nego ronde 1 — sodorkan token nego yang
+ *  DIHITUNG SISTEM dari plafon AppSetting; model tidak menghitung diskon. */
+export const SHIPPING_GROUNDING_NEGO_OFFER = {
+  id: 'PELANGGAN SEDANG NEGO: kamu boleh menawarkan potongan SEKALI, HANYA memakai penanda diskon/nego yang tersedia di daftar di atas ({{diskon_barang}}/{{total_transfer_nego}}/{{total_cod_nego}}/{{diskon_ongkir}}) — jumlahnya sudah dihitung sistem sesuai kebijakan toko. JANGAN mengarang angka potongan sendiri, JANGAN menjanjikan free ongkir.',
+  en: 'THE CUSTOMER IS NEGOTIATING: you may offer a discount ONCE, using ONLY the discount/nego placeholders available in the list above ({{diskon_barang}}/{{total_transfer_nego}}/{{total_cod_nego}}/{{diskon_ongkir}}) — the amounts are computed by the system per store policy. NEVER invent a discount figure, NEVER promise free shipping.',
+};
+
+/** P2 — nego melewati plafon: jangan berjanji, serahkan ke admin. */
+export const SHIPPING_GROUNDING_NEGO_STUCK = {
+  id: 'PELANGGAN MINTA POTONGAN MELEBIHI KEBIJAKAN (atau sudah pernah ditawari potongan maksimal). JANGAN menjanjikan diskon/free ongkir apa pun lagi. Katakan dengan sopan bahwa permintaannya kamu sampaikan dulu ke atasan dan akan dikabari — admin sudah otomatis diberi tahu. Lanjutkan membantu hal lain.',
+  en: 'THE CUSTOMER IS ASKING FOR MORE THAN POLICY ALLOWS (or was already offered the maximum). Do NOT promise any further discount/free shipping. Politely say you will check with your supervisor and get back to them — the admin has been notified automatically. Keep helping with anything else.',
+};
+
+/** >>> ANGGA — addendum v2 M2: blok penanda GLOBAL untuk system prompt bersama
+ *  (per-bot, cacheable) — hanya NAMA penanda; nilainya ditempel sistem verbatim
+ *  sesudah model menjawab. */
+export const GLOBAL_TOKENS_INTRO = {
+  id: (names: string) =>
+    `PENANDA GLOBAL yang SELALU tersedia (di luar penanda harga per-order): ${names}. Kalau pelanggan membutuhkan info tersebut (mis. nomor rekening), taruh penandanya persis seperti tertulis (dengan dua kurung kurawal) — sistem menempel isinya verbatim. JANGAN mengetik sendiri isi/nomornya.`,
+  en: (names: string) =>
+    `GLOBAL PLACEHOLDERS that are ALWAYS available (besides per-order price placeholders): ${names}. When the customer needs that info (e.g. bank account), place the placeholder exactly as written (double curly braces) — the system pastes the content verbatim. NEVER type the content/numbers yourself.`,
+};
+// <<< ANGGA (addendum v2)
 // <<< ANGGA (Order Context Log)
 // <<< ANGGA

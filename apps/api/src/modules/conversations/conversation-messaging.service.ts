@@ -143,9 +143,9 @@ export class ConversationMessagingService {
         text,
         quoted,
       );
-      // >>> ANGGA — Order Context Log (v1.1 §12.3-11): pesan terkirim sungguhan
-      // → cek penanda selesai-order (teks memuat catatan S&K {{catatan_sk}}).
-      void this.orderLog?.noteOutboundSent(conversation.id, text);
+      // >>> ANGGA — Order Context Log (v1.1 §12.3-11 + addendum v2 M1): pesan
+      // terkirim sungguhan → penanda selesai-order + scan penawaran produk.
+      void this.orderLog?.noteOutbound(conversation.id, pendingMessage.id, text);
       // <<< ANGGA
 
       const message = await this.prisma.message.update({
@@ -250,9 +250,9 @@ export class ConversationMessagingService {
         text,
         quoted,
       );
-      // >>> ANGGA — Order Context Log (v1.1 §12.3-11): pesan terkirim sungguhan
-      // → cek penanda selesai-order (teks memuat catatan S&K {{catatan_sk}}).
-      void this.orderLog?.noteOutboundSent(conversation.id, text);
+      // >>> ANGGA — Order Context Log (v1.1 §12.3-11 + addendum v2 M1): pesan
+      // terkirim sungguhan → penanda selesai-order + scan penawaran produk.
+      void this.orderLog?.noteOutbound(conversation.id, messageId, text);
       // <<< ANGGA
 
       let updated;

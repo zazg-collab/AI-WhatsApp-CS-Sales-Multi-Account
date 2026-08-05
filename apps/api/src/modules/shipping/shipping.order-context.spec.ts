@@ -23,6 +23,25 @@ const PERF = {
   recommended: 'JNE',
 };
 
+// >>> ANGGA — addendum v2 M5: kebijakan memori order = kategori sendiri.
+const OC = {
+  orderContextStaleHours: 24,
+  orderCancelKeywords: ['batal', 'gak jadi', 'ga jadi', 'nggak jadi', 'tidak jadi', 'cancel'],
+  orderAggregateKeywords: ['semuanya', 'semua', 'seluruhnya', 'sekaligus', 'digabung', 'gabung', 'totalin semua', 'dua-duanya', 'borong', 'sama yang tadi', 'sama yg tadi'],
+  orderAffirmationKeywords: ['iya', 'iyaa', 'ya', 'yup', 'betul', 'bener', 'benar', 'itu', 'oke', 'ok', 'sip', 'gas', 'boleh', 'mau', 'jadi', 'lanjut'],
+  orderNegationKeywords: ['gak', 'ga', 'nggak', 'ngga', 'bukan', 'jangan', 'tidak', 'no'],
+  orderFillerWords: ['kak', 'ka', 'dong', 'deh', 'aja', 'sih', 'min', 'gan', 'bang', 'mas', 'mbak', 'pak', 'bu', 'nya', 'yg', 'yang', 'yaudah', 'udah'],
+  orderClosingNote: '',
+  orderBridgeEnforcement: 'retry_once',
+  orderDeixisKeywords: ['yg ini', 'yang ini', 'yg itu', 'yang itu', 'ini aja', 'itu aja'],
+  orderOfferWindowMinutes: 60,
+  orderGlobalTokens: {} as Record<string, string>,
+  orderFormHintKeywords: ['form pemesanan', 'sudah melakukan pemesanan', 'mengisi form'],
+  orderReferenceKeywords: ['yang tadi', 'yg tadi', 'pesanan tadi', 'order tadi', 'yang kemarin', 'sebelumnya'],
+  orderNegoKeywords: ['diskon lagi', 'kurangin', 'murahin', 'free ongkir', 'gratis ongkir', 'nego', 'dikurangiin'],
+};
+// <<< ANGGA
+
 const CONFIG = {
   mengantarApiKey: 'API-TEST',
   mengantarOriginId: 'ORIGIN-TEST',
@@ -36,15 +55,12 @@ const CONFIG = {
   priceRoundingIncrement: 500,
   shippingDiscountPercentMax: 0, // diskon dimatikan supaya angka tes sederhana
   destinationAliases: {} as Record<string, string>,
-  // Order Context Log (default ketok/usulan Bossfren 2026-08-04)
-  orderContextStaleHours: 24,
-  orderCancelKeywords: ['batal', 'gak jadi', 'ga jadi', 'nggak jadi', 'tidak jadi', 'cancel'],
-  orderAggregateKeywords: ['semuanya', 'semua', 'seluruhnya', 'sekaligus', 'digabung', 'gabung', 'totalin semua', 'dua-duanya', 'borong', 'sama yang tadi'],
-  orderAffirmationKeywords: ['iya', 'iyaa', 'ya', 'yup', 'betul', 'bener', 'benar', 'itu', 'oke', 'ok', 'sip', 'gas', 'boleh', 'mau', 'jadi', 'lanjut'],
-  orderNegationKeywords: ['gak', 'ga', 'nggak', 'ngga', 'bukan', 'jangan', 'tidak', 'no'],
-  orderFillerWords: ['kak', 'ka', 'dong', 'deh', 'aja', 'sih', 'min', 'gan', 'bang', 'mas', 'mbak', 'pak', 'bu', 'nya', 'yg', 'yang', 'yaudah', 'udah'],
-  orderClosingNote: '',
-  orderBridgeEnforcement: 'retry_once',
+  // >>> ANGGA — transisi M5: salinan kebijakan memori order juga di sini,
+  // supaya tes RED bisa dijalankan terhadap kode PRA-addendum (yang masih
+  // membacanya dari kategori shipping). Kode pasca-addendum membacanya dari
+  // settings.orderContext() (objek OC di atas).
+  ...OC,
+  // <<< ANGGA
 };
 
 const GOLOK = {
@@ -69,7 +85,7 @@ function entry(items: Array<{ productId: string; name: string; qty: number }>, o
   };
 }
 
-function fakeLog(entries: any[] = []) {
+function fakeLog(entries: any[] = [], offers: any[] = [], lastCompleted: any[] = []) {
   return {
     candidates: jest.fn().mockResolvedValue(entries),
     latestFresh: jest.fn(async () => entries.find((e) => e.fresh && e.snapshot.items.length) ?? null),
@@ -77,8 +93,26 @@ function fakeLog(entries: any[] = []) {
     recordSnapshot: jest.fn().mockResolvedValue(undefined),
     recordMarker: jest.fn().mockResolvedValue(undefined),
     noteOutboundSent: jest.fn().mockResolvedValue(undefined),
+    // >>> ANGGA — addendum v2
+    noteOutbound: jest.fn().mockResolvedValue(undefined),
+    noteInboundForm: jest.fn().mockResolvedValue(undefined),
+    recordOffer: jest.fn().mockResolvedValue(undefined),
+    recentOffers: jest.fn().mockResolvedValue(offers),
+    candidatesWithCompleted: jest.fn(async () => ({ current: entries, lastCompleted })),
+    // <<< ANGGA
   };
 }
+
+// >>> ANGGA — addendum v2: pembuat entri PENAWARAN (offer registry).
+function offer(items: Array<{ productId: string; name: string }>, fresh = true) {
+  return {
+    items: items.map((i) => ({ ...i, sku: null, qty: 1 })),
+    medium: 'text',
+    createdAt: new Date(),
+    fresh,
+  };
+}
+// <<< ANGGA
 
 interface Opts {
   lastCustomerText?: string;
@@ -87,6 +121,11 @@ interface Opts {
   logEntries?: any[];
   addresses?: any[];
   config?: Partial<typeof CONFIG>;
+  // >>> ANGGA — addendum v2
+  oc?: Partial<typeof OC>;
+  offers?: any[];
+  lastCompleted?: any[];
+  // <<< ANGGA
 }
 
 function harness(opts: Opts = {}) {
@@ -108,7 +147,11 @@ function harness(opts: Opts = {}) {
       count: jest.fn().mockResolvedValue(0),
     },
   };
-  const settings: any = { shipping: jest.fn().mockResolvedValue(cfg) };
+  const oc = { ...OC, ...(opts.oc ?? {}) };
+  const settings: any = {
+    shipping: jest.fn().mockResolvedValue(cfg),
+    orderContext: jest.fn().mockResolvedValue(oc),
+  };
   const provider: any = { chat: jest.fn().mockResolvedValue(JSON.stringify(extract)) };
   const mengantar: any = {
     searchAddress: jest.fn().mockResolvedValue(
@@ -127,10 +170,12 @@ function harness(opts: Opts = {}) {
   };
   const cache = new ShippingQuoteCache();
   const svc = new ShippingService(prisma, settings, provider, mengantar, cache);
-  const orderLog = fakeLog(opts.logEntries ?? []);
+  const orderLog = fakeLog(opts.logEntries ?? [], opts.offers ?? [], opts.lastCompleted ?? []);
   // Suntik lewat properti (bukan konstruktor) — lihat komentar kepala file.
   (svc as unknown as { orderLog: unknown }).orderLog = orderLog;
-  return { svc, prisma, settings, provider, mengantar, cache, orderLog, cfg };
+  const notifications = { send: jest.fn() };
+  (svc as unknown as { notifications: unknown }).notifications = notifications;
+  return { svc, prisma, settings, provider, mengantar, cache, orderLog, notifications, cfg };
 }
 
 function pesanBaru(h: ReturnType<typeof harness>, id: string, text: string) {
@@ -270,7 +315,8 @@ describe('Order Context Log — tangga ambiguitas BARANG (tambal sort[0])', () =
 describe('Order Context Log — token global & bridge-validasi', () => {
   it('{{catatan_sk}} dikenal TANPA kutipan aktif (v1.1 §12.1-3)', async () => {
     const note = 'Terima kasih sudah order! S&K COD: paket wajib dibayar saat kurir tiba.';
-    const h = harness({ config: { orderClosingNote: note } });
+    // >>> ANGGA — addendum v2 M5: catatan_sk kini kebijakan kategori orderContext.
+    const h = harness({ oc: { orderClosingNote: note } });
     const out = await h.svc.resolvePriceTokens('c1', 'Siap kak! {{catatan_sk}}');
     expect(out.ok).toBe(true);
     expect(out.text).toContain(note);
@@ -363,5 +409,133 @@ describe('Order Context Log — T3 anchor & T4 eskalasi downgrade', () => {
     // Sinyal kemungkinan KEHILANGAN KONTEKS (pola insiden) — bukan pesan generik.
     expect(grounding).toContain('Golok Sembelih Multifungsi');
     expect(grounding).toMatch(/konfirmasi|pastikan|maksud/i);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// >>> ANGGA — ADDENDUM v2 (2026-08-05): tes alur 4 mekanisme + P1/P2.
+// RED-first terhadap kode pra-addendum (gagal di assertion), lalu GREEN.
+
+describe('Addendum v2 — M2: kamus token global', () => {
+  it('{{rekening_transfer}} dari kamus AppSetting resolve verbatim tanpa kutipan aktif', async () => {
+    const rek = 'BCA 6765556680 a.n Cordova Digital Inovasi';
+    const h = harness({ oc: { orderGlobalTokens: { rekening_transfer: rek } } });
+    const out = await h.svc.resolvePriceTokens('c1', 'Silakan transfer ke:\n{{rekening_transfer}}');
+    expect(out.ok).toBe(true);
+    expect(out.text).toContain(rek); // digit rekening lolos gerbang HANYA via sisipan sistem
+  });
+
+  it('nama kamus yang bentrok token uang DIABAIKAN (tidak bisa membajak {{total_transfer}})', async () => {
+    const h = harness({ oc: { orderGlobalTokens: { total_transfer: 'Rp1' } } });
+    const out = await h.svc.resolvePriceTokens('c1', 'Totalnya {{total_transfer}} kak');
+    expect(out.ok).toBe(false); // tetap tak dikenal tanpa kutipan aktif — bukan 'Rp1'
+    expect(out.text).not.toContain('Rp1');
+  });
+});
+
+describe('Addendum v2 — M3/M1: fallback PENAWARAN (seed form) & deixis', () => {
+  it('form seed → "kirim ke medan, totalnya berapa?" dikutip dari penawaran + bridge', async () => {
+    const h = harness({
+      lastCustomerText: 'kirim ke medan ya kak, totalnya berapa?',
+      extract: { kota: 'Medan', items: [] },
+      offers: [offer([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi' }])],
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.shippingOnly).toBe(false);
+    expect(res.quote.matchedItems).toEqual([expect.objectContaining({ productId: 'p-golok' })]);
+    // Jalur ASUMSI → bridge wajib menyebut nama barang.
+    const polos = await h.svc.resolvePriceTokens('c1', 'Totalnya {{total_transfer}} ya kak');
+    expect(polos.ok).toBe(false);
+  });
+
+  it('interseksi "golok yg itu": kata generik dipersempit penawaran → jawab + bridge, TANPA bertanya', async () => {
+    const h = harness({
+      lastCustomerText: 'kirim ke medan ya, aku mau dong golok yg itu',
+      extract: { kota: 'Medan', items: [{ nama: 'golok', qty: 1 }] },
+      offers: [offer([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi' }])],
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.matchedItems).toEqual([expect.objectContaining({ productId: 'p-golok' })]);
+  });
+
+  it('dua penawaran aktif + frasa tunjuk → BERTANYA tertutup dari kandidat penawaran saja', async () => {
+    const h = harness({
+      lastCustomerText: 'kirim ke medan, yg itu berapa kak',
+      extract: { kota: 'Medan', items: [] },
+      offers: [
+        offer([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi' }]),
+        offer([{ productId: 'p-bedog', name: 'Bedog Betekok' }]),
+      ],
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('item_ambiguous');
+    expect(res.itemCandidates.map((c: any) => c.productId).sort()).toEqual(['p-bedog', 'p-golok']);
+  });
+});
+
+describe('Addendum v2 — M4: referensi eksplisit lintas penanda selesai', () => {
+  it('replay Aluna: "kalau 2 sama yg tadi jadi berapa?" → union order berjalan + order SELESAI terakhir', async () => {
+    const h = harness({
+      lastCustomerText: 'kalau 2 sama yg tadi jadi berapa?',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }])],
+      lastCompleted: [entry([{ productId: 'p-bedog', name: 'Bedog Betekok', qty: 1 }])],
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.matchedItems).toHaveLength(2);
+    expect(res.quote.goodsTotal).toBe(150000 + 139000);
+  });
+
+  it('TANPA frasa referensi, order selesai TIDAK terjangkau (perilaku lama utuh)', async () => {
+    const h = harness({
+      lastCustomerText: 'totalnya berapa?',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }])],
+      lastCompleted: [entry([{ productId: 'p-bedog', name: 'Bedog Betekok', qty: 1 }])],
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.matchedItems).toEqual([expect.objectContaining({ productId: 'p-golok' })]);
+  });
+});
+
+describe('Addendum v2 — P1: diskon barang per-pcs (token nego)', () => {
+  it('{{diskon_barang}} & {{total_cod_nego}} dihitung sistem dari discountMaxPerPcs', async () => {
+    const h = harness({
+      lastCustomerText: 'kirim ke medan ya, golok sembelih multifungsi 2',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 2 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    // 2 pcs × 5.000 = 10.000; transfer: 2×150.000 + 47.000 = 347.000 → nego 337.000
+    const a = await h.svc.resolvePriceTokens('c1', 'Kalau nego: {{diskon_barang}} → {{total_transfer_nego}}');
+    expect(a.ok).toBe(true);
+    expect(a.text).toContain('Rp10.000');
+    expect(a.text).toContain('Rp337.000');
+  });
+});
+
+describe('Addendum v2 — P2: tangga nego', () => {
+  it('nego ronde 1 → grounding menyodorkan token nego; ronde 2 → eskalasi + notifikasi admin', async () => {
+    const h = harness({
+      lastCustomerText: 'kirim ke medan ya, golok sembelih multifungsi 1',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+
+    pesanBaru(h, 'm2', 'ga ada diskon lagi kak?');
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const ronde1 = await h.svc.getGroundingText('c1');
+    expect(ronde1).toContain('NEGO');
+    expect(ronde1).toContain('{{diskon_barang}}');
+    expect(h.notifications.send).not.toHaveBeenCalled();
+
+    pesanBaru(h, 'm3', 'kurangin lagi dong kak');
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const ronde2 = await h.svc.getGroundingText('c1');
+    expect(ronde2).toContain('atasan');
+    expect(h.notifications.send).toHaveBeenCalledTimes(1);
   });
 });

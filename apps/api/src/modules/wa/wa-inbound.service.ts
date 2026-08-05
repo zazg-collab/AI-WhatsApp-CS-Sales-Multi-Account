@@ -112,6 +112,16 @@ export class WaInboundService {
       if (result.customer && !result.customer.avatarUrl) {
         this.maybeFetchAvatar(accountId, result.customer.id, remoteJid).catch(() => undefined);
       }
+      // >>> ANGGA — addendum v2 M3: pesan form funnel ("saya sudah melakukan
+      // pemesanan <PRODUK> ...") di-seed deterministik ke offer registry —
+      // pesan template = fakta pasti, tidak perlu LLM menebak ulang.
+      // Fire-and-forget; guard dedupe per pesan ada di service-nya.
+      void this.orderLog?.noteInboundForm(
+        result.conversation.id,
+        (result as { message?: { id?: string } }).message?.id ?? m.key.id ?? '',
+        text,
+      );
+      // <<< ANGGA
       if (result.suppressAutomation) return;
       if (result.csatCaptured) return;
       await this.maybeAutoAway(result).catch((err) =>
@@ -529,11 +539,11 @@ Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
       data: { lastMessage: text, lastMessageAt: new Date() },
     });
     this.events.emitToAccount(convo.whatsappAccountId, 'message:new', { conversationId: convo.id, message });
-    // >>> ANGGA — Order Context Log (v1.1 §12.3-11): penanda "selesai order"
-    // ditulis saat pesan closing BENAR-BENAR terkirim (bukan saat draft
-    // dibuat). Deteksinya deterministik: teks memuat catatan S&K hasil
-    // substitusi {{catatan_sk}}. Fire-and-forget — tidak boleh menunda kirim.
-    void this.orderLog?.noteOutboundSent(convo.id, text);
+    // >>> ANGGA — Order Context Log (v1.1 §12.3-11 + addendum v2 M1): hook
+    // pesan keluar yang BENAR-BENAR terkirim — deteksi closing (penanda
+    // selesai) + scan PENAWARAN (teks yang menyebut produk katalog tercatat
+    // sebagai offer, jangkar untuk "yg ini/yg itu"). Fire-and-forget.
+    void this.orderLog?.noteOutbound(convo.id, message.id, text);
     // <<< ANGGA
     return message;
   }

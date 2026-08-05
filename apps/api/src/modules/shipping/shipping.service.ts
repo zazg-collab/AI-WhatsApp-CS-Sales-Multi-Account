@@ -2,6 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { MessageStatus, SenderType } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { NotificationsService } from '../../notifications/notifications.service'; // >>> ANGGA — addendum v2 P2 <<<
 import { AiProviderService } from '../ai/ai-provider.service';
 import { tokenizeForMatch, scoreProductMatch } from '../products/products.util';
 // >>> ANGGA: satu pemindai JSON dipakai bersama seluruh parser keluaran LLM,
@@ -27,6 +28,8 @@ import {
   SHIPPING_GROUNDING_ASSUMED,
   SHIPPING_GROUNDING_STALE_CONTEXT,
   SHIPPING_GROUNDING_CONTEXT_DOWNGRADE,
+  SHIPPING_GROUNDING_NEGO_OFFER,
+  SHIPPING_GROUNDING_NEGO_STUCK,
   // <<< ANGGA
 } from '../../i18n/bot-prompts';
 // >>> ANGGA — Fase 113: satu definisi "angka uang" dipakai ulang dari
@@ -53,6 +56,8 @@ import {
 import {
   OrderContextService,
   mergeSnapshots,
+  catalogMatchesInText,
+  type OfferEntry,
   type OrderContextEntry,
 } from './order-context.service';
 // <<< ANGGA
@@ -502,6 +507,9 @@ export class ShippingService {
     // yang sama dengan `shipping` di PromptBuilderService). Tanpa service ini,
     // seluruh perilaku log/carry-over mati dan alur lama berjalan apa adanya.
     @Optional() private readonly orderLog?: OrderContextService,
+    // >>> ANGGA — addendum v2 P2: notifikasi instan saat nego mentok plafon
+    // (pola notifikasi gerbang uang). Optional supaya spec lama tetap jalan.
+    @Optional() private readonly notifications?: NotificationsService,
     // <<< ANGGA
   ) {}
 
@@ -621,6 +629,9 @@ export class ShippingService {
 
   async quoteForConversation(conversationId: string): Promise<ShippingResult> {
     const cfg = await this.settings.shipping();
+    // >>> ANGGA — addendum v2 M5: kebijakan memori order kini kategori sendiri.
+    const oc = await this.settings.orderContext();
+    // <<< ANGGA
     if (!cfg.mengantarApiKey || !cfg.mengantarOriginId) {
       this.cache.recordOutcome(conversationId, 'not_configured');
       return { status: 'not_configured' };
@@ -656,7 +667,7 @@ export class ShippingService {
     // penanda `cancelled` + konteks direset. Pembatalan PARSIAL ("batal yang
     // golok aja") TIDAK cocok whole-message dan jatuh ke alur ekstraksi biasa
     // (menghasilkan snapshot baru berisi item sisa).
-    if (this.orderLog && wholeMessageMatch(lastCustomerText, cfg.orderCancelKeywords, cfg.orderFillerWords)) {
+    if (this.orderLog && wholeMessageMatch(lastCustomerText, oc.orderCancelKeywords, oc.orderFillerWords)) {
       this.cache.reset(conversationId);
       this.cache.clearPending(conversationId);
       this.cache.clearPendingItems(conversationId);
@@ -685,13 +696,20 @@ export class ShippingService {
       // kata agregat → GABUNGAN semua entri segar per identitas produk
       // (v1.1 §12.1-4). Dua-duanya jalur ASUMSI → ditandai untuk
       // bridge-validasi (jawaban wajib menyebut nama barang).
-      if (this.orderLog) {
+      // >>> ANGGA — addendum v2: frasa TUNJUK ("yg ini") atau REFERENSI
+      // ("sama yg tadi") butuh resolusi penuh (offer registry / lintas-marker)
+      // — jangan puas dengan snapshot terakhir; jatuh ke jalur ekstraksi.
+      const adaTunjukAtauReferensi =
+        hasAggregateKeyword(lastCustomerText, oc.orderDeixisKeywords) ||
+        hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords);
+      // <<< ANGGA
+      if (this.orderLog && !adaTunjukAtauReferensi) {
         const entries = (await this.orderLog.candidates(conversationId)).filter(
           (e) => e.fresh && e.snapshot.items.length > 0 && e.snapshot.destinationId,
         );
         if (entries.length) {
           const latest = entries[0];
-          const aggregateAsk = hasAggregateKeyword(lastCustomerText, cfg.orderAggregateKeywords);
+          const aggregateAsk = hasAggregateKeyword(lastCustomerText, oc.orderAggregateKeywords);
           const logItems = aggregateAsk
             ? mergeSnapshots(entries.map((e) => e.snapshot)).map((m) => ({ name: m.name, qty: m.qty }))
             : latest.snapshot.items.map((i) => ({ name: i.name, qty: i.qty }));
@@ -740,12 +758,61 @@ export class ShippingService {
     let choiceCity: string | null = null;
     const pendingItems = this.cache.pendingItems(conversationId);
     if (pendingItems) {
-      const chosen = pilihBarang(pendingItems.candidates, lastCustomerText, cfg);
+      const chosen = pilihBarang(pendingItems.candidates, lastCustomerText, oc);
       if (chosen) {
         this.cache.clearPendingItems(conversationId);
         itemsFromChoice = [{ name: chosen.name, qty: patchQty(lastCustomerText) ?? pendingItems.qty }];
         choiceCity = pendingItems.city;
       }
+    }
+    // <<< ANGGA
+
+    // >>> ANGGA — addendum v2 M1 + amendemen interseksi ("golok yg itu"):
+    // frasa TUNJUK me-resolve ke PENAWARAN (offer registry). Urutan preseden:
+    //  1. nama produk UNIK di pesan → alur ekstraksi biasa (di bawah);
+    //  2. kata generik + frasa tunjuk → kandidat katalog ∩ penawaran segar;
+    //  3. frasa tunjuk saja → penawaran segar terakhir;
+    //  interseksi/pool = 1 → jawab + bridge; ≥2 → tangga pertanyaan barang;
+    //  0 penawaran → jatuh ke alur lama (tanya/ekstraksi).
+    let itemsFromDeixis: ExtractedItem[] | null = null;
+    let deixisAmbiguous: Array<{ productId: string; name: string }> | null = null;
+    if (!itemsFromChoice && this.orderLog && hasAggregateKeyword(lastCustomerText, oc.orderDeixisKeywords)) {
+      const offers = (await this.orderLog.recentOffers(conversationId)).filter((o) => o.fresh);
+      if (offers.length) {
+        // Kandidat penawaran unik per productId, terbaru dulu.
+        const offerPool = new Map<string, { productId: string; name: string }>();
+        for (const o of offers) {
+          for (const it of o.items) {
+            if (!offerPool.has(it.productId)) offerPool.set(it.productId, { productId: it.productId, name: it.name });
+          }
+        }
+        const products = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
+        const generik = catalogMatchesInText(lastCustomerText, products as never);
+        let pool = Array.from(offerPool.values());
+        if (generik.length) {
+          const generikIds = new Set(generik.map((g) => g.productId));
+          const inter = pool.filter((c) => generikIds.has(c.productId));
+          if (inter.length) pool = inter; // interseksi kosong → tetap pool penawaran (cabang 2)
+        }
+        if (pool.length === 1) {
+          itemsFromDeixis = [{ name: pool[0].name, qty: patchQty(lastCustomerText) ?? 1 }];
+        } else if (pool.length >= 2) {
+          deixisAmbiguous = pool;
+        }
+      }
+    }
+    if (deixisAmbiguous) {
+      this.cache.setPendingItems(conversationId, {
+        candidates: deixisAmbiguous,
+        qty: patchQty(lastCustomerText) ?? 1,
+        city: extract.city?.trim() || choiceCity || cached?.city || null,
+      });
+      this.cache.recordOutcome(conversationId, 'item_ambiguous');
+      return finish({
+        status: 'item_ambiguous',
+        keyword: lastCustomerText.slice(0, 40),
+        itemCandidates: deixisAmbiguous,
+      });
     }
     // <<< ANGGA
 
@@ -758,22 +825,33 @@ export class ShippingService {
     // ("total semuanya") → gabungan SEMUA entri segar per identitas produk
     // (v1.1 §12.1-4, anti hitung-dobel). Dua-duanya ditandai ASUMSI untuk
     // enforcement bridge-validasi di `resolvePriceTokens`.
-    let items = itemsFromChoice ?? extract.items;
-    let source = itemsFromChoice ? 'confirmation' : 'extractor';
+    let items = itemsFromChoice ?? itemsFromDeixis ?? extract.items;
+    let source = itemsFromChoice ? 'confirmation' : itemsFromDeixis ? 'offer' : 'extractor';
     let carriedEntry: OrderContextEntry | null = null;
-    let assumedNames: string[] | null = null;
+    let assumedNames: string[] | null = itemsFromDeixis ? itemsFromDeixis.map((i) => i.name) : null;
     let aggregate = false;
     if (!items.length && this.orderLog) {
       const products = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
       if (!mentionsCatalogProduct(lastCustomerText, products)) {
-        const entries = (await this.orderLog.candidates(conversationId)).filter(
-          (e) => e.snapshot.items.length > 0,
-        );
+        // >>> ANGGA — addendum v2 M4: frasa referensi eksplisit ("sama yg
+        // tadi") membuka jangkauan ke SATU order completed terakhir — input
+        // dihitung ulang (bukan angkanya), wajib bridge, hasil konfirmasi
+        // jadi snapshot baru (revisi order pasca-closing).
+        const refAsk = hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords);
+        const aggAsk = hasAggregateKeyword(lastCustomerText, oc.orderAggregateKeywords);
+        const cw = refAsk
+          ? await this.orderLog.candidatesWithCompleted(conversationId)
+          : { current: await this.orderLog.candidates(conversationId), lastCompleted: [] };
+        const entries = cw.current.filter((e) => e.snapshot.items.length > 0);
         const freshEntries = entries.filter((e) => e.fresh);
-        if (freshEntries.length && hasAggregateKeyword(lastCustomerText, cfg.orderAggregateKeywords)) {
-          const merged = mergeSnapshots(freshEntries.map((e) => e.snapshot));
+        const refEntries = refAsk
+          ? cw.lastCompleted.filter((e) => e.snapshot.items.length > 0)
+          : [];
+        if ((freshEntries.length || refEntries.length) && (aggAsk || (refAsk && freshEntries.length && refEntries.length))) {
+          // Agregat / agregat+referensi → union per identitas produk.
+          const merged = mergeSnapshots([...freshEntries, ...refEntries].map((e) => e.snapshot));
           items = merged.map((m) => ({ name: m.name, qty: m.qty }));
-          carriedEntry = freshEntries[0];
+          carriedEntry = freshEntries[0] ?? refEntries[0];
           assumedNames = merged.map((m) => m.name);
           aggregate = true;
           source = 'carryover';
@@ -785,9 +863,57 @@ export class ShippingService {
           carriedEntry = latest;
           assumedNames = items.map((i) => i.name);
           source = 'carryover';
+        } else if (refAsk && refEntries.length) {
+          // Referensi ke order completed terakhir tanpa order berjalan.
+          const latest = refEntries[0];
+          items = latest.snapshot.items.map((i) => ({ name: i.name, qty: i.qty }));
+          const q = patchQty(lastCustomerText);
+          if (q != null && items.length === 1) items = [{ ...items[0], qty: q }];
+          carriedEntry = latest;
+          assumedNames = items.map((i) => i.name);
+          source = 'carryover';
+        } else {
+          // >>> ANGGA — addendum v2 M1/M3, fallback PENAWARAN: belum ada
+          // kutipan sama sekali, tapi ada penawaran segar (mis. seed form) →
+          // barang dari penawaran (satu produk unik), jalur ASUMSI + bridge.
+          const offers = (await this.orderLog.recentOffers(conversationId)).filter((o) => o.fresh);
+          const unik = new Map<string, { productId: string; name: string }>();
+          for (const o of offers) for (const it of o.items) if (!unik.has(it.productId)) unik.set(it.productId, it);
+          if (unik.size === 1) {
+            const satu = Array.from(unik.values())[0];
+            items = [{ name: satu.name, qty: patchQty(lastCustomerText) ?? 1 }];
+            assumedNames = [satu.name];
+            source = 'offer';
+          }
+          // <<< ANGGA
         }
       }
     }
+    // >>> ANGGA — addendum v2 M4 (lanjutan): referensi eksplisit SAAT barang
+    // baru juga disebut ("kalau 2 sama yg tadi") — union nama barang baru +
+    // isi order completed terakhir, dedupe per nama. Deterministik.
+    if (
+      items.length &&
+      this.orderLog &&
+      hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords)
+    ) {
+      const cw = await this.orderLog.candidatesWithCompleted(conversationId);
+      const refLatest = cw.lastCompleted.find((e) => e.snapshot.items.length > 0);
+      if (refLatest) {
+        const ada = new Set(items.map((i) => i.name.toLowerCase().trim()));
+        const tambahan = refLatest.snapshot.items
+          .filter((i) => !ada.has(i.name.toLowerCase().trim()))
+          .map((i) => ({ name: i.name, qty: i.qty }));
+        if (tambahan.length) {
+          items = [...items, ...tambahan];
+          carriedEntry = carriedEntry ?? refLatest;
+          assumedNames = items.map((i) => i.name);
+          aggregate = true;
+          source = 'carryover';
+        }
+      }
+    }
+    // <<< ANGGA
     if (assumedNames) this.cache.setAssumed(conversationId, assumedNames, aggregate);
     else this.cache.clearAssumed(conversationId);
     // <<< ANGGA
@@ -1083,6 +1209,18 @@ export class ShippingService {
       // codFee tidak masuk akal (<= 0) → jangan tawarkan COD, jangan tebak.
     }
 
+    // >>> ANGGA — addendum v2 P1: diskon BARANG per-pcs (kebijakan
+    // `discountMaxPerPcs` yang sebelumnya cuma dokumentasi — transkrip CS
+    // membuktikan dipakai nyata: 149→144, 199→194 = 5rb/pcs). Dihitung
+    // SISTEM, dibulatkan ke BAWAH (tidak pernah melewati plafon), keluar
+    // sebagai token `{{diskon_barang}}`/`{{total_*_nego}}` — model tidak
+    // pernah menghitung diskon. shippingOnly tidak dapat (belum ada barang).
+    const totalQty = resolved.matched.reduce((sum, m) => sum + m.qty, 0);
+    const goodsDiscount = shippingOnly
+      ? 0
+      : floorTo(cfg.discountMaxPerPcs * totalQty, cfg.priceRoundingIncrement);
+    // <<< ANGGA
+
     // Langkah 9 — dua angka akhir, dibulatkan (Rule 11).
     const quote: ShippingQuote = {
       city: target.city,
@@ -1124,6 +1262,13 @@ export class ShippingService {
       codShippingFee,
       codDiscount,
       codTotalDiscounted,
+      // >>> ANGGA — addendum v2 P1 <<<
+      goodsDiscount,
+      transferTotalNego: goodsDiscount > 0 ? Math.max(0, (shippingDiscount > 0 ? transferTotalDiscounted : transferTotal) - goodsDiscount) : 0,
+      codTotalNego:
+        codTotal != null && goodsDiscount > 0
+          ? Math.max(0, ((codDiscount ?? 0) > 0 && codTotalDiscounted != null ? codTotalDiscounted : codTotal) - goodsDiscount)
+          : null,
       // <<< ANGGA
     };
     return { status: 'ok', quote };
@@ -1199,6 +1344,30 @@ export class ShippingService {
         const assumed = this.cache.assumed(conversationId);
         if (assumed?.productNames.length) {
           lines.push(t(SHIPPING_GROUNDING_ASSUMED, lang)(assumed.productNames.join(', ')));
+        }
+        // <<< ANGGA
+        // >>> ANGGA — addendum v2 P2: tangga NEGO. Deteksi deterministik frasa
+        // nego di pesan terakhir; ronde 1 → sodorkan token nego (P1, dihitung
+        // sistem dari plafon AppSetting); ronde ≥2 → JANGAN berjanji, katakan
+        // dicek ke atasan + notifikasi instan ke admin (pola notifikasi
+        // gerbang uang; sekali per pesan lewat pagar bumpNego).
+        const memoNego = this.turnMemo.get(conversationId);
+        if (memoNego) {
+          const oc = await this.settings.orderContext();
+          if (hasAggregateKeyword(memoNego.lastText, oc.orderNegoKeywords)) {
+            const msgId = memoNego.key.split(':')[0] || memoNego.key;
+            const ronde = this.cache.bumpNego(conversationId, msgId);
+            const adaTokenNego = (q.goodsDiscount ?? 0) > 0 || q.shippingDiscount > 0;
+            if (ronde <= 1 && adaTokenNego) {
+              lines.push(t(SHIPPING_GROUNDING_NEGO_OFFER, lang));
+            } else {
+              lines.push(t(SHIPPING_GROUNDING_NEGO_STUCK, lang));
+              this.logger.warn(`Nego mentok plafon di ${conversationId} (ronde ${ronde})`);
+              this.notifications?.send(
+                `🤝 Nego melewati plafon diskon\nPercakapan: ${conversationId}\nPesan: "${memoNego.lastText.slice(0, 120)}"\nBot menahan janji & menyarankan cek admin.`,
+              );
+            }
+          }
         }
         // <<< ANGGA
         return lines.join('\n');
@@ -1303,6 +1472,19 @@ export class ShippingService {
    *  tujuan). Diisi `resolvePriceTokens` sesudah model menjawab, pola yang
    *  sama seperti kutipan ongkir (`quoteForConversation` -> `getGroundingText`
    *  -> `resolvePriceTokens`) — cuma sumber datanya beda. */
+  /** >>> ANGGA — addendum v2 M2: daftar NAMA token global yang tersedia
+   *  (kamus AppSetting + catatan_sk bila terisi) — dibacakan prompt-builder di
+   *  blok system bersama supaya model tahu penanda apa yang boleh dipakai.
+   *  Nilainya TIDAK pernah ikut (diisi resolver sesudah model menjawab). <<< */
+  async globalTokenCatalog(): Promise<string[]> {
+    const oc = await this.settings.orderContext();
+    const names = Object.keys(oc.orderGlobalTokens ?? {}).filter(
+      (n) => /^[a-z_]+$/.test(n) && !NAMA_TOKEN_CADANGAN.has(n),
+    );
+    if ((oc.orderClosingNote ?? '').trim()) names.push('catatan_sk');
+    return names;
+  }
+
   cacheProductPriceTokens(conversationId: string, tokens: Record<string, string>): void {
     this.cache.setProductPriceTokens(conversationId, tokens);
   }
@@ -1321,9 +1503,18 @@ export class ShippingService {
     // >>> ANGGA — Order Context Log: config dibaca untuk (a) token GLOBAL
     // `{{catatan_sk}}` (v1.1 §12.1-3 — WAJIB dikenal resolver TANPA kutipan
     // aktif; tanpa ini draft closing ditahan gerbangnya sendiri saat cache
-    // dingin), dan (b) enforcement bridge-validasi di bawah.
-    const cfg = await this.settings.shipping();
+    // dingin), (b) KAMUS token global addendum v2 M2 (mis. rekening_transfer —
+    // nomor rekening tidak pernah diketik model, anti-fraud), dan (c)
+    // enforcement bridge-validasi di bawah. Addendum v2 M5: kategori sendiri.
+    const cfg = await this.settings.orderContext();
     const globalTokens: Record<string, string> = {};
+    // Kamus dulu, catatan_sk sesudahnya (nama cadangan tidak bisa ditimpa).
+    for (const [nama, isi] of Object.entries(cfg.orderGlobalTokens ?? {})) {
+      if (!/^[a-z_]+$/.test(nama)) continue; // salah bentuk → abaikan
+      if (NAMA_TOKEN_CADANGAN.has(nama)) continue; // bentrok token uang/sistem
+      if (typeof isi !== 'string' || !isi.trim()) continue;
+      globalTokens[nama] = isi;
+    }
     if (cfg.orderClosingNote) globalTokens.catatan_sk = cfg.orderClosingNote;
 
     // Bridge-validasi (v1.1 §12.2-8): kutipan giliran ini dihitung dari ASUMSI
@@ -1682,6 +1873,16 @@ export function pilihBarang(
  * diperiksa; sisi mana pun yang lebih dulu tetap kena jendela 20 karakter
  * yang sama.
  */
+/** >>> ANGGA — addendum v2 M2: nama yang TIDAK boleh dipakai kamus token
+ *  global — token uang/kutipan & token sistem. Salah pakai → diabaikan
+ *  resolver (dan ditolak validasi DTO di sisi simpan). <<< */
+export const NAMA_TOKEN_CADANGAN = new Set([
+  'catatan_sk', 'kota_tujuan', 'rincian_order', 'harga_satuan', 'subtotal_barang',
+  'ongkir', 'kurir_transfer', 'kurir_cod', 'total_transfer', 'total_cod',
+  'blok_total', 'diskon_ongkir', 'total_transfer_diskon', 'total_cod_diskon',
+  'diskon_barang', 'total_transfer_nego', 'total_cod_nego',
+]);
+
 export function penjagaKata(text: string): string | null {
   const kata = '(total(nya)?|ongkir(nya)?|ongkos\\s*kirim)';
   const token = '\\{\\{(harga_satuan|subtotal_barang)\\}\\}';
@@ -1727,12 +1928,22 @@ export function buildPriceTokens(q: ShippingQuote): Record<string, string> {
     tokens.diskon_ongkir = `Rp${formatIdr(q.shippingDiscount)}`;
     tokens.total_transfer_diskon = `Rp${formatIdr(q.transferTotalDiscounted)}`;
   }
+  // >>> ANGGA — addendum v2 P1: token nego (diskon barang per-pcs + diskon
+  // ongkir, "harga mentok"). HANYA ada bila diskon barangnya > 0.
+  if ((q.goodsDiscount ?? 0) > 0) {
+    tokens.diskon_barang = `Rp${formatIdr(q.goodsDiscount as number)}`;
+    if ((q.transferTotalNego ?? 0) > 0) tokens.total_transfer_nego = `Rp${formatIdr(q.transferTotalNego as number)}`;
+  }
+  // <<< ANGGA
 
   if (q.codTotal != null && q.codCourier) {
     tokens.kurir_cod = q.codCourier;
     tokens.total_cod = `Rp${formatIdr(q.codTotal)}`;
     if (q.codDiscount != null && q.codDiscount > 0 && q.codTotalDiscounted != null) {
       tokens.total_cod_diskon = `Rp${formatIdr(q.codTotalDiscounted)}`;
+    }
+    if ((q.goodsDiscount ?? 0) > 0 && q.codTotalNego != null && q.codTotalNego > 0) {
+      tokens.total_cod_nego = `Rp${formatIdr(q.codTotalNego)}`; // >>> ANGGA — addendum v2 P1 <<<
     }
     tokens.blok_total =
       `• Transfer : Rp${formatIdr(q.transferTotal)}
@@ -1778,6 +1989,17 @@ export function katalogPenanda(q: ShippingQuote): string[] {
       '• {{total_transfer_diskon}} = total TRANSFER sudah dipotong diskon ongkir',
     );
   }
+  // >>> ANGGA — addendum v2 P1
+  if ((q.goodsDiscount ?? 0) > 0) {
+    lines.push(
+      '• {{diskon_barang}} = potongan harga barang — HANYA saat pelanggan keberatan harga, sekali per percakapan',
+      '• {{total_transfer_nego}} = total TRANSFER harga mentok (sudah semua diskon) — HANYA untuk nego',
+    );
+    if (q.codTotalNego != null && q.codTotalNego > 0) {
+      lines.push('• {{total_cod_nego}} = total COD harga mentok (sudah semua diskon) — HANYA untuk nego');
+    }
+  }
+  // <<< ANGGA
   if (q.codTotal != null && q.codCourier) {
     lines.push(
       '• {{kurir_cod}} = kurir untuk COD',

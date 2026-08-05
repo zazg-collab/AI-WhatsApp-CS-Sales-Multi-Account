@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+// >>> ANGGA — addendum v2 M1/M3: deteksi produk di teks keluar/form memakai
+// pencocok katalog yang sama dengan resolveItems (satu perilaku, satu sumber).
+import { tokenizeForMatch, scoreProductMatch } from '../products/products.util';
+// <<< ANGGA
 
 /**
  * >>> ANGGA — Order Context Log (blueprint 2026-08-04 + amendemen v1.1).
@@ -50,9 +54,51 @@ export interface OrderContextEntry {
 
 export type OrderMarkerType = 'completed' | 'cancelled';
 
+/** >>> ANGGA — addendum v2 M1: PENAWARAN — produk yang disodorkan sistem/bot/
+ *  admin ke pelanggan (teks/media/form). Jangkar deterministik untuk kata
+ *  tunjuk ("yg ini", "yg itu") dan fallback konteks sebelum ada kutipan. <<< */
+export interface OfferEntry {
+  items: OrderSnapshotItem[];
+  medium: 'text' | 'media' | 'form';
+  createdAt: Date;
+  /** true = masih dalam jendela `orderOfferWindowMinutes`. */
+  fresh: boolean;
+}
+
 /** Berapa event terakhir yang dibaca saat menyusun kandidat. Parameter teknis
  *  (bukan angka bisnis): satu sesi belanja wajar jauh di bawah ini. */
 export const CANDIDATE_SCAN_LIMIT = 50;
+
+/** >>> ANGGA — addendum v2 M1: batas produk yang dicatat per satu penawaran
+ *  (pesan katalog panjang tetap terekam tanpa membengkak). Parameter teknis. */
+export const MAX_OFFER_ITEMS = 4;
+
+/** Ambang skor pencocokan nama produk — SAMA dengan MIN_PRODUCT_MATCH_SCORE
+ *  di shipping.service (nilai disalin sebagai konstanta teknis untuk
+ *  menghindari impor melingkar; dijaga selaras lewat tes). */
+const MIN_MATCH_SCORE = 2;
+
+/**
+ * Produk katalog yang DISEBUT di teks (skor ≥ ambang), terurut skor menurun.
+ * Dipakai M1 (offer scan pesan keluar), M3 (seed form), dan interseksi deixis.
+ * Pure + diekspor supaya bisa diuji tanpa Nest/DB.
+ */
+export function catalogMatchesInText(
+  text: string,
+  products: Array<{ id: string; sku?: string | null; name: string }>,
+): Array<{ productId: string; sku: string | null; name: string; score: number }> {
+  const tokens = tokenizeForMatch(text ?? '');
+  if (!tokens.size) return [];
+  return (products ?? [])
+    .map((p) => ({
+      productId: p.id,
+      sku: p.sku ?? null,
+      name: p.name,
+      score: scoreProductMatch(p as never, tokens),
+    }))
+    .filter((m) => m.score >= MIN_MATCH_SCORE)
+    .sort((a, b) => b.score - a.score);
+}
 
 /**
  * Union per IDENTITAS PRODUK dari daftar snapshot (terbaru lebih dulu):
@@ -93,11 +139,18 @@ export class OrderContextService {
   /** Pagar "satu giliran satu kebenaran": messageId customer terakhir yang
    *  sudah menulis snapshot, per percakapan (pola `bumpAsk`). */
   private readonly writtenFor = new Map<string, string>();
+  /** >>> ANGGA — addendum v2 M1: pagar dedupe penawaran per pesan (bounded). */
+  private readonly offerWrittenFor = new Set<string>();
+  // <<< ANGGA
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
   ) {}
+
+  private async oc() {
+    return this.settings.orderContext();
+  }
 
   private get table(): OrderContextTable {
     return (this.prisma as unknown as { orderContextEvent: OrderContextTable })
@@ -171,7 +224,7 @@ export class OrderContextService {
       this.logger.warn(`Gagal membaca log order ${conversationId}: ${err}`);
       return [];
     }
-    const cfg = await this.settings.shipping();
+    const cfg = await this.oc();
     const staleMs = Math.max(1, cfg.orderContextStaleHours) * 3_600_000;
     const now = Date.now();
 
@@ -209,7 +262,7 @@ export class OrderContextService {
   async noteOutboundSent(conversationId: string, text: string): Promise<void> {
     if (!conversationId || !text) return;
     try {
-      const cfg = await this.settings.shipping();
+      const cfg = await this.oc();
       const note = (cfg.orderClosingNote ?? '').trim();
       if (note.length < 10) return;
       if (!text.includes(note)) return;
@@ -218,6 +271,188 @@ export class OrderContextService {
       this.logger.warn(`Gagal deteksi closing ${conversationId}: ${err}`);
     }
   }
+
+  // >>> ANGGA — addendum v2 M1: hook TUNGGAL untuk pesan keluar yang
+  // benar-benar terkirim — (a) deteksi closing (marker selesai), (b) scan
+  // PENAWARAN: teks yang menyebut produk katalog tercatat sebagai offer.
+  // Fire-and-forget dari jalur kirim; tidak pernah melempar.
+  async noteOutbound(conversationId: string, messageId: string, text: string): Promise<void> {
+    await this.noteOutboundSent(conversationId, text);
+    await this.scanOffer(conversationId, messageId, text, 'text');
+  }
+
+  /** M3 — seed deterministik dari pesan FORM funnel (masuk ATAU keluar):
+   *  pesan memuat frasa penanda form → produk di dalamnya dicatat sebagai
+   *  penawaran `form`, TANPA lewat LLM (pesan template = fakta pasti). */
+  async noteInboundForm(conversationId: string, messageId: string, text: string): Promise<void> {
+    if (!conversationId || !text) return;
+    try {
+      const cfg = await this.oc();
+      const t = text.toLowerCase();
+      const isForm = (cfg.orderFormHintKeywords ?? []).some(
+        (k) => k && t.includes(k.toLowerCase()),
+      );
+      if (!isForm) return;
+      await this.scanOffer(conversationId, messageId, text, 'form');
+    } catch (err) {
+      this.logger.warn(`Gagal seed form ${conversationId}: ${err}`);
+    }
+  }
+
+  /** Scan teks → produk katalog yang disebut → recordOffer. Dedupe per pesan. */
+  private async scanOffer(
+    conversationId: string,
+    messageId: string,
+    text: string,
+    medium: 'text' | 'media' | 'form',
+  ): Promise<void> {
+    if (!conversationId || !messageId || !text) return;
+    const key = `${conversationId}:${messageId}`;
+    if (this.offerWrittenFor.has(key)) return;
+    try {
+      const products = await (this.prisma as unknown as {
+        product: { findMany(args: Record<string, unknown>): Promise<Array<{ id: string; sku?: string | null; name: string }>> };
+      }).product.findMany({ where: { status: 'active' }, take: 500 });
+      const matches = catalogMatchesInText(text, products);
+      if (!matches.length) return;
+      this.offerWrittenFor.add(key);
+      while (this.offerWrittenFor.size > 1000) {
+        const oldest = this.offerWrittenFor.values().next().value;
+        if (oldest === undefined) break;
+        this.offerWrittenFor.delete(oldest);
+      }
+      await this.recordOffer(
+        conversationId,
+        matches.slice(0, MAX_OFFER_ITEMS).map((m) => ({
+          productId: m.productId,
+          sku: m.sku,
+          name: m.name,
+          qty: 1,
+        })),
+        medium,
+        messageId,
+      );
+    } catch (err) {
+      this.logger.warn(`Gagal scan penawaran ${conversationId}: ${err}`);
+    }
+  }
+
+  /** Catat penawaran (M1). Tidak pernah melempar. */
+  async recordOffer(
+    conversationId: string,
+    items: OrderSnapshotItem[],
+    medium: 'text' | 'media' | 'form',
+    messageId?: string,
+  ): Promise<void> {
+    if (!conversationId || !items?.length) return;
+    try {
+      await this.table.create({
+        data: {
+          conversationId,
+          type: 'offer',
+          payload: { items, medium, messageId: messageId ?? null } as unknown as object,
+          source: medium,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Gagal menulis penawaran ${conversationId}: ${err}`);
+    }
+  }
+
+  /**
+   * Penawaran SETELAH penanda lifecycle terakhir, terbaru dulu, berlabel
+   * `fresh` (jendela `orderOfferWindowMinutes`). Dipakai resolusi deixis
+   * ("yg ini") dan fallback konteks pra-kutipan (form seed).
+   */
+  async recentOffers(conversationId: string): Promise<OfferEntry[]> {
+    if (!conversationId) return [];
+    let rows: Array<{ type: string; payload: unknown; createdAt: Date }>;
+    try {
+      rows = await this.table.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        take: CANDIDATE_SCAN_LIMIT,
+      });
+    } catch (err) {
+      this.logger.warn(`Gagal membaca penawaran ${conversationId}: ${err}`);
+      return [];
+    }
+    const cfg = await this.oc();
+    const windowMs = Math.max(1, cfg.orderOfferWindowMinutes) * 60_000;
+    const now = Date.now();
+    const out: OfferEntry[] = [];
+    for (const row of rows) {
+      if (row.type === 'completed' || row.type === 'cancelled') break;
+      if (row.type !== 'offer') continue;
+      const p = row.payload as { items?: unknown; medium?: unknown } | null;
+      if (!p || typeof p !== 'object') continue;
+      const items = (Array.isArray(p.items) ? p.items : [])
+        .filter((i): i is OrderSnapshotItem => !!i && typeof (i as OrderSnapshotItem).productId === 'string' && typeof (i as OrderSnapshotItem).name === 'string')
+        .map((i) => ({ productId: i.productId, sku: i.sku ?? null, name: i.name, qty: Number(i.qty) > 0 ? Math.floor(Number(i.qty)) : 1 }));
+      if (!items.length) continue;
+      out.push({
+        items,
+        medium: (p.medium === 'media' || p.medium === 'form' ? p.medium : 'text'),
+        createdAt: row.createdAt,
+        fresh: now - new Date(row.createdAt).getTime() <= windowMs,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * M4 — kandidat segmen BERJALAN + snapshot segmen COMPLETED terakhir.
+   * Segmen completed hanya boleh dipakai bila pelanggan MERUJUKNYA eksplisit
+   * (orderReferenceKeywords) — dihitung ulang inputnya, wajib bridge.
+   */
+  async candidatesWithCompleted(conversationId: string): Promise<{
+    current: OrderContextEntry[];
+    lastCompleted: OrderContextEntry[];
+  }> {
+    const current = await this.candidates(conversationId);
+    const empty = { current, lastCompleted: [] as OrderContextEntry[] };
+    if (!conversationId) return empty;
+    let rows: Array<{ type: string; payload: unknown; createdAt: Date }>;
+    try {
+      rows = await this.table.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        take: CANDIDATE_SCAN_LIMIT,
+      });
+    } catch {
+      return empty;
+    }
+    // Cari marker pertama; hanya jenis `completed` yang boleh dirujuk balik
+    // (order `cancelled` memang dibatalkan — tidak untuk dilanjutkan).
+    let i = 0;
+    while (i < rows.length && rows[i].type !== 'completed' && rows[i].type !== 'cancelled') i++;
+    if (i >= rows.length || rows[i].type !== 'completed') return empty;
+    const lastCompleted: OrderContextEntry[] = [];
+    for (let j = i + 1; j < rows.length; j++) {
+      const row = rows[j];
+      if (row.type === 'completed' || row.type === 'cancelled') break;
+      if (row.type !== 'snapshot') continue;
+      const p = row.payload as Partial<OrderSnapshot> | null;
+      if (!p || typeof p !== 'object') continue;
+      const items = (Array.isArray(p.items) ? p.items : [])
+        .filter((it): it is OrderSnapshotItem => !!it && typeof it.productId === 'string' && typeof it.name === 'string')
+        .map((it) => ({ productId: it.productId, sku: it.sku ?? null, name: it.name, qty: Number(it.qty) > 0 ? Math.floor(Number(it.qty)) : 1 }));
+      lastCompleted.push({
+        snapshot: {
+          city: String(p.city ?? ''),
+          province: String(p.province ?? ''),
+          destinationId: String(p.destinationId ?? ''),
+          items,
+        },
+        createdAt: row.createdAt,
+        // Segmen completed selalu diperlakukan TIDAK segar untuk keperluan
+        // jawaban langsung — hanya boleh lewat jalur referensi eksplisit.
+        fresh: false,
+      });
+    }
+    return { current, lastCompleted };
+  }
+  // <<< ANGGA (addendum v2)
 
   /** Entri SEGAR terbaru yang punya barang — anchor default "order aktif". */
   async latestFresh(conversationId: string): Promise<OrderContextEntry | null> {
