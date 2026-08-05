@@ -261,6 +261,12 @@ class OrderContextSettingsDto {
   orderContradictionPhrases?: string[];
   // <<< ANGGA
 
+  // >>> ANGGA — anti-teater proses (2026-08-05): narasi "sedang mengecek" yang
+  // ditahan saat draft sudah menyisipkan penanda uang di pesan yang sama.
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderTheaterPhrases?: string[];
+  // <<< ANGGA
+
   // >>> ANGGA — Q-Chain (2026-08-05): funnel pertanyaan berantai.
   @IsOptional() @IsBoolean()
   orderFunnelEnabled?: boolean;

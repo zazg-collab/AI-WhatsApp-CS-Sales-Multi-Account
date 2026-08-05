@@ -193,6 +193,12 @@ export interface OrderContextSettings {
    *  ini obrolan uang/tempat — model dilarang bilang "akan cek dulu" padahal
    *  datanya sudah dihitung sistem. */
   orderContradictionPhrases: string[];
+  /** >>> ANGGA — anti-teater proses (2026-08-05, insiden "mataram dobel"):
+   *  frasa narasi "sedang mengecek" ("saya cek dulu", "mohon tunggu", "saya
+   *  proses dulu") yang ditahan HANYA saat draft yang sama SUDAH menyisipkan
+   *  penanda uang — pura-pura mengecek padahal angkanya sudah ditulis di
+   *  pesan itu juga. Giliran nego dikecualikan (eskalasi atasan sah). <<< */
+  orderTheaterPhrases: string[];
   /** >>> ANGGA — Q-Chain (2026-08-05, KETOK + MANDAT KERAS Bossfren): funnel
    *  pertanyaan berantai — jawaban uang WAJIB menutup dengan pertanyaan
    *  langkah berikutnya (barang→alamat→konklusi→qty→total+metode). Kalimat =

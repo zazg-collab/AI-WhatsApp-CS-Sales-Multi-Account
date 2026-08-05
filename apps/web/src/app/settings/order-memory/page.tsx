@@ -158,6 +158,13 @@ const dict: Dict = {
     en: 'Held ONLY when a quote is computed AND the turn is about money/places — the bot must not deny data it already has.',
   },
   // <<< ANGGA
+  // >>> ANGGA — anti-teater proses (2026-08-05, insiden "mataram dobel").
+  theaterKw: { id: 'Frasa teater proses ("cek dulu / mohon tunggu")', en: 'Process-theater phrases ("checking / please wait")' },
+  theaterKwHint: {
+    id: 'Ditahan HANYA kalau balasan yang sama sudah memuat angka dari penanda — bot dilarang pura-pura "masih mengecek" padahal angkanya sudah ia tulis di pesan itu juga. Giliran nego dikecualikan.',
+    en: 'Held ONLY when the same reply already contains numbers from placeholders — the bot must not pretend to "still be checking" while the number is right there. Negotiation turns are exempt.',
+  },
+  // <<< ANGGA
   // >>> ANGGA — Q-Chain (2026-08-05, ketok Bossfren): funnel pertanyaan berantai.
   secFunnel: { id: 'Funnel pertanyaan berantai (Q-Chain)', en: 'Chained question funnel (Q-Chain)' },
   secFunnelIntro: {
@@ -212,6 +219,7 @@ interface OrderContextSettings {
   orderFormWelcomeTemplate: string;
   orderMetaPhraseBlacklist: string[];
   orderContradictionPhrases: string[];
+  orderTheaterPhrases: string[]; // >>> ANGGA — anti-teater (2026-08-05) <<<
   orderFunnelEnabled: boolean;
   orderFunnelAskItem: string;
   orderFunnelAskAddress: string;
@@ -294,6 +302,7 @@ export default function OrderMemorySettingsPage() {
         orderFormWelcomeTemplate: data.orderFormWelcomeTemplate ?? '',
         orderMetaPhraseBlacklist: data.orderMetaPhraseBlacklist ?? [],
         orderContradictionPhrases: data.orderContradictionPhrases ?? [],
+        orderTheaterPhrases: data.orderTheaterPhrases ?? [], // >>> ANGGA — anti-teater <<<
         // >>> ANGGA — Q-Chain (2026-08-05)
         orderFunnelEnabled: data.orderFunnelEnabled !== false,
         orderFunnelAskItem: data.orderFunnelAskItem ?? '',
@@ -456,6 +465,13 @@ export default function OrderMemorySettingsPage() {
                 <input className={fieldCls} disabled={!canEdit}
                   value={(data.orderContradictionPhrases ?? []).join(', ')}
                   onChange={(e) => patch('orderContradictionPhrases', parseList(e.target.value))} />
+              </Field>
+              {/* <<< ANGGA */}
+              {/* >>> ANGGA — anti-teater proses (2026-08-05, insiden "mataram dobel") */}
+              <Field label={t('theaterKw')} hint={`${t('listHint')} ${t('theaterKwHint')}`}>
+                <input className={fieldCls} disabled={!canEdit}
+                  value={(data.orderTheaterPhrases ?? []).join(', ')}
+                  onChange={(e) => patch('orderTheaterPhrases', parseList(e.target.value))} />
               </Field>
               {/* <<< ANGGA */}
 

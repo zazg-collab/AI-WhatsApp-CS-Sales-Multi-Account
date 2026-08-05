@@ -261,6 +261,17 @@ export class SettingsService {
           'akan cek dulu', 'saya akan cek', 'akan konfirmasi ke admin',
           // <<< ANGGA
         ]),
+        // >>> ANGGA — anti-teater proses (2026-08-05, insiden "mataram dobel"):
+        // narasi "sedang mengecek" yang ditahan HANYA kalau draft yang sama
+        // sudah menyisipkan penanda uang (kontradiksi satu pesan). Beda kelas
+        // dari orderContradictionPhrases (itu bersyarat giliran-uang, ini
+        // bersyarat token-terpasang) — nego dikecualikan di kode.
+        orderTheaterPhrases: this.list(this.config.get('ORDER_THEATER_PHRASES'), [
+          'saya cek dulu', 'saya bantu cek dulu', 'mohon tunggu', 'mohon ditunggu',
+          'tunggu sebentar', 'saya proses dulu', 'setelah saya cek', 'sedang saya cek',
+          'saya cek terlebih dahulu',
+        ]),
+        // <<< ANGGA
         // <<< ANGGA
         // >>> ANGGA — Q-Chain (2026-08-05, ketok Bossfren): funnel pertanyaan
         // berantai. Wording default = ketok; ubah dari dashboard tanpa deploy.

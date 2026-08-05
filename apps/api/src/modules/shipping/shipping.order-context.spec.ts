@@ -50,6 +50,10 @@ const OC = {
   // urutan kata 'akan cek dulu'/'saya akan cek'/'akan konfirmasi ke admin'
   // (cermin default settings.service; 'konfirmasi dulu ke admin' tetap sah).
   orderContradictionPhrases: ['belum memiliki informasi', 'belum ada informasi', 'belum punya info', 'tidak memiliki informasi', 'belum bisa memastikan', 'akan saya cek dulu', 'cek dengan tim', 'tim logistik', 'menghubungkan dengan tim', 'akan segera memberikan informasi', 'akan cek dulu', 'saya akan cek', 'akan konfirmasi ke admin'],
+  // >>> ANGGA — anti-teater proses (2026-08-05, insiden "mataram dobel"):
+  // cermin default settings.service — narasi "sedang mengecek" yang ditahan
+  // hanya saat draft yang sama sudah menyisipkan penanda uang.
+  orderTheaterPhrases: ['saya cek dulu', 'saya bantu cek dulu', 'mohon tunggu', 'mohon ditunggu', 'tunggu sebentar', 'saya proses dulu', 'setelah saya cek', 'sedang saya cek', 'saya cek terlebih dahulu'],
   // <<< ANGGA
   // >>> ANGGA — Q-Chain (2026-08-05, ketok Bossfren): funnel pertanyaan berantai.
   orderFunnelEnabled: true,
@@ -1134,6 +1138,91 @@ describe('Q-Chain fix — REPLAY "banyumas kak": jawaban pilihan = giliran uang'
     pesanBaru(h, 'm2', 'kalau garansinya gimana kak?');
     expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok'); // cache
     const out = await h.svc.resolvePriceTokens('c1', 'Untuk garansi, saya akan cek dulu ke tim ya kak 🙏');
+    expect(out.ok).toBe(true);
+  });
+});
+// <<< ANGGA
+
+// >>> ANGGA — Q-Chain fix 2 (2026-08-05, REPLAY insiden "mataram dobel"):
+// draft nyata pada giliran "ongkir ke mataram berapa?" (qty BELUM pasti)
+// menyodorkan blok tagihan lengkap + total transfer/COD SEBELUM qty dijawab
+// (keluar pakem, MANDAT KERAS Bossfren: "ditotalin itu jika qty udah jelas
+// dijawab") DAN bernarasi teater "saya cek dulu… mohon tunggu… saya proses
+// dulu… setelah saya cek" padahal angkanya tertulis di pesan yang sama.
+// Fix: (1) langkah PRA-TOTAL → katalog kelas total disensor + gerbang menahan
+// pemakaiannya; (2) penjaga anti-teater (kontradiksi dalam satu pesan).
+
+describe('Q-Chain fix 2 — REPLAY "mataram dobel": total prematur + teater proses', () => {
+  it('langkah PRA-TOTAL: katalog total DISENSOR dari grounding (qty belum pasti)', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('mau ambil berapa pcs kak?'); // funnel tetap jalan
+    // Pra-fix: seluruh katalog total ikut ditawarkan walau langkahnya qty.
+    expect(grounding).not.toContain('{{rincian_tagihan}}');
+    expect(grounding).not.toContain('{{total_transfer}}');
+    expect(grounding).not.toContain('{{subtotal_barang}}');
+    expect(grounding).toContain('LARANGAN KERAS GILIRAN INI');
+  });
+
+  it('gerbang MENAHAN total yang disodorkan sebelum qty pasti (walau modelnya nulis sendiri)', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    await h.svc.getGroundingText('c1'); // funnelExpect langkah qty tercatat
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Ongkirnya {{ongkir}} ya kak untuk Golok Sembelih Multifungsi. Jadi totalnya:\n{{rincian_tagihan}}\nmau ambil berapa pcs kak?',
+    );
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toContain('belum waktunya menyodorkan total');
+  });
+
+  it('ANTI-TEATER: "saya cek dulu… mohon tunggu… setelah saya cek" + angka di pesan yang sama → DITAHAN', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Baik kak, saya cek dulu ongkir ke Medan ya 🙏 Mohon tunggu sebentar ya kak, saya proses dulu 🕒 Setelah saya cek, ongkirnya {{ongkir}} untuk Golok Sembelih Multifungsi. Mau ambil berapa pcs kak?',
+    );
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toContain('berpura-pura masih mengecek');
+  });
+
+  it('kontrol: giliran TOTAL (qty pasti + metode terjawab) → {{rincian_tagihan}} tetap sah', async () => {
+    const h = harness({
+      lastCustomerText: 'COD deh kak. beli 2 ya',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }], { qtyPasti: true })],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('{{rincian_tagihan}}'); // langkah total: TIDAK disensor
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Ini ya kak:\n{{rincian_tagihan}}\nboleh dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏',
+    );
+    expect(out.ok).toBe(true);
+  });
+
+  it('kontrol: frasa teater TANPA angka di pesan yang sama → tidak salah tangkap', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Untuk stok warna lain mohon tunggu sebentar ya kak, saya cek dulu ke admin 🙏',
+    );
     expect(out.ok).toBe(true);
   });
 });

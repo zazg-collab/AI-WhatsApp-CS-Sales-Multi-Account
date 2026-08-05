@@ -1546,7 +1546,7 @@ export class ShippingService {
     lastMsgId: string,
     lang: string,
     opts: { quote?: ShippingQuote; hargaTurn?: boolean },
-  ): Promise<string | null> {
+  ): Promise<{ teks: string; step: string } | null> {
     if (!this.orderLog) return null;
     const oc = await this.settings.orderContext();
     if (oc.orderFunnelEnabled === false) return null;
@@ -1588,13 +1588,15 @@ export class ShippingService {
     const qtyPasti = latest?.snapshot.qtyPasti === true;
 
     const asks = await this.orderLog.funnelAsks(conversationId);
-    const pilih = (step: string, kalimat: string, total = false): string | null => {
+    const pilih = (step: string, kalimat: string, total = false): { teks: string; step: string } | null => {
       const bersih = (kalimat ?? '').trim();
       if (!bersih) return null; // template dikosongkan admin = langkah dimatikan
       if ((asks[step] ?? 0) >= 2) return null; // anti-cerewet: maks 2x per segmen
       void this.orderLog?.recordFunnelAsk(conversationId, step, lastMsgId);
       this.cache.setFunnelExpect(conversationId, { messageId: lastMsgId, step, kalimat: bersih });
-      return t(total ? SHIPPING_FUNNEL_TOTAL : SHIPPING_FUNNEL_DIRECTIVE, lang)(bersih);
+      // >>> ANGGA — Q-Chain fix 2: langkah ikut dipulangkan supaya pemanggil
+      // bisa menyensor katalog total pada langkah PRA-TOTAL. <<<
+      return { teks: t(total ? SHIPPING_FUNNEL_TOTAL : SHIPPING_FUNNEL_DIRECTIVE, lang)(bersih), step };
     };
 
     if (!adaBarang) return pilih('barang', oc.orderFunnelAskItem);
@@ -1693,7 +1695,7 @@ export class ShippingService {
             const memoQ = this.turnMemo.get(conversationId);
             const msgIdQ = (memoQ?.key ?? '').split(':')[0] || '';
             const arah = await this.funnelDirective(conversationId, msgIdQ, lang, { quote: q });
-            if (arah) lines.push(arah);
+            if (arah) lines.push(arah.teks);
           }
           // <<< ANGGA
           return lines.join('\n');
@@ -1766,7 +1768,24 @@ export class ShippingService {
         if (!adaNego) {
           const msgIdQ = (memoNego?.key ?? '').split(':')[0] || '';
           const arah = await this.funnelDirective(conversationId, msgIdQ, lang, { quote: q });
-          if (arah) lines.push(arah);
+          if (arah) {
+            // >>> ANGGA — Q-Chain fix 2 (2026-08-05, insiden "mataram dobel"):
+            // langkah PRA-TOTAL (barang/alamat/keranjang/qty) = total BELUM
+            // BOLEH tersodor (ketok Bossfren: "ditotalin itu jika qty udah
+            // jelas dijawab"). Baris katalog kelas total DIBUANG dari giliran
+            // ini supaya model tidak tergoda; gerbang di `resolvePriceTokens`
+            // menahan kalau model tetap menulis penandanya sendiri.
+            if (PRA_TOTAL_STEPS.has(arah.step)) {
+              for (let i = lines.length - 1; i >= 0; i--) {
+                if (/^• \{\{/.test(lines[i]) && POLA_TOKEN_TOTAL.test(lines[i])) lines.splice(i, 1);
+              }
+              lines.push(
+                '• LARANGAN KERAS GILIRAN INI: JANGAN menyodorkan subtotal/total/rekap tagihan — jumlah pesanan belum pasti. Jawab yang ditanya (mis. ongkir/harga) SINGKAT satu kalimat, tanpa narasi proses, lalu tutup dengan pertanyaan wajib di bawah.',
+              );
+            }
+            // <<< ANGGA
+            lines.push(arah.teks);
+          }
         }
         // <<< ANGGA
         return lines.join('\n');
@@ -1863,7 +1882,7 @@ export class ShippingService {
                 lang,
                 { hargaTurn: true },
               );
-              if (arah) return arah;
+              if (arah) return arah.teks;
             }
           }
         }
@@ -2119,6 +2138,20 @@ export class ShippingService {
             `Balasan melanggar alur penjualan wajib — tidak menutup dengan pertanyaan langkah "${expectF.step}". Tulis ulang dan akhiri PERSIS dengan: "${expectF.kalimat}"`,
           );
         }
+        // >>> ANGGA — Q-Chain fix 2 (2026-08-05, insiden "mataram dobel"):
+        // langkah PRA-TOTAL → total HARAM tersodor duluan (ketok Bossfren:
+        // "ditotalin itu jika qty udah jelas dijawab"). Dicek di teks MENTAH
+        // (sebelum substitusi) — penanda total yang ditulis model sendiri
+        // tetap tertangkap walau katalognya sudah disensor grounding.
+        if (PRA_TOTAL_STEPS.has(expectF.step)) {
+          const tokenTotal = text.match(POLA_TOKEN_TOTAL);
+          if (tokenTotal) {
+            issues.push(
+              `Balasan melanggar alur penjualan wajib — belum waktunya menyodorkan total (${tokenTotal[0]}): jumlah pesanan belum pasti. Jawab yang ditanya saja (harga/ongkir) lalu tutup dengan pertanyaan langkah "${expectF.step}".`,
+            );
+          }
+        }
+        // <<< ANGGA
       }
     }
     // <<< ANGGA
@@ -2154,6 +2187,31 @@ export class ShippingService {
           );
         }
       }
+      // >>> ANGGA — ANTI-TEATER PROSES (2026-08-05, insiden "mataram dobel":
+      // "saya cek dulu… mohon tunggu… saya proses dulu 🕒 Setelah saya cek,
+      // ongkirnya Rp50.000"): draft yang SUDAH menyisipkan penanda uang tapi
+      // masih bernarasi "sedang mengecek" = kontradiksi di dalam SATU pesan —
+      // angkanya jelas sudah di tangan. Giliran NEGO dikecualikan (eskalasi
+      // "saya cek dulu ke atasan" itu sah dan memang diperintahkan sistem).
+      {
+        const teksGiliranT = this.turnMemo.get(conversationId)?.lastText ?? '';
+        const adaTokenUangDipakai =
+          /\{\{(harga_satuan|harga_produk_\d+|ongkir|kota_tujuan)\}\}/i.test(text) ||
+          POLA_TOKEN_TOTAL.test(text);
+        const giliranNego = hasAggregateKeyword(teksGiliranT, cfg.orderNegoKeywords);
+        if (adaTokenUangDipakai && !giliranNego) {
+          const teater = (cfg.orderTheaterPhrases ?? [])
+            .map((f) => (f ?? '').trim())
+            .filter((f) => f.length > 0)
+            .find((f) => substituted.toLowerCase().includes(f.toLowerCase()));
+          if (teater) {
+            issues.push(
+              `Balasan berpura-pura masih mengecek ("${teater}") padahal angkanya sudah tertulis di pesan yang sama — hapus seluruh narasi proses (cek dulu/mohon tunggu/saya proses), jawab langsung satu kalimat memakai penanda.`,
+            );
+          }
+        }
+      }
+      // <<< ANGGA
     }
     // <<< ANGGA
 
@@ -2514,6 +2572,15 @@ export const NAMA_TOKEN_CADANGAN = new Set([
  * `resolvePriceTokens` (file yang sama — ada penanda silang di sana). String
  * yang tidak dikenal jatuh ke 'lainnya', bukan salah hitung diam-diam.
  */
+/** >>> ANGGA — Q-Chain fix 2 (2026-08-05, insiden "mataram dobel + total
+ *  prematur"): langkah funnel PRA-TOTAL. Selama langkah aktif giliran ini
+ *  masih di sini, penanda kelas total (rincian_tagihan/subtotal/total_*)
+ *  DIHAPUS dari katalog grounding DAN drafnya DITAHAN gerbang kalau tetap
+ *  memakainya — ketok Bossfren: "ditotalin itu jika qty udah jelas dijawab". <<< */
+export const PRA_TOTAL_STEPS = new Set(['barang', 'alamat', 'keranjang', 'qty']);
+export const POLA_TOKEN_TOTAL =
+  /\{\{(rincian_tagihan|subtotal_barang|total_transfer|total_cod|blok_total|total_transfer_diskon|total_cod_diskon|total_transfer_nego|total_cod_nego)\}\}/i;
+
 export function klasifikasiAlasanGate(
   issue: string,
 ): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'funnel_dilanggar' | 'lainnya' {
@@ -2524,6 +2591,7 @@ export function klasifikasiAlasanGate(
   if (s.includes('ASUMSI order yang sedang berjalan')) return 'bridge_asumsi';
   if (s.includes('istilah internal')) return 'istilah_internal'; // >>> ANGGA — E3 <<<
   if (s.includes('menyangkal data yang sudah tersedia')) return 'kontradiksi_data'; // >>> ANGGA — P2 <<<
+  if (s.includes('berpura-pura masih mengecek')) return 'kontradiksi_data'; // >>> ANGGA — anti-teater (2026-08-05) <<<
   if (s.includes('melanggar alur penjualan wajib')) return 'funnel_dilanggar'; // >>> ANGGA — Q-Chain <<<
   return 'lainnya';
 }
