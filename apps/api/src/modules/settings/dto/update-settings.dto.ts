@@ -241,6 +241,12 @@ class OrderContextSettingsDto {
 
   @IsOptional() @IsArray() @IsString({ each: true })
   orderNegoKeywords?: string[];
+
+  // >>> ANGGA — F1/F2 (2026-08-05): kata tanya-uang. Pelajaran bc0bf94: field
+  // AppSetting baru = TIGA tempat (types + defaults + DTO ini).
+  @IsOptional() @IsArray() @IsString({ each: true })
+  orderMoneyAskKeywords?: string[];
+  // <<< ANGGA
 }
 // <<< ANGGA
 

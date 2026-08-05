@@ -63,6 +63,13 @@ const dict: Dict = {
   },
   bridgeRetry: { id: 'retry_once — koreksi otomatis lalu tahan (disarankan)', en: 'retry_once — auto-correct then hold (recommended)' },
   bridgePrompt: { id: 'prompt_only — instruksi saja', en: 'prompt_only — instruction only' },
+  // >>> ANGGA — F1/F2 (2026-08-05): kata tanya-uang.
+  moneyAskKw: { id: 'Kata tanya-uang (pembuka memori)', en: 'Money-ask words (memory opener)' },
+  moneyAskKwHint: {
+    id: 'Bot hanya menjawab pakai memori order (rekap/asumsi) kalau pesan memuat salah satu kata ini. Sapaan tanpa kata ini dijawab natural tanpa rekap. Kata dasar cukup — "totalnya" tertangkap oleh "total".',
+    en: 'Order memory (recap/assumption) only answers when the message contains one of these. Word stems suffice — "totalnya" is caught by "total".',
+  },
+  // <<< ANGGA
   cancelKw: { id: 'Kata pembatalan order utuh', en: 'Whole-order cancel words' },
   cancelKwHint: {
     id: 'Berlaku hanya kalau seluruh pesan cuma kata ini + pengisi. Pembatalan parsial = perubahan order biasa.',
@@ -149,6 +156,9 @@ interface OrderContextSettings {
   orderFormHintKeywords: string[];
   orderReferenceKeywords: string[];
   orderNegoKeywords: string[];
+  // >>> ANGGA — F1/F2 (2026-08-05)
+  orderMoneyAskKeywords: string[];
+  // <<< ANGGA
 }
 
 const fieldCls =
@@ -200,6 +210,9 @@ export default function OrderMemorySettingsPage() {
         orderFormHintKeywords: data.orderFormHintKeywords,
         orderReferenceKeywords: data.orderReferenceKeywords,
         orderNegoKeywords: data.orderNegoKeywords,
+        // >>> ANGGA — F1/F2 (2026-08-05)
+        orderMoneyAskKeywords: data.orderMoneyAskKeywords,
+        // <<< ANGGA
       };
       const updated = await api<{ orderContext: OrderContextSettings }>('/settings', {
         method: 'PUT',
@@ -278,6 +291,13 @@ export default function OrderMemorySettingsPage() {
                   </select>
                 </Field>
               </div>
+              {/* >>> ANGGA — F1/F2 (2026-08-05): kata tanya-uang */}
+              <Field label={t('moneyAskKw')} hint={`${t('listHint')} ${t('moneyAskKwHint')}`}>
+                <input className={fieldCls} disabled={!canEdit}
+                  value={(data.orderMoneyAskKeywords ?? []).join(', ')}
+                  onChange={(e) => patch('orderMoneyAskKeywords', parseList(e.target.value))} />
+              </Field>
+              {/* <<< ANGGA */}
               <Field label={t('cancelKw')} hint={`${t('listHint')} ${t('cancelKwHint')}`}>
                 <input className={fieldCls} disabled={!canEdit} value={data.orderCancelKeywords.join(', ')}
                   onChange={(e) => patch('orderCancelKeywords', parseList(e.target.value))} />

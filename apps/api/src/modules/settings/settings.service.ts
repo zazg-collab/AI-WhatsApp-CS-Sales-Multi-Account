@@ -218,6 +218,13 @@ export class SettingsService {
           'diskon lagi', 'kurangin', 'kurangi lagi', 'murahin', 'free ongkir',
           'gratis ongkir', 'nego', 'dikurangiin',
         ]),
+        // >>> ANGGA — F1/F2 (2026-08-05): kata tanya-uang (substring, kata
+        // dasar cukup — "totalnya" tertangkap "total").
+        orderMoneyAskKeywords: this.list(this.config.get('ORDER_MONEY_ASK_KEYWORDS'), [
+          'total', 'ongkir', 'ongkos', 'harga', 'berapa', 'bayar', 'biaya',
+          'transfer', 'rekening', 'cod',
+        ]),
+        // <<< ANGGA
       },
       // <<< ANGGA (Order Context)
     };

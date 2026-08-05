@@ -1,4 +1,4 @@
-import { ShippingService } from './shipping.service';
+import { ShippingService, penjagaKata } from './shipping.service';
 import { ShippingQuoteCache } from './shipping-quote.cache';
 
 /**
@@ -39,6 +39,9 @@ const OC = {
   orderFormHintKeywords: ['form pemesanan', 'sudah melakukan pemesanan', 'mengisi form'],
   orderReferenceKeywords: ['yang tadi', 'yg tadi', 'pesanan tadi', 'order tadi', 'yang kemarin', 'sebelumnya'],
   orderNegoKeywords: ['diskon lagi', 'kurangin', 'murahin', 'free ongkir', 'gratis ongkir', 'nego', 'dikurangiin'],
+  // >>> ANGGA — F1/F2 (2026-08-05): kata tanya-uang, pembuka jalur asumsi.
+  orderMoneyAskKeywords: ['total', 'ongkir', 'ongkos', 'harga', 'berapa', 'bayar', 'biaya', 'transfer', 'rekening', 'cod'],
+  // <<< ANGGA
 };
 // <<< ANGGA
 
@@ -539,3 +542,86 @@ describe('Addendum v2 — P2: tangga nego', () => {
     expect(h.notifications.send).toHaveBeenCalledTimes(1);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// >>> ANGGA — F1+F2+F3 (2026-08-05): REPLAY insiden "halo" di akun tes —
+// sapaan polos dijawab rekap order kemarin (log-hit menyala untuk pesan
+// APA PUN tanpa hint), lalu draft tertahan gerbang uang gara-gara frasa
+// "total harga 2 x {{harga_satuan}}". Tes RED-first terhadap kode pra-F.
+
+describe('F1 — jalur asumsi hanya untuk pesan TANYA-UANG (insiden "halo")', () => {
+  it('REPLAY: "halo" + snapshot segar kemarin → TIDAK dijawab kutipan order', async () => {
+    const h = harness({
+      lastCustomerText: 'halo',
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 2 }])],
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    // Kode pra-F1: log-hit menyala → 'ok' → grounding menyuruh rekap. Harusnya
+    // sapaan jatuh ke alur lama dan TIDAK membawa kutipan apa pun.
+    expect(res.status).toBe('no_destination');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toBe(''); // nol suntikan ongkir/total untuk sapaan
+  });
+
+  it('penjaga perilaku: "totalnya berapa?" tetap log-hit tanpa LLM', async () => {
+    const h = harness({
+      lastCustomerText: 'totalnya berapa?',
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }])],
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(h.provider.chat).not.toHaveBeenCalled();
+  });
+
+  it('penjaga perilaku: afirmasi utuh "oke kak" tetap boleh pakai konteks (jalur bridge)', async () => {
+    const h = harness({
+      lastCustomerText: 'oke kak',
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }])],
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(h.provider.chat).not.toHaveBeenCalled();
+  });
+});
+
+describe('F2 — directive rekap ASUMSI hanya saat obrolan order/uang', () => {
+  it('assumed tersisa dari giliran uang + basa-basi berikutnya (cache hangat) → directive TIDAK disuntik', async () => {
+    const h = harness({
+      lastCustomerText: 'totalnya berapa?',
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }])],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    pesanBaru(h, 'm2', 'oke makasih infonya kak'); // bukan afirmasi utuh, bukan tanya uang
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok'); // cache hangat
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).not.toContain('ASUMSI'); // pra-F2: directive rekap ikut tersuntik
+  });
+
+  it('penjaga perilaku: giliran tanya-uang jalur asumsi TETAP dapat directive bridge', async () => {
+    const h = harness({
+      lastCustomerText: 'totalnya berapa?',
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }])],
+    });
+    await h.svc.quoteForConversation('c1');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('ASUMSI');
+    expect(grounding).toContain('Golok Sembelih Multifungsi');
+  });
+});
+
+describe('F3 — penjaga kata: perkalian eksplisit atas harga satuan itu SAH', () => {
+  it('"total harga 2 x {{harga_satuan}}" (pola draft insiden) → LOLOS', () => {
+    expect(
+      penjagaKata('Kamu memesan 2 Golok Sembelih Multifungsi dengan total harga 2 x {{harga_satuan}} dan ongkir sekitar {{ongkir}}.'),
+    ).toBeNull();
+  });
+
+  it('"totalnya {{harga_satuan}}" tanpa perkalian → tetap DITAHAN', () => {
+    expect(penjagaKata('totalnya {{harga_satuan}} ya kak')).not.toBeNull();
+  });
+
+  it('"totalnya 2 x {{subtotal_barang}}" → tetap DITAHAN (pelonggaran KHUSUS harga_satuan)', () => {
+    expect(penjagaKata('totalnya 2 x {{subtotal_barang}} kak')).not.toBeNull();
+  });
+});
+// <<< ANGGA

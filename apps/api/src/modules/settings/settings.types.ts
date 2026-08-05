@@ -176,6 +176,11 @@ export interface OrderContextSettings {
   /** P2 — frasa NEGO ("diskon lagi","free ongkir") pemicu tangga nego:
    *  tawaran token nego dulu, melewati plafon → eskalasi admin. */
   orderNegoKeywords: string[];
+  /** F1/F2 (2026-08-05, insiden "halo" dijawab rekap order) — kata TANYA-UANG
+   *  ("total","ongkir","berapa",…) pembuka jalur asumsi (log-hit/carry-over)
+   *  dan directive rekap. Dicocokkan SUBSTRING (imbuhan: "totalnya" kena oleh
+   *  "total"). Sapaan tanpa kata ini tidak pernah dijawab kutipan order. */
+  orderMoneyAskKeywords: string[];
 }
 // <<< ANGGA
 

@@ -683,6 +683,24 @@ export class ShippingService {
     const cached = this.cache.get(conversationId);
     const mayHaveChanged =
       PLACE_HINT.test(lastCustomerText) || ORDER_CHANGE_HINT.test(lastCustomerText);
+    // >>> ANGGA — F1 (2026-08-05, insiden "halo" dijawab rekap order kemarin):
+    // jalur ASUMSI (log-hit & carry-over) layak jalan hanya kalau pelanggan
+    // memang bicara uang/order — bukan untuk sapaan/basa-basi. `tanyaUang`
+    // pakai substring (BUKAN batas-kata seperti hasAggregateKeyword) karena
+    // bahasa kita hobi imbuhan: "totalnya", "harganya", "ongkirnya" wajib
+    // tetap tertangkap oleh kata dasar di daftar AppSetting.
+    const tanyaUang =
+      adaKataTanyaUang(lastCustomerText, oc.orderMoneyAskKeywords) ||
+      hasAggregateKeyword(lastCustomerText, oc.orderAggregateKeywords);
+    // Afirmasi utuh ("iya", "oke kak") = lanjutan order yang sedang berjalan —
+    // tetap boleh pakai konteks (jawaban bridge tidak boleh mendadak pikun).
+    const afirmasiUtuh = wholeMessageMatch(
+      lastCustomerText,
+      oc.orderAffirmationKeywords,
+      oc.orderFillerWords,
+      oc.orderNegationKeywords,
+    );
+    // <<< ANGGA
     if (!mayHaveChanged) {
       if (cached) {
         this.cache.recordOutcome(conversationId, 'ok');
@@ -703,7 +721,10 @@ export class ShippingService {
         hasAggregateKeyword(lastCustomerText, oc.orderDeixisKeywords) ||
         hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords);
       // <<< ANGGA
-      if (this.orderLog && !adaTunjukAtauReferensi) {
+      // >>> ANGGA — F1: gerbang tanya-uang. Sapaan tanpa kata uang/agregat/
+      // afirmasi jatuh ke alur lama (ekstraksi) — TIDAK dijawab kutipan
+      // instan dari log.
+      if (this.orderLog && !adaTunjukAtauReferensi && (tanyaUang || afirmasiUtuh)) {
         const entries = (await this.orderLog.candidates(conversationId)).filter(
           (e) => e.fresh && e.snapshot.items.length > 0 && e.snapshot.destinationId,
         );
@@ -830,7 +851,18 @@ export class ShippingService {
     let carriedEntry: OrderContextEntry | null = null;
     let assumedNames: string[] | null = itemsFromDeixis ? itemsFromDeixis.map((i) => i.name) : null;
     let aggregate = false;
-    if (!items.length && this.orderLog) {
+    // >>> ANGGA — F1 (lanjutan): carry-over juga jalur ASUMSI — gerbang yang
+    // sama. Tanpa ini, "halo" yang lolos gerbang log-hit tetap kena rekap
+    // lewat pintu belakang (ekstraksi kosong → barang diseret dari log).
+    // Hint tempat/perubahan & frasa referensi ikut membuka gerbang: "COD deh
+    // kak. beli 2 ya" (insiden asal T2) dan "sama yg tadi" (M4) tetap jalan.
+    const bicaraOrder =
+      tanyaUang ||
+      afirmasiUtuh ||
+      mayHaveChanged ||
+      hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords);
+    if (!items.length && this.orderLog && bicaraOrder) {
+      // <<< ANGGA
       const products = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
       if (!mentionsCatalogProduct(lastCustomerText, products)) {
         // >>> ANGGA — addendum v2 M4: frasa referensi eksplisit ("sama yg
@@ -1341,8 +1373,25 @@ export class ShippingService {
         // ASUMSI order berjalan (carry-over/agregat) → jawaban wajib menyebut
         // barangnya (bridge-validasi; ditegakkan kode di `resolvePriceTokens`,
         // baris ini instruksinya).
+        // >>> ANGGA — F2 (2026-08-05, insiden "halo"): directive ini MEMAKSA
+        // model merekap order ("WAJIB sebut nama barang + totalnya") — pantas
+        // hanya kalau pesan terakhir memang obrolan order/uang. Flag assumed
+        // bisa tersisa dari giliran uang sebelumnya (TTL memo) sementara
+        // pelanggan sudah pindah ke basa-basi; tanpa gerbang ini, "halo"/
+        // "makasih kak" dengan cache hangat ikut dijawab rekap.
         const assumed = this.cache.assumed(conversationId);
-        if (assumed?.productNames.length) {
+        const memoNego = this.turnMemo.get(conversationId);
+        const oc = await this.settings.orderContext();
+        const teksTerakhir = memoNego?.lastText ?? '';
+        const obrolanOrder =
+          adaKataTanyaUang(teksTerakhir, oc.orderMoneyAskKeywords) ||
+          hasAggregateKeyword(teksTerakhir, oc.orderAggregateKeywords) ||
+          hasAggregateKeyword(teksTerakhir, oc.orderDeixisKeywords) ||
+          hasAggregateKeyword(teksTerakhir, oc.orderReferenceKeywords) ||
+          PLACE_HINT.test(teksTerakhir) ||
+          ORDER_CHANGE_HINT.test(teksTerakhir) ||
+          wholeMessageMatch(teksTerakhir, oc.orderAffirmationKeywords, oc.orderFillerWords, oc.orderNegationKeywords);
+        if (assumed?.productNames.length && obrolanOrder) {
           lines.push(t(SHIPPING_GROUNDING_ASSUMED, lang)(assumed.productNames.join(', ')));
         }
         // <<< ANGGA
@@ -1351,9 +1400,7 @@ export class ShippingService {
         // sistem dari plafon AppSetting); ronde ≥2 → JANGAN berjanji, katakan
         // dicek ke atasan + notifikasi instan ke admin (pola notifikasi
         // gerbang uang; sekali per pesan lewat pagar bumpNego).
-        const memoNego = this.turnMemo.get(conversationId);
         if (memoNego) {
-          const oc = await this.settings.orderContext();
           if (hasAggregateKeyword(memoNego.lastText, oc.orderNegoKeywords)) {
             const msgId = memoNego.key.split(':')[0] || memoNego.key;
             const ronde = this.cache.bumpNego(conversationId, msgId);
@@ -1423,7 +1470,12 @@ export class ShippingService {
         // dengan MENYEBUT order lama, tanpa angka apa pun.
         if (this.orderLog) {
           const lastText = this.turnMemo.get(conversationId)?.lastText ?? '';
-          if (/(total|ongkir|ongkos|harga|berapa|bayar)/i.test(lastText)) {
+          // >>> ANGGA — F1 (2026-08-05): regex hardcoded lama diganti daftar
+          // AppSetting yang sama dengan gerbang log-hit — SATU sumber kebijakan
+          // "apa itu pertanyaan uang".
+          const ocStale = await this.settings.orderContext();
+          if (adaKataTanyaUang(lastText, ocStale.orderMoneyAskKeywords)) {
+            // <<< ANGGA
             const entry = await this.orderLog.latestAny(conversationId);
             if (entry && !entry.fresh) {
               const desc =
@@ -1768,6 +1820,22 @@ export function hasAggregateKeyword(text: string, keywords: string[]): boolean {
 }
 
 /**
+ * >>> ANGGA — F1 (2026-08-05): "apakah pesan ini bicara uang?" — pencocokan
+ * SUBSTRING (sengaja beda dari `hasAggregateKeyword` yang batas-kata), karena
+ * imbuhan bahasa sehari-hari ("totalnya", "harganya", "ongkirnya", "dibayar")
+ * wajib tertangkap oleh kata dasar di daftar `orderMoneyAskKeywords`.
+ * Kelonggaran substring aman di sini: salah-positif cuma berarti jalur asumsi
+ * terbuka (perilaku lama), bukan angka salah.
+ */
+export function adaKataTanyaUang(text: string, keywords: string[]): boolean {
+  const norm = (text ?? '').toLowerCase();
+  return (keywords ?? []).some((k) => {
+    const kata = (k ?? '').trim().toLowerCase();
+    return kata.length > 0 && norm.includes(kata);
+  });
+}
+
+/**
  * Qty baru dari pesan pendek ("beli 2", "jadi 3 aja", "2 pcs") — jalur patch
  * qty deterministik untuk carry-over. Null kalau tidak ada pola qty yang
  * meyakinkan. Batas 1..999 (di luar itu hampir pasti bukan qty).
@@ -1884,10 +1952,18 @@ export const NAMA_TOKEN_CADANGAN = new Set([
 ]);
 
 export function penjagaKata(text: string): string | null {
+  // >>> ANGGA — F3 (2026-08-05, insiden draft "total harga 2 x
+  // {{harga_satuan}}" tertahan): PERKALIAN eksplisit "angka x {{harga_satuan}}"
+  // itu pemakaian label satuan yang SAH — angkanya memang harga satuan, dan
+  // pengalinya membuat maknanya tak mungkin tertukar dengan total. Pola itu
+  // dinetralkan dulu sebelum pemeriksaan, KHUSUS harga_satuan (subtotal_barang
+  // dikali angka tetap janggal → tetap dijaga).
+  const bersih = (text ?? '').replace(/\d+\s*[x×*]\s*\{\{harga_satuan\}\}/gi, '[perkalian-satuan]');
+  // <<< ANGGA
   const kata = '(total(nya)?|ongkir(nya)?|ongkos\\s*kirim)';
   const token = '\\{\\{(harga_satuan|subtotal_barang)\\}\\}';
   const larangan = new RegExp(`\\b${kata}\\b[^{}\\n]{0,20}${token}|${token}[^{}\\n]{0,20}\\b${kata}\\b`, 'i');
-  const m = (text ?? '').match(larangan);
+  const m = bersih.match(larangan);
   return m ? m[0] : null;
 }
 
