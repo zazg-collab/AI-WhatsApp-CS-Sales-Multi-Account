@@ -38,6 +38,28 @@ describe('PromptBuilderService', () => {
     await expect(service.buildForConversation('c1')).rejects.toThrow(NotFoundException);
   });
 
+  // >>> ANGGA — koreksi 2026-08-06 (REPLAY insiden "{{subtotal_barang}}"
+  // berulang lintas percakapan/model — TERBUKTI DARI KODE, bukan cuma dugaan):
+  // draft yang ditahan gerbang (status pending) atau kedaluwarsa (status
+  // failed) sebelumnya tidak boleh ikut riwayat yang dikirim ke LLM, supaya
+  // model tidak meniru "balasannya sendiri" yang penuh penanda rusak.
+  it('mengecualikan draft milik kita sendiri yang pending/failed dari riwayat percakapan (bukan pesan pelanggan)', async () => {
+    prisma.conversation.findUnique.mockResolvedValue({
+      id: 'c1',
+      customer,
+      bot: null,
+      messages: [],
+    });
+    await service.buildForConversation('c1');
+    const arg = prisma.conversation.findUnique.mock.calls[0][0];
+    expect(arg.include.messages.where).toEqual({
+      OR: [
+        { senderType: 'customer' },
+        { status: { notIn: ['pending', 'failed'] } },
+      ],
+    });
+  });
+
   it('builds system + mapped history', async () => {
     prisma.conversation.findUnique.mockResolvedValue({
       id: 'c1',

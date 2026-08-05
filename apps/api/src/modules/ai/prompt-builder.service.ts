@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
-import { SenderType } from '@sentinel/database';
+import { SenderType, MessageStatus } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ChatMessage } from './ai-provider.service';
 import { ProductsService } from '../products/products.service';
@@ -95,10 +95,28 @@ export class PromptBuilderService {
       include: {
         customer: true,
         bot: { include: { persona: true } },
+        // >>> ANGGA — koreksi 2026-08-06 (insiden "{{subtotal_barang}}" berulang
+        // walau sudah diganti model, TERBUKTI DARI KODE): draft yang DITAHAN
+        // gerbang uang (status pending) atau KEDALUWARSA (status failed, lihat
+        // `expireStaleDrafts`) sebelumnya TETAP masuk riwayat yang dikirim ke
+        // LLM apa adanya — termasuk teks "{{token_tak_dikenal}}" mentahnya.
+        // Model lalu MENIRU pola dari "balasannya sendiri" di riwayat itu di
+        // giliran berikutnya, bikin bug yang sama terlihat "berulang terus"
+        // walau kodenya sudah benar dan modelnya sudah diganti (racunnya ada
+        // di data percakapan, bukan di kode/model). Balasan kami sendiri yang
+        // BELUM/GAGAL terkirim (pending/failed) dibuang dari riwayat; pesan
+        // pelanggan tidak pernah disaring oleh status ini.
         messages: {
+          where: {
+            OR: [
+              { senderType: SenderType.customer },
+              { status: { notIn: [MessageStatus.pending, MessageStatus.failed] } },
+            ],
+          },
           orderBy: { createdAt: 'desc' },
           take: historyLimit,
         },
+        // <<< ANGGA
       },
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
