@@ -1414,6 +1414,80 @@ describe('Jalur FORM → ongkir → qty (REPLAY "GSM Naga Merah")', () => {
 });
 // <<< ANGGA
 
+// >>> ANGGA — GERBANG PAKEM (2026-08-05, KETOK Bossfren): pakem v3 + blueprint
+// ongkir jujur + blueprint produk jujur DIANGKAT jadi lapisan gerbang (bukan
+// sekadar prompt) — pelanggaran → feedback → revisi → mode Draft ditahan /
+// AI ON kirim revisiannya (mekanisme retry gerbang uang yang sudah ada).
+
+describe('GERBANG PAKEM — pakem & kejujuran jadi lapisan gerbang', () => {
+  it('#1 ANTI-NGARANG PRODUK: angka kutipan ditempel ke produk lain → DITAHAN; sebut produk order → sah', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const buruk = await h.svc.resolvePriceTokens(
+      'c1',
+      'Untuk Bedog Betekok totalnya {{total_transfer}} ya kak. mau ambil berapa pcs kak?',
+    );
+    expect(buruk.ok).toBe(false);
+    expect(buruk.issues.join(' ')).toContain('menempelkan angka kutipan ke produk yang salah');
+    const baik = await h.svc.resolvePriceTokens(
+      'c1',
+      'Untuk Golok Sembelih Multifungsi totalnya {{total_transfer}} ya kak. mau ambil berapa pcs kak?',
+    );
+    expect(baik.issues.join(' ')).not.toContain('menempelkan angka kutipan');
+  });
+
+  it('#2 KOTA AMBIGU: draft wajib memuat pertanyaan terbuka ketok', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram berapa kak?',
+      extract: { kota: 'Mataram', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+    await h.svc.getGroundingText('c1'); // kewajiban kalimat tercatat
+    const buruk = await h.svc.resolvePriceTokens('c1', 'Wah untuk Mataram aku bantu pastikan dulu ya kak 🙏');
+    expect(buruk.ok).toBe(false);
+    expect(buruk.issues.join(' ')).toContain('melanggar alur');
+    const baik = await h.svc.resolvePriceTokens(
+      'c1',
+      'Mataramnya mana ya kak? boleh sebut provinsinya, atau langsung kecamatannya 🙏',
+    );
+    expect(baik.ok).toBe(true);
+  });
+
+  it('#3 BARANG AMBIGU (>2): draft wajib memuat pertanyaan terbuka "yang mana"', async () => {
+    const h = harness({
+      lastCustomerText: 'harga golok sembelih berapa kak? kirim ke medan',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih', qty: 1 }] },
+      products: [GOLOK, GOLOK2, GOLOK3, BEDOG],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('item_ambiguous');
+    await h.svc.getGroundingText('c1');
+    const buruk = await h.svc.resolvePriceTokens('c1', 'Golok sembelihnya ready kak, mau dikirim ke mana?');
+    expect(buruk.ok).toBe(false);
+    const baik = await h.svc.resolvePriceTokens('c1', 'Golok Sembelih-nya yang mana ya kak? 🙏');
+    expect(baik.ok).toBe(true);
+  });
+
+  it('#4 GAGAL JUJUR: sistem gagal → draft wajib eskalasi "ke admin"', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    (h.mengantar.searchAddress as jest.Mock).mockResolvedValue(null); // API mati
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(['api_error', 'not_configured', 'no_courier']).toContain(res.status);
+    await h.svc.getGroundingText('c1');
+    const buruk = await h.svc.resolvePriceTokens('c1', 'Sebentar ya kak, ongkirnya menyusul 🙏');
+    expect(buruk.ok).toBe(false);
+    const baik = await h.svc.resolvePriceTokens('c1', 'Ongkirnya aku cek dulu ke admin ya kak 🙏');
+    expect(baik.ok).toBe(true);
+  });
+});
+// <<< ANGGA
+
 describe('P5 — alat debug search keyword (dipakai widget Settings Ongkir)', () => {
   it('mengembalikan baris mentah + ringkasan kelompok ber-level', async () => {
     const h = harness({ addresses: ROWS_MATARAM });

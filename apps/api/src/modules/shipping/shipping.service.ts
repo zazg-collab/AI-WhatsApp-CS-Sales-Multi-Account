@@ -1858,6 +1858,14 @@ export class ShippingService {
             }
             // <<< ANGGA
             if (arah.teks) lines.push(arah.teks);
+          } else if (adaKataTanyaUang(teksTerakhir, oc.orderMoneyAskKeywords)) {
+            // >>> ANGGA — WATCHDOG PAKEM (2026-08-05): giliran tanya-uang
+            // berkutipan TANPA langkah funnel sama sekali = anomali bisu
+            // (funnel mati/log kosong/klasifikasi meleset) — bunyikan, jangan
+            // diam. Ini kelas insiden yang tidak bisa direvisi model. <<<
+            this.logger.warn(
+              `Watchdog pakem: giliran tanya-uang di ${conversationId} keluar TANPA langkah funnel (funnel mati / log kosong / klasifikasi giliran meleset?)`,
+            );
           }
         }
         // <<< ANGGA
@@ -1873,6 +1881,11 @@ export class ShippingService {
       // tersimpan di pendingItems — jawaban pelanggan dicocokkan ke SEMUA.
       case 'item_ambiguous': {
         if (result.itemCandidates.length > MAX_CHOICES_ASKED) {
+          // >>> ANGGA — GERBANG PAKEM (2026-08-05, ketok Bossfren): pertanyaan
+          // terbuka barang bukan lagi sekadar prompt — jadi KEWAJIBAN gerbang
+          // (pola MANDAT funnel): draft tanpa kalimatnya → feedback → revisi →
+          // tahan. <<<
+          this.setExpectGiliran(conversationId, 'barang_ambigu', `${(result.keyword ?? '').trim()}-nya yang mana ya kak?`);
           return t(SHIPPING_GROUNDING_ITEM_AMBIGUOUS_OPEN, lang)(result.keyword ?? '');
         }
         return (
@@ -1909,6 +1922,19 @@ export class ShippingService {
           );
         }
         if (ronde > 1) return t(SHIPPING_GROUNDING_ASK_DISTRICT, lang);
+        // >>> ANGGA — GERBANG PAKEM (2026-08-05): pertanyaan terbuka tujuan
+        // (format ketok) jadi KEWAJIBAN gerbang, bukan sekadar prompt.
+        // Kalimatnya WAJIB cermin persis kutipan di SHIPPING_GROUNDING_
+        // AMBIGUOUS_OPEN (emoji/tanda baca diabaikan pencocok normF). <<<
+        {
+          const nm = (result.keyword ?? '').trim() || 'tujuannya';
+          const rapi = nm.charAt(0).toUpperCase() + nm.slice(1);
+          this.setExpectGiliran(
+            conversationId,
+            'tujuan_ambigu',
+            `${rapi}nya mana ya kak? boleh sebut provinsinya, atau langsung kecamatannya`,
+          );
+        }
         return t(SHIPPING_GROUNDING_AMBIGUOUS_OPEN, lang)(result.keyword ?? '');
       }
       // <<< ANGGA
@@ -1976,8 +2002,22 @@ export class ShippingService {
       case 'api_error':
       case 'not_configured':
       default:
+        // >>> ANGGA — GERBANG PAKEM (2026-08-05): kejujuran saat GAGAL juga
+        // kewajiban gerbang — jawaban ongkir yang sistemnya gagal WAJIB
+        // menyebut eskalasi "ke admin" (fallback jujur resmi), bukan
+        // menggantung ("sebentar ya kak…") atau melempar ke ekspedisi. <<<
+        this.setExpectGiliran(conversationId, 'gagal_jujur', 'ke admin');
         return t(SHIPPING_GROUNDING_UNKNOWN, lang);
     }
+  }
+
+  /** >>> ANGGA — GERBANG PAKEM (2026-08-05): tulis kewajiban-kalimat untuk
+   *  giliran non-funnel (ambigu kota/barang, gagal jujur) — menumpang
+   *  mekanisme funnelExpect + MANDAT yang sudah terbukti. <<< */
+  private setExpectGiliran(conversationId: string, step: string, kalimat: string): void {
+    const msgId = (this.turnMemo.get(conversationId)?.key ?? '').split(':')[0] || '';
+    if (!msgId || !kalimat.trim()) return;
+    this.cache.setFunnelExpect(conversationId, { messageId: msgId, step, kalimat: kalimat.trim() });
   }
 
   /**
@@ -2289,6 +2329,48 @@ export class ShippingService {
             issues.push(
               `Balasan berpura-pura masih mengecek ("${teater}") padahal angkanya sudah tertulis di pesan yang sama — hapus seluruh narasi proses (cek dulu/mohon tunggu/saya proses), jawab langsung satu kalimat memakai penanda.`,
             );
+          }
+        }
+      }
+      // <<< ANGGA
+      // >>> ANGGA — GERBANG PAKEM #1: ANTI-NGARANG PRODUK (2026-08-05, ketok
+      // Bossfren; pelajaran "GSM Naga Merah"): angka kutipan HARAM ditempel ke
+      // produk lain. Draft memakai penanda uang kutipan TAPI satu-satunya nama
+      // produk katalog yang disebut ada di LUAR order/kandidat/penawaran aktif
+      // → angka benar, label produk salah → ditahan. Giliran campuran tetap
+      // sah selama nama produk order ikut disebut.
+      {
+        const pakaiTokenKutipan =
+          POLA_TOKEN_TOTAL.test(text) || /\{\{(harga_satuan|ongkir|rincian_order)\}\}/i.test(text);
+        if (pakaiTokenKutipan) {
+          const whitelist = new Set<string>();
+          for (const m of quote.matchedItems ?? []) whitelist.add(m.name.toLowerCase().trim());
+          for (const c of this.cache.pendingItems(conversationId)?.candidates ?? []) whitelist.add(c.name.toLowerCase().trim());
+          for (const n of this.cache.assumed(conversationId)?.productNames ?? []) whitelist.add(n.toLowerCase().trim());
+          try {
+            for (const o of ((await this.orderLog?.recentOffers(conversationId)) ?? []).filter((x) => x.fresh)) {
+              for (const it of o.items ?? []) whitelist.add(String(it.name ?? '').toLowerCase().trim());
+            }
+          } catch { /* penawaran tak terbaca = abaikan sumber ini */ }
+          whitelist.delete('');
+          const teksL = substituted.toLowerCase();
+          const adaNamaOrder = [...whitelist].some((n) => teksL.includes(n));
+          if (whitelist.size && !adaNamaOrder) {
+            try {
+              const katalog = await this.prisma.product.findMany({
+                where: { status: 'active' },
+                take: 500,
+                select: { name: true },
+              });
+              const salah = katalog
+                .map((p: { name?: string | null }) => String(p.name ?? '').trim())
+                .find((n: string) => n.length >= 4 && !whitelist.has(n.toLowerCase()) && teksL.includes(n.toLowerCase()));
+              if (salah) {
+                issues.push(
+                  `Balasan menempelkan angka kutipan ke produk yang salah — menyebut "${salah}" padahal angka penanda giliran ini milik order: ${[...whitelist].join(', ')}. Tulis ulang dengan nama produk order yang benar.`,
+                );
+              }
+            } catch { /* katalog tak terbaca = lewati penjaga ini */ }
           }
         }
       }
@@ -2666,7 +2748,7 @@ export const POLA_TOKEN_TOTAL =
 
 export function klasifikasiAlasanGate(
   issue: string,
-): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'funnel_dilanggar' | 'lainnya' {
+): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'funnel_dilanggar' | 'salah_produk' | 'lainnya' {
   const s = issue ?? '';
   if (s.includes('membuat labelnya salah')) return 'label_rancu';
   if (s.includes('tidak dikenal/tidak tersedia')) return 'token_tak_dikenal';
@@ -2676,6 +2758,7 @@ export function klasifikasiAlasanGate(
   if (s.includes('menyangkal data yang sudah tersedia')) return 'kontradiksi_data'; // >>> ANGGA — P2 <<<
   if (s.includes('berpura-pura masih mengecek')) return 'kontradiksi_data'; // >>> ANGGA — anti-teater (2026-08-05) <<<
   if (s.includes('melanggar alur penjualan wajib')) return 'funnel_dilanggar'; // >>> ANGGA — Q-Chain <<<
+  if (s.includes('menempelkan angka kutipan ke produk yang salah')) return 'salah_produk'; // >>> ANGGA — Gerbang Pakem #1 <<<
   return 'lainnya';
 }
 // <<< ANGGA
