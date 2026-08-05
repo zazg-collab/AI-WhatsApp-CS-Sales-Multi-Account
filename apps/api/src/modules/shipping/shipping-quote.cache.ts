@@ -51,6 +51,10 @@ export interface ShippingQuote {
   shippingOnly: boolean;
   /** Nama barang yang disebut pelanggan tapi tidak cocok katalog (kalau ada). */
   unmatchedNames?: string[];
+  /** >>> ANGGA — Q-Chain v3 (2026-08-05): estimasi tiba "x-y hari" dari
+   *  `estimatedDate` kurir terpilih (API Mengantar). Null bila API tak
+   *  menyediakan. <<< */
+  eta?: string | null;
   transferCourier: string;
   /** Total transfer SUDAH dibulatkan (Rule 11). */
   transferTotal: number;

@@ -42,6 +42,10 @@ export interface CourierEstimate {
   estimatedPrice?: number;
   estimatedSpecialPrice?: number;
   estimate_delivery?: string;
+  /** >>> ANGGA — Q-Chain v3 (2026-08-05, ketok Bossfren): estimasi tiba
+   *  "x-y hari" dari CHECK SHIPPING FEE PUBLIC — dibacakan di blok
+   *  {{rincian_tagihan}} & token {{estimasi_tiba}}. <<< */
+  estimatedDate?: string;
   unsupported?: boolean;
   unsupported_cod?: boolean;
   /** Diuji live dan diputuskan TIDAK dipakai (§11 poin 6) — didaftar di sini

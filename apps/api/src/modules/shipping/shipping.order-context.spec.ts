@@ -14,7 +14,7 @@ import { ShippingQuoteCache } from './shipping-quote.cache';
  */
 
 const ESTIMATE: Record<string, any> = {
-  JNE: { price: 47000, estimatedPrice: 47000, codFee: 0 },
+  JNE: { price: 47000, estimatedPrice: 47000, codFee: 0, estimatedDate: '2-3 hari' },
   SiCepat: { price: 33000, estimatedPrice: 33000, codFee: 0, unsupported: false },
 };
 const PERF = {
@@ -56,6 +56,7 @@ const OC = {
   orderFunnelAskBasketOpen: 'produk yang mana aja kak yang jadi diambil? 😊',
   orderFunnelAskQty: 'mau ambil berapa pcs kak?',
   orderFunnelAskPayment: 'mau diproses COD atau transfer kak? 😊',
+  orderFunnelAskLandmark: 'boleh dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏',
   // <<< ANGGA
 };
 // <<< ANGGA
@@ -943,20 +944,58 @@ describe('Q-Chain — funnel pertanyaan berantai (urutan pakem)', () => {
     expect(grounding).toContain('mau ambil berapa pcs kak?');
   });
 
-  it('TRACE 3: qty pasti ("beli 2 ya") → sodorkan TOTAL ({{rincian_tagihan}}) + tanya metode', async () => {
+  it('TRACE 3a: qty pasti TANPA sebut metode ("jadi 2 ya kak") → TOTAL + tanya metode', async () => {
+    const h = harness({
+      lastCustomerText: 'jadi 2 ya kak',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }], { qtyPasti: true })],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('{{rincian_tagihan}}');
+    expect(grounding).toContain('mau diproses COD atau transfer kak?');
+  });
+
+  it('TRACE 3b (v3): metode SUDAH disebut ("COD deh kak. beli 2 ya") → TOTAL + langsung tanya PATOKAN (bukan metode lagi)', async () => {
     const h = harness({
       lastCustomerText: 'COD deh kak. beli 2 ya',
       extract: { kota: null, items: [] },
       logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }], { qtyPasti: true })],
     });
     expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
-    // qtyPasti ikut tercatat di snapshot giliran ini.
     expect(h.orderLog.recordSnapshot).toHaveBeenCalledWith(
       'c1', 'm1', expect.objectContaining({ qtyPasti: true }), expect.anything(),
     );
     const grounding = await h.svc.getGroundingText('c1');
     expect(grounding).toContain('{{rincian_tagihan}}');
-    expect(grounding).toContain('mau diproses COD atau transfer kak?');
+    expect(grounding).toContain('patokan rumahnya');
+    expect(grounding).not.toContain('mau diproses COD atau transfer kak?');
+  });
+
+  it('TRACE 3c (v3): total sudah tersodor, pelanggan jawab metode → tanya PATOKAN saja', async () => {
+    const h = harness({
+      lastCustomerText: 'cod aja kak',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 2 }], { qtyPasti: true })],
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1 });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('patokan rumahnya');
+    // Total sudah pernah tersodor → directive TOTAL tidak diulang (katalog
+    // penanda tetap menyebut {{rincian_tagihan}} — itu daftar, bukan perintah).
+    expect(grounding).not.toContain('SODORKAN TOTAL SEKARANG');
+  });
+
+  it('v3: blok {{rincian_tagihan}} memuat estimasi tiba dari API (estimatedDate)', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa? golok sembelih multifungsi 2 pcs',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 2 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const out = await h.svc.resolvePriceTokens('c1', 'Ini ya kak:\n{{rincian_tagihan}}\nmau diproses COD atau transfer kak? 😊');
+    expect(out.ok).toBe(true);
+    expect(out.text).toContain('Estimasi tiba : 2-3 hari');
   });
 
   it('MANDAT KERAS: balasan tanpa kalimat funnel wajib → DITAHAN gerbang; dengan kalimatnya → lolos', async () => {

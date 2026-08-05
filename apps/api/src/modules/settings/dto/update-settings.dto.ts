@@ -282,6 +282,9 @@ class OrderContextSettingsDto {
 
   @IsOptional() @IsString()
   orderFunnelAskPayment?: string;
+
+  @IsOptional() @IsString()
+  orderFunnelAskLandmark?: string; // >>> ANGGA — Q-Chain v3 <<<
   // <<< ANGGA
 }
 // <<< ANGGA

@@ -171,6 +171,7 @@ const dict: Dict = {
   funnelAskBasketOpen: { id: 'Konklusi keranjang (3+ produk)', en: 'Basket conclusion (3+ products)' },
   funnelAskQty: { id: 'Tanya qty (setelah ongkir)', en: 'Ask qty (after shipping)' },
   funnelAskPayment: { id: 'Tanya metode (menempel TOTAL)', en: 'Ask payment (with TOTAL)' },
+  funnelAskLandmark: { id: 'Tanya patokan rumah (setelah metode)', en: 'Ask house landmark (after payment)' },
   // <<< ANGGA
   // >>> ANGGA — S1 (2026-08-05): telemetri gerbang uang.
   gateStatsTitle: { id: 'Telemetri gerbang uang', en: 'Money gate telemetry' },
@@ -218,6 +219,7 @@ interface OrderContextSettings {
   orderFunnelAskBasketOpen: string;
   orderFunnelAskQty: string;
   orderFunnelAskPayment: string;
+  orderFunnelAskLandmark: string;
   // <<< ANGGA
 }
 
@@ -300,6 +302,7 @@ export default function OrderMemorySettingsPage() {
         orderFunnelAskBasketOpen: data.orderFunnelAskBasketOpen ?? '',
         orderFunnelAskQty: data.orderFunnelAskQty ?? '',
         orderFunnelAskPayment: data.orderFunnelAskPayment ?? '',
+        orderFunnelAskLandmark: data.orderFunnelAskLandmark ?? '',
         // <<< ANGGA
       };
       const updated = await api<{ orderContext: OrderContextSettings }>('/settings', {
@@ -513,6 +516,10 @@ export default function OrderMemorySettingsPage() {
                 <Field label={t('funnelAskPayment')}>
                   <input className={fieldCls} disabled={!canEdit} value={data.orderFunnelAskPayment ?? ''}
                     onChange={(e) => patch('orderFunnelAskPayment', e.target.value)} />
+                </Field>
+                <Field label={t('funnelAskLandmark')}>
+                  <input className={fieldCls} disabled={!canEdit} value={data.orderFunnelAskLandmark ?? ''}
+                    onChange={(e) => patch('orderFunnelAskLandmark', e.target.value)} />
                 </Field>
               </div>
               {/* <<< ANGGA */}

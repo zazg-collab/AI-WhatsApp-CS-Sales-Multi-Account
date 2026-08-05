@@ -264,6 +264,8 @@ export class SettingsService {
         orderFunnelAskBasketOpen: (this.config.get<string>('ORDER_FUNNEL_ASK_BASKET_OPEN') ?? 'produk yang mana aja kak yang jadi diambil? 😊').trim(),
         orderFunnelAskQty: (this.config.get<string>('ORDER_FUNNEL_ASK_QTY') ?? 'mau ambil berapa pcs kak?').trim(),
         orderFunnelAskPayment: (this.config.get<string>('ORDER_FUNNEL_ASK_PAYMENT') ?? 'mau diproses COD atau transfer kak? 😊').trim(),
+        // >>> ANGGA — Q-Chain v3: patokan rumah (audit transkrip Aluna+Defa).
+        orderFunnelAskLandmark: (this.config.get<string>('ORDER_FUNNEL_ASK_LANDMARK') ?? 'boleh dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏').trim(),
         // <<< ANGGA
       },
       // <<< ANGGA (Order Context)

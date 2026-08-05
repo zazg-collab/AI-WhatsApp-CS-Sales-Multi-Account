@@ -204,6 +204,9 @@ export interface OrderContextSettings {
   orderFunnelAskBasketOpen: string;
   orderFunnelAskQty: string;
   orderFunnelAskPayment: string;
+  /** Q-Chain v3 — PATOKAN rumah, ditanya setelah metode bayar terjawab
+   *  (pola tetap Aluna & Defa), sebelum closing. */
+  orderFunnelAskLandmark: string;
 }
 // <<< ANGGA
 

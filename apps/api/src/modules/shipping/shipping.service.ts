@@ -1450,6 +1450,14 @@ export class ShippingService {
       destinationId,
       weightKg,
       goodsTotal,
+      // >>> ANGGA — Q-Chain v3 (ketok Bossfren): estimasi tiba dari
+      // `estimatedDate` kurir transfer (fallback kurir COD) — apa adanya dari
+      // API ("x-y hari"), tidak pernah dihitung sendiri.
+      eta:
+        (estimates[transferCourier]?.estimatedDate ?? '').trim() ||
+        (codCourierFinal ? (estimates[codCourierFinal]?.estimatedDate ?? '').trim() : '') ||
+        null,
+      // <<< ANGGA
       transferCourier,
       transferTotal,
       codCourier: codCourierFinal,
@@ -1585,9 +1593,30 @@ export class ShippingService {
       return pilih('keranjang', kalimat);
     }
     if (!qtyPasti) return pilih('qty', oc.orderFunnelAskQty);
-    // Semua slot terisi → sodorkan TOTAL + tanya metode (invariant Bossfren:
-    // metode TIDAK PERNAH ditanya sebelum total tersodor — satu giliran).
-    return pilih('metode', oc.orderFunnelAskPayment, true);
+
+    // >>> ANGGA — Q-Chain v3 (2026-08-05, temuan audit transkrip Aluna+Defa):
+    // langkah PATOKAN RUMAH — dua-dua CS selalu menanyakannya setelah metode
+    // terjawab, sebelum closing ("boleh dicantumkan patokan rumahnya…?").
+    // Metode dianggap TERJAWAB kalau pelanggan menyebut cod/transfer — baik
+    // menjawab pertanyaan metode, MAUPUN menyebutnya duluan ("COD deh kak.
+    // beli 2 ya") — supaya bot tidak bebal menanyakan metode yang sudah
+    // dijawab. Jejaknya dipersist (`funnel_ask` step `metode_terjawab`).
+    const sebutMetode = /\b(cod|tf)\b|transfer/i.test(teksG);
+    const metodeTerjawab = (asks['metode_terjawab'] ?? 0) >= 1 || sebutMetode;
+    if (sebutMetode && !(asks['metode_terjawab'] ?? 0)) {
+      void this.orderLog.recordFunnelAsk(conversationId, 'metode_terjawab', lastMsgId);
+    }
+    const totalSudah = (asks['total'] ?? 0) >= 1;
+    if (metodeTerjawab) {
+      // Metode sudah jelas → TOTAL (kalau belum tersodor) langsung disambung
+      // pertanyaan PATOKAN; kalau total sudah pernah tersodor → patokan saja.
+      if (!totalSudah) return pilih('total', oc.orderFunnelAskLandmark, true);
+      return pilih('patokan', oc.orderFunnelAskLandmark);
+    }
+    // Invariant Bossfren: metode TIDAK PERNAH ditanya sebelum total tersodor —
+    // pertanyaan metode selalu satu paket dengan penyodoran {{rincian_tagihan}}.
+    return pilih('total', oc.orderFunnelAskPayment, true);
+    // <<< ANGGA
   }
   // <<< ANGGA
 
@@ -2447,6 +2476,7 @@ export const NAMA_TOKEN_CADANGAN = new Set([
   'blok_total', 'diskon_ongkir', 'total_transfer_diskon', 'total_cod_diskon',
   'diskon_barang', 'total_transfer_nego', 'total_cod_nego',
   'rincian_tagihan', // >>> ANGGA — S2 (2026-08-05) <<<
+  'estimasi_tiba', // >>> ANGGA — Q-Chain v3 (2026-08-05) <<<
 ]);
 
 /**
@@ -2505,6 +2535,7 @@ export function buildPriceTokens(q: ShippingQuote): Record<string, string> {
   if (q.shippingOnly) {
     tokens.ongkir = `Rp${formatIdr(q.transferTotal)}`;
     tokens.kurir_transfer = q.transferCourier;
+    if (q.eta) tokens.estimasi_tiba = q.eta; // >>> ANGGA — Q-Chain v3 <<<
     return tokens;
   }
 
@@ -2565,6 +2596,12 @@ export function buildPriceTokens(q: ShippingQuote): Record<string, string> {
     if (q.codTotal != null && q.codCourier) {
       baris.push(`• Total COD (${q.codCourier}) : Rp${formatIdr(q.codTotal)} — sudah termasuk biaya COD`);
     }
+    // >>> ANGGA — Q-Chain v3: estimasi tiba dari API (pola RINCIAN BIAYA CS).
+    if (q.eta) {
+      baris.push(`• Estimasi tiba : ${q.eta}`);
+      tokens.estimasi_tiba = q.eta;
+    }
+    // <<< ANGGA
     tokens.rincian_tagihan = baris.join('\n');
   }
   // <<< ANGGA
@@ -2580,11 +2617,13 @@ export function buildPriceTokens(q: ShippingQuote): Record<string, string> {
  */
 export function katalogPenanda(q: ShippingQuote): string[] {
   if (q.shippingOnly) {
-    return [
+    const dasar = [
       '• {{kota_tujuan}} = kota/kabupaten tujuan',
       '• {{ongkir}} = ongkir untuk 1 pcs (produk belum dipastikan)',
       '• {{kurir_transfer}} = nama kurirnya',
     ];
+    if (q.eta) dasar.push('• {{estimasi_tiba}} = estimasi lama pengiriman dari ekspedisi'); // >>> ANGGA — Q-Chain v3 <<<
+    return dasar;
   }
 
   const lines = [
@@ -2608,6 +2647,7 @@ export function katalogPenanda(q: ShippingQuote): string[] {
     '• {{kurir_transfer}} = kurir untuk TRANSFER',
     '• {{total_transfer}} = total akhir TRANSFER (sudah termasuk ongkir)',
   );
+  if (q.eta) lines.push('• {{estimasi_tiba}} = estimasi lama pengiriman dari ekspedisi'); // >>> ANGGA — Q-Chain v3 <<<
   if (q.shippingDiscount > 0) {
     lines.push(
       '• {{diskon_ongkir}} = potongan ongkir — pakai HANYA sesuai aturan diskon di instruksi persona, jangan tawarkan sendiri tanpa alasan',
