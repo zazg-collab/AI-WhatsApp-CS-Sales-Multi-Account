@@ -1197,6 +1197,27 @@ describe('Q-Chain fix 2 — REPLAY "mataram dobel": total prematur + teater pros
     expect(out.issues.join(' ')).toContain('berpura-pura masih mengecek');
   });
 
+  it('REPLAY "cakranegara kak": anti-cerewet TIDAK membuka gembok total (qty sudah 2x ditanya)', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ qty: 2 }); // cap kena
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).not.toContain('mau ambil berapa pcs kak?'); // pertanyaan baku dibungkam
+    // Pra-fix: cap → directive null → sensor mati → katalog total ikut tampil.
+    expect(grounding).not.toContain('{{rincian_tagihan}}');
+    expect(grounding).not.toContain('{{total_transfer}}');
+    expect(grounding).toContain('LARANGAN KERAS');
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Baik kak, untuk pengiriman ke Medan:\n{{rincian_tagihan}}',
+    );
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toContain('belum waktunya menyodorkan total');
+  });
+
   it('kontrol: giliran TOTAL (qty pasti + metode terjawab) → {{rincian_tagihan}} tetap sah', async () => {
     const h = harness({
       lastCustomerText: 'COD deh kak. beli 2 ya',

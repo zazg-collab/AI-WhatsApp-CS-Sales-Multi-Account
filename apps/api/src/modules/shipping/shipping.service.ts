@@ -1588,7 +1588,7 @@ export class ShippingService {
     lastMsgId: string,
     lang: string,
     opts: { quote?: ShippingQuote; hargaTurn?: boolean },
-  ): Promise<{ teks: string; step: string } | null> {
+  ): Promise<{ teks: string | null; step: string } | null> {
     if (!this.orderLog) return null;
     const oc = await this.settings.orderContext();
     if (oc.orderFunnelEnabled === false) return null;
@@ -1630,16 +1630,26 @@ export class ShippingService {
     const qtyPasti = latest?.snapshot.qtyPasti === true;
 
     const asks = await this.orderLog.funnelAsks(conversationId);
-    const pilih = (step: string, kalimat: string, total = false): { teks: string; step: string } | null => {
+    // >>> ANGGA — Q-Chain fix 3 (2026-08-05, insiden "cakranegara kak" dijawab
+    // rekap total padahal qty belum ditanya-jawab): LANGKAH dan PERTANYAAN
+    // dipisah. Anti-cerewet (maks 2x) dan template-kosong hanya MEMBUNGKAM
+    // pertanyaannya — TIDAK PERNAH membuka gembok total. Dulu pilih() balik
+    // null saat cap kena → tanpa langkah → sensor PRA-TOTAL & gerbang ikut
+    // mati → model bebas menyodorkan {{rincian_tagihan}}. Sekarang langkah
+    // SELALU dipulangkan (teks null saat capped) + funnelExpect tetap ditulis
+    // (kalimat '' = tanpa kewajiban kalimat verbatim, tapi gembok total aktif).
+    const pilih = (step: string, kalimat: string, total = false): { teks: string | null; step: string } => {
       const bersih = (kalimat ?? '').trim();
-      if (!bersih) return null; // template dikosongkan admin = langkah dimatikan
-      if ((asks[step] ?? 0) >= 2) return null; // anti-cerewet: maks 2x per segmen
+      const bolehTanya = bersih.length > 0 && (asks[step] ?? 0) < 2;
+      if (!bolehTanya) {
+        this.cache.setFunnelExpect(conversationId, { messageId: lastMsgId, step, kalimat: '' });
+        return { teks: null, step };
+      }
       void this.orderLog?.recordFunnelAsk(conversationId, step, lastMsgId);
       this.cache.setFunnelExpect(conversationId, { messageId: lastMsgId, step, kalimat: bersih });
-      // >>> ANGGA — Q-Chain fix 2: langkah ikut dipulangkan supaya pemanggil
-      // bisa menyensor katalog total pada langkah PRA-TOTAL. <<<
       return { teks: t(total ? SHIPPING_FUNNEL_TOTAL : SHIPPING_FUNNEL_DIRECTIVE, lang)(bersih), step };
     };
+    // <<< ANGGA
 
     if (!adaBarang) return pilih('barang', oc.orderFunnelAskItem);
     if (!adaAlamat) return pilih('alamat', oc.orderFunnelAskAddress);
@@ -1737,7 +1747,7 @@ export class ShippingService {
             const memoQ = this.turnMemo.get(conversationId);
             const msgIdQ = (memoQ?.key ?? '').split(':')[0] || '';
             const arah = await this.funnelDirective(conversationId, msgIdQ, lang, { quote: q });
-            if (arah) lines.push(arah.teks);
+            if (arah?.teks) lines.push(arah.teks);
           }
           // <<< ANGGA
           return lines.join('\n');
@@ -1822,11 +1832,13 @@ export class ShippingService {
                 if (/^• \{\{/.test(lines[i]) && POLA_TOKEN_TOTAL.test(lines[i])) lines.splice(i, 1);
               }
               lines.push(
-                '• LARANGAN KERAS GILIRAN INI: JANGAN menyodorkan subtotal/total/rekap tagihan — jumlah pesanan belum pasti. Jawab yang ditanya (mis. ongkir/harga) SINGKAT satu kalimat, tanpa narasi proses, lalu tutup dengan pertanyaan wajib di bawah.',
+                arah.teks
+                  ? '• LARANGAN KERAS GILIRAN INI: JANGAN menyodorkan subtotal/total/rekap tagihan — jumlah pesanan belum pasti. Jawab yang ditanya (mis. ongkir/harga) SINGKAT satu kalimat, tanpa narasi proses, lalu tutup dengan pertanyaan wajib di bawah.'
+                  : `• LARANGAN KERAS GILIRAN INI: JANGAN menyodorkan subtotal/total/rekap tagihan — jumlah pesanan belum pasti (langkah "${arah.step}" belum terjawab). Jawab yang ditanya (mis. ongkir/harga) SINGKAT satu kalimat, lalu tutup dengan menanyakan info langkah itu memakai bahasamu sendiri yang santai (pertanyaan bakunya sudah pernah ditanyakan — jangan diulang persis).`,
               );
             }
             // <<< ANGGA
-            lines.push(arah.teks);
+            if (arah.teks) lines.push(arah.teks);
           }
         }
         // <<< ANGGA
@@ -1932,7 +1944,7 @@ export class ShippingService {
                 lang,
                 { hargaTurn: true },
               );
-              if (arah) return arah.teks;
+              if (arah?.teks) return arah.teks;
             }
           }
         }
