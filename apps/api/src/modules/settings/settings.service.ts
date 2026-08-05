@@ -167,12 +167,16 @@ export class SettingsService {
           // dialihkan ke kecamatan pusatnya yang bersih satu kota.
           malang: 'klojen',
           padang: 'padang barat',
-          // >>> ANGGA — 2026-08-05 (temuan live Bossfren): "mataram" malah
-          // resolve DOMINAN ke LAMPUNG TIMUR (banyak kelurahan "Mataram
-          // Baru" dkk di sana) — Kota Mataram NTB tenggelam. Kelas bug yang
-          // sama; dialihkan ke kecamatan pusat Kota Mataram yang namanya unik.
-          mataram: 'cakranegara',
-          // <<< ANGGA
+          // >>> ANGGA — AUDIT TUMPANG-TINDIH (2026-08-05, ketok Bossfren):
+          // alias `mataram: 'cakranegara'` (fix 171204f pagi tadi) DICABUT —
+          // ia lahir SEBELUM ketok P0 "selalu bertanya" dan justru membuat
+          // "mataram" di-auto-kunci ke Kota Mataram NTB tanpa bertanya,
+          // padahal pelanggan bisa bermaksud Mataram-nya Lampung (persis
+          // kelas "sok tau" yang dilarang). Beda dari solo/jogja/malang dkk
+          // (nama panggilan yang satu kota jelas): "mataram" memang nama
+          // banyak daerah → P0 yang menangani (tanya terbuka + saringan
+          // provinsi P4). Kalau alias ini sempat disimpan lewat dashboard,
+          // hapus juga dari sana — nilai DB menimpa default kode ini. <<<
         }),
       },
       // <<< ANGGA

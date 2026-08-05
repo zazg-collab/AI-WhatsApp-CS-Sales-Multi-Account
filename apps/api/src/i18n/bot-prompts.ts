@@ -799,9 +799,9 @@ export const SHIPPING_GROUNDING_ITEM_AMBIGUOUS = {
  *  = retry_once. */
 export const SHIPPING_GROUNDING_ASSUMED = {
   id: (names: string) =>
-    `PENTING: penanda harga di atas dihitung dari ASUMSI order yang sedang berjalan (${names}) — pelanggan tidak menyebut nama barangnya di pesan terakhir. WAJIB sebutkan nama barangnya di kalimat jawabanmu (atau pakai {{rincian_order}}/{{rincian_tagihan}}), contoh pola: "Untuk [nama barang] ya kak — totalnya ...". Jangan hanya menyebut angka polos.`,
+    `PENTING: penanda harga di atas dihitung dari ASUMSI order yang sedang berjalan (${names}) — pelanggan tidak menyebut nama barangnya di pesan terakhir. WAJIB sebutkan nama barangnya di kalimat jawabanmu (atau pakai {{rincian_order}}/{{rincian_tagihan}}), contoh pola: "Untuk [nama barang] ya kak — …". Jangan hanya menyebut angka polos. (Catatan: ini aturan MENYEBUT NAMA barang — BUKAN perintah menyodorkan total; ikuti aturan alur penjualan di bawah soal kapan total boleh keluar.)`,
   en: (names: string) =>
-    `IMPORTANT: the price placeholders above are computed from the ASSUMED ongoing order (${names}) — the customer did not name the item in their last message. You MUST name the item in your reply (or use {{rincian_order}}/{{rincian_tagihan}}), e.g. "For [item name], the total is ...". Never give a bare number.`,
+    `IMPORTANT: the price placeholders above are computed from the ASSUMED ongoing order (${names}) — the customer did not name the item in their last message. You MUST name the item in your reply (or use {{rincian_order}}/{{rincian_tagihan}}), e.g. "For [item name] — …". Never give a bare number. (Note: this rule is about NAMING the item — NOT an instruction to present a total; follow the sales-flow rules below for when totals may appear.)`,
 };
 
 /** T4 — pola insiden "sistem kehilangan konteks": kutipan LENGKAP tiba-tiba

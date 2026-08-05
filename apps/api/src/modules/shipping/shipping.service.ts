@@ -330,7 +330,9 @@ export function resolveDestination(
 
 /** >>> ANGGA — TIDAK DIPAKAI sejak ketok 2026-08-05 (lihat kandidatDominan).
  *  Disimpan sebagai catatan sejarah parameter rancangan 2026-08-03. <<< */
-export const DOMINANCE_RATIO = 3;
+// >>> ANGGA — AUDIT TUMPANG-TINDIH (2026-08-05): `DOMINANCE_RATIO = 3` DIHAPUS
+// — sisa mati rancangan dominansi 2026-08-03 yang sudah DIBATALKAN ketok P0;
+// tidak direferensikan satu baris pun di kode/tes (diverifikasi grep). <<<
 
 /**
  * Bolehkah kandidat teratas dipakai langsung tanpa bertanya?
