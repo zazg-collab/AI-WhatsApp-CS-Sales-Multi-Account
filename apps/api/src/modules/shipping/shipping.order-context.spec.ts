@@ -1288,6 +1288,64 @@ describe('AUDIT TOTAL — REPLAY "purwokerto dijawab data mataram"', () => {
 });
 // <<< ANGGA
 
+// >>> ANGGA — TANGGA BARANG TERBUKA (2026-08-05, ketok Bossfren, REPLAY insiden
+// "kalau golok sembelih berapa kak?" dijawab "konfirmasi dulu ke admin"):
+// (1) giliran uang yang menyebut nama produk katalog tidak boleh ditelan
+// cache/log-hit — wajib turun ke tangga BARANG; (2) cocok TEPAT 2 → tertutup
+// "A atau B?"; cocok >2 → TERBUKA "X-nya yang mana ya kak?" tanpa daftar.
+
+const GOLOK2 = {
+  id: 'p-golok2', sku: 'GLK-03', name: 'Golok Sembelih Super', category: 'golok',
+  description: '', price: 199000, weightGrams: null, status: 'active',
+};
+const GOLOK3 = {
+  id: 'p-golok3', sku: 'GLK-04', name: 'Golok Sembelih Mini', category: 'golok',
+  description: '', price: 99000, weightGrams: null, status: 'active',
+};
+
+describe('Tangga BARANG terbuka — REPLAY "golok sembelih" → "konfirmasi ke admin"', () => {
+  it('giliran uang menyebut produk ambigu + cache hangat → item_ambiguous, TERBUKA tanpa daftar; jawaban pemilih → resolve', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      products: [GOLOK, GOLOK2, GOLOK3, BEDOG],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok'); // kutipan MEDAN hangat
+
+    pesanBaru(h, 'm2', 'kalau golok sembelih berapa kak?');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: null, items: [{ nama: 'Golok Sembelih', qty: 1 }] }),
+    );
+    const res: any = await h.svc.quoteForConversation('c1');
+    // Pra-fix: cache-hit menelan giliran ini → 'ok' → model mentok → "cek admin".
+    expect(res.status).toBe('item_ambiguous');
+    expect(res.itemCandidates.length).toBe(3);
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('yang mana ya kak'); // pertanyaan TERBUKA pola ketok
+    expect(grounding).toContain('Golok Sembelih');
+    expect(grounding).not.toContain('Golok Sembelih Super'); // daftar TIDAK dibacakan
+
+    pesanBaru(h, 'm3', 'yang multifungsi kak');
+    const res3: any = await h.svc.quoteForConversation('c1');
+    expect(res3.status).toBe('ok');
+    expect(res3.quote.matchedItems[0].name).toBe('Golok Sembelih Multifungsi');
+  });
+
+  it('cocok TEPAT 2 produk → pertanyaan TERTUTUP "A atau B" (dua-duanya dibacakan)', async () => {
+    const h = harness({
+      lastCustomerText: 'harga golok sembelih berapa kak? kirim ke medan',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih', qty: 1 }] },
+      products: [GOLOK, GOLOK2, BEDOG],
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('item_ambiguous');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('Golok Sembelih Multifungsi');
+    expect(grounding).toContain('Golok Sembelih Super');
+  });
+});
+// <<< ANGGA
+
 describe('P5 — alat debug search keyword (dipakai widget Settings Ongkir)', () => {
   it('mengembalikan baris mentah + ringkasan kelompok ber-level', async () => {
     const h = harness({ addresses: ROWS_MATARAM });

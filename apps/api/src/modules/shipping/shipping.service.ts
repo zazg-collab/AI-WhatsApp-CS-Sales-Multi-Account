@@ -25,6 +25,7 @@ import {
   // >>> ANGGA — Order Context Log (blueprint 2026-08-04)
   SHIPPING_EXTRACT_ANCHOR,
   SHIPPING_GROUNDING_ITEM_AMBIGUOUS,
+  SHIPPING_GROUNDING_ITEM_AMBIGUOUS_OPEN, // >>> ANGGA — tangga barang terbuka (2026-08-05) <<<
   SHIPPING_GROUNDING_ASSUMED,
   SHIPPING_GROUNDING_STALE_CONTEXT,
   SHIPPING_GROUNDING_CONTEXT_DOWNGRADE,
@@ -801,7 +802,19 @@ export class ShippingService {
       // pelanggan harus diproses tangga pilihan di bawah.
       const adaPendingPilihan = !!this.cache.pendingItems(conversationId);
       // <<< ANGGA
-      if (cached && !adaPendingPilihan) {
+      // >>> ANGGA — TANGGA BARANG di giliran HARGA (2026-08-05, ketok Bossfren,
+      // insiden "kalau golok sembelih berapa kak?" dijawab "konfirmasi dulu ke
+      // admin"): giliran uang yang MENYEBUT nama produk katalog TIDAK boleh
+      // ditelan cache/log-hit — sebutan itu wajib turun ke jalur ekstraksi
+      // supaya tangga BARANG bisa bertanya "yang mana" saat cocok >1 produk
+      // (jujur, jangan sotoy), atau mengutip langsung saat cocok tunggal.
+      let sebutProduk = false;
+      if (tanyaUang && (cached || (this.orderLog && !adaPendingPilihan))) {
+        const produkAktif = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
+        sebutProduk = mentionsCatalogProduct(lastCustomerText, produkAktif);
+      }
+      // <<< ANGGA
+      if (cached && !adaPendingPilihan && !sebutProduk) {
         this.cache.recordOutcome(conversationId, 'ok');
         return finish({ status: 'ok', quote: cached });
       }
@@ -823,7 +836,7 @@ export class ShippingService {
       // >>> ANGGA — F1: gerbang tanya-uang. Sapaan tanpa kata uang/agregat/
       // afirmasi jatuh ke alur lama (ekstraksi) — TIDAK dijawab kutipan
       // instan dari log.
-      if (this.orderLog && !adaTunjukAtauReferensi && !adaPendingPilihan && (tanyaUang || afirmasiUtuh)) {
+      if (this.orderLog && !sebutProduk && !adaTunjukAtauReferensi && !adaPendingPilihan && (tanyaUang || afirmasiUtuh)) {
         const entries = (await this.orderLog.candidates(conversationId)).filter(
           (e) => e.fresh && e.snapshot.items.length > 0 && e.snapshot.destinationId,
         );
@@ -1819,10 +1832,18 @@ export class ShippingService {
         // <<< ANGGA
         return lines.join('\n');
       }
-      // >>> ANGGA — Order Context Log: tangga BARANG — pertanyaan tertutup
-      // untuk sebutan yang cocok >1 produk. Penanda uang SENGAJA tidak
-      // disediakan untuk giliran ini (enforcement kode, bukan harapan).
+      // >>> ANGGA — Order Context Log: tangga BARANG. Penanda uang SENGAJA
+      // tidak disediakan untuk giliran ini (enforcement kode, bukan harapan).
+      // >>> ANGGA — ketok Bossfren 2026-08-05 (insiden "golok sembelih" →
+      // "konfirmasi dulu ke admin"): pola sama dengan tujuan (P0) — cocok
+      // TEPAT 2 → pertanyaan TERTUTUP "A atau B?"; cocok >2 → pertanyaan
+      // TERBUKA "X-nya yang mana?" TANPA membacakan daftar (jangan sotoy,
+      // daftar panjang menenggelamkan jawaban). Semua kandidat tetap
+      // tersimpan di pendingItems — jawaban pelanggan dicocokkan ke SEMUA.
       case 'item_ambiguous': {
+        if (result.itemCandidates.length > MAX_CHOICES_ASKED) {
+          return t(SHIPPING_GROUNDING_ITEM_AMBIGUOUS_OPEN, lang)(result.keyword ?? '');
+        }
         return (
           t(SHIPPING_GROUNDING_ITEM_AMBIGUOUS, lang) +
           '\n' +

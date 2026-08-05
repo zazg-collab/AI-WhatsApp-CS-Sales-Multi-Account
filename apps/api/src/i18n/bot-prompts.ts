@@ -791,6 +791,18 @@ export const SHIPPING_GROUNDING_ITEM_AMBIGUOUS = {
   en: 'SHIPPING DATA: the item name the customer used matches MORE THAN ONE catalog product. Do NOT state any price, shipping cost, or total yet. Casually ask which product they mean, using ONLY the options below, quoting the names EXACTLY as written — do not add or invent other products:',
 };
 
+/** >>> ANGGA — ketok Bossfren 2026-08-05 (insiden "golok sembelih" dijawab
+ *  "konfirmasi dulu ke admin"): sebutan barang cocok >2 produk → pertanyaan
+ *  TERBUKA tanpa membacakan daftar (pola sama P0 tujuan: jujur, jangan sotoy,
+ *  daftar panjang menenggelamkan jawaban). Tepat 2 tetap pakai tertutup di
+ *  atas. Kalimat wajib Indonesia santai, jangan diterjemahkan. <<< */
+export const SHIPPING_GROUNDING_ITEM_AMBIGUOUS_OPEN = {
+  id: (kw: string) =>
+    `DATA ONGKIR: nama barang yang disebut pelanggan ("${kw}") cocok dengan BANYAK produk katalog. JANGAN menyebut harga, ongkir, atau total apa pun, JANGAN menebak produknya, dan JANGAN membacakan daftar produk. Tanyakan TERBUKA dengan santai, PERSIS pola ini sebagai pertanyaanmu: "${kw}-nya yang mana ya kak? 🙏" — jangan diterjemahkan ke bahasa lain, jangan dibuat kaku.`,
+  en: (kw: string) =>
+    `SHIPPING DATA: the item the customer mentioned ("${kw}") matches MANY catalog products. Do NOT state any price, shipping cost, or total, do NOT guess the product, and do NOT read out a product list. Ask an OPEN question casually, in Indonesian, following EXACTLY this pattern: "${kw}-nya yang mana ya kak? 🙏" — do not translate it, keep it casual.`,
+};
+
 /** Bridge-validasi (v1.1 §12.2-8): kutipan giliran ini dihitung dari ASUMSI
  *  order terakhir/gabungan log, bukan sebutan eksplisit pelanggan di pesan itu.
  *  Jawaban WAJIB menyebut barangnya supaya asumsi yang salah langsung terlihat
