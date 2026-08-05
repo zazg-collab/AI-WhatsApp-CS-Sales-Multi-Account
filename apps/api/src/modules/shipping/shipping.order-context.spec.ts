@@ -1390,11 +1390,13 @@ describe('Jalur FORM → ongkir → qty (REPLAY "GSM Naga Merah")', () => {
     });
     expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
 
-    // Jawaban pilihan kota — jalur yang TIDAK lewat carry/penawaran → ongkir-doang.
+    // Jawaban pilihan kota — dulu ongkir-doang; kini UPGRADE otomatis ke
+    // kutipan penuh (barang tunggal dikenal dari penawaran form, 2026-08-06).
     pesanBaru(h, 'm2', 'banyumas kak');
     const r2: any = await h.svc.quoteForConversation('c1');
     expect(r2.status).toBe('ok');
-    expect(r2.quote.shippingOnly).toBe(true);
+    expect(r2.quote.shippingOnly).toBe(false);
+    expect(r2.quote.matchedItems[0]).toEqual(expect.objectContaining({ name: 'Bedog Betekok' }));
     const g2 = await h.svc.getGroundingText('c1');
     expect(g2).toContain('mau ambil berapa pcs kak?'); // pra-fix: "produknya mau yang mana kak?" (bebal)
     expect(g2).not.toContain('produknya mau yang mana kak?');
@@ -1655,6 +1657,49 @@ describe('GERBANG REKENING — rekening hanya setelah pilih transfer', () => {
       'Siap kak, untuk transfer nanti saya kirimkan detail rekeningnya ya 🙏',
     );
     expect(baik.ok).toBe(true);
+  });
+});
+// <<< ANGGA
+
+// >>> ANGGA — UPGRADE ONGKIR-DOANG (2026-08-06, REPLAY insiden "sandubaya
+// 1 pcs"): kutipan jatuh ongkir-doang PADAHAL barang (form) + qty diketahui →
+// model mengarang total manual (tertahan gerbang). Fix: finalize meng-upgrade
+// kutipan ongkir-doang jadi PENUH saat tepat satu produk dikenal.
+
+describe('UPGRADE ongkir-doang → kutipan penuh (alur total Bossfren)', () => {
+  it('REPLAY: jawaban pilihan kota menjatuhkan barang → upgrade dari penawaran form → rincian tagihan hidup', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke purwokerto berapa?',
+      extract: { kota: 'Purwokerto', items: [] },
+      addresses: ROWS_PURWOKERTO,
+      offers: [offer([{ productId: 'p-bedog', name: 'Bedog Betekok' }])],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    pesanBaru(h, 'm2', 'banyumas kak'); // jalur pilihan: items tidak terbawa (akar insiden)
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    // Pra-fix: shippingOnly → penanda total tak tersedia → model ngarang
+    // "{{subtotal_barang}} (Harga + Ongkir)" → tertahan gerbang.
+    expect(res.quote.shippingOnly).toBe(false);
+    expect(res.quote.matchedItems).toEqual([
+      expect.objectContaining({ name: 'Bedog Betekok' }),
+    ]);
+    // Alur total Bossfren jalan: berat+COD → estimate API → subtotal+total+estimasi.
+    const out = await h.svc.resolvePriceTokens('c1', 'Ini ya kak:\n{{rincian_tagihan}}\nmau ambil berapa pcs kak?');
+    expect(out.text).toContain('Estimasi tiba');
+    expect(out.text).toContain('Total TRANSFER');
+  });
+
+  it('pengecualian T4 tetap hidup: barang BARU tak dikenal disebut → TIDAK di-upgrade diam-diam', async () => {
+    const h = harness({
+      lastCustomerText: 'kalau paket promo spesial ke medan ongkirnya berapa?',
+      extract: { kota: 'Medan', items: [{ nama: 'Paket Promo Spesial', qty: 1 }] },
+      offers: [offer([{ productId: 'p-bedog', name: 'Bedog Betekok' }])],
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.shippingOnly).toBe(true); // konfirmasi dulu, jangan balik ke Bedog diam-diam
   });
 });
 // <<< ANGGA

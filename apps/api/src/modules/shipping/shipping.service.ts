@@ -1106,6 +1106,44 @@ export class ShippingService {
     // pertanyaan, outcome — SATU tempat supaya semua jalur (jawaban pilihan
     // kota, jalur carry-over, jalur ekstraksi) diperlakukan identik.
     const finalize = async (result: ShippingResult): Promise<ShippingResult> => {
+      // >>> ANGGA — UPGRADE ONGKIR-DOANG (2026-08-06, insiden "sandubaya 1 pcs"
+      // — kutipan jatuh ongkir-doang PADAHAL barang dikenal, model lalu
+      // mengarang "{{subtotal_barang}} (Harga+Ongkir)" dan tertahan gerbang):
+      // apa pun jalur hulunya yang menjatuhkan barang, kutipan ongkir-doang
+      // dengan TEPAT SATU produk dikenal (penawaran form/log segar) langsung
+      // dihitung ulang jadi kutipan PENUH — alur total Bossfren (berat + COD
+      // amount → estimate API → estimatedPrice+Date → harga barang + ongkir)
+      // baru bisa jalan kalau barangnya ikut. Ambigu (>1 produk) TIDAK
+      // di-upgrade — biar funnel/keranjang yang bertanya, jangan sok tau.
+      // Pengecualian T4: pelanggan MENYEBUT barang baru yang tak cocok katalog
+      // (unmatchedNames terisi) → JANGAN diam-diam balik ke barang lama —
+      // biarkan alur konfirmasi T4/unmatched yang bertanya (anti sok-tau).
+      if (result.status === 'ok' && result.quote.shippingOnly && !result.quote.unmatchedNames?.length && this.orderLog) {
+        try {
+          const unik = new Map<string, { name: string; qty: number }>();
+          for (const o of (await this.orderLog.recentOffers(conversationId)).filter((x) => x.fresh)) {
+            for (const it of o.items ?? []) if (it.productId) unik.set(it.productId, { name: it.name, qty: 1 });
+          }
+          for (const e of (await this.orderLog.candidates(conversationId)).filter((x) => x.fresh)) {
+            for (const it of e.snapshot.items) unik.set(it.productId, { name: it.name, qty: it.qty });
+          }
+          if (unik.size === 1) {
+            const satu = Array.from(unik.values())[0];
+            const qtyU = patchQty(lastCustomerText) ?? satu.qty ?? 1;
+            const hasil2 = await this.quoteUntukTujuan(
+              { city: result.quote.city, province: result.quote.province, label: '', destinationId: result.quote.destinationId },
+              [{ name: satu.name, qty: qtyU }],
+            );
+            if (hasil2.status === 'ok' && !hasil2.quote.shippingOnly) {
+              this.logger.warn(
+                `Upgrade ongkir-doang → kutipan penuh di ${conversationId}: barang "${satu.name}" x${qtyU} dikenal dari penawaran/log tapi hilang di jalur hulu (items ekstraksi giliran ini kosong/tak cocok) — periksa extractOrderTarget.`,
+              );
+              result = hasil2;
+            }
+          }
+        } catch { /* upgrade gagal = pakai hasil apa adanya */ }
+      }
+      // <<< ANGGA
       if (result.status === 'ok') {
         this.cache.set(conversationId, result.quote, cfg.quoteCacheTtlMs);
         this.cache.resetAsks(conversationId);
