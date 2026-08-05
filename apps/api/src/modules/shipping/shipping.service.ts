@@ -90,7 +90,11 @@ import {
  * sekali lebih banyak daripada mengutip ongkir kota yang salah).
  */
 export const PLACE_HINT =
-  /(kirim(kan)?\s+ke|ongkir(nya)?\s+(ke|berapa)|dikirim\s+ke|alamat|domisili|lokasi\s?(saya|ku|aku)?|kota|kabupaten|kab\.|provinsi|daerah|luar\s+(kota|pulau)|jne|sicepat|j&t|kurir|ekspedisi)/i;
+  // >>> ANGGA — 2026-08-06 (insiden "mahal ya, ke purwokerto aja deh berapa
+  // ongkirnya?" dijawab ongkir MATARAM): + urutan TERBALIK "berapa ongkir(nya)"
+  // dan "ke <tempat> aja/dulu/deh" — frasa ganti-tujuan paling umum yang dulu
+  // lolos → giliran ketelan cache → angka kota lama nempel ke kota baru. <<<
+  /(kirim(kan)?\s+ke|ongkir(nya)?\s+(ke|berapa)|berapa\s+ongkir|ke\s+\w+\s+(aja|saja|dulu|deh)|dikirim\s+ke|alamat|domisili|lokasi\s?(saya|ku|aku)?|kota|kabupaten|kab\.|provinsi|daerah|luar\s+(kota|pulau)|jne|sicepat|j&t|kurir|ekspedisi)/i;
 
 /**
  * Perubahan isi order juga membatalkan cache — di luar teks LAMPIRAN, tapi

@@ -1576,6 +1576,36 @@ describe('GABUNG DUA JAWABAN — "sandubaya mataram" (data API nyata)', () => {
 });
 // <<< ANGGA
 
+// >>> ANGGA — GANTI TUJUAN URUTAN TERBALIK (2026-08-06, REPLAY insiden "mahal
+// ya, ke purwokerto aja deh berapa ongkirnya?" dijawab ongkir MATARAM):
+// PLACE_HINT tak mengenali "berapa ongkirnya" (terbalik) / "ke X aja deh" →
+// giliran ketelan cache → angka kota lama nempel ke kota baru.
+
+describe('Ganti tujuan urutan terbalik — REPLAY "ke purwokerto aja deh"', () => {
+  it('"mahal ya, ke purwokerto aja deh berapa ongkirnya?" → TIDAK ditelan cache; resolve ulang', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok'); // kutipan MEDAN hangat
+
+    pesanBaru(h, 'm2', 'mahal ya, ke purwokerto aja deh berapa ongkirnya?');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) =>
+      /purwokerto/i.test(kw) ? ROWS_PURWOKERTO : [{
+        _id: 'dest-medan', PROVINCE_NAME: 'SUMATERA UTARA', CITY_NAME: 'MEDAN',
+        CITY_NAME_SI: 'Kota Medan', DISTRICT_NAME: 'X', SUBDISTRICT_NAME: 'Z',
+      }],
+    );
+    const res: any = await h.svc.quoteForConversation('c1');
+    // Pra-fix: 'ok' berisi kutipan MEDAN → "ongkir ke Purwokerto Rp<medan>" (BAHAYA).
+    expect(res.status).toBe('ambiguous'); // purwokerto 2 kandidat → tanya jujur
+  });
+});
+// <<< ANGGA
+
 describe('P5 — alat debug search keyword (dipakai widget Settings Ongkir)', () => {
   it('mengembalikan baris mentah + ringkasan kelompok ber-level', async () => {
     const h = harness({ addresses: ROWS_MATARAM });
