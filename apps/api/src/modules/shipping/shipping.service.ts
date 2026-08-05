@@ -2317,6 +2317,26 @@ export class ShippingService {
       issues.push(`Penanda dipakai setelah kata yang bisa membuat labelnya salah: "${guard}"`);
     }
 
+    // >>> ANGGA — GERBANG PAKEM: larangan PENJUMLAHAN MANUAL sebagai "total"
+    // (2026-08-06, insiden "kalau cod total berapa kalau transfer total
+    // berapa" — draft menjawab "Rp139.000 + Rp11.000" mentah, SAMA PERSIS
+    // untuk COD MAUPUN Transfer, padahal {{total_cod}} dan {{total_transfer}}
+    // sudah dihitung sistem dan BEDA nilainya karena biaya COD ikut masuk).
+    // Dua penanda dijumlahkan pakai "+" TIDAK PERNAH benar — sistem selalu
+    // sudah menyediakan penanda total yang sudah dihitung utuh untuk setiap
+    // kondisi order (total_transfer/total_cod/blok_total/rincian_tagihan);
+    // kalau model menjumlahkan sendiri, itu tandanya ada komponen (mis. biaya
+    // COD) yang pasti kelewat. Berlaku untuk KOMBINASI penanda apa pun, bukan
+    // cuma harga_satuan/subtotal_barang (retry pertama insiden ini lolos dari
+    // larangan `penjagaKata` yang lebih sempit dengan kombinasi token lain).
+    const jumlahManual = text.match(/\{\{[a-z_]+\}\}\s*\+\s*\{\{[a-z_]+\}\}/gi);
+    if (jumlahManual) {
+      issues.push(
+        `Balasan menjumlahkan penanda sendiri dengan "+" sebagai total (${jumlahManual.join(', ')}) — total SUDAH dihitung sistem, wajib pakai {{total_transfer}}/{{total_cod}}/{{blok_total}}/{{rincian_tagihan}} langsung, jangan menjumlahkan penanda manual.`,
+      );
+    }
+    // <<< ANGGA
+
     // >>> ANGGA — Order Context Log: config dibaca untuk (a) token GLOBAL
     // `{{catatan_sk}}` (v1.1 §12.1-3 — WAJIB dikenal resolver TANPA kutipan
     // aktif; tanpa ini draft closing ditahan gerbangnya sendiri saat cache
@@ -2940,7 +2960,7 @@ export const POLA_TOKEN_TOTAL =
 
 export function klasifikasiAlasanGate(
   issue: string,
-): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'funnel_dilanggar' | 'salah_produk' | 'lainnya' {
+): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'funnel_dilanggar' | 'salah_produk' | 'jumlah_manual' | 'lainnya' {
   const s = issue ?? '';
   if (s.includes('membuat labelnya salah')) return 'label_rancu';
   if (s.includes('tidak dikenal/tidak tersedia')) return 'token_tak_dikenal';
@@ -2951,6 +2971,7 @@ export function klasifikasiAlasanGate(
   if (s.includes('berpura-pura masih mengecek')) return 'kontradiksi_data'; // >>> ANGGA — anti-teater (2026-08-05) <<<
   if (s.includes('melanggar alur penjualan wajib')) return 'funnel_dilanggar'; // >>> ANGGA — Q-Chain <<<
   if (s.includes('menempelkan angka kutipan ke produk yang salah')) return 'salah_produk'; // >>> ANGGA — Gerbang Pakem #1 <<<
+  if (s.includes('menjumlahkan penanda sendiri')) return 'jumlah_manual'; // >>> ANGGA — Gerbang Pakem (2026-08-06) <<<
   return 'lainnya';
 }
 // <<< ANGGA

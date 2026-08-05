@@ -1704,6 +1704,57 @@ describe('UPGRADE ongkir-doang → kutipan penuh (alur total Bossfren)', () => {
 });
 // <<< ANGGA
 
+// >>> ANGGA — GERBANG PAKEM: larangan PENJUMLAHAN MANUAL (2026-08-06, REPLAY
+// insiden "kalau cod total berapa kalau transfer total berapa?" — draft
+// menjawab "Rp139.000 + Rp11.000" mentah, SAMA PERSIS untuk COD maupun
+// Transfer, alih-alih {{total_cod}}/{{total_transfer}} yang sudah beda nilai
+// karena biaya COD). Dua penanda dijumlahkan "+" ditahan, apa pun kombinasi
+// tokennya; penanda total resmi (blok_total / pasangan total_cod+total_transfer
+// yang benar) tetap sah.
+
+describe('GERBANG PAKEM — larangan penjumlahan manual sebagai "total" (REPLAY "cod total berapa, transfer total berapa")', () => {
+  it('draft menjumlahkan {{harga_satuan}} + {{ongkir}} sebagai total COD & Transfer → DITAHAN', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const buruk = await h.svc.resolvePriceTokens(
+      'c1',
+      'Untuk COD, totalnya adalah {{harga_satuan}} + {{ongkir}}. Untuk transfer, totalnya juga {{harga_satuan}} + {{ongkir}}, kak.',
+    );
+    expect(buruk.ok).toBe(false);
+    expect(buruk.issues.join(' ')).toContain('menjumlahkan penanda sendiri');
+  });
+
+  it('draft pakai {{blok_total}} (bukan penjumlahan manual) → sah', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const baik = await h.svc.resolvePriceTokens(
+      'c1',
+      'Ini rekapnya kak:\n{{blok_total}}\nmau diproses yang mana kak?',
+    );
+    expect(baik.ok).toBe(true);
+  });
+
+  it('draft pakai {{total_cod}} dan {{total_transfer}} terpisah (tanpa "+") → tetap sah', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const baik = await h.svc.resolvePriceTokens(
+      'c1',
+      'Kalau COD totalnya {{total_cod}} kak, kalau transfer totalnya {{total_transfer}} kak.',
+    );
+    expect(baik.ok).toBe(true);
+  });
+});
+// <<< ANGGA
+
 describe('P5 — alat debug search keyword (dipakai widget Settings Ongkir)', () => {
   it('mengembalikan baris mentah + ringkasan kelompok ber-level', async () => {
     const h = harness({ addresses: ROWS_MATARAM });
