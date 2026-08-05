@@ -241,6 +241,11 @@ export class SettingsService {
           'penanda', 'placeholder', 'instruksi sistem', 'gerbang uang', 'grounding',
           'informasi harga yang akurat', 'informasi ongkir yang akurat',
           'dicek kembali di chat', 'cek chat ini',
+          // >>> ANGGA — audit total (2026-08-05, insiden "purwokerto"): bot
+          // HARAM melempar pelanggan ke ekspedisi ("cek di website resmi
+          // ekspedisi / hubungi cs ekspedisi") — ongkir urusan toko.
+          'website resmi ekspedisi', 'website ekspedisi', 'cs ekspedisi',
+          // <<< ANGGA
         ]),
         // <<< ANGGA
         // >>> ANGGA — P2 (2026-08-05): frasa penyangkalan data. "admin" SENGAJA
@@ -259,6 +264,9 @@ export class SettingsService {
           // kata; 'konfirmasi dulu ke admin' TIDAK dimasukkan — itu fallback sah
           // BASE_RULES #3 saat data memang tidak ada.
           'akan cek dulu', 'saya akan cek', 'akan konfirmasi ke admin',
+          // >>> ANGGA — audit total (2026-08-05, insiden "purwokerto"): varian
+          // penyangkalan baru dari draft nyata.
+          'tidak bisa memberikan info', 'belum bisa mengakses',
           // <<< ANGGA
         ]),
         // >>> ANGGA — anti-teater proses (2026-08-05, insiden "mataram dobel"):

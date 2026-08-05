@@ -43,13 +43,13 @@ const OC = {
   orderMoneyAskKeywords: ['total', 'ongkir', 'ongkos', 'harga', 'berapa', 'bayar', 'biaya', 'transfer', 'rekening', 'cod'],
   // <<< ANGGA
   // >>> ANGGA — E3 (2026-08-05): frasa internal yang haram sampai ke pelanggan.
-  orderMetaPhraseBlacklist: ['penanda', 'placeholder', 'instruksi sistem', 'gerbang uang', 'grounding', 'informasi harga yang akurat', 'informasi ongkir yang akurat', 'dicek kembali di chat', 'cek chat ini'],
+  orderMetaPhraseBlacklist: ['penanda', 'placeholder', 'instruksi sistem', 'gerbang uang', 'grounding', 'informasi harga yang akurat', 'informasi ongkir yang akurat', 'dicek kembali di chat', 'cek chat ini', 'website resmi ekspedisi', 'website ekspedisi', 'cs ekspedisi'],
   // <<< ANGGA
   // >>> ANGGA — P2 (2026-08-05): frasa kontradiksi "menyangkal data yang tersedia".
   // >>> ANGGA — Q-Chain fix (2026-08-05, insiden "banyumas kak"): + varian
   // urutan kata 'akan cek dulu'/'saya akan cek'/'akan konfirmasi ke admin'
   // (cermin default settings.service; 'konfirmasi dulu ke admin' tetap sah).
-  orderContradictionPhrases: ['belum memiliki informasi', 'belum ada informasi', 'belum punya info', 'tidak memiliki informasi', 'belum bisa memastikan', 'akan saya cek dulu', 'cek dengan tim', 'tim logistik', 'menghubungkan dengan tim', 'akan segera memberikan informasi', 'akan cek dulu', 'saya akan cek', 'akan konfirmasi ke admin'],
+  orderContradictionPhrases: ['belum memiliki informasi', 'belum ada informasi', 'belum punya info', 'tidak memiliki informasi', 'belum bisa memastikan', 'akan saya cek dulu', 'cek dengan tim', 'tim logistik', 'menghubungkan dengan tim', 'akan segera memberikan informasi', 'akan cek dulu', 'saya akan cek', 'akan konfirmasi ke admin', 'tidak bisa memberikan info', 'belum bisa mengakses'],
   // >>> ANGGA — anti-teater proses (2026-08-05, insiden "mataram dobel"):
   // cermin default settings.service — narasi "sedang mengecek" yang ditahan
   // hanya saat draft yang sama sudah menyisipkan penanda uang.
@@ -1224,6 +1224,66 @@ describe('Q-Chain fix 2 — REPLAY "mataram dobel": total prematur + teater pros
       'Untuk stok warna lain mohon tunggu sebentar ya kak, saya cek dulu ke admin 🙏',
     );
     expect(out.ok).toBe(true);
+  });
+});
+// <<< ANGGA
+
+// >>> ANGGA — AUDIT TOTAL (2026-08-05, REPLAY insiden "ongkir ke purwokerto?"
+// dijawab data MATARAM Rp50.000): akar = ekstraksi tujuan GAGAL (LLM error/
+// JSON rusak) dikembalikan sebagai "kosong" → fallback `cached?.city` diam-diam
+// memakai kota LAMA → cache-hit → penanda uang kota lama tersedia → model
+// melabeli kota BARU dengan angka kota lama, dan gerbang tak bisa menangkap
+// (semua digit hasil sisipan sah). Fix: gagal ≠ kosong (flag `failed`); giliran
+// ber-hint tempat/order + ekstraksi gagal → JUJUR api_error (grounding UNKNOWN,
+// nol angka). Plus: melempar pelanggan ke ekspedisi = frasa haram.
+
+describe('AUDIT TOTAL — REPLAY "purwokerto dijawab data mataram"', () => {
+  it('ekstraksi GAGAL + giliran ber-hint tempat → api_error JUJUR, BUKAN kutipan kota lama', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok'); // kutipan MEDAN aktif
+
+    // Giliran 2: pelanggan pindah kota, ekstraktor MATI (timeout) — persis
+    // kelas insiden: pra-fix jatuh ke kota lama & menjawab seolah beres.
+    pesanBaru(h, 'm2', 'ongkir ke purwokerto berapa?');
+    (h.provider.chat as jest.Mock).mockRejectedValue(new Error('timeout'));
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('api_error'); // pra-fix: 'ok' berisi kutipan MEDAN (BAHAYA)
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('BELUM bisa memastikan tarif'); // UNKNOWN jujur
+    expect(grounding).not.toContain('{{ongkir}}'); // nol penanda uang kota lama
+    // Kutipan lama ikut dikosongkan — model yang nekat menulis {{ongkir}}
+    // TIDAK mendapat angka MEDAN, drafnya ditahan (penanda tak dikenal).
+    const out = await h.svc.resolvePriceTokens('c1', 'Ongkirnya {{ongkir}} ya kak 🙏');
+    expect(out.ok).toBe(false);
+  });
+
+  it('ekstraksi gagal TANPA hint tempat (basa-basi) → tidak ikut kena (cache tetap sah)', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    pesanBaru(h, 'm2', 'oke kak makasih infonya');
+    (h.provider.chat as jest.Mock).mockRejectedValue(new Error('timeout'));
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok'); // cache-hit tanpa hint — tidak ada risiko salah kota
+  });
+
+  it('melempar pelanggan ke "website resmi ekspedisi / cs ekspedisi" → DITAHAN', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Ongkirnya {{ongkir}} ya kak untuk Golok Sembelih Multifungsi. Kalau mau lebih detail bisa cek di website resmi ekspedisi ya kak 🙏 mau ambil berapa pcs kak?',
+    );
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toContain('istilah internal');
   });
 });
 // <<< ANGGA

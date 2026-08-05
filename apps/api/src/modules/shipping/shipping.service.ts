@@ -153,6 +153,12 @@ export interface ShippingOrderExtract {
    *  SARINGAN deterministik atas kelompok kandidat. <<< */
   province: string | null;
   items: ExtractedItem[];
+  /** >>> ANGGA — audit total (2026-08-05, insiden "purwokerto dijawab data
+   *  mataram"): true = ekstraksi GAGAL (LLM error / JSON rusak), BUKAN sekadar
+   *  kosong. Beda kelasnya penting: kosong = pelanggan memang tak menyebut
+   *  apa-apa (carry-over sah); GAGAL pada giliran ber-hint tempat/order =
+   *  fallback kota lama DILARANG (bisa salah-label kota) → jujur api_error. <<< */
+  failed?: boolean;
 }
 
 export type ShippingResult =
@@ -703,7 +709,7 @@ export class ShippingService {
       );
     } catch (err) {
       this.logger.warn(`Deteksi tujuan/item gagal: ${err}`);
-      return empty;
+      return { ...empty, failed: true }; // >>> ANGGA — audit total: gagal ≠ kosong <<<
     }
     return parseExtract(raw);
   }
@@ -1180,6 +1186,27 @@ export class ShippingService {
     }
     // <<< ANGGA
 
+    // >>> ANGGA — AUDIT TOTAL (2026-08-05, insiden "ongkir ke purwokerto?"
+    // dijawab data MATARAM Rp50.000): kalau ekstraksi GAGAL (LLM error/JSON
+    // rusak) pada giliran yang menyebut tempat/perubahan order, fallback
+    // `cached?.city` di bawah akan DIAM-DIAM memakai kota LAMA → cache-hit →
+    // seluruh penanda uang kota lama tersedia → model melabeli kota BARU
+    // dengan angka kota lama, dan gerbang tak bisa menangkap (semua digit
+    // hasil sisipan sah). Ekstraksi gagal ≠ pesan tanpa kota — giliran
+    // ber-hint WAJIB jujur: status api_error (grounding UNKNOWN, nol angka,
+    // "dicek dulu ke admin"), jangan menebak.
+    if (extract.failed && mayHaveChanged) {
+      this.logger.warn(
+        `Ongkir gagal (extract_error) di ${conversationId}: pesan ber-hint tempat/order tapi deteksi tujuan GAGAL — kota lama TIDAK dipakai (anti salah-label).`,
+      );
+      // Kutipan lama ikut dikosongkan: tanpa ini model masih bisa menyisipkan
+      // {{ongkir}} kota LAMA di giliran gagal ini dan lolos gerbang (digit
+      // sisipan sah). Log ter-persist — giliran berikutnya recompute normal.
+      this.cache.reset(conversationId);
+      this.cache.recordOutcome(conversationId, 'api_error');
+      return finish({ status: 'api_error' });
+    }
+    // <<< ANGGA
     const city =
       extract.city?.trim() || choiceCity || carriedEntry?.snapshot.city || cached?.city || null;
     if (!city) {
@@ -2350,7 +2377,9 @@ export function parseExtract(raw: string): ShippingOrderExtract {
       .filter((i) => i.name.length > 0);
     return { city, province, items };
   } catch {
-    return empty;
+    // >>> ANGGA — audit total (2026-08-05): JSON rusak = ekstraksi GAGAL,
+    // bukan "pelanggan tidak menyebut apa-apa" — penanda beda kelas. <<<
+    return { ...empty, failed: true };
   }
 }
 

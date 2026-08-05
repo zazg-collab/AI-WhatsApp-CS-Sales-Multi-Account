@@ -1205,7 +1205,9 @@ describe('pembantu murni & kontrak grounding', () => {
     expect(parseExtract('```json\n{"kota":"Medan","items":[{"nama":"Golok","qty":"3"}]}\n```'))
       .toEqual({ city: 'Medan', province: null, items: [{ name: 'Golok', qty: 3 }] });
     expect(parseExtract('{"kota":null,"items":[]}')).toEqual({ city: null, province: null, items: [] });
-    expect(parseExtract('bukan json')).toEqual({ city: null, province: null, items: [] });
+    // >>> ANGGA — audit total (2026-08-05): JSON rusak kini DIBEDAKAN dari kosong
+    // (failed: true) — akar insiden "purwokerto dijawab data mataram".
+    expect(parseExtract('bukan json')).toEqual({ city: null, province: null, items: [], failed: true });
     expect(parseExtract('{"kota":"Medan","items":[{"nama":"Golok"}]}').items[0].qty).toBe(1);
     expect(parseExtract('{"kota":"Mataram","provinsi":"NTB","items":[]}').province).toBe('NTB');
   });
