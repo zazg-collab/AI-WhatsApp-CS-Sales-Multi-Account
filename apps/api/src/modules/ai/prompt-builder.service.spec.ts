@@ -104,8 +104,9 @@ describe('PromptBuilderService', () => {
       messages: [],
     });
     const msgs = await service.buildForConversation('c1');
-    // bot is null → language falls back to 'en' → English no-knowledge note.
-    expect(msgs[1].content).toContain('no knowledge base yet');
+    // >>> ANGGA — 2026-08-05: bot null kini jatuh ke 'id' (diselaraskan dgn
+    // ekstraktor & Sentinel; insiden kalimat tanya bocor bahasa Inggris).
+    expect(msgs[1].content).toContain('belum ada knowledge');
     expect(prisma.knowledgeItem.findMany).not.toHaveBeenCalled();
   });
 

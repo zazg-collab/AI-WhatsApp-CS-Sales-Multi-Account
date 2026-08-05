@@ -694,11 +694,12 @@ export const SHIPPING_GROUNDING_AMBIGUOUS_OPEN = {
   id: (tempat: string) => {
     const nama = (tempat ?? '').trim() || 'tujuannya';
     const rapi = nama.charAt(0).toUpperCase() + nama.slice(1);
-    return `DATA ONGKIR: tempat "${rapi}" cocok dengan LEBIH DARI SATU daerah berbeda di sistem ekspedisi — dan daerah yang pelanggan maksud bisa saja belum terlihat sistem. JANGAN menebak, JANGAN menyebut angka ongkir/total apa pun, dan JANGAN menyebut nama kabupaten/provinsi kandidat mana pun. Bertanyalah dengan pola PERSIS seperti ini: "${rapi}nya mana ya kak? boleh sebut provinsinya, atau langsung kecamatannya 🙏"`;
+    return `DATA ONGKIR: tempat "${rapi}" cocok dengan LEBIH DARI SATU daerah berbeda di sistem ekspedisi — dan daerah yang pelanggan maksud bisa saja belum terlihat sistem. JANGAN menebak, JANGAN menyebut angka ongkir/total apa pun, dan JANGAN menyebut nama kabupaten/provinsi kandidat mana pun. Balasanmu untuk soal ongkir ini = kalimat tanya berikut PERSIS APA ADANYA (boleh menambah SATU sapaan pendek di depannya, tidak lebih): "${rapi}nya mana ya kak? boleh sebut provinsinya, atau langsung kecamatannya 🙏" — JANGAN diterjemahkan ke bahasa lain, JANGAN diubah kata-katanya, JANGAN ditambah penjelasan.`;
   },
   en: (tempat: string) => {
     const nama = (tempat ?? '').trim() || 'the destination';
-    return `SHIPPING DATA: "${nama}" matches MORE THAN ONE distinct area — and the one the customer means may not even be visible to the system yet. Do NOT guess, do NOT state any shipping cost, and do NOT name any candidate regency/province. Ask exactly in this shape: "Which ${nama} do you mean? feel free to mention the province, or just the district 🙏"`;
+    const rapi = nama.charAt(0).toUpperCase() + nama.slice(1);
+    return `SHIPPING DATA: "${rapi}" matches MORE THAN ONE distinct area — and the one the customer means may not even be visible to the system yet. Do NOT guess, do NOT state any shipping cost, and do NOT name any candidate regency/province. Your reply for this shipping question = the following question VERBATIM (you may prepend ONE short greeting, nothing more): "${rapi}nya mana ya kak? boleh sebut provinsinya, atau langsung kecamatannya 🙏" — do NOT translate it, do NOT rephrase it, do NOT add explanations. (The question stays in Indonesian unless the customer is clearly chatting in another language.)`;
   },
 };
 

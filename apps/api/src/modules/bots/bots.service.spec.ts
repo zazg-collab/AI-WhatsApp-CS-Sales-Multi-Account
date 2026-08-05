@@ -53,7 +53,7 @@ describe('BotsService', () => {
   it('create maps defaults', async () => {
     await service.create({ botName: 'Bot' } as any);
     const data = prisma.bot.create.mock.calls[0][0].data;
-    expect(data.language).toBe('en');
+    expect(data.language).toBe('id'); // >>> ANGGA — 2026-08-05: default create diselaraskan ke skema ('id'); 'en' lama bikin bot baru diam-diam berbahasa Inggris di prompt <<<
     expect(data.status).toBe('draft');
   });
 

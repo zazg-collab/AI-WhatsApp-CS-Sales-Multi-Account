@@ -103,7 +103,14 @@ export class PromptBuilderService {
     });
     if (!conversation) throw new NotFoundException('Conversation not found');
 
-    const lang = conversation.bot?.language ?? 'en';
+    // >>> ANGGA — koreksi 2026-08-05 (insiden pertanyaan tujuan keluar
+    // BAHASA INGGRIS verbatim): fallback bahasa di sini dulu 'en' sementara
+    // ekstraktor & Sentinel jatuh ke 'id' — percakapan dengan bot berbahasa
+    // 'en' (default lama bots.service saat create) menerima SELURUH grounding
+    // versi Inggris, dan instruksi "pakai pola PERSIS" membuat kalimatnya
+    // bocor mentah ke pelanggan. Disamakan ke 'id' (toko Indonesia).
+    const lang = conversation.bot?.language ?? 'id';
+    // <<< ANGGA
 
     const soul =
       conversation.bot?.persona?.soulMd ??

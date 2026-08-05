@@ -43,7 +43,7 @@ export class BotsService {
         personaId: dto.personaId,
         knowledgeBaseId: dto.knowledgeBaseId,
         defaultAiMode: dto.defaultAiMode,
-        language: dto.language ?? 'en',
+        language: dto.language ?? 'id', // >>> ANGGA — 2026-08-05: selaras default skema ('id'); default 'en' lama membuat bot baru diam-diam berbahasa Inggris di prompt <<<
         status: dto.status ?? 'draft',
       },
       include: { persona: true, knowledgeBase: { select: { id: true, name: true } } },
