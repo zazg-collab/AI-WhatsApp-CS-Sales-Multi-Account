@@ -670,11 +670,46 @@ export const SHIPPING_MONEY_RULE = {
 // dipanggil dari `AiService.gateMoneyTokens`'s caller. Kalau retry-nya juga
 // tetap ditahan, baru jatuh ke draft manual seperti sebelumnya (tidak ada
 // retry kedua — biaya panggilan LLM ekstra dijaga tetap satu kali saja).
+// >>> ANGGA — fix (2026-08-06, insiden "cod aja kak" diulang totalan,
+// RETRY-NYA SENDIRI IKUT GAGAL): instruksi koreksi retry SEBELUMNYA cuma
+// SATU macam — "pakai PENANDA {{...}}" — pas untuk kelas "digit_mentah"
+// (angka rupiah ditulis mentah), tapi SALAH ARAH untuk kelas lain, terutama
+// "funnel_dilanggar" (total TIDAK BOLEH disebut SAMA SEKALI di giliran ini —
+// entah ditulis mentah ATAU lewat penanda). Model yang ditahan gara-gara
+// mengulang total lalu diberi instruksi "pakai penanda" dengan patuh
+// menukar angka mentah jadi {{total_cod}} — TETAP melanggar gerbang funnel,
+// retry gagal lagi, draft jatuh ke tangan admin walau ada mekanisme retry.
+// Fix: klasifikasikan `issues` lewat `klasifikasiAlasanGate` (S1, dipanggil
+// dari `AiService`) dan kirim instruksi yang BENAR-BENAR cocok dengan
+// pelanggarannya — bukan satu kalimat generik untuk semua kelas.
+export const MONEY_GATE_RETRY_HINTS: Record<string, { id: string; en: string }> = {
+  funnel_dilanggar: {
+    id: 'Untuk balasan kali ini, JANGAN sebutkan angka atau rincian total sama sekali — baik ditulis sendiri MAUPUN lewat penanda {{...}} manapun (termasuk {{total_cod}}/{{total_transfer}}/{{rincian_tagihan}}). Hapus SELURUH kalimat yang menyinggung total/tagihan, jawab bagian lain yang ditanya secara singkat, lalu tutup dengan pertanyaan wajib yang sudah ditentukan.',
+    en: 'For this reply, do NOT mention any total or bill breakdown at all — neither typed yourself NOR via any {{...}} placeholder (including {{total_cod}}/{{total_transfer}}/{{rincian_tagihan}}). Remove EVERY sentence referencing the total/bill, answer the rest briefly, then close with the mandated question.',
+  },
+  kontradiksi_data: {
+    id: 'Jangan menyangkal data atau bilang akan mengecek dulu — datanya SUDAH tersedia sekarang. Jawab langsung memakai penanda yang tersedia, seperti CS yang sudah memegang datanya, tanpa narasi "sedang mengecek".',
+    en: 'Do not deny the data or say you will check first — the data is already available right now. Answer directly using the available placeholder, like an agent who already has the data in hand, without any "checking" narration.',
+  },
+  rekening_mentah: {
+    id: 'Jangan ketik nomor rekening sendiri — pakai penanda {{rekening_transfer}} persis seperti tertulis, sistem yang mengisi nomornya.',
+    en: 'Do not type the bank account number yourself — use the {{rekening_transfer}} placeholder exactly as written, the system fills in the real number.',
+  },
+  salah_produk: {
+    id: 'Angka penanda yang kamu pakai itu milik produk order ini — pastikan nama produk yang kamu sebut di balasan PERSIS produk order ini, bukan produk lain.',
+    en: "The placeholder figures you used belong to this order — make sure the product name you mention in the reply is EXACTLY this order's product, not a different one.",
+  },
+  jumlah_manual: {
+    id: 'Jangan menjumlahkan dua penanda sendiri pakai tanda "+" — pakai LANGSUNG penanda TOTAL yang sudah dihitung sistem dari daftar yang tersedia, jangan menjumlahkan sendiri.',
+    en: 'Do not add two placeholders yourself with a "+" — use the TOTAL placeholder already computed by the system from the provided list directly, do not sum it yourself.',
+  },
+};
+
 export const MONEY_GATE_RETRY_USER = {
-  id: (previousText: string, issues: string[]) =>
-    `Balasanmu barusan ditahan sistem karena melanggar aturan gerbang uang:\n${issues.map((s) => `- ${s}`).join('\n')}\n\nBalasan yang ditahan:\n"${previousText}"\n\nTulis ULANG balasan yang SAMA isinya, tapi untuk SEMUA nominal rupiah yang terkait order ini, WAJIB pakai PENANDA {{...}} yang sudah disediakan di atas — jangan tulis angka rupiah apa pun sendiri. Jangan minta maaf atau menyinggung soal sistem/gerbang ke pelanggan, langsung tulis balasan yang benar.`,
-  en: (previousText: string, issues: string[]) =>
-    `Your last reply was held by the system for violating the money-gate rule:\n${issues.map((s) => `- ${s}`).join('\n')}\n\nThe held reply:\n"${previousText}"\n\nRewrite the SAME reply, but for ALL rupiah amounts related to this order, you MUST use the {{...}} PLACEHOLDER already provided above — do not write any rupiah number yourself. Do not apologize or mention the system/gate to the customer, just write the corrected reply.`,
+  id: (previousText: string, issues: string[], hint?: string) =>
+    `Balasanmu barusan ditahan sistem karena melanggar aturan gerbang uang:\n${issues.map((s) => `- ${s}`).join('\n')}\n\nBalasan yang ditahan:\n"${previousText}"\n\n${hint ?? 'Tulis ULANG balasan yang SAMA isinya, tapi untuk SEMUA nominal rupiah yang terkait order ini, WAJIB pakai PENANDA {{...}} yang sudah disediakan di atas — jangan tulis angka rupiah apa pun sendiri.'} Jangan minta maaf atau menyinggung soal sistem/gerbang ke pelanggan, langsung tulis balasan yang benar.`,
+  en: (previousText: string, issues: string[], hint?: string) =>
+    `Your last reply was held by the system for violating the money-gate rule:\n${issues.map((s) => `- ${s}`).join('\n')}\n\nThe held reply:\n"${previousText}"\n\n${hint ?? 'Rewrite the SAME reply, but for ALL rupiah amounts related to this order, you MUST use the {{...}} PLACEHOLDER already provided above — do not write any rupiah number yourself.'} Do not apologize or mention the system/gate to the customer, just write the corrected reply.`,
 };
 
 export const SHIPPING_GROUNDING_INTRO = {

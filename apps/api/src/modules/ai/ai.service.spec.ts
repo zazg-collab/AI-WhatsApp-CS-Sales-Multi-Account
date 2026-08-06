@@ -402,4 +402,58 @@ describe('AiService', () => {
       expect(detectBuyingSignals(undefined as unknown as string[])).toEqual({ score: 0, reasons: [] });
     });
   });
+
+  // >>> ANGGA — fix (2026-08-06, insiden "cod aja kak" diulang totalan,
+  // RETRY-NYA SENDIRI IKUT GAGAL): retry gerbang uang dulu SELALU memberi
+  // instruksi generik "pakai PENANDA {{...}}" — pas untuk kelas digit
+  // mentah, tapi untuk kelas funnel_dilanggar (total DILARANG disebut SAMA
+  // SEKALI di giliran ini) instruksi itu salah arah: model cuma menukar
+  // angka mentah jadi penanda dan TETAP melanggar. Sekarang instruksi retry
+  // diklasifikasi dulu (S1 `klasifikasiAlasanGate`) dan disesuaikan per kelas.
+  describe('gerbang uang \u2014 instruksi retry disesuaikan per kelas pelanggaran (S1)', () => {
+    it('kelas funnel_dilanggar (mengulang rincian total) -> pesan retry MELARANG total sama sekali, BUKAN "pakai penanda"', async () => {
+      provider.chat
+        .mockResolvedValueOnce('Total yang harus dibayarkan saat barang tiba adalah: {{total_cod}} boleh dicantumkan patokan rumahnya dekat apa kak?')
+        .mockResolvedValueOnce('Boleh dicantumkan patokan rumahnya dekat apa kak?');
+      const shipping = {
+        resolvePriceTokens: jest
+          .fn()
+          .mockResolvedValueOnce({
+            text: 'Total yang harus dibayarkan saat barang tiba adalah: {{total_cod}} boleh dicantumkan patokan rumahnya dekat apa kak?',
+            ok: false,
+            issues: ['Balasan mengulang rincian total ({{total_cod}}) padahal total sudah pernah disodorkan di giliran sebelumnya \u2014 jangan direkap ulang, cukup tutup dengan pertanyaan langkah "patokan".'],
+          })
+          .mockResolvedValueOnce({ text: 'Boleh dicantumkan patokan rumahnya dekat apa kak?', ok: true, issues: [] }),
+      };
+      const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
+      const r = await svc.generateReply('c1');
+      const retryMessages = provider.chat.mock.calls[1][0];
+      const lastMsg = retryMessages[retryMessages.length - 1];
+      expect(lastMsg.content).toMatch(/JANGAN sebutkan angka atau rincian total sama sekali/);
+      expect(lastMsg.content).not.toMatch(/WAJIB pakai PENANDA/);
+      expect(r.moneyBlocked).toBe(false);
+      expect(r.text).toBe('Boleh dicantumkan patokan rumahnya dekat apa kak?');
+    });
+
+    it('kelas digit_mentah (default, tidak berubah) -> pesan retry TETAP "pakai PENANDA {{...}}"', async () => {
+      provider.chat
+        .mockResolvedValueOnce('Bedog Betekok harganya Rp139.000, kak.')
+        .mockResolvedValueOnce('Bedog Betekok harganya {{harga_satuan}}, kak.');
+      const shipping = {
+        resolvePriceTokens: jest
+          .fn()
+          .mockResolvedValueOnce({
+            text: 'Bedog Betekok harganya Rp139.000, kak.',
+            ok: false,
+            issues: ['Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000'],
+          })
+          .mockResolvedValueOnce({ text: 'Bedog Betekok harganya {{harga_satuan}}, kak.', ok: true, issues: [] }),
+      };
+      const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
+      await svc.generateReply('c1');
+      const retryMessages = provider.chat.mock.calls[1][0];
+      const lastMsg = retryMessages[retryMessages.length - 1];
+      expect(lastMsg.content).toMatch(/WAJIB pakai PENANDA/);
+    });
+  });
 });

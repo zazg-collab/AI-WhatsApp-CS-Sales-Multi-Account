@@ -17,7 +17,7 @@ import { AiCacheService } from './ai-cache.service';
 // `shipping.service.ts` bersama pemakainya; di sini disediakan pintu masuk
 // resmi lewat AiService supaya sejajar dengan `leadScore`/`analyzeSentiment`
 // dan bisa dipakai controller/uji tanpa menyentuh modul shipping langsung.
-import { ShippingService, type ShippingOrderExtract } from '../shipping/shipping.service';
+import { ShippingService, type ShippingOrderExtract, klasifikasiAlasanGate } from '../shipping/shipping.service';
 // <<< ANGGA
 import {
   t,
@@ -32,6 +32,7 @@ import {
   SEGMENTED_REPLY_SYSTEM,
   SEGMENTED_REPLY_LIST,
   MONEY_GATE_RETRY_USER,
+  MONEY_GATE_RETRY_HINTS,
   mediaPlaceholder,
   FALLBACK_PHRASE,
   stripDataFences,
@@ -154,10 +155,28 @@ export class AiService {
     if (retry) {
       this.logger.warn(`Gerbang uang: mencoba ulang sekali dengan koreksi untuk ${conversationId}`);
       try {
+        // >>> ANGGA — fix (2026-08-06, insiden "cod aja kak" diulang totalan,
+        // retry-nya sendiri ikut gagal): instruksi koreksi kini disesuaikan
+        // per KELAS pelanggaran (S1), bukan satu kalimat generik "pakai
+        // penanda" untuk semua kelas — lihat komentar MONEY_GATE_RETRY_HINTS.
+        // Prioritas: kalau ada BEBERAPA issue sekaligus, kelas non-"digit
+        // mentah" didahulukan karena itu yang butuh instruksi BEDA (digit
+        // mentah tetap ditangani hint default di MONEY_GATE_RETRY_USER).
+        const kelasIssues = rendered.issues.map((s) => klasifikasiAlasanGate(s));
+        const kelasPrioritas = [
+          'funnel_dilanggar',
+          'kontradiksi_data',
+          'rekening_mentah',
+          'salah_produk',
+          'jumlah_manual',
+        ] as const;
+        const kelasCocok = kelasPrioritas.find((k) => kelasIssues.includes(k));
+        const hint = kelasCocok ? MONEY_GATE_RETRY_HINTS[kelasCocok]?.[retry.lang === 'en' ? 'en' : 'id'] : undefined;
+        // <<< ANGGA
         const retryMessages: ChatMessage[] = [
           ...retry.messages,
           { role: 'assistant', content: rendered.text },
-          { role: 'user', content: t(MONEY_GATE_RETRY_USER, retry.lang)(rendered.text, rendered.issues) },
+          { role: 'user', content: t(MONEY_GATE_RETRY_USER, retry.lang)(rendered.text, rendered.issues, hint) },
         ];
         let retryText = await this.provider.chat(retryMessages, { model: retry.model, maxTokens: 500 });
         retryText = stripDataFences(retryText);
