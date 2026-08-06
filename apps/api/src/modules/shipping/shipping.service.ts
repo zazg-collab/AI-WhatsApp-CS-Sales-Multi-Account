@@ -2031,6 +2031,22 @@ export class ShippingService {
               );
             }
             // <<< ANGGA
+            // >>> ANGGA — fix (2026-08-06, insiden "cod aja kak" diulang
+            // totalan): langkah PATOKAN (metode terjawab + total SUDAH
+            // pernah tersodor) juga HARAM mengulang rincian total — beda
+            // alasan dari PRA-TOTAL (di situ "belum pasti", di sini "sudah
+            // pernah dikasih, jangan direkap lagi"). Baris katalog kelas
+            // total ikut dibuang; gerbang di `resolvePriceTokens` menahan
+            // draft yang tetap menulis penandanya sendiri.
+            if (arah.step === 'patokan') {
+              for (let i = lines.length - 1; i >= 0; i--) {
+                if (/^• \{\{/.test(lines[i]) && POLA_TOKEN_TOTAL.test(lines[i])) lines.splice(i, 1);
+              }
+              lines.push(
+                '• LARANGAN KERAS GILIRAN INI: total/rincian tagihan SUDAH pernah disodorkan di giliran sebelumnya — JANGAN mengulang subtotal/total/rekap tagihan lagi. Jawab singkat (mis. konfirmasi metode) lalu tutup dengan pertanyaan patokan di bawah.',
+              );
+            }
+            // <<< ANGGA
             if (arah.teks) lines.push(arah.teks);
           } else if (adaKataTanyaUang(teksTerakhir, oc.orderMoneyAskKeywords)) {
             // >>> ANGGA — WATCHDOG PAKEM (2026-08-05): giliran tanya-uang
@@ -2512,6 +2528,18 @@ export class ShippingService {
           if (tokenTotal) {
             issues.push(
               `Balasan melanggar alur penjualan wajib — belum waktunya menyodorkan total (${tokenTotal[0]}): jumlah pesanan belum pasti. Jawab yang ditanya saja (harga/ongkir) lalu tutup dengan pertanyaan langkah "${expectF.step}".`,
+            );
+          }
+        }
+        // >>> ANGGA — fix (2026-08-06, insiden "cod aja kak" diulang
+        // totalan): langkah PATOKAN = total sudah pernah tersodor, draft
+        // yang masih menulis penanda total sendiri berarti mengulang rekap
+        // yang dilarang — ditahan sama seperti pelanggaran PRA-TOTAL.
+        if (expectF.step === 'patokan') {
+          const tokenTotalUlang = text.match(POLA_TOKEN_TOTAL);
+          if (tokenTotalUlang) {
+            issues.push(
+              `Balasan mengulang rincian total (${tokenTotalUlang[0]}) padahal total sudah pernah disodorkan di giliran sebelumnya — jangan direkap ulang, cukup tutup dengan pertanyaan langkah "${expectF.step}".`,
             );
           }
         }

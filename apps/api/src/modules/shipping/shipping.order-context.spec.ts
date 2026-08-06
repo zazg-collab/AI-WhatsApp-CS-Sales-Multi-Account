@@ -986,7 +986,7 @@ describe('Q-Chain — funnel pertanyaan berantai (urutan pakem)', () => {
     expect(grounding).not.toContain('mau diproses COD atau transfer kak?');
   });
 
-  it('TRACE 3c (v3): total sudah tersodor, pelanggan jawab metode → tanya PATOKAN saja', async () => {
+  it('TRACE 3c (v3, revisi 2026-08-06): total sudah tersodor, pelanggan jawab metode → tanya PATOKAN saja, TANPA mengulang rincian total', async () => {
     const h = harness({
       lastCustomerText: 'cod aja kak',
       extract: { kota: null, items: [] },
@@ -996,9 +996,39 @@ describe('Q-Chain — funnel pertanyaan berantai (urutan pakem)', () => {
     expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
     const grounding = await h.svc.getGroundingText('c1');
     expect(grounding).toContain('patokan rumahnya');
-    // Total sudah pernah tersodor → directive TOTAL tidak diulang (katalog
-    // penanda tetap menyebut {{rincian_tagihan}} — itu daftar, bukan perintah).
+    // Total sudah pernah tersodor → directive TOTAL tidak diulang.
     expect(grounding).not.toContain('SODORKAN TOTAL SEKARANG');
+    // REVISI (insiden "cod aja kak" → bot mengulang totalan lagi, 2026-08-06):
+    // asumsi lama "katalog penanda tetap menyebut {{rincian_tagihan}} — itu
+    // daftar, bukan perintah" TERBUKTI SALAH di produksi (model tetap
+    // memakainya walau tanpa perintah eksplisit). Sekarang katalog kelas
+    // total (baris "• {{token}} = ...") ikut dibuang di langkah patokan +
+    // larangan keras eksplisit ditambahkan. (Catatan: {{rincian_tagihan}}
+    // sebagai KATA masih bisa nongol di teks bridge ASUMSI-order lain yang
+    // menyebutnya sebagai opsi penamaan barang — itu temuan audit grounding
+    // terpisah, bukan bagian dari fix ini; yang fix ini jamin adalah baris
+    // KATALOG-nya hilang dan gerbang menahan kalau model tetap menulisnya.)
+    expect(grounding).not.toContain('• {{rincian_tagihan}} = BLOK rekap tagihan');
+    expect(grounding).not.toContain('{{total_transfer}}');
+    expect(grounding).not.toContain('{{total_cod}}');
+    expect(grounding).toContain('LARANGAN KERAS GILIRAN INI: total/rincian tagihan SUDAH pernah disodorkan');
+  });
+
+  it('REPLAY "cod aja kak" (2026-08-06): gerbang MENAHAN draft yang mengulang rincian total di langkah PATOKAN', async () => {
+    const h = harness({
+      lastCustomerText: 'cod aja kak',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 2 }], { qtyPasti: true })],
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1 });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    await h.svc.getGroundingText('c1'); // funnelExpect langkah patokan tercatat
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Baik kak, jadi harga barang Rp150.000 x 2, subtotal, ongkir, dan totalnya:\n{{rincian_tagihan}}\nboleh dicantumkan patokan rumahnya dekat apa kak? 🙏',
+    );
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toContain('mengulang rincian total');
   });
 
   it('v3: blok {{rincian_tagihan}} memuat estimasi tiba dari API (estimatedDate)', async () => {
