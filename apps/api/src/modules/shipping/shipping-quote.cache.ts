@@ -164,6 +164,21 @@ export class ShippingQuoteCache {
   private readonly asks = new Map<string, { count: number; messageId: string }>();
   /** Pilihan tujuan yang sedang ditawarkan ke pelanggan, per percakapan. */
   private readonly pendings = new Map<string, DestinationChoice[]>();
+  // >>> ANGGA — koreksi 2026-08-06 (insiden "Purwokertonya mana ya kak?"
+  // ditanya ULANG walau sudah pernah dijawab & menghasilkan ongkir sebelum
+  // pelanggan sempat pindah topik lalu balik lagi): begitu istilah kota/
+  // kecamatan AMBIGU berhasil didisambiguasi jadi satu DestinationChoice
+  // pasti, ingat pemetaan "istilah yang disebut pelanggan (dinormalisasi)" ->
+  // hasilnya, SEPANJANG sesi belanja (TTL sama seperti kutipan ongkir aktif
+  // `store`/`quoteCacheTtlMs` — ini fakta yang wajar diingat selama sesi
+  // belanja, bukan cuma "sebentar sesudah dihitung" seperti `outcomes`).
+  // Begitu istilah yang sama disebut lagi, pakai LANGSUNG hasil lama —
+  // jangan tanya ulang. Kunci luar = conversationId, kunci dalam = istilah
+  // dinormalisasi (lower-case, trim) — satu percakapan bisa mengingat
+  // beberapa istilah tujuan berbeda sekaligus (mis. "purwokerto" DAN
+  // "mataram" kalau pelanggan bolak-balik di antara keduanya).
+  private readonly resolvedTerms = new Map<string, Map<string, { choice: DestinationChoice; expiresAt: number }>>();
+  // <<< ANGGA
   // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{139000}}" ronde
   // 2): penanda harga produk (`{{harga_produk_N}}`) untuk giliran balasan yang
   // BELUM punya kutipan ongkir aktif (pelanggan tanya harga sebelum menyebut
@@ -309,6 +324,43 @@ export class ShippingQuoteCache {
     this.pendings.delete(conversationId);
   }
 
+  // >>> ANGGA — koreksi 2026-08-06: lihat komentar di field `resolvedTerms`.
+  rememberDestinationTerm(
+    conversationId: string,
+    term: string,
+    choice: DestinationChoice,
+    ttlMs: number,
+  ): void {
+    const key = term.trim().toLowerCase();
+    if (!key) return;
+    let byTerm = this.resolvedTerms.get(conversationId);
+    if (!byTerm) {
+      byTerm = new Map();
+      this.resolvedTerms.set(conversationId, byTerm);
+      while (this.resolvedTerms.size > MAX_QUOTE_ENTRIES) {
+        const oldest = this.resolvedTerms.keys().next().value;
+        if (oldest === undefined) break;
+        this.resolvedTerms.delete(oldest);
+      }
+    }
+    byTerm.set(key, { choice, expiresAt: Date.now() + ttlMs });
+  }
+
+  recallDestinationTerm(conversationId: string, term: string): DestinationChoice | null {
+    const key = term.trim().toLowerCase();
+    if (!key) return null;
+    const byTerm = this.resolvedTerms.get(conversationId);
+    if (!byTerm) return null;
+    const memo = byTerm.get(key);
+    if (!memo) return null;
+    if (Date.now() > memo.expiresAt) {
+      byTerm.delete(key);
+      return null;
+    }
+    return memo.choice;
+  }
+  // <<< ANGGA
+
   lastOutcome(conversationId: string): ShippingOutcome | null {
     const memo = this.outcomes.get(conversationId);
     if (!memo) return null;
@@ -425,6 +477,7 @@ export class ShippingQuoteCache {
     this.outcomes.clear();
     this.asks.clear();
     this.pendings.clear();
+    this.resolvedTerms.clear(); // >>> ANGGA <<<
     this.productPriceTokens.clear();
     this.itemPendings.clear(); // >>> ANGGA — Order Context Log <<<
     this.assumeds.clear(); // >>> ANGGA — Order Context Log <<<

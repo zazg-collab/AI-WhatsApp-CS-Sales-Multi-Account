@@ -1150,6 +1150,79 @@ describe('Q-Chain fix — REPLAY "banyumas kak": jawaban pilihan = giliran uang'
 });
 // <<< ANGGA
 
+// >>> ANGGA — koreksi 2026-08-06 (REPLAY insiden "Purwokertonya mana ya
+// kak?" ditanya ULANG walau sudah pernah dijawab & menghasilkan ongkir):
+// pelanggan disambiguasi Purwokerto -> Banyumas, lalu PINDAH ke tujuan lain,
+// lalu BALIK LAGI menyebut "purwokerto" -- seharusnya langsung dipakai hasil
+// lama, bukan ditanya ulang kecamatannya.
+const ROWS_SOLO = [
+  { _id: 'd-solo', PROVINCE_NAME: 'JAWA TENGAH', CITY_NAME: 'SOLO', CITY_NAME_SI: 'Kota Solo', DISTRICT_NAME: 'X', SUBDISTRICT_NAME: 'Y' },
+];
+
+describe('Memori tujuan lintas-topik — REPLAY "Purwokertonya mana ya kak?" ditanya ulang', () => {
+  it('balik ke istilah tujuan yang sudah pernah didisambiguasi (via jawaban pilihan) -> langsung dipakai, TIDAK tanya ulang', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke purwokerto berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_PURWOKERTO,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    // Giliran 2: jawab kecamatan -> resolve BANYUMAS (jalur `dipilih`).
+    pesanBaru(h, 'm2', 'banyumas kak');
+    const res2: any = await h.svc.quoteForConversation('c1');
+    expect(res2.status).toBe('ok');
+    expect(res2.quote.city).toBe('BANYUMAS');
+
+    // Giliran 3: pelanggan pindah topik ke tujuan lain sama sekali (Solo).
+    pesanBaru(h, 'm3', 'eh kalau ke solo aja deh, berapa ongkirnya?');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Solo', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) =>
+      /solo/i.test(kw) ? ROWS_SOLO : ROWS_PURWOKERTO,
+    );
+    const res3: any = await h.svc.quoteForConversation('c1');
+    expect(res3.status).toBe('ok');
+    expect(res3.quote.city).toBe('SOLO');
+
+    // Giliran 4: balik lagi ke "purwokerto" -- TIDAK boleh tanya ulang
+    // kecamatan (padahal ROWS_PURWOKERTO sendiri masih ambigu kalau dicari
+    // dari nol), dan TIDAK boleh memanggil searchAddress lagi untuk ini.
+    const searchCallsSebelum = (h.mengantar.searchAddress as jest.Mock).mock.calls.length;
+    pesanBaru(h, 'm4', '1 pcs aja kak jadinya ke purwokerto aja deh');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    const res4: any = await h.svc.quoteForConversation('c1');
+    expect(res4.status).toBe('ok'); // pra-fix: 'ambiguous' (tanya ulang kecamatan)
+    expect(res4.quote.city).toBe('BANYUMAS');
+    expect((h.mengantar.searchAddress as jest.Mock).mock.calls.length).toBe(searchCallsSebelum);
+  });
+});
+// <<< ANGGA
+
+// >>> ANGGA — koreksi 2026-08-06 (REPLAY insiden "GSM Naga Merah" nyasar ke
+// order "bedog betekok, bedog sicepot"): grounding kutipan penuh wajib
+// menyebut nama barang order SECARA EKSPLISIT & WAJIB (bukan cuma via token
+// opsional {{rincian_order}}), supaya model tidak menebak nama dari produk
+// LAIN yang kebetulan disebut di blok stok (harga boleh sama/mirip).
+describe('Jangkar nama barang di grounding — REPLAY insiden "GSM Naga Merah" nyasar ke order lain', () => {
+  it('kutipan penuh (matchedItems > 0) menyebut nama barang order SECARA PASTI, eksplisit & wajib', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? bedog betekok 1 pcs',
+      extract: { kota: 'Medan', items: [{ nama: 'Bedog Betekok', qty: 1 }] },
+    });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('Bedog Betekok');
+    expect(grounding).toContain('SECARA PASTI');
+    expect(grounding).toContain('JANGAN pakai nama produk lain');
+  });
+});
+// <<< ANGGA
+
 // >>> ANGGA — Q-Chain fix 2 (2026-08-05, REPLAY insiden "mataram dobel"):
 // draft nyata pada giliran "ongkir ke mataram berapa?" (qty BELUM pasti)
 // menyodorkan blok tagihan lengkap + total transfer/COD SEBELUM qty dijawab

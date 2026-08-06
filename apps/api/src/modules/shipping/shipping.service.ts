@@ -1232,6 +1232,17 @@ export class ShippingService {
       this.cache.clearPending(conversationId);
       this.cache.resetAsks(conversationId);
       this.cache.reset(conversationId);
+      // >>> ANGGA — koreksi 2026-08-06 (insiden "Purwokertonya mana ya kak?"
+      // ditanya ULANG): ingat istilah yang memicu pertanyaan tujuan ini ->
+      // hasil pilihannya, supaya kalau pelanggan menyebut istilah yang sama
+      // lagi nanti (mis. sesudah sempat pindah ke tujuan lain), jawabannya
+      // langsung dipakai TANPA tanya ulang. Lihat komentar di
+      // `ShippingQuoteCache.resolvedTerms`.
+      const istilahTujuan = (extract.city ?? '').trim().toLowerCase();
+      if (istilahTujuan) {
+        this.cache.rememberDestinationTerm(conversationId, istilahTujuan, dipilih, cfg.quoteCacheTtlMs);
+      }
+      // <<< ANGGA
       const hasil = await this.quoteUntukTujuan(dipilih, items);
       return finalize(hasil);
     }
@@ -1341,12 +1352,19 @@ export class ShippingService {
           this.cache.resetAsks(conversationId);
           this.cache.reset(conversationId);
           const menang = urut[0];
-          return finalize(
-            await this.quoteUntukTujuan(
-              { city: menang.city, province: menang.province, label: '', destinationId: menang.ids[0] },
-              items,
-            ),
-          );
+          const pilihanMenang: DestinationChoice = {
+            city: menang.city,
+            province: menang.province,
+            label: '',
+            destinationId: menang.ids[0],
+          };
+          // >>> ANGGA — koreksi 2026-08-06: sama seperti cabang `dipilih` di
+          // atas — ingat istilah "kotaKonteks" -> hasil ini untuk sisa sesi.
+          if (kotaKonteks) {
+            this.cache.rememberDestinationTerm(conversationId, kotaKonteks, pilihanMenang, cfg.quoteCacheTtlMs);
+          }
+          // <<< ANGGA
+          return finalize(await this.quoteUntukTujuan(pilihanMenang, items));
         }
         turnViaPilihan = true;
         return finalize({
@@ -1396,6 +1414,19 @@ export class ShippingService {
         items,
       );
       return finalize(hasil);
+    }
+    // <<< ANGGA
+
+    // >>> ANGGA — koreksi 2026-08-06 (insiden "Purwokertonya mana ya kak?"
+    // ditanya ULANG): sebelum mencari alamat dari nol (yang bisa jatuh
+    // ambigu lagi persis seperti giliran pertama), cek dulu apakah istilah
+    // kota/kecamatan yang disebut SEKARANG pernah berhasil didisambiguasi di
+    // percakapan ini (mis. pelanggan sempat pindah ke tujuan lain lalu balik
+    // lagi) — kalau ya, pakai LANGSUNG hasilnya, jangan tanya ulang.
+    const tujuanDiingat = this.cache.recallDestinationTerm(conversationId, city.trim().toLowerCase());
+    if (tujuanDiingat) {
+      turnViaPilihan = true;
+      return finalize(await this.quoteUntukTujuan(tujuanDiingat, items));
     }
     // <<< ANGGA
 
@@ -3106,6 +3137,22 @@ export function katalogPenanda(q: ShippingQuote): string[] {
     '• {{kota_tujuan}} = kota/kabupaten tujuan',
     '• {{rincian_order}} = daftar barang & jumlahnya (opsional, pakai kalau perlu — bukan wajib)',
   ];
+  // >>> ANGGA — koreksi 2026-08-06 (insiden "GSM Naga Merah" nyasar ke order
+  // "bedog betekok, bedog sicepot"): angka kutipan (harga/ongkir/total) sudah
+  // dijaga gerbang uang, tapi NAMA barang yang menyertainya tidak — kalau ada
+  // produk LAIN yang harganya kebetulan sama/mirip disebut di blok stok
+  // (lihat PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE, sengaja tetap
+  // menampilkan harga barang di luar order), model bisa salah pasang nama.
+  // Sebut nama barang order ini SECARA EKSPLISIT & WAJIB di sini — bukan
+  // opsional seperti {{rincian_order}} — supaya model punya jangkar pasti,
+  // bukan menebak dari nama produk lain yang kebetulan ada di konteks.
+  if (q.matchedItems.length) {
+    const namaOrderPasti = q.matchedItems.map((m) => m.name).join(', ');
+    lines.push(
+      `• Barang di order berongkir ini SECARA PASTI: ${namaOrderPasti} — WAJIB pakai nama ini persis kalau menyebut barang order ini. JANGAN pakai nama produk lain (termasuk dari daftar stok toko di blok lain) untuk order ini, walau harganya kebetulan sama/mirip.`,
+    );
+  }
+  // <<< ANGGA
   // >>> ANGGA — S2 (2026-08-05): kondisi SAMA PERSIS dengan buildPriceTokens.
   if (q.matchedItems.length) {
     lines.push(
