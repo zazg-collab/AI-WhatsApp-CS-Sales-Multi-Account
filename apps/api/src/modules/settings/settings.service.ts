@@ -202,7 +202,7 @@ export class SettingsService {
           'gak', 'ga', 'nggak', 'ngga', 'bukan', 'jangan', 'tidak', 'no',
         ]),
         orderFillerWords: this.list(this.config.get('ORDER_FILLER_WORDS'), [
-          'kak', 'ka', 'dong', 'deh', 'aja', 'sih', 'min', 'gan', 'bang',
+          'kak', 'ka', 'kakak', 'kaka', 'dong', 'deh', 'aja', 'sih', 'min', 'gan', 'bang',
           'mas', 'mbak', 'pak', 'bu', 'nya', 'yg', 'yang', 'yaudah', 'udah',
         ]),
         orderClosingNote: (this.config.get<string>('ORDER_CLOSING_NOTE') ?? '').trim(),

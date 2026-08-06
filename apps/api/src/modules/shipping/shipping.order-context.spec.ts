@@ -1871,6 +1871,52 @@ describe('JAWABAN KECAMATAN — REPLAY "sandubaya kak"', () => {
 });
 // <<< ANGGA
 
+// >>> ANGGA — REPLAY LIVE (2026-08-06, laporan Bossfren "kumat lagi abis 2
+// perbaikan terakhir"): honorifik "kakak" (BUKAN "kak" yang sudah difilter)
+// lolos dari stopword `generik` (>=4 karakter, tidak match "kak"/"kk") ->
+// kataJawaban jadi 2 kata ["sandubaya","kakak"] -> memicu cabang frasa-utuh
+// (fix d0b0f0e) yang SIA-SIA ("kakak" bukan istilah lokasi apa pun, frasa
+// gabungan pasti nol hasil) sebelum jatuh ke loop kata-per-kata lama —
+// pemborosan 1-2 panggilan API pencarian tambahan per giliran yang TIDAK
+// PERNAH terjadi sebelum fix itu ada. "kakak" ditambahkan ke stopword
+// generik (sejajar "kak"/"mas"/"bang" yang sudah ada) supaya jawaban
+// sesederhana "sandubaya kakak" berperilaku IDENTIK dengan "sandubaya kak"
+// yang sudah lama terbukti aman — bukan tambal khusus "kakak", tapi
+// melengkapi daftar honorifik yang memang seharusnya bukan kata kunci
+// lokasi. <<<
+describe('REPLAY live 2026-08-06 — honorifik "kakak" lolos filter, memicu frasa-utuh sia-sia', () => {
+  it('"sandubaya kakak" resolve LANGSUNG ke Kota Mataram NTB, TANPA memicu pencarian frasa gabungan sia-sia', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram berapa kak?',
+      extract: { kota: 'Mataram', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    pesanBaru(h, 'm2', 'sandubaya kakak');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Mataram', provinsi: 'Nusa Tenggara Barat', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) =>
+      /sandubaya/i.test(kw)
+        ? [{ _id: 'd-sdb', PROVINCE_NAME: 'NUSA TENGGARA BARAT', CITY_NAME: 'MATARAM', CITY_NAME_SI: 'Kota Mataram', DISTRICT_NAME: 'SANDUBAYA', SUBDISTRICT_NAME: 'X' }]
+        : ROWS_MATARAM,
+    );
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+    expect(res.quote.province).toBe('NUSA TENGGARA BARAT');
+    // Diagnostik akar sebab: kalau "kakak" TIDAK difilter, kode akan
+    // memanggil searchAddress dengan frasa "sandubaya kakak" (sia-sia) DULU
+    // sebelum jatuh ke kata polos "sandubaya" — panggilan API ekstra yang
+    // tidak pernah ada di jalur "sandubaya kak" yang sudah lama aman.
+    const semuaKeyword = (h.mengantar.searchAddress as jest.Mock).mock.calls.map((c) => c[0] as string);
+    expect(semuaKeyword.some((kw) => /kakak/i.test(kw))).toBe(false);
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('mau ambil berapa pcs kak?'); // funnel lanjut (viaPilihan)
+  });
+});
+// <<< ANGGA
+
 // >>> ANGGA — GABUNG DUA JAWABAN (2026-08-05 malam, KETOK BOSSFREN, dibuktikan
 // di API NYATA via widget): "kota mataram" = NOL baris (varian jenis-kota
 // DICABUT), tapi "sandubaya mataram" = 7 baris presisi Kota Mataram NTB.

@@ -1338,8 +1338,16 @@ export class ShippingService {
       // Sebutan produk = bukan jawaban tujuan — jangan search nama golok jadi desa.
       const produkKatalogL = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
       if (!mentionsCatalogProduct(lastCustomerText, produkKatalogL)) {
+      // >>> ANGGA — fix (2026-08-06, REPLAY live laporan Bossfren "kumat lagi
+      // abis 2 perbaikan terakhir"): "kakak" (honorifik >=4 huruf, BUKAN "kak"
+      // yang sudah difilter duluan) lolos dari daftar ini -> jadi kata KEDUA
+      // di kataJawaban -> memicu cabang frasa-utuh (fix d0b0f0e) yang SIA-SIA
+      // (bukan istilah lokasi apa pun) sebelum jatuh ke kata polos -> 1-2
+      // panggilan API pencarian tambahan per giliran yang TIDAK PERNAH ada
+      // sebelum fix itu. Ditambahkan sejajar "kak"/"mas"/"bang" yang sudah
+      // ada — melengkapi daftar honorifik, bukan tambalan khusus satu kata. <<<
       const generik = new Set([
-        'kak', 'kk', 'ya', 'yaa', 'iya', 'betul', 'bener', 'benar', 'oke', 'ok', 'sip',
+        'kak', 'kk', 'kakak', 'kaka', 'ya', 'yaa', 'iya', 'betul', 'bener', 'benar', 'oke', 'ok', 'sip',
         'dong', 'deh', 'itu', 'yang', 'yg', 'di', 'ke', 'kota', 'kabupaten', 'kab',
         'provinsi', 'daerah', 'kecamatan', 'kelurahan', 'desa', 'aja', 'saja', 'mas', 'bang',
         ...(oc.orderFillerWords ?? []).map((w) => (w ?? '').toLowerCase().trim()),
