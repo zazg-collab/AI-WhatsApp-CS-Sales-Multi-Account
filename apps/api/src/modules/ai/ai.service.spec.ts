@@ -455,5 +455,40 @@ describe('AiService', () => {
       const lastMsg = retryMessages[retryMessages.length - 1];
       expect(lastMsg.content).toMatch(/WAJIB pakai PENANDA/);
     });
+
+    // >>> ANGGA -- fix (2026-08-06, REPLAY laporan Bossfren "Fatih"/"Sandubaya
+    // COD" -- draft ditahan gerbang uang dgn 2 issue SEKALIGUS: jumlah_manual
+    // ["subtotal_barang" + "ongkir" dijumlahkan sendiri] DAN funnel_dilanggar
+    // ["mengulang rincian total" di langkah patokan]): retry SEBELUM fix ini
+    // cuma kirim SATU hint (prioritas tertinggi menang, funnel_dilanggar),
+    // jumlah_manual-nya sama sekali tidak disinggung ke model -- kemungkinan
+    // besar ini kenapa retry gagal juga (model dikasih tau "jangan sebut
+    // total" tapi TIDAK dikasih tau "jangan jumlahkan penanda sendiri").
+    it('kelas GABUNGAN (funnel_dilanggar + jumlah_manual sekaligus) -> pesan retry berisi KEDUA instruksi, bukan cuma satu', async () => {
+      provider.chat
+        .mockResolvedValueOnce(
+          'Totalnya {{subtotal_barang}} + {{ongkir}} + biaya COD boleh dicantumkan patokan rumahnya dekat apa kak?',
+        )
+        .mockResolvedValueOnce('Boleh dicantumkan patokan rumahnya dekat apa kak?');
+      const shipping = {
+        resolvePriceTokens: jest
+          .fn()
+          .mockResolvedValueOnce({
+            text: 'Totalnya {{subtotal_barang}} + {{ongkir}} + biaya COD boleh dicantumkan patokan rumahnya dekat apa kak?',
+            ok: false,
+            issues: [
+              'Balasan menjumlahkan penanda sendiri dengan "+" sebagai total ({{subtotal_barang}}, {{ongkir}}) — total SUDAH dihitung sistem, wajib pakai {{total_transfer}}/{{total_cod}}/{{blok_total}}/{{rincian_tagihan}} langsung, jangan menjumlahkan penanda manual.',
+              'Balasan mengulang rincian total ({{subtotal_barang}}) padahal total sudah pernah disodorkan di giliran sebelumnya — jangan direkap ulang, cukup tutup dengan pertanyaan langkah "patokan".',
+            ],
+          })
+          .mockResolvedValueOnce({ text: 'Boleh dicantumkan patokan rumahnya dekat apa kak?', ok: true, issues: [] }),
+      };
+      const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
+      await svc.generateReply('c1');
+      const retryMessages = provider.chat.mock.calls[1][0];
+      const lastMsg = retryMessages[retryMessages.length - 1];
+      expect(lastMsg.content).toMatch(/JANGAN sebutkan angka atau rincian total sama sekali/); // hint funnel_dilanggar
+      expect(lastMsg.content).toMatch(/Jangan menjumlahkan dua penanda sendiri pakai tanda/); // hint jumlah_manual
+    });
   });
 });

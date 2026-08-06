@@ -3154,10 +3154,32 @@ export class ShippingService {
           (utuh, nama: string) => tokens[nama] ?? utuh,
         );
         // <<< ANGGA
-        if (!normF(substituted).includes(normF(kalimatWajibTersubstitusi))) {
+        const normSubstituted = normF(substituted);
+        const normKalimatWajib = normF(kalimatWajibTersubstitusi);
+        if (!normSubstituted.includes(normKalimatWajib)) {
           issues.push(
             `Balasan melanggar alur penjualan wajib — tidak menutup dengan pertanyaan langkah "${expectF.step}". Tulis ulang dan akhiri PERSIS dengan: "${kalimatWajibTersubstitusi}"`,
           );
+        } else if (normKalimatWajib) {
+          // >>> ANGGA — fix (2026-08-06, REPLAY laporan Bossfren "Fatih"/
+          // "Sandubaya COD", screenshot "trs knp ini doble2"): cek di atas
+          // cuma pernah memverifikasi kalimat wajib ADA (`.includes()`),
+          // TIDAK PERNAH ngecek apakah dia cuma muncul SEKALI. Draft nyata
+          // yang dilaporkan: model menulis jawaban natural dulu (kebetulan
+          // ISI-nya persis sama minus emoji penutup), LALU menempel lagi
+          // kalimat wajib PERSIS (dengan emoji) di akhir buat "menuhin
+          // syarat" gerbang — lolos cek "ada" di atas, padahal pelanggan
+          // menerima kalimat yang sama dua kali berturut-turut. Dihitung
+          // lewat `split()` (bukan regex global) karena `normKalimatWajib`
+          // bisa memuat karakter regex-sensitif (sudah dinormalisasi ke
+          // huruf/angka/spasi saja lewat `normF`, tapi tetap dihindari demi
+          // aman) — jumlah kemunculan = jumlah potongan dikurangi 1.
+          const kemunculan = normSubstituted.split(normKalimatWajib).length - 1;
+          if (kemunculan > 1) {
+            issues.push(
+              `Balasan mengulang kalimat wajib langkah "${expectF.step}" sebanyak ${kemunculan}x — kalimatnya cuma boleh muncul SEKALI di akhir balasan (jangan dijawab dengan kalimat sendiri dulu lalu ditempel lagi versi PERSIS-nya). Tulis ulang, sebutkan SEKALI saja: "${kalimatWajibTersubstitusi}"`,
+            );
+          }
         }
         // >>> ANGGA — Q-Chain fix 2 (2026-08-05, insiden "mataram dobel"):
         // langkah PRA-TOTAL → total HARAM tersodor duluan (ketok Bossfren:
@@ -3672,7 +3694,7 @@ export const POLA_TOKEN_TOTAL =
 // bawahnya (urutan if-else di sini penting).
 export function klasifikasiAlasanGate(
   issue: string,
-): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'rekening_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'funnel_dilanggar' | 'salah_produk' | 'jumlah_manual' | 'lainnya' {
+): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'rekening_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'funnel_dilanggar' | 'salah_produk' | 'jumlah_manual' | 'kalimat_dobel' | 'lainnya' {
   const s = issue ?? '';
   if (s.includes('membuat labelnya salah')) return 'label_rancu';
   if (s.includes('tidak dikenal/tidak tersedia')) return 'token_tak_dikenal';
@@ -3682,6 +3704,12 @@ export function klasifikasiAlasanGate(
   if (s.includes('istilah internal')) return 'istilah_internal'; // >>> ANGGA — E3 <<<
   if (s.includes('menyangkal data yang sudah tersedia')) return 'kontradiksi_data'; // >>> ANGGA — P2 <<<
   if (s.includes('berpura-pura masih mengecek')) return 'kontradiksi_data'; // >>> ANGGA — anti-teater (2026-08-05) <<<
+  // >>> ANGGA — fix (2026-08-06, REPLAY "trs knp ini doble2"): dicek SEBELUM
+  // 'melanggar alur penjualan wajib' generik di bawah — dua-duanya sama-sama
+  // pelanggaran funnel, tapi kelas ini butuh hint BEDA (jangan diulang,
+  // bukan jangan disebut sama sekali), jadi dipisah sendiri.
+  if (s.includes('mengulang kalimat wajib')) return 'kalimat_dobel';
+  // <<< ANGGA
   if (s.includes('melanggar alur penjualan wajib')) return 'funnel_dilanggar'; // >>> ANGGA — Q-Chain <<<
   if (s.includes('mengulang rincian total')) return 'funnel_dilanggar'; // >>> ANGGA — koreksi 2026-08-06, insiden "cod aja kak" <<<
   if (s.includes('menempelkan angka kutipan ke produk yang salah')) return 'salah_produk'; // >>> ANGGA — Gerbang Pakem #1 <<<

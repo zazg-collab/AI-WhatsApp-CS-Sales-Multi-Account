@@ -1073,6 +1073,32 @@ describe('Q-Chain — funnel pertanyaan berantai (urutan pakem)', () => {
     expect(out.issues.join(' ')).toContain('mengulang rincian total');
   });
 
+  // >>> ANGGA -- fix (2026-08-06, REPLAY laporan Bossfren "Fatih"/"Sandubaya
+  // COD", screenshot "trs knp ini doble2"): gerbang "wajib tutup dengan
+  // kalimat X" cuma pernah ngecek APAKAH kalimat itu ADA (`.includes()`),
+  // TIDAK PERNAH ngecek apakah cuma muncul SEKALI. Draft nyata yang
+  // dilaporkan Bossfren nulis jawaban natural dulu (kebetulan mirip banget
+  // templatenya, minus emoji penutup), LALU nempel lagi kalimat wajib PERSIS
+  // (dengan emoji) di akhir buat "menuhin syarat" gerbang -- lolos cek
+  // "ada", padahal isinya dobel. Test ini mengisolasi KHUSUS duplikasi (draft
+  // di bawah tidak melanggar aturan lain -- tidak ada penanda total ditulis
+  // manual/diulang, cuma kalimat wajibnya ditulis 2x).
+  it('REPLAY duplikasi kalimat wajib (2026-08-06, "trs knp ini doble2"): gerbang MENAHAN draft yang menulis kalimat wajib funnel DUA KALI', async () => {
+    const h = harness({
+      lastCustomerText: 'jadi 2 ya kak',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }], { qtyPasti: true })],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    await h.svc.getGroundingText('c1'); // funnelExpect langkah 'total' tercatat, kalimat = tanya metode
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Baik kak, jadi totalnya:\n{{rincian_tagihan}}\nmau diproses COD atau transfer kak?\nmau diproses COD atau transfer kak? 😊',
+    );
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toMatch(/dua kali|duplikat|mengulang kalimat wajib/i);
+  });
+
   it('Q-Chain v3.1 (revisi Bossfren 2026-08-06): metode COD -> langkah PATOKAN minta ALAMAT LENGKAP sekaligus patokan, bukan patokan doang', async () => {
     const h = harness({
       lastCustomerText: 'COD deh kak. beli 2 ya',

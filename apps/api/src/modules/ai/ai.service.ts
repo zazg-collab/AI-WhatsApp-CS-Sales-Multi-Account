@@ -159,19 +159,37 @@ export class AiService {
         // retry-nya sendiri ikut gagal): instruksi koreksi kini disesuaikan
         // per KELAS pelanggaran (S1), bukan satu kalimat generik "pakai
         // penanda" untuk semua kelas — lihat komentar MONEY_GATE_RETRY_HINTS.
-        // Prioritas: kalau ada BEBERAPA issue sekaligus, kelas non-"digit
-        // mentah" didahulukan karena itu yang butuh instruksi BEDA (digit
-        // mentah tetap ditangani hint default di MONEY_GATE_RETRY_USER).
+        // >>> ANGGA — koreksi (2026-08-06, REPLAY laporan Bossfren "Fatih"/
+        // "Sandubaya COD" — draft ditahan dengan 2 issue SEKALIGUS:
+        // jumlah_manual + funnel_dilanggar, retry TETAP gagal): versi
+        // sebelumnya di sini cuma kirim SATU hint (kelas prioritas tertinggi
+        // menang, sisanya diam-diam tidak disinggung ke model sama sekali).
+        // Kalau draft melanggar BEBERAPA kelas berbarengan, model cuma
+        // dikasih tahu SATU dari sekian pelanggarannya — retry gagal lagi
+        // karena pelanggaran lain yang tidak disebut kemungkinan besar tetap
+        // terulang. Fix: kumpulkan SEMUA kelas yang cocok (bukan cuma yang
+        // pertama), gabung hint-nya jadi satu instruksi — urutan prioritas
+        // tetap dipakai supaya instruksi paling kritis (funnel_dilanggar)
+        // tetap disebut paling dulu/tegas, tapi kelas lain TIDAK lagi
+        // dibungkam. `rendered.issues` mentah tetap ikut terkirim sebagai
+        // daftar bullet terpisah di `MONEY_GATE_RETRY_USER` (tidak berubah),
+        // jadi ini memperkuat instruksi actionable-nya, bukan duplikat.
         const kelasIssues = rendered.issues.map((s) => klasifikasiAlasanGate(s));
         const kelasPrioritas = [
           'funnel_dilanggar',
+          'kalimat_dobel',
           'kontradiksi_data',
           'rekening_mentah',
           'salah_produk',
           'jumlah_manual',
         ] as const;
-        const kelasCocok = kelasPrioritas.find((k) => kelasIssues.includes(k));
-        const hint = kelasCocok ? MONEY_GATE_RETRY_HINTS[kelasCocok]?.[retry.lang === 'en' ? 'en' : 'id'] : undefined;
+        const kelasCocokSemua = kelasPrioritas.filter((k) => kelasIssues.includes(k));
+        const hint = kelasCocokSemua.length
+          ? kelasCocokSemua
+              .map((k) => MONEY_GATE_RETRY_HINTS[k]?.[retry.lang === 'en' ? 'en' : 'id'])
+              .filter((s): s is string => !!s)
+              .join(' ')
+          : undefined;
         // <<< ANGGA
         const retryMessages: ChatMessage[] = [
           ...retry.messages,

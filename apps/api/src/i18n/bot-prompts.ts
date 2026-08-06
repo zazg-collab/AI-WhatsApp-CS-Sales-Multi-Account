@@ -703,6 +703,17 @@ export const MONEY_GATE_RETRY_HINTS: Record<string, { id: string; en: string }> 
     id: 'Jangan menjumlahkan dua penanda sendiri pakai tanda "+" — pakai LANGSUNG penanda TOTAL yang sudah dihitung sistem dari daftar yang tersedia, jangan menjumlahkan sendiri.',
     en: 'Do not add two placeholders yourself with a "+" — use the TOTAL placeholder already computed by the system from the provided list directly, do not sum it yourself.',
   },
+  // >>> ANGGA — fix (2026-08-06, REPLAY laporan Bossfren "Fatih"/"Sandubaya
+  // COD", screenshot "trs knp ini doble2"): model menulis jawaban natural
+  // dulu (kebetulan isinya mirip banget kalimat wajib, minus emoji), LALU
+  // menempel lagi kalimat wajib PERSIS di akhir untuk "menuhin syarat" —
+  // hasilnya kalimat yang sama muncul dua kali. Hint ini beda dari
+  // funnel_dilanggar (yang bilang "jangan sebut sama sekali") — di sini
+  // kalimatnya MEMANG wajib ada, cuma jangan diulang.
+  kalimat_dobel: {
+    id: 'Balasanmu barusan menulis kalimat wajib penutup itu DUA KALI (atau lebih) — mungkin kamu menjawab dengan kalimat versi sendiri dulu, lalu menempel lagi versi PERSIS-nya di akhir. Kalimat itu cukup ditulis SEKALI SAJA, di akhir balasan — jangan dijawab dua kali dengan kata-kata yang mirip/sama.',
+    en: 'Your last reply wrote the mandated closing sentence TWICE (or more) — you may have answered with your own phrasing first, then appended the exact required sentence again. Write that sentence only ONCE, at the end of the reply — do not answer twice with similar/identical wording.',
+  },
 };
 
 export const MONEY_GATE_RETRY_USER = {
