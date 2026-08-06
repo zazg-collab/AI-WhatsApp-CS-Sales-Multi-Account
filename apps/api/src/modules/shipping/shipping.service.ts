@@ -2,6 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { MessageStatus, SenderType } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { OrderContextSettings } from '../settings/settings.types';
 import { NotificationsService } from '../../notifications/notifications.service'; // >>> ANGGA — addendum v2 P2 <<<
 import { AiProviderService } from '../ai/ai-provider.service';
 import { tokenizeForMatch, scoreProductMatch } from '../products/products.util';
@@ -1761,6 +1762,39 @@ export class ShippingService {
    * (event `funnel_ask`). Return null = tidak ada directive (belokan, nego,
    * pertanyaan wajib lain, funnel mati, atau sudah mentok cap).
    */
+  /** >>> ANGGA — refactor (2026-08-06, audit grounding #2+#4): SATU sumber
+   *  kebenaran untuk "sinyal umum obrolan order/uang" — irisan kondisi yang
+   *  DULU disalin terpisah di `jawabanUang` (funnelDirective) dan
+   *  `obrolanOrder` (getGroundingText). Dekomposisi OR murni, TIDAK mengubah
+   *  perilaku salah satu pemanggil lama (asosiatif/komutatif) — cuma
+   *  menghilangkan salinan gandanya supaya tidak bisa drift lagi. <<< */
+  private isBridgeCommonSignal(teks: string, viaPilihan: boolean, oc: OrderContextSettings): boolean {
+    return (
+      viaPilihan === true ||
+      adaKataTanyaUang(teks, oc.orderMoneyAskKeywords) ||
+      hasAggregateKeyword(teks, oc.orderAggregateKeywords) ||
+      PLACE_HINT.test(teks) ||
+      ORDER_CHANGE_HINT.test(teks)
+    );
+  }
+
+  /** >>> ANGGA — refactor (2026-08-06, audit grounding #2+#4): definisi
+   *  "obrolan order" versi F2 (2026-08-05, insiden "halo") — sengaja lebih
+   *  sempit dari `jawabanUang` (funnel), makanya PUNYA kondisi tambahan
+   *  sendiri (deixis/referensi/afirmasi utuh) di atas sinyal umum. Dipakai
+   *  di `getGroundingText` (kapan directive ASUMSI disuntik) DAN di gerbang
+   *  bridge-enforcement `resolvePriceTokens` (temuan audit #2: gerbang itu
+   *  dulu TIDAK mengecek kondisi ini sama sekali — bisa menahan draft untuk
+   *  aturan yang giliran itu tidak pernah diberitahukan ke model). <<< */
+  private isObrolanOrder(teks: string, viaPilihan: boolean, oc: OrderContextSettings): boolean {
+    return (
+      this.isBridgeCommonSignal(teks, viaPilihan, oc) ||
+      hasAggregateKeyword(teks, oc.orderDeixisKeywords) ||
+      hasAggregateKeyword(teks, oc.orderReferenceKeywords) ||
+      wholeMessageMatch(teks, oc.orderAffirmationKeywords, oc.orderFillerWords, oc.orderNegationKeywords)
+    );
+  }
+
   private async funnelDirective(
     conversationId: string,
     lastMsgId: string,
@@ -1779,14 +1813,21 @@ export class ShippingService {
     // yang ME-RESOLVE pilihan (jawaban atas pertanyaan tujuan/barang/keranjang
     // kita sendiri) dihitung giliran uang WALAU teksnya tanpa kata uang —
     // "banyumas kak" adalah jawaban ongkir, funnel wajib lanjut, bukan diam. <<<
+    // >>> ANGGA — refactor (2026-08-06, audit grounding #2+#4): "sinyal
+    // umum obrolan order/uang" sekarang SATU definisi bersama
+    // (`isBridgeCommonSignal`), dipakai di sini DAN di `getGroundingText`
+    // (obrolanOrder) DAN di gerbang bridge-enforcement (`resolvePriceTokens`)
+    // — sebelumnya tiga tempat ini punya salinan kondisi masing-masing yang
+    // bisa drift diam-diam kapan saja satu diedit tanpa yang lain ikut.
+    // `hargaTurn`/`patchQty` TETAP kondisi tambahan KHUSUS funnel (giliran
+    // harga/qty yang belum tentu "obrolan order" versi grounding ASUMSI),
+    // diOR-kan eksplisit di sini, bukan disembunyikan ke fungsi bersama —
+    // supaya bedanya kelihatan jelas dan sengaja, bukan drift lagi.
     const jawabanUang =
       opts.hargaTurn === true ||
-      memoG?.viaPilihan === true ||
-      adaKataTanyaUang(teksG, oc.orderMoneyAskKeywords) ||
-      hasAggregateKeyword(teksG, oc.orderAggregateKeywords) ||
-      PLACE_HINT.test(teksG) ||
-      ORDER_CHANGE_HINT.test(teksG) ||
-      patchQty(teksG) != null;
+      patchQty(teksG) != null ||
+      this.isBridgeCommonSignal(teksG, memoG?.viaPilihan === true, oc);
+    // <<< ANGGA
     if (!jawabanUang) return null;
 
     const entries = (await this.orderLog.candidates(conversationId)).filter(
@@ -1982,15 +2023,14 @@ export class ShippingService {
         const memoNego = this.turnMemo.get(conversationId);
         const oc = await this.settings.orderContext();
         const teksTerakhir = memoNego?.lastText ?? '';
-        const obrolanOrder =
-          memoNego?.viaPilihan === true || // >>> ANGGA — Q-Chain fix: jawaban pilihan = obrolan order <<<
-          adaKataTanyaUang(teksTerakhir, oc.orderMoneyAskKeywords) ||
-          hasAggregateKeyword(teksTerakhir, oc.orderAggregateKeywords) ||
-          hasAggregateKeyword(teksTerakhir, oc.orderDeixisKeywords) ||
-          hasAggregateKeyword(teksTerakhir, oc.orderReferenceKeywords) ||
-          PLACE_HINT.test(teksTerakhir) ||
-          ORDER_CHANGE_HINT.test(teksTerakhir) ||
-          wholeMessageMatch(teksTerakhir, oc.orderAffirmationKeywords, oc.orderFillerWords, oc.orderNegationKeywords);
+        // >>> ANGGA — refactor (2026-08-06, audit grounding #2+#4): pindah
+        // ke definisi bersama `isObrolanOrder` (lihat komentarnya) — perilaku
+        // IDENTIK dengan sebelumnya (dekomposisi OR murni), cuma sumbernya
+        // sekarang satu tempat, dipakai juga oleh gerbang bridge-enforcement
+        // di resolvePriceTokens (menutup temuan audit #2: gerbang itu dulu
+        // tidak mengecek kondisi ini sama sekali).
+        const obrolanOrder = this.isObrolanOrder(teksTerakhir, memoNego?.viaPilihan === true, oc);
+        // <<< ANGGA
         if (assumed?.productNames.length && obrolanOrder) {
           lines.push(t(SHIPPING_GROUNDING_ASSUMED, lang)(assumed.productNames.join(', ')));
         }
@@ -2420,12 +2460,45 @@ export class ShippingService {
     // `issues` → ikut mekanisme retry-sekali gerbang uang yang sudah ada.
     if (cfg.orderBridgeEnforcement !== 'prompt_only') {
       const assumed = this.cache.assumed(conversationId);
-      if (assumed?.productNames.length) {
+      // >>> ANGGA — fix (2026-08-06, audit grounding #2): gerbang ini DULU
+      // jalan tanpa syarat begitu ada `assumed` + token uang di draft — tidak
+      // sinkron dengan instruksi `SHIPPING_GROUNDING_ASSUMED` yang HANYA
+      // disuntik ke grounding kalau giliran ini `isObrolanOrder` (dipersempit
+      // sengaja di F2 2026-08-05, insiden "halo" — supaya basa-basi dengan
+      // cache hangat tidak ikut dipaksa merekap order). Draft bisa tertahan
+      // untuk aturan yang giliran itu TIDAK PERNAH diberitahukan ke model.
+      // Fix: gerbang sekarang PERSEMPIT mengikuti kondisi yang SAMA seperti
+      // instruksinya (bukan melebarkan instruksi balik — supaya insiden
+      // "halo" tidak muncul lagi kalau arahnya dibalik).
+      const memoBridge = this.turnMemo.get(conversationId);
+      const obrolanOrderBridge = this.isObrolanOrder(memoBridge?.lastText ?? '', memoBridge?.viaPilihan === true, cfg);
+      // <<< ANGGA
+      if (assumed?.productNames.length && obrolanOrderBridge) {
         const adaTokenUang =
           /\{\{(total_transfer|total_cod|subtotal_barang|blok_total|harga_satuan|total_transfer_diskon|total_cod_diskon)\}\}/i.test(text);
-        // >>> ANGGA — S2: {{rincian_tagihan}} juga memuat nama barang (blok
-        // sistem) → memenuhi bridge sama seperti {{rincian_order}}.
-        const adaRincian = /\{\{(rincian_order|rincian_tagihan)\}\}/i.test(text);
+        // >>> ANGGA — fix (2026-08-06, audit grounding #1): {{rincian_tagihan}}
+        // TIDAK selalu boleh memenuhi bridge — langkah PRA_TOTAL_STEPS/patokan
+        // MELARANG total sama sekali (gerbang di bawah), jadi menyarankan
+        // model "pakai {{rincian_tagihan}}" untuk memenuhi bridge di langkah
+        // itu cuma memindahkan pelanggaran, bukan menyelesaikannya. Restriksi
+        // HANYA berlaku kalau funnelExpect memang milik GILIRAN INI (cek
+        // messageId — pola sama gerbang PRA_TOTAL di bawah); tanpa funnelExpect
+        // yang cocok, perilaku LAMA (tanpa restriksi) dipakai — supaya tidak
+        // ada giliran yang mendadak tertahan gara-gara data basi/tak sinkron.
+        const expectFBridge = this.cache.funnelExpect(conversationId);
+        const msgIdNowBridge = (this.turnMemo.get(conversationId)?.key ?? '').split(':')[0] || '';
+        const langkahTotalDilarang =
+          !!expectFBridge &&
+          !!msgIdNowBridge &&
+          expectFBridge.messageId === msgIdNowBridge &&
+          (PRA_TOTAL_STEPS.has(expectFBridge.step) || expectFBridge.step === 'patokan');
+        // S2: {{rincian_tagihan}} juga memuat nama barang (blok sistem) →
+        // memenuhi bridge sama seperti {{rincian_order}} — KECUALI giliran
+        // ini total sedang dilarang: saat itu hanya {{rincian_order}} (bukan
+        // token uang) yang sah memenuhi bridge.
+        const adaRincian = langkahTotalDilarang
+          ? /\{\{rincian_order\}\}/i.test(text)
+          : /\{\{(rincian_order|rincian_tagihan)\}\}/i.test(text);
         // <<< ANGGA
         if (adaTokenUang && !adaRincian && !namaDisebut(text, assumed.productNames)) {
           issues.push(

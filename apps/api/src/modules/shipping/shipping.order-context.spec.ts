@@ -1892,3 +1892,70 @@ describe('Audit grounding #3 — grounding order SELALU Bahasa Indonesia (parame
   });
 });
 // <<< ANGGA
+
+// >>> ANGGA — audit grounding #1 (2026-08-06): instruksi bridge ASUMSI order
+// ("sebutkan nama barangnya atau pakai {{rincian_order}}/{{rincian_tagihan}}")
+// TIDAK sadar soal langkah PRA_TOTAL_STEPS/patokan yang melarang total sama
+// sekali — menyuruh model "pakai {{rincian_tagihan}}" di langkah itu cuma
+// memindahkan pelanggaran. Fix: di langkah itu HANYA {{rincian_order}} (bukan
+// token uang) yang sah memenuhi bridge.
+describe('Audit grounding #1 — bridge ASUMSI di langkah PATOKAN tidak lagi menerima {{rincian_tagihan}}', () => {
+  it('giliran PATOKAN + ASUMSI order: {{rincian_tagihan}} TIDAK memenuhi bridge (harus sebut nama atau {{rincian_order}})', async () => {
+    const h = harness({
+      lastCustomerText: 'jadi berapa totalnya kak?',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 2 }], { qtyPasti: true })],
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1, metode_terjawab: 1 });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    await h.svc.getGroundingText('c1'); // funnelExpect langkah patokan + assumed cache tercatat
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Untuk order ini {{harga_satuan}} per pcs kak.\n{{rincian_tagihan}}',
+    );
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toContain('tidak menyebut nama barangnya');
+  });
+
+  // Catatan: regresi "rincian_tagihan tetap memenuhi bridge di luar langkah
+  // PRA_TOTAL/patokan" sudah tercakup oleh tes S2 "bridge jalur asumsi:
+  // {{rincian_tagihan}} MEMENUHI wajib-sebut-nama-barang" di atas (skenario
+  // tanpa funnelExpect giliran-ini — guard #1 di kode: tanpa funnelExpect
+  // yang cocok, perilaku lama dipakai apa adanya).
+});
+// <<< ANGGA
+
+// >>> ANGGA — audit grounding #2 (2026-08-06): gerbang bridge-enforcement
+// dulu jalan TANPA SYARAT begitu ada `assumed` + token uang di draft — tidak
+// sinkron dengan instruksi SHIPPING_GROUNDING_ASSUMED yang cuma disuntik ke
+// grounding kalau giliran ini `isObrolanOrder` (dipersempit sengaja F2
+// 2026-08-05 insiden "halo"). Draft bisa tertahan untuk aturan yang giliran
+// itu TIDAK PERNAH diberitahukan ke model. Fix: gerbang ikut dipersempit
+// dengan kondisi yang SAMA seperti instruksinya.
+describe('Audit grounding #2 — gerbang bridge ASUMSI kini sinkron dengan kondisi tampil instruksinya', () => {
+  it('giliran basa-basi (BUKAN obrolan order) + cache assumed hangat → bridge TIDAK ditegakkan', async () => {
+    const h = harness({
+      lastCustomerText: 'totalnya berapa?',
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }])],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    pesanBaru(h, 'm2', 'oke makasih infonya kak'); // sama seperti tes F2 — terbukti BUKAN obrolan order
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok'); // cache hangat
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).not.toContain('ASUMSI'); // F2: instruksi bridge memang tidak disuntik giliran ini
+    const out = await h.svc.resolvePriceTokens('c1', 'Sama-sama kak! Harga satuannya {{harga_satuan}} kalau mau order lagi ya.');
+    expect(out.ok).toBe(true); // FIX #2: giliran bukan obrolan order → bridge tidak ikut ditegakkan
+  });
+
+  it('kontrol: giliran tanya-uang (obrolan order) + assumed → bridge TETAP ditegakkan seperti biasa', async () => {
+    const h = harness({
+      lastCustomerText: 'totalnya berapa?',
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }])],
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    await h.svc.getGroundingText('c1');
+    const out = await h.svc.resolvePriceTokens('c1', 'Harga satuannya {{harga_satuan}} kak.');
+    expect(out.ok).toBe(false); // obrolan order + assumed + token uang tanpa nama barang → tetap ditahan
+  });
+});
+// <<< ANGGA
