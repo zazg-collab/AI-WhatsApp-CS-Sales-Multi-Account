@@ -1917,6 +1917,59 @@ describe('REPLAY live 2026-08-06 — honorifik "kakak" lolos filter, memicu fras
 });
 // <<< ANGGA
 
+// >>> ANGGA — fix latensi (2026-08-06, tindak lanjut diagnosis "kumat lagi"):
+// dulu kandidat keyword (kombinasi+kota vs kata polos) dicoba SATU-SATU
+// berurutan (await lalu break) -> sampai 2 round-trip jaringan BERANTAI per
+// kata, dikali maks 3 kata di loop = sampai 6 round-trip berurutan untuk
+// SATU giliran balasan. Sekarang ditembak PARALEL (Promise.all) — kandidat
+// kedua WAJIB sudah terpanggil walau kandidat pertama belum selesai, bukan
+// menunggu kandidat pertama kelar dulu. Dibuktikan pakai promise yang
+// sengaja ditunda manual untuk kandidat pertama. <<<
+describe('fix latensi (2026-08-06) — kandidat keyword pencarian tujuan ditembak PARALEL, bukan berurutan', () => {
+  it('kandidat "kata polos" sudah terpanggil MESKI kandidat "kombinasi+kota" belum selesai (bukan menunggu berurutan)', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram berapa kak?',
+      extract: { kota: 'Mataram', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    pesanBaru(h, 'm2', 'sandubaya kak');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Mataram', provinsi: 'Nusa Tenggara Barat', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+
+    const dipanggil: string[] = [];
+    let lepaskanKombinasi!: (rows: unknown[]) => void;
+    const kombinasiDitunda = new Promise<unknown[]>((resolve) => { lepaskanKombinasi = resolve; });
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) => {
+      dipanggil.push(kw);
+      if (/^sandubaya mataram$/i.test(kw)) return kombinasiDitunda; // kandidat #1 SENGAJA ditunda
+      if (/^sandubaya$/i.test(kw)) {
+        return [{ _id: 'd-sdb', PROVINCE_NAME: 'NUSA TENGGARA BARAT', CITY_NAME: 'MATARAM', CITY_NAME_SI: 'Kota Mataram', DISTRICT_NAME: 'SANDUBAYA', SUBDISTRICT_NAME: 'X' }];
+      }
+      return ROWS_MATARAM;
+    });
+
+    const janji = h.svc.quoteForConversation('c1');
+    // setImmediate menunggu SELURUH microtask yang sudah antre selesai jalan
+    // dulu (termasuk rantai await mock DB/prisma sebelum blok pencarian
+    // tujuan) — kalau kode masih berurutan (await kandidat #1 dulu baru
+    // lanjut ke #2), kandidat #2 ("sandubaya" polos) TIDAK AKAN tercatat
+    // terpanggil di titik ini, karena kandidat #1 sengaja belum pernah
+    // selesai (`kombinasiDitunda` belum di-resolve).
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(dipanggil).toContain('sandubaya mataram');
+    expect(dipanggil).toContain('sandubaya'); // <-- bukti ditembak paralel, bukan menunggu giliran
+
+    lepaskanKombinasi([]); // kandidat #1 akhirnya selesai (nol hasil)
+    const res: any = await janji;
+    expect(res.status).toBe('ok'); // tetap resolve lewat kandidat #2 yang sudah duluan jalan
+    expect(res.quote.province).toBe('NUSA TENGGARA BARAT');
+  });
+});
+// <<< ANGGA
+
 // >>> ANGGA — GABUNG DUA JAWABAN (2026-08-05 malam, KETOK BOSSFREN, dibuktikan
 // di API NYATA via widget): "kota mataram" = NOL baris (varian jenis-kota
 // DICABUT), tapi "sandubaya mataram" = 7 baris presisi Kota Mataram NTB.

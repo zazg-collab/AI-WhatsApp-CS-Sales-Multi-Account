@@ -1390,11 +1390,20 @@ export class ShippingService {
             : []),
           frasaGabungan,
         ];
-        let rowsF: MengantarAddress[] | null = null;
-        for (const kw of cobaFrasa) {
-          rowsF = await this.mengantar.searchAddress(terapkanAlias(kw, cfg.destinationAliases));
-          if (rowsF?.length) break;
-        }
+        // >>> ANGGA — fix latensi (2026-08-06, tindak lanjut laporan Bossfren
+        // "kumat lagi"): dulu `cobaFrasa` dicoba SATU-SATU berurutan (await
+        // lalu break kalau ketemu) — sampai 2 round-trip jaringan BERANTAI utk
+        // satu giliran. Kandidatnya independen (bukan hasil satu bergantung
+        // yang lain), jadi ditembak PARALEL sekaligus — prioritas urutan asli
+        // (kombinasi+kota didahulukan atas frasa polos) tetap dijaga lewat
+        // `.find` pada array hasil yang urutannya presis mengikuti `cobaFrasa`
+        // (Promise.all menjaga indeks, BUKAN kecepatan siapa duluan selesai).
+        // Memangkas latensi giliran ini jadi ~1 round-trip alih-alih 2. <<<
+        const hasilF = await Promise.all(
+          cobaFrasa.map((kw) => this.mengantar.searchAddress(terapkanAlias(kw, cfg.destinationAliases))),
+        );
+        const rowsF = hasilF.find((r) => r?.length) ?? null;
+        // <<< ANGGA
         let urutF = rowsF?.length ? resolveDestination(rowsF, frasaGabungan) : [];
         if (urutF.length) {
           const provJawabF = normalisasiProvinsi(extract.province ?? '');
@@ -1466,11 +1475,17 @@ export class ShippingService {
           ...(kotaKonteks && kotaKonteks !== w ? [`${w} ${kotaKonteks}`] : []),
           w,
         ];
-        let rows: MengantarAddress[] | null = null;
-        for (const kw of cobaKeyword) {
-          rows = await this.mengantar.searchAddress(terapkanAlias(kw, cfg.destinationAliases));
-          if (rows?.length) break;
-        }
+        // >>> ANGGA — fix latensi (2026-08-06, tindak lanjut laporan Bossfren
+        // "kumat lagi"): sama seperti frasa-utuh di atas — 2 kandidat keyword
+        // independen ditembak PARALEL, bukan berurutan+break, supaya loop kata
+        // per kata (maks 3 kata) tidak menumpuk jadi rantai round-trip
+        // berurutan. Prioritas (gabungan+kota didahulukan) tetap terjaga via
+        // `.find` pada array hasil ber-indeks sama dengan `cobaKeyword`. <<<
+        const hasilKw = await Promise.all(
+          cobaKeyword.map((kw) => this.mengantar.searchAddress(terapkanAlias(kw, cfg.destinationAliases))),
+        );
+        const rows = hasilKw.find((r) => r?.length) ?? null;
+        // <<< ANGGA
         if (!rows?.length) continue;
         let urut = resolveDestination(rows, w);
         if (!urut.length) continue;
