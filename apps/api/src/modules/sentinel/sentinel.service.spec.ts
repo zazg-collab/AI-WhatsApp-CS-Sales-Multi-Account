@@ -26,7 +26,7 @@ describe('SentinelService', () => {
       auditLog: { create: jest.fn().mockResolvedValue({}) },
     };
     provider = { chat: jest.fn(), sentinelModel: jest.fn().mockResolvedValue('sentinel-model') };
-    prompts = { buildForConversation: jest.fn().mockResolvedValue([]), getGroundingText: jest.fn().mockResolvedValue('') };
+    prompts = { buildForConversation: jest.fn().mockResolvedValue([]), getKnowledgeGroundingText: jest.fn().mockResolvedValue('') };
     events = { emit: jest.fn(), emitToAccount: jest.fn() };
     notifications = { send: jest.fn() };
     agent = { ask: jest.fn().mockResolvedValue(null) };

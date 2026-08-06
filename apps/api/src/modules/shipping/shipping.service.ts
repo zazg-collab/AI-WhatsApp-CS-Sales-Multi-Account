@@ -3102,18 +3102,30 @@ export const PRA_TOTAL_STEPS = new Set(['barang', 'alamat', 'keranjang', 'qty'])
 export const POLA_TOKEN_TOTAL =
   /\{\{(rincian_tagihan|subtotal_barang|total_transfer|total_cod|blok_total|total_transfer_diskon|total_cod_diskon|total_transfer_nego|total_cod_nego)\}\}/i;
 
+// >>> ANGGA — koreksi 2026-08-06 (audit menyeluruh, temuan #2 & #5):
+// (a) issue "mengulang rincian total" (fix "cod aja kak", commit f5eb0a6)
+// belum dikenali di sini — jatuh ke 'lainnya', padahal ini juga pelanggaran
+// alur penjualan (funnel_dilanggar). (b) `digitPanjang` (rekening/telepon,
+// anti-fraud M2) dan `angkaMentah` (harga rupiah mentah) dua-duanya memuat
+// substring "ditulis langsung oleh model" — kelas gate SEPERTINYA sama
+// ('digit_mentah') padahal beda jenis pelanggaran. Dipisah jadi kategori
+// sendiri ('rekening_mentah'), dicek LEBIH DULU pakai prefiks unik
+// "Angka panjang (nomor rekening" supaya tidak ketiban aturan generik di
+// bawahnya (urutan if-else di sini penting).
 export function klasifikasiAlasanGate(
   issue: string,
-): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'funnel_dilanggar' | 'salah_produk' | 'jumlah_manual' | 'lainnya' {
+): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'rekening_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'funnel_dilanggar' | 'salah_produk' | 'jumlah_manual' | 'lainnya' {
   const s = issue ?? '';
   if (s.includes('membuat labelnya salah')) return 'label_rancu';
   if (s.includes('tidak dikenal/tidak tersedia')) return 'token_tak_dikenal';
+  if (s.includes('Angka panjang (nomor rekening')) return 'rekening_mentah'; // >>> ANGGA — anti-fraud M2 <<<
   if (s.includes('ditulis langsung oleh model')) return 'digit_mentah';
   if (s.includes('ASUMSI order yang sedang berjalan')) return 'bridge_asumsi';
   if (s.includes('istilah internal')) return 'istilah_internal'; // >>> ANGGA — E3 <<<
   if (s.includes('menyangkal data yang sudah tersedia')) return 'kontradiksi_data'; // >>> ANGGA — P2 <<<
   if (s.includes('berpura-pura masih mengecek')) return 'kontradiksi_data'; // >>> ANGGA — anti-teater (2026-08-05) <<<
   if (s.includes('melanggar alur penjualan wajib')) return 'funnel_dilanggar'; // >>> ANGGA — Q-Chain <<<
+  if (s.includes('mengulang rincian total')) return 'funnel_dilanggar'; // >>> ANGGA — koreksi 2026-08-06, insiden "cod aja kak" <<<
   if (s.includes('menempelkan angka kutipan ke produk yang salah')) return 'salah_produk'; // >>> ANGGA — Gerbang Pakem #1 <<<
   if (s.includes('menjumlahkan penanda sendiri')) return 'jumlah_manual'; // >>> ANGGA — Gerbang Pakem (2026-08-06) <<<
   return 'lainnya';

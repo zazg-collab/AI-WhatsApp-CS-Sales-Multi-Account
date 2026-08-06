@@ -236,9 +236,21 @@ export const PRODUCT_STOCK_INTRO = {
 // sedang aktif (`shippingGrounding` tidak kosong) — precedence ditulis
 // eksplisit di blok yang lebih diprioritaskan model, bukan cuma ditambah di
 // blok belakang yang sudah kalah pengaruh.
+// >>> ANGGA — koreksi 2026-08-06 (audit menyeluruh, temuan #1): kalimat
+// terakhir SEBELUMNYA bilang "barang di luar order itu boleh tetap disebut
+// harganya dari data stok ini" — waktu itu blok stok memang menyuntik angka
+// MENTAH untuk barang di luar order saat shippingGrounding aktif. Tapi
+// `resolvePriceTokens`'s `angkaMentah` (gerbang uang) menahan SEMUA angka
+// rupiah mentah tanpa kecuali barang di luar order — jadi instruksi ini dulu
+// menyuruh model melakukan sesuatu yang gerbangnya sendiri akan tahan &
+// retry-nya pasti gagal (tidak ada penanda order untuk barang di luar order).
+// Sekarang blok stok produk SELALU pakai `{{harga_produk_x}}` untuk semua
+// barang (lihat `prompt-builder.service.ts`), jadi kalimat di sini diperbarui
+// supaya konsisten: barang di luar order tetap pakai PENANDA, bukan angka
+// mentah.
 export const PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE = {
-  id: 'PENTING — order berongkir sedang aktif di percakapan ini (lihat data ongkir & penanda di bawah): untuk HARGA barang yang termasuk order itu, WAJIB pakai PENANDA {{harga_satuan}}/{{subtotal_barang}} dari data ongkir — JANGAN tulis angka rupiah sendiri di sini, aturan gerbang uang menang. Ketersediaan/stok tetap boleh disebut langsung seperti biasa. Barang di luar order itu boleh tetap disebut harganya dari data stok ini.',
-  en: 'IMPORTANT — a shipping quote is active in this conversation (see the shipping data & placeholders below): for the price of items that are part of that quote, you MUST use the {{harga_satuan}}/{{subtotal_barang}} PLACEHOLDER from the shipping data — do NOT write the rupiah number yourself here, the money-gate rule wins. Availability/stock can still be stated directly as usual. Items outside that quote can still have their price stated from this stock data.',
+  id: 'PENTING — order berongkir sedang aktif di percakapan ini (lihat data ongkir & penanda di bawah): untuk HARGA barang yang termasuk order itu, WAJIB pakai PENANDA {{harga_satuan}}/{{subtotal_barang}} dari data ongkir (BUKAN penanda {{harga_produk_x}} yang tertulis di sebelah produk itu) — aturan gerbang uang menang. Ketersediaan/stok tetap boleh disebut langsung seperti biasa. Barang di luar order itu tetap pakai PENANDA {{harga_produk_x}} yang tertulis di sebelah produknya seperti biasa — JANGAN tulis angka rupiah sendiri untuk barang mana pun di sini.',
+  en: 'IMPORTANT — a shipping quote is active in this conversation (see the shipping data & placeholders below): for the price of items that are part of that quote, you MUST use the {{harga_satuan}}/{{subtotal_barang}} PLACEHOLDER from the shipping data (NOT the {{harga_produk_x}} placeholder next to that item) — the money-gate rule wins. Availability/stock can still be stated directly as usual. Items outside that quote still use the {{harga_produk_x}} placeholder written next to them as usual — do NOT write a rupiah number yourself for any item here.',
 };
 
 // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{139000}}"

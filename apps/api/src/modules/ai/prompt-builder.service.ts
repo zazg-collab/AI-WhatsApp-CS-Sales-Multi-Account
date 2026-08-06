@@ -201,36 +201,46 @@ export class PromptBuilderService {
     // `SHIPPING_MONEY_RULE` yang posisinya belakangan & kalah pengaruh) —
     // lihat komentar di `PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE`.
     // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{139000}}"
-    // ronde 2): kalau BELUM ada order berongkir aktif, harga produk juga
-    // TIDAK BOLEH lagi disuntik sebagai angka mentah — model tidak pernah
-    // dikasih instruksi gerbang uang apa pun untuk giliran ini (lihat
-    // `PRODUCT_PRICE_USE_TOKEN`), jadi ia dulu membungkus angka mentahnya
-    // sendiri jadi penanda palsu (mis. `{{139000}}`). Sekarang setiap produk
-    // berharga dapat penanda `{{harga_produk_x}}` (huruf, BUKAN angka — nama
-    // penanda cuma boleh `[a-z_]+`, lihat `resolvePriceTokens`), nilainya
-    // dicache lewat `cacheProductPriceTokens` supaya `resolvePriceTokens`
-    // bisa mengisinya sesudah model menjawab. Order berongkir aktif TIDAK
-    // disentuh sama sekali (precedence #1 di atas tetap seperti semula).
+    // ronde 2): harga produk TIDAK PERNAH lagi disuntik sebagai angka mentah
+    // — model tidak pernah dikasih instruksi gerbang uang apa pun untuk
+    // giliran ini (lihat `PRODUCT_PRICE_USE_TOKEN`), jadi ia dulu membungkus
+    // angka mentahnya sendiri jadi penanda palsu (mis. `{{139000}}`). Setiap
+    // produk berharga dapat penanda `{{harga_produk_x}}` (huruf, BUKAN angka
+    // — nama penanda cuma boleh `[a-z_]+`, lihat `resolvePriceTokens`),
+    // nilainya dicache lewat `cacheProductPriceTokens` supaya
+    // `resolvePriceTokens` bisa mengisinya sesudah model menjawab.
+    // >>> ANGGA — koreksi 2026-08-06 (audit menyeluruh, temuan #1): SEBELUMNYA
+    // baris ini bercabang — order berongkir aktif → harga produk ditulis
+    // MENTAH (raw `formatProductPrice`) di blok stok, dengan alasan barang DI
+    // LUAR order itu "boleh tetap disebut harganya dari data stok ini". Tapi
+    // `resolvePriceTokens`'s `angkaMentah` (gerbang uang) menyisir SELURUH
+    // balasan cari angka rupiah yang bukan hasil substitusi penanda — TANPA
+    // pengecualian untuk barang di luar order. Akibatnya: pelanggan tanya
+    // harga barang LAIN sementara satu order lain sedang diongkirin →
+    // balasan yang justru BENAR (nurut instruksi lama) ketahan gerbang,
+    // retry otomatis pasti gagal juga (tidak ada penanda untuk barang di luar
+    // order saat itu), balasan jatuh ke draft manual + alarm admin palsu.
+    // Fix: harga produk SELALU lewat penanda `{{harga_produk_x}}`, order
+    // berongkir aktif atau tidak — satu invarian tunggal, tidak ada cabang
+    // yang bisa lupa disinkronkan lagi dengan gerbang uang. Barang yang
+    // memang bagian order tetap didahulukan pakai penanda order sendiri
+    // (`{{harga_satuan}}` dkk, lihat `PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE`
+    // — teksnya diperbarui juga supaya tidak lagi menyuruh model menulis
+    // angka mentah untuk barang di luar order).
     const productPriceTokens: Record<string, string> = {};
     let productPriceTokenIndex = 0;
     const productBlock = products.length
       ? [
           t(PRODUCT_STOCK_INTRO, lang),
           ...(shippingGrounding ? [t(PRODUCT_STOCK_PRICE_DEFER_TO_MONEY_GATE, lang)] : []),
-          ...(!shippingGrounding && products.some((p) => p.price != null)
-            ? [t(PRODUCT_PRICE_USE_TOKEN, lang)]
-            : []),
+          ...(products.some((p) => p.price != null) ? [t(PRODUCT_PRICE_USE_TOKEN, lang)] : []),
           ...products.map((p) => {
             let price = '';
             if (p.price != null) {
-              if (shippingGrounding) {
-                price = ` — ${formatProductPrice(p.price, p.currency, botLocale)}`;
-              } else {
-                const tokenName = `harga_produk_${String.fromCharCode(97 + productPriceTokenIndex)}`;
-                productPriceTokenIndex += 1;
-                productPriceTokens[tokenName] = formatProductPrice(p.price, p.currency, botLocale);
-                price = ` — {{${tokenName}}}`;
-              }
+              const tokenName = `harga_produk_${String.fromCharCode(97 + productPriceTokenIndex)}`;
+              productPriceTokenIndex += 1;
+              productPriceTokens[tokenName] = formatProductPrice(p.price, p.currency, botLocale);
+              price = ` — {{${tokenName}}}`;
             }
             const stockLabel = p.stock > 0
               ? `${t(PRODUCT_AVAILABLE, lang)} (${p.stock}${p.unit ? ` ${p.unit}` : ''})`
@@ -347,13 +357,27 @@ export class PromptBuilderService {
     ];
   }
 
+  // >>> ANGGA — koreksi 2026-08-06 (audit menyeluruh, temuan #3 & #4):
+  // docstring LAMA menyebut "Sentinel's checkPriceGrounding" — fungsi itu
+  // sudah DIHAPUS sejak Fase 113 (2026-08-04), diganti gerbang token di
+  // `ShippingService.resolvePriceTokens` yang dipanggil TANPA SYARAT dari
+  // `AiService`, bukan lagi sebagai gerbang Sentinel. Kegunaan METHOD INI
+  // (bukan namesake-nya `ShippingService.getGroundingText`, beda tujuan —
+  // lihat rename di bawah) sekarang murni memberi data ke
+  // `checkKnowledgeGrounding` (disiplin RAG "1b" di `sentinel.service.ts`),
+  // dipanggil lewat `this.prompts.getKnowledgeGroundingText(...)`. Nama
+  // method di-rename dari `getGroundingText` supaya tidak lagi kembar nama
+  // persis dengan `ShippingService.getGroundingText` (dua-duanya dipanggil
+  // berdekatan di `sentinel.service.ts`, rawan tertukar saat dibaca).
   /**
    * The same knowledge + live-product text injected into the prompt for this
-   * conversation, returned standalone so a deterministic groundedness check
-   * (Sentinel's checkPriceGrounding) can verify a draft against the actual
-   * data the bot was given — not just trust the LLM's "don't fabricate" rule.
+   * conversation, returned standalone so the deterministic RAG-groundedness
+   * check (`checkKnowledgeGrounding`, Sentinel's "1b") can verify a draft
+   * actually used the retrieved knowledge/product data — not just trust the
+   * LLM's "don't fabricate" rule. NOT related to the money-gate price check
+   * (see `ShippingService.resolvePriceTokens` for that).
    */
-  async getGroundingText(conversationId: string): Promise<string> {
+  async getKnowledgeGroundingText(conversationId: string): Promise<string> {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       include: {

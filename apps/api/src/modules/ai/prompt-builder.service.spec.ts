@@ -270,6 +270,10 @@ describe('PromptBuilderService', () => {
           .mockResolvedValue(
             'Jangan pernah menulis nominal rupiah sendiri...\n• {{harga_satuan}} = harga satu barang',
           ),
+        // >>> ANGGA — koreksi 2026-08-06 (audit menyeluruh, temuan #1): harga
+        // produk sekarang SELALU ditokenkan (lihat describe di bawah), jadi
+        // cacheProductPriceTokens ikut terpanggil di sini juga.
+        cacheProductPriceTokens: jest.fn(),
       };
       const svc = new PromptBuilderService(prisma, products as any, knowledgeIndex, shipping as any);
       prisma.conversation.findUnique.mockResolvedValue({
@@ -364,7 +368,18 @@ describe('PromptBuilderService', () => {
       expect(cacheProductPriceTokens).not.toHaveBeenCalled();
     });
 
-    it('order berongkir SEDANG aktif → tetap pakai harga mentah seperti sebelumnya (tidak berubah), cacheProductPriceTokens tidak dipanggil', async () => {
+    // >>> ANGGA — koreksi 2026-08-06 (audit menyeluruh, temuan #1): tes ini
+    // DULU justru mendokumentasikan bug sebagai "perilaku yang benar" —
+    // "tetap pakai harga mentah" waktu order berongkir aktif. Insidennya:
+    // `resolvePriceTokens`'s `angkaMentah` (gerbang uang) menahan SEMUA
+    // angka rupiah mentah tanpa kecuali barang di luar order aktif, jadi
+    // kalau pelanggan tanya harga barang LAIN (bukan bagian order yang
+    // sedang diongkirin), balasan yang justru BENAR (nurut instruksi lama)
+    // ketahan gerbang + retry otomatis pasti gagal juga (tidak ada penanda
+    // untuk barang itu) → jatuh ke draft manual + alarm admin palsu. Fix:
+    // harga produk SELALU lewat penanda `{{harga_produk_x}}`, order
+    // berongkir aktif atau tidak. Tes diganti membuktikan perilaku BARU.
+    it('order berongkir SEDANG aktif → harga produk TETAP pakai {{harga_produk_N}} (bukan angka mentah), supaya gerbang uang tidak menahan balasan yang menyebut harga barang di luar order', async () => {
       const products = { relevantForQuery: jest.fn().mockResolvedValue(productWithPrice) };
       const cacheProductPriceTokens = jest.fn();
       const shipping = {
@@ -384,9 +399,14 @@ describe('PromptBuilderService', () => {
       });
       const msgs = await svc.buildForConversation('c1');
       const shared = msgs[1].content;
-      expect(shared).toContain('139,000');
-      expect(shared).not.toMatch(/\{\{harga_produk_[a-z]+\}\}/);
-      expect(cacheProductPriceTokens).not.toHaveBeenCalled();
+      expect(shared).toMatch(/\{\{harga_produk_[a-z]+\}\}/);
+      expect(shared).not.toContain('139,000');
+      expect(shared).not.toContain('139000');
+      expect(cacheProductPriceTokens).toHaveBeenCalledWith('c1', expect.objectContaining({}));
+      const [, tokens] = cacheProductPriceTokens.mock.calls[0];
+      const values = Object.values(tokens);
+      const expectedPrice = (139000).toLocaleString('en-US', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
+      expect(values).toContain(expectedPrice);
     });
   });
 

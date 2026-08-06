@@ -120,7 +120,7 @@ export class SentinelService {
     // 1b. RAG discipline: nothing retrieved + bot didn't punt to the fallback
     // phrase → it likely answered from outside the KB. Same n8n/Dify-style
     // "answer only from retrieved context" guarantee, enforced deterministically.
-    const groundingText = await this.prompts.getGroundingText(conversationId);
+    const groundingText = await this.prompts.getKnowledgeGroundingText(conversationId);
     const knowledgeHit = checkKnowledgeGrounding(draftText, groundingText, lastCustomerText);
 
     // >>> ANGGA: 1c. Kata terlarang persona — hanya diperiksa pada teks balasan

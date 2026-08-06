@@ -736,6 +736,27 @@ describe('S1 — telemetri alasan hold gerbang uang (sisi-baca)', () => {
     expect(klasifikasiAlasanGate('alasan format masa depan yang belum dikenal')).toBe('lainnya');
   });
 
+  // >>> ANGGA — koreksi 2026-08-06 (audit menyeluruh, temuan #2 & #5): issue
+  // "mengulang rincian total" (fix "cod aja kak", commit f5eb0a6) belum
+  // dikenali sebelumnya (jatuh ke 'lainnya'); dan `digitPanjang` (rekening)
+  // vs `angkaMentah` (harga) dulu satu bucket 'digit_mentah' walau beda
+  // jenis pelanggaran.
+  it('klasifikasi alasan: "mengulang rincian total" masuk funnel_dilanggar, rekening mentah punya kelas sendiri', () => {
+    const { klasifikasiAlasanGate } = require('./shipping.service');
+    expect(
+      klasifikasiAlasanGate(
+        'Balasan mengulang rincian total ({{rincian_tagihan}}) padahal total sudah pernah disodorkan di giliran sebelumnya — jangan direkap ulang, cukup tutup dengan pertanyaan langkah "patokan".',
+      ),
+    ).toBe('funnel_dilanggar');
+    expect(
+      klasifikasiAlasanGate(
+        'Angka panjang (nomor rekening/telepon) ditulis langsung oleh model: 1234567890 — angka kelas ini wajib lewat penanda kamus (mis. {{rekening_bca}}), jangan pernah diketik sendiri.',
+      ),
+    ).toBe('rekening_mentah');
+    // harga mentah (bukan rekening) tetap di kelas lama, tidak ikut bergeser.
+    expect(klasifikasiAlasanGate('Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 434.000')).toBe('digit_mentah');
+  });
+
   it('moneyGateStats menghitung draft tertahan per alasan dari Message.moneyGateIssues', async () => {
     const h = harness();
     (h.prisma as any).message.findMany = jest.fn().mockResolvedValue([
