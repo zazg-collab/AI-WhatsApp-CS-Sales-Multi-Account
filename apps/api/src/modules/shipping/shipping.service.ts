@@ -2573,9 +2573,7 @@ export class ShippingService {
             // ini supaya model tidak tergoda; gerbang di `resolvePriceTokens`
             // menahan kalau model tetap menulis penandanya sendiri.
             if (PRA_TOTAL_STEPS.has(arah.step)) {
-              for (let i = lines.length - 1; i >= 0; i--) {
-                if (/^• \{\{/.test(lines[i]) && POLA_TOKEN_TOTAL.test(lines[i])) lines.splice(i, 1);
-              }
+              this.buangBarisTotalDariKatalog(lines);
               lines.push(
                 arah.teks
                   ? '• LARANGAN KERAS GILIRAN INI: JANGAN menyodorkan subtotal/total/rekap tagihan — jumlah pesanan belum pasti. Jawab yang ditanya (mis. ongkir/harga) SINGKAT satu kalimat, tanpa narasi proses, lalu tutup dengan pertanyaan wajib di bawah.'
@@ -2591,9 +2589,7 @@ export class ShippingService {
             // total ikut dibuang; gerbang di `resolvePriceTokens` menahan
             // draft yang tetap menulis penandanya sendiri.
             if (arah.step === 'patokan') {
-              for (let i = lines.length - 1; i >= 0; i--) {
-                if (/^• \{\{/.test(lines[i]) && POLA_TOKEN_TOTAL.test(lines[i])) lines.splice(i, 1);
-              }
+              this.buangBarisTotalDariKatalog(lines);
               lines.push(
                 '• LARANGAN KERAS GILIRAN INI: total/rincian tagihan SUDAH pernah disodorkan di giliran sebelumnya — JANGAN mengulang subtotal/total/rekap tagihan lagi. Jawab singkat (mis. konfirmasi metode) lalu tutup dengan pertanyaan patokan di bawah.',
               );
@@ -2791,6 +2787,22 @@ export class ShippingService {
     this.cache.setFunnelExpect(conversationId, { messageId: msgId, step, kalimat: kalimat.trim() });
   }
 
+  /** >>> ANGGA — Klaster B (2026-08-06, konsolidasi GERBANG PAKEM): dua
+   *  cabang di `getGroundingText` (PRA_TOTAL_STEPS dan langkah 'patokan')
+   *  membuang baris katalog kelas total dengan loop yang PERSIS SAMA —
+   *  disatukan di sini, mekanis, tanpa mengubah perilaku (cek `POLA_TOKEN_
+   *  TOTAL` dan syarat prefiks `• {{` tetap identik). Enforcement REAKTIF di
+   *  `resolvePriceTokens` (backstop kalau model tetap menulis token total
+   *  sendiri) SENGAJA tidak digabung ke sini — beda lapis (grounding =
+   *  preventif/apa yang BOLEH dilihat model, resolvePriceTokens = reaktif/
+   *  apa yang BOLEH lolos ke pelanggan), dua lapis independen itu memang
+   *  desain sengaja ("belt and suspenders"), bukan duplikasi yang salah. <<< */
+  private buangBarisTotalDariKatalog(lines: string[]): void {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (/^• \{\{/.test(lines[i]) && POLA_TOKEN_TOTAL.test(lines[i])) lines.splice(i, 1);
+    }
+  }
+
   /**
    * >>> ANGGA — Fase 113 (2026-08-04): MENGGANTIKAN `getGroundingNumbers()`
    * (dihapus — satu-satunya pemakainya, `checkPriceGrounding` di Sentinel,
@@ -2926,15 +2938,33 @@ export class ShippingService {
   async resolvePriceTokens(
     conversationId: string,
     text: string,
-  ): Promise<{ text: string; ok: boolean; issues: string[] }> {
-    // >>> ANGGA — S1: teks-teks issue di bawah dibaca balik oleh
-    // `klasifikasiAlasanGate` (telemetri). Kalau mengubah kata-katanya,
-    // perbarui juga pencocokan di sana. <<<
+  ): Promise<{ text: string; ok: boolean; issues: string[]; issueCodes: IssueCode[] }> {
+    // >>> ANGGA — Klaster C (2026-08-06, refactor `klasifikasiAlasanGate`):
+    // SEBELUMNYA satu-satunya cara tahu KATEGORI pelanggaran adalah
+    // menebaknya balik dari teks `issues` lewat `klasifikasiAlasanGate()` —
+    // stringly-typed, rawan diam-diam salah kalau kata-kata di bawah diubah
+    // tanpa memperbarui pencocokannya juga (bug class S1 yang sama). Sekarang
+    // kode kategori dilekatkan LANGSUNG di titik lahirnya lewat `pushIssue()`
+    // — jalur keputusan LIVE (`AiService.gateMoneyTokens`) baca `issueCodes`
+    // ini, bukan menebak dari teks lagi. `klasifikasiAlasanGate()` TETAP ada
+    // dan TIDAK diubah cara kerjanya, tapi sekarang cuma dipakai untuk
+    // telemetri histori (`moneyGateStats`) yang membaca `Message.
+    // moneyGateIssues` LAMA dari database — baris itu cuma teks polos, tidak
+    // pernah punya kode terlekat, jadi tetap butuh penebak-balik untuk data
+    // dari SEBELUM refactor ini (dan kalau field ini gagal disimpan/dibaca
+    // suatu saat). Kalau menambah issue baru: pakai `pushIssue(kode, teks)`,
+    // JANGAN `issues.push(teks)` langsung — supaya `issueCodes` selalu
+    // sinkron 1:1 dengan `issues` (index yang sama = pasangan yang sama). <<<
     const issues: string[] = [];
+    const issueCodes: IssueCode[] = [];
+    const pushIssue = (code: IssueCode, pesan: string) => {
+      issues.push(pesan);
+      issueCodes.push(code);
+    };
 
     const guard = penjagaKata(text);
     if (guard) {
-      issues.push(`Penanda dipakai setelah kata yang bisa membuat labelnya salah: "${guard}"`);
+      pushIssue('label_rancu', `Penanda dipakai setelah kata yang bisa membuat labelnya salah: "${guard}"`);
     }
 
     // >>> ANGGA — GERBANG PAKEM: larangan PENJUMLAHAN MANUAL sebagai "total"
@@ -2951,7 +2981,8 @@ export class ShippingService {
     // larangan `penjagaKata` yang lebih sempit dengan kombinasi token lain).
     const jumlahManual = text.match(/\{\{[a-z_]+\}\}\s*\+\s*\{\{[a-z_]+\}\}/gi);
     if (jumlahManual) {
-      issues.push(
+      pushIssue(
+        'jumlah_manual',
         `Balasan menjumlahkan penanda sendiri dengan "+" sebagai total (${jumlahManual.join(', ')}) — total SUDAH dihitung sistem, wajib pakai {{total_transfer}}/{{total_cod}}/{{blok_total}}/{{rincian_tagihan}} langsung, jangan menjumlahkan penanda manual.`,
       );
     }
@@ -3043,7 +3074,8 @@ export class ShippingService {
           : /\{\{(rincian_order|rincian_tagihan)\}\}/i.test(text);
         // <<< ANGGA
         if (adaTokenUang && !adaRincian && !namaDisebut(text, assumed.productNames)) {
-          issues.push(
+          pushIssue(
+            'bridge_asumsi',
             'Balasan memakai ASUMSI order yang sedang berjalan tapi tidak menyebut nama barangnya — sebutkan nama barangnya atau pakai {{rincian_order}}/{{rincian_tagihan}} supaya pelanggan bisa mengoreksi kalau asumsinya salah.',
           );
         }
@@ -3071,12 +3103,12 @@ export class ShippingService {
 
     const sisaPenanda = substituted.match(/\{\{[a-z_]+\}\}/gi);
     if (sisaPenanda) {
-      issues.push(`Penanda tidak dikenal/tidak tersedia untuk kutipan ini: ${sisaPenanda.join(', ')}`);
+      pushIssue('token_tak_dikenal', `Penanda tidak dikenal/tidak tersedia untuk kutipan ini: ${sisaPenanda.join(', ')}`);
     }
 
     const angkaMentah = [...angkaUtuh(substituted, true)].filter((n) => !inserted.has(n));
     if (angkaMentah.length) {
-      issues.push(`Angka rupiah ditulis langsung oleh model, bukan lewat penanda: ${angkaMentah.join(', ')}`);
+      pushIssue('digit_mentah', `Angka rupiah ditulis langsung oleh model, bukan lewat penanda: ${angkaMentah.join(', ')}`);
     }
 
     // >>> ANGGA — GERBANG PAKEM: REKENING (2026-08-06, insiden "sandubaya 1 pcs"
@@ -3087,7 +3119,8 @@ export class ShippingService {
     // boleh keluar setelah pelanggan MEMILIH transfer.
     const digitPanjang = text.match(/\b\d{8,}\b|\b\d[\d\- ]{9,}\d\b/g) ?? [];
     if (digitPanjang.length) {
-      issues.push(
+      pushIssue(
+        'rekening_mentah',
         `Angka panjang (nomor rekening/telepon) ditulis langsung oleh model: ${digitPanjang.join(', ')} — angka kelas ini wajib lewat penanda kamus (mis. {{rekening_bca}}), jangan pernah diketik sendiri.`,
       );
     }
@@ -3103,7 +3136,8 @@ export class ShippingService {
           } catch { /* log tak terbaca = anggap belum */ }
         }
         if (!metodeSudah) {
-          issues.push(
+          pushIssue(
+            'funnel_dilanggar',
             'Balasan melanggar alur penjualan wajib — menyodorkan rekening padahal pelanggan BELUM memilih metode bayar. Urutannya: sodorkan total, tanya "mau diproses COD atau transfer kak?", dan rekening HANYA setelah pelanggan memilih transfer.',
           );
         }
@@ -3123,7 +3157,8 @@ export class ShippingService {
       .filter((f) => f.length > 0)
       .find((f) => substituted.toLowerCase().includes(f.toLowerCase()));
     if (frasaInternal) {
-      issues.push(
+      pushIssue(
+        'istilah_internal',
         `Balasan menyebut istilah internal sistem ("${frasaInternal}") — tulis ulang tanpa menyinggung sistem, penanda, atau proses internal ke pelanggan.`,
       );
     }
@@ -3157,7 +3192,8 @@ export class ShippingService {
         const normSubstituted = normF(substituted);
         const normKalimatWajib = normF(kalimatWajibTersubstitusi);
         if (!normSubstituted.includes(normKalimatWajib)) {
-          issues.push(
+          pushIssue(
+            'funnel_dilanggar',
             `Balasan melanggar alur penjualan wajib — tidak menutup dengan pertanyaan langkah "${expectF.step}". Tulis ulang dan akhiri PERSIS dengan: "${kalimatWajibTersubstitusi}"`,
           );
         } else if (normKalimatWajib) {
@@ -3176,7 +3212,8 @@ export class ShippingService {
           // aman) — jumlah kemunculan = jumlah potongan dikurangi 1.
           const kemunculan = normSubstituted.split(normKalimatWajib).length - 1;
           if (kemunculan > 1) {
-            issues.push(
+            pushIssue(
+              'kalimat_dobel',
               `Balasan mengulang kalimat wajib langkah "${expectF.step}" sebanyak ${kemunculan}x — kalimatnya cuma boleh muncul SEKALI di akhir balasan (jangan dijawab dengan kalimat sendiri dulu lalu ditempel lagi versi PERSIS-nya). Tulis ulang, sebutkan SEKALI saja: "${kalimatWajibTersubstitusi}"`,
             );
           }
@@ -3189,7 +3226,8 @@ export class ShippingService {
         if (PRA_TOTAL_STEPS.has(expectF.step)) {
           const tokenTotal = text.match(POLA_TOKEN_TOTAL);
           if (tokenTotal) {
-            issues.push(
+            pushIssue(
+              'funnel_dilanggar',
               `Balasan melanggar alur penjualan wajib — belum waktunya menyodorkan total (${tokenTotal[0]}): jumlah pesanan belum pasti. Jawab yang ditanya saja (harga/ongkir) lalu tutup dengan pertanyaan langkah "${expectF.step}".`,
             );
           }
@@ -3201,7 +3239,8 @@ export class ShippingService {
         if (expectF.step === 'patokan') {
           const tokenTotalUlang = text.match(POLA_TOKEN_TOTAL);
           if (tokenTotalUlang) {
-            issues.push(
+            pushIssue(
+              'funnel_dilanggar',
               `Balasan mengulang rincian total (${tokenTotalUlang[0]}) padahal total sudah pernah disodorkan di giliran sebelumnya — jangan direkap ulang, cukup tutup dengan pertanyaan langkah "${expectF.step}".`,
             );
           }
@@ -3237,7 +3276,8 @@ export class ShippingService {
           .filter((f) => f.length > 0)
           .find((f) => substituted.toLowerCase().includes(f.toLowerCase()));
         if (sangkal) {
-          issues.push(
+          pushIssue(
+            'kontradiksi_data',
             `Balasan menyangkal data yang sudah tersedia ("${sangkal}") — kutipan ongkir/tagihan untuk giliran ini SUDAH dihitung sistem; jawab langsung memakai penanda, jangan bilang akan cek dulu.`,
           );
         }
@@ -3260,7 +3300,8 @@ export class ShippingService {
             .filter((f) => f.length > 0)
             .find((f) => substituted.toLowerCase().includes(f.toLowerCase()));
           if (teater) {
-            issues.push(
+            pushIssue(
+              'kontradiksi_data',
               `Balasan berpura-pura masih mengecek ("${teater}") padahal angkanya sudah tertulis di pesan yang sama — hapus seluruh narasi proses (cek dulu/mohon tunggu/saya proses), jawab langsung satu kalimat memakai penanda.`,
             );
           }
@@ -3300,7 +3341,8 @@ export class ShippingService {
                 .map((p: { name?: string | null }) => String(p.name ?? '').trim())
                 .find((n: string) => n.length >= 4 && !whitelist.has(n.toLowerCase()) && teksL.includes(n.toLowerCase()));
               if (salah) {
-                issues.push(
+                pushIssue(
+                  'salah_produk',
                   `Balasan menempelkan angka kutipan ke produk yang salah — menyebut "${salah}" padahal angka penanda giliran ini milik order: ${[...whitelist].join(', ')}. Tulis ulang dengan nama produk order yang benar.`,
                 );
               }
@@ -3312,7 +3354,7 @@ export class ShippingService {
     }
     // <<< ANGGA
 
-    return { text: substituted, ok: issues.length === 0, issues };
+    return { text: substituted, ok: issues.length === 0, issues, issueCodes };
   }
 
   // ── Pembantu internal ────────────────────────────────────────────────────
@@ -3692,9 +3734,26 @@ export const POLA_TOKEN_TOTAL =
 // sendiri ('rekening_mentah'), dicek LEBIH DULU pakai prefiks unik
 // "Angka panjang (nomor rekening" supaya tidak ketiban aturan generik di
 // bawahnya (urutan if-else di sini penting).
-export function klasifikasiAlasanGate(
-  issue: string,
-): 'label_rancu' | 'token_tak_dikenal' | 'digit_mentah' | 'rekening_mentah' | 'bridge_asumsi' | 'istilah_internal' | 'kontradiksi_data' | 'funnel_dilanggar' | 'salah_produk' | 'jumlah_manual' | 'kalimat_dobel' | 'lainnya' {
+// >>> ANGGA — Klaster C (2026-08-06): union kelas dipindah ke tipe bernama
+// `IssueCode`, dipakai bersama oleh `resolvePriceTokens` (lewat `pushIssue`,
+// dilekatkan LANGSUNG saat issue lahir) dan fungsi ini (masih menebak balik
+// dari teks — sekarang HANYA untuk telemetri histori, lihat komentar di
+// `resolvePriceTokens`). Uniannya sendiri TIDAK berubah, cuma diberi nama. <<<
+export type IssueCode =
+  | 'label_rancu'
+  | 'token_tak_dikenal'
+  | 'digit_mentah'
+  | 'rekening_mentah'
+  | 'bridge_asumsi'
+  | 'istilah_internal'
+  | 'kontradiksi_data'
+  | 'funnel_dilanggar'
+  | 'salah_produk'
+  | 'jumlah_manual'
+  | 'kalimat_dobel'
+  | 'lainnya';
+
+export function klasifikasiAlasanGate(issue: string): IssueCode {
   const s = issue ?? '';
   if (s.includes('membuat labelnya salah')) return 'label_rancu';
   if (s.includes('tidak dikenal/tidak tersedia')) return 'token_tak_dikenal';

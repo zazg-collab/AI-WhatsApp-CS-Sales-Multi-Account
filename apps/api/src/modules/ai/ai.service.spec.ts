@@ -93,6 +93,7 @@ describe('AiService', () => {
           text: 'Totalnya Rp161.000 kak, jadi 139000 juga oke',
           ok: false,
           issues: ['Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000'],
+          issueCodes: ['digit_mentah'],
         }),
       };
       const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
@@ -106,7 +107,7 @@ describe('AiService', () => {
     it('gerbang uang: tidak ditahan → moneyGateIssues tidak ada/kosong', async () => {
       provider.chat.mockResolvedValue('Baik kak, ditunggu ya');
       const shipping = {
-        resolvePriceTokens: jest.fn().mockResolvedValue({ text: 'Baik kak, ditunggu ya', ok: true, issues: [] }),
+        resolvePriceTokens: jest.fn().mockResolvedValue({ text: 'Baik kak, ditunggu ya', ok: true, issues: [], issueCodes: [] }),
       };
       const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
       const r = await svc.generateReply('c1');
@@ -129,8 +130,9 @@ describe('AiService', () => {
             text: 'Bedog Betekok harganya Rp139.000, kak.',
             ok: false,
             issues: ['Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000'],
+            issueCodes: ['digit_mentah'],
           })
-          .mockResolvedValueOnce({ text: 'Bedog Betekok harganya Rp139.000, kak.', ok: true, issues: [] }),
+          .mockResolvedValueOnce({ text: 'Bedog Betekok harganya Rp139.000, kak.', ok: true, issues: [], issueCodes: [] }),
       };
       const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
       const r = await svc.generateReply('c1');
@@ -157,11 +159,13 @@ describe('AiService', () => {
             text: 'Bedog Betekok harganya Rp139.000, kak.',
             ok: false,
             issues: ['percobaan pertama: 139000'],
+            issueCodes: ['lainnya'],
           })
           .mockResolvedValueOnce({
             text: 'Bedog Betekok harganya Rp139.000 lagi, kak.',
             ok: false,
             issues: ['percobaan kedua: masih 139000'],
+            issueCodes: ['lainnya'],
           }),
       };
       const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
@@ -182,6 +186,7 @@ describe('AiService', () => {
           text: 'Bedog Betekok harganya Rp139.000, kak.',
           ok: false,
           issues: ['percobaan pertama: 139000'],
+          issueCodes: ['lainnya'],
         }),
       };
       const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
@@ -422,8 +427,9 @@ describe('AiService', () => {
             text: 'Total yang harus dibayarkan saat barang tiba adalah: {{total_cod}} boleh dicantumkan patokan rumahnya dekat apa kak?',
             ok: false,
             issues: ['Balasan mengulang rincian total ({{total_cod}}) padahal total sudah pernah disodorkan di giliran sebelumnya \u2014 jangan direkap ulang, cukup tutup dengan pertanyaan langkah "patokan".'],
+            issueCodes: ['funnel_dilanggar'],
           })
-          .mockResolvedValueOnce({ text: 'Boleh dicantumkan patokan rumahnya dekat apa kak?', ok: true, issues: [] }),
+          .mockResolvedValueOnce({ text: 'Boleh dicantumkan patokan rumahnya dekat apa kak?', ok: true, issues: [], issueCodes: [] }),
       };
       const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
       const r = await svc.generateReply('c1');
@@ -446,8 +452,9 @@ describe('AiService', () => {
             text: 'Bedog Betekok harganya Rp139.000, kak.',
             ok: false,
             issues: ['Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000'],
+            issueCodes: ['digit_mentah'],
           })
-          .mockResolvedValueOnce({ text: 'Bedog Betekok harganya {{harga_satuan}}, kak.', ok: true, issues: [] }),
+          .mockResolvedValueOnce({ text: 'Bedog Betekok harganya {{harga_satuan}}, kak.', ok: true, issues: [], issueCodes: [] }),
       };
       const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
       await svc.generateReply('c1');
@@ -480,8 +487,9 @@ describe('AiService', () => {
               'Balasan menjumlahkan penanda sendiri dengan "+" sebagai total ({{subtotal_barang}}, {{ongkir}}) — total SUDAH dihitung sistem, wajib pakai {{total_transfer}}/{{total_cod}}/{{blok_total}}/{{rincian_tagihan}} langsung, jangan menjumlahkan penanda manual.',
               'Balasan mengulang rincian total ({{subtotal_barang}}) padahal total sudah pernah disodorkan di giliran sebelumnya — jangan direkap ulang, cukup tutup dengan pertanyaan langkah "patokan".',
             ],
+            issueCodes: ['jumlah_manual', 'funnel_dilanggar'],
           })
-          .mockResolvedValueOnce({ text: 'Boleh dicantumkan patokan rumahnya dekat apa kak?', ok: true, issues: [] }),
+          .mockResolvedValueOnce({ text: 'Boleh dicantumkan patokan rumahnya dekat apa kak?', ok: true, issues: [], issueCodes: [] }),
       };
       const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
       await svc.generateReply('c1');

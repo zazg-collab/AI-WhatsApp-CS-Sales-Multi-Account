@@ -17,7 +17,7 @@ import { AiCacheService } from './ai-cache.service';
 // `shipping.service.ts` bersama pemakainya; di sini disediakan pintu masuk
 // resmi lewat AiService supaya sejajar dengan `leadScore`/`analyzeSentiment`
 // dan bisa dipakai controller/uji tanpa menyentuh modul shipping langsung.
-import { ShippingService, type ShippingOrderExtract, klasifikasiAlasanGate } from '../shipping/shipping.service';
+import { ShippingService, type ShippingOrderExtract } from '../shipping/shipping.service';
 // <<< ANGGA
 import {
   t,
@@ -174,7 +174,15 @@ export class AiService {
         // dibungkam. `rendered.issues` mentah tetap ikut terkirim sebagai
         // daftar bullet terpisah di `MONEY_GATE_RETRY_USER` (tidak berubah),
         // jadi ini memperkuat instruksi actionable-nya, bukan duplikat.
-        const kelasIssues = rendered.issues.map((s) => klasifikasiAlasanGate(s));
+        //
+        // >>> ANGGA — Klaster C (2026-08-06): SEBELUMNYA baris ini menebak
+        // kelas balik dari teks (`klasifikasiAlasanGate(s)`) — jalur LIVE
+        // ikut kena fragilitas stringly-typed yang sama seperti telemetri.
+        // `resolvePriceTokens` sekarang melekatkan kode LANGSUNG di titik
+        // issue lahir (`pushIssue`), jadi di sini tinggal dipakai apa
+        // adanya — nol tebak-tebakan, nol risiko kata-kata berubah tapi
+        // pencocokan lupa diperbarui. <<<
+        const kelasIssues = rendered.issueCodes;
         const kelasPrioritas = [
           'funnel_dilanggar',
           'kalimat_dobel',
