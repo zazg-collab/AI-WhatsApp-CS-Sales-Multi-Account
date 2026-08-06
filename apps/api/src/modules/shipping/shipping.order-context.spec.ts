@@ -2197,3 +2197,59 @@ describe('GERBANG PAKEM — anti-ngarang lokasi tangga LANJUTAN (REPLAY laporan 
   });
 });
 // <<< ANGGA
+
+
+// >>> ANGGA — fix (2026-08-06, REPLAY laporan Bossfren, dibuktikan LANGSUNG
+// pakai widget "Destination keyword search debug" Bossfren sendiri): akar
+// masalah SESUNGGUHNYA di balik "Kab. Purwokerto ngaco" (lebih dalam dari
+// perbaikan kunci-verbatim #31 di atas — itu tetap perlu sebagai jaring
+// pengaman, tapi ini akar SEBAB kenapa sistem sampai bertanya lagi padahal
+// jawaban pelanggan sudah cukup). Data di bawah PERSIS hasil widget: cari
+// "purwokerto timur" -> API balik 8 baris (5 kecamatan PURWOKERTO TIMUR di
+// Kab. Banyumas + 3 KELURAHAN "Purwokerto" tunggal yang sama sekali tak
+// terkait di Lamongan/Kediri/Blitar, Jawa Timur) -> widget Bossfren
+// menyaring bersih jadi 1 grup kandidat (Kab. Banyumas, level "district").
+// Sebelum fix ini, sistem BOT (bukan widget) memecah jawaban "purwokerto
+// timur kak" jadi kata per kata dan menilai baris HANYA terhadap kata
+// tunggal "purwokerto" — kata pembeda "timur" hilang di langkah penilaian,
+// jadi 3 kelurahan tak-terkait itu ikut lolos jadi "kandidat", ambiguitas
+// PALSU muncul lagi, dan sistem terpaksa bertanya ronde 3 (di sinilah model
+// akhirnya mengarang "Kab. Purwokerto").
+const ROWS_PURWOKERTO_TIMUR_REAL = [
+  { _id: 'r1', PROVINCE_NAME: 'JAWA TENGAH', CITY_NAME: 'BANYUMAS', CITY_NAME_SI: 'Kab. Banyumas', DISTRICT_NAME: 'PURWOKERTO TIMUR', SUBDISTRICT_NAME: 'MERSI' },
+  { _id: 'r2', PROVINCE_NAME: 'JAWA TENGAH', CITY_NAME: 'BANYUMAS', CITY_NAME_SI: 'Kab. Banyumas', DISTRICT_NAME: 'PURWOKERTO TIMUR', SUBDISTRICT_NAME: 'ARCAWINANGUN' },
+  { _id: 'r3', PROVINCE_NAME: 'JAWA TENGAH', CITY_NAME: 'BANYUMAS', CITY_NAME_SI: 'Kab. Banyumas', DISTRICT_NAME: 'PURWOKERTO TIMUR', SUBDISTRICT_NAME: 'PURWOKERTO LOR' },
+  { _id: 'r4', PROVINCE_NAME: 'JAWA TENGAH', CITY_NAME: 'BANYUMAS', CITY_NAME_SI: 'Kab. Banyumas', DISTRICT_NAME: 'PURWOKERTO TIMUR', SUBDISTRICT_NAME: 'SOKANEGARA' },
+  { _id: 'r5', PROVINCE_NAME: 'JAWA TENGAH', CITY_NAME: 'BANYUMAS', CITY_NAME_SI: 'Kab. Banyumas', DISTRICT_NAME: 'PURWOKERTO TIMUR', SUBDISTRICT_NAME: 'KRANJI' },
+  { _id: 'r6', PROVINCE_NAME: 'JAWA TIMUR', CITY_NAME: 'LAMONGAN', CITY_NAME_SI: 'Kab. Lamongan', DISTRICT_NAME: 'NGIMBANG', SUBDISTRICT_NAME: 'PURWOKERTO' },
+  { _id: 'r7', PROVINCE_NAME: 'JAWA TIMUR', CITY_NAME: 'KEDIRI', CITY_NAME_SI: 'Kab. Kediri', DISTRICT_NAME: 'NGADILUWIH', SUBDISTRICT_NAME: 'PURWOKERTO' },
+  { _id: 'r8', PROVINCE_NAME: 'JAWA TIMUR', CITY_NAME: 'BLITAR', CITY_NAME_SI: 'Kab. Blitar', DISTRICT_NAME: 'SRENGAT', SUBDISTRICT_NAME: 'PURWOKERTO' },
+];
+
+describe('GERBANG PAKEM — jawaban FRASA (≥2 kata) dinilai UTUH, bukan kata per kata (REPLAY widget debug Bossfren "purwokerto timur")', () => {
+  it('"purwokerto timur kak" setelah ronde 1 ambigu -> resolve LANGSUNG ke Kab. Banyumas, TIDAK bertanya lagi', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke purwokerto berapa kak?',
+      extract: { kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_PURWOKERTO, // 2 kandidat nyata (Banyumas vs Lampung Tengah) -> ronde 1 ambigu, SAH
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    pesanBaru(h, 'm2', 'purwokerto timur kak');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Purwokerto Timur', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) =>
+      /purwokerto timur/i.test(kw) ? ROWS_PURWOKERTO_TIMUR_REAL : ROWS_PURWOKERTO,
+    );
+    const res2: any = await h.svc.quoteForConversation('c1');
+    // Pra-fix: 'ambiguous' lagi (kelurahan "Purwokerto" di Lamongan/Kediri/
+    // Blitar ikut kebawa jadi kandidat palsu karena penilaian cuma pakai
+    // kata "purwokerto"). Pasca-fix: resolve bersih, TIDAK bertanya lagi.
+    expect(res2.status).toBe('ok');
+    expect(res2.quote.city).toBe('BANYUMAS');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('mau ambil berapa pcs kak?'); // funnel lanjut, bukan tanya lokasi lagi
+  });
+});
+// <<< ANGGA

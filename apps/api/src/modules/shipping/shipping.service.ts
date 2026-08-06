@@ -1348,6 +1348,102 @@ export class ShippingService {
       const kataJawaban = (lastCustomerText.toLowerCase().match(/[a-z]+/g) ?? [])
         .filter((w) => w.length >= 4 && !generik.has(w))
         .slice(0, 3);
+      // >>> ANGGA — fix (2026-08-06, REPLAY laporan Bossfren "purwokerto
+      // timur" -> "Kab. Purwokerto" ngarang, DIBUKTIKAN pakai widget debug
+      // search Bossfren sendiri): jawaban pelanggan berupa FRASA ≥2 kata
+      // ("purwokerto timur") SEBELUM fix ini dipecah per-KATA di loop bawah,
+      // dan payahnya kata pembeda kedua ("timur") cuma numpang di STRING
+      // PENCARIAN API (`${w} ${kotaKonteks}`, dan itu pun rusak jadi
+      // "purwokerto purwokerto timur" karena `kotaKonteks` giliran ini
+      // adalah HASIL EKSTRAKSI dari jawaban yang sama, "purwokerto timur" —
+      // guard `kotaKonteks !== w` tidak menangkap kasus w SUBSET dari
+      // kotaKonteks) — sedangkan PENILAIAN LOKAL (`resolveDestination`)
+      // tetap dicocokkan cuma terhadap kata TUNGGAL `w`="purwokerto". Widget
+      // debug Bossfren membuktikan API sendiri SUDAH balik hasil bersih untuk
+      // "purwokerto timur" (1 grup: Kab. Banyumas) — baris kelurahan
+      // "Purwokerto" tunggal di Lamongan/Kediri/Blitar tidak relevan sama
+      // sekali, cuma numpang lolos karena penilaian lokal buang kata "timur".
+      // Fix: coba FRASA UTUH (semua kataJawaban digabung, urutan aslinya)
+      // dulu — untuk PENCARIAN *dan* PENILAIAN LOKAL sekaligus — sebelum
+      // jatuh ke kata satu-satu di bawah. `levelKecocokan` mencocokkan
+      // PERSIS/awalan-kata, jadi frasa dua-kata otomatis cuma kena baris
+      // kecamatan yang namanya PERSIS SAMA ("PURWOKERTO TIMUR"), menyingkirkan
+      // kelurahan bernama tunggal "Purwokerto" di kabupaten lain TANPA
+      // daftar pengecualian apa pun — general untuk nama tempat serupa di
+      // luar Purwokerto juga (mis. "X Timur"/"X Utara" yang jadi substring
+      // nama desa "X" di kabupaten lain). Kalau frasa utuh nol hasil (bukan
+      // ambigu — benar-benar tak ketemu), baru fallback ke kata satu-satu. <<<
+      if (kataJawaban.length > 1) {
+        const frasaGabungan = kataJawaban.join(' ');
+        const kotaKonteksF = (extract.city ?? '').trim().toLowerCase();
+        const cobaFrasa = [
+          ...(kotaKonteksF && kotaKonteksF !== frasaGabungan && !kotaKonteksF.includes(frasaGabungan)
+            ? [`${frasaGabungan} ${kotaKonteksF}`]
+            : []),
+          frasaGabungan,
+        ];
+        let rowsF: MengantarAddress[] | null = null;
+        for (const kw of cobaFrasa) {
+          rowsF = await this.mengantar.searchAddress(terapkanAlias(kw, cfg.destinationAliases));
+          if (rowsF?.length) break;
+        }
+        let urutF = rowsF?.length ? resolveDestination(rowsF, frasaGabungan) : [];
+        if (urutF.length) {
+          const provJawabF = normalisasiProvinsi(extract.province ?? '');
+          if (provJawabF) {
+            const saringF = urutF.filter((c) => normalisasiProvinsi(c.province) === provJawabF);
+            if (saringF.length) urutF = saringF;
+          }
+          if (urutF.length > 1 && extract.city) {
+            const kotaKF = extract.city.trim().toLowerCase();
+            if (kotaKF) {
+              const silangF = urutF.filter((c) => `${c.city} ${c.cityLabel}`.toLowerCase().includes(kotaKF));
+              if (silangF.length) urutF = silangF;
+            }
+          }
+          if (kandidatDominan(urutF)) {
+            turnViaPilihan = true;
+            this.cache.clearPending(conversationId);
+            this.cache.resetAsks(conversationId);
+            this.cache.reset(conversationId);
+            const menangF = urutF[0];
+            const pilihanMenangF: DestinationChoice = {
+              city: menangF.city,
+              province: menangF.province,
+              label: '',
+              destinationId: menangF.ids[0],
+            };
+            if (!STOPWORDS_LOKASI_GENERIK.has(frasaGabungan)) {
+              this.cache.rememberDestinationTerm(conversationId, frasaGabungan, pilihanMenangF, cfg.quoteCacheTtlMs);
+            }
+            for (const wF of kataJawaban) {
+              if (!STOPWORDS_LOKASI_GENERIK.has(wF)) {
+                this.cache.rememberDestinationTerm(conversationId, wF, pilihanMenangF, cfg.quoteCacheTtlMs);
+              }
+            }
+            return finalize(await this.quoteUntukTujuan(pilihanMenangF, items));
+          }
+          // Frasa utuh KETEMU tapi masih >1 kandidat sungguhan — ini sudah
+          // subset paling presisi yang bisa dihasilkan (frasa 2 kata lebih
+          // spesifik daripada kata tunggal manapun di bawah), jadi langsung
+          // tanya tertutup dari sini, JANGAN diteruskan ke fallback per-kata
+          // (yang cuma akan melebarkan ambiguitas lagi, bukan mempersempit).
+          turnViaPilihan = true;
+          return finalize({
+            status: 'ambiguous',
+            sempit: true,
+            candidates: urutF.map((c) => ({
+              city: c.city,
+              province: c.province,
+              label: labelKandidat(c, urutF),
+              destinationId: c.ids[0],
+            })),
+          });
+        }
+        // Frasa utuh NOL hasil (bukan ambigu, benar-benar tak ketemu) —
+        // lanjut ke fallback kata satu-satu di bawah apa adanya.
+      }
+      // <<< ANGGA
       for (const w of kataJawaban) {
         // >>> ANGGA — KETOK BOSSFREN (2026-08-05 malam, DIBUKTIKAN di API
         // nyata via widget): saat stuck, GABUNGKAN jawaban kedua + konteks
