@@ -1329,8 +1329,34 @@ export class ShippingService {
     // bertanya tujuan (askCount > 0), coba search kata-kata jawaban (tanpa
     // kata pengisi/afirmasi/generik) SEBELUM jatuh ke kota hasil ekstraksi;
     // provinsi hasil ekstraksi tetap dipakai sebagai saringan (P4).
+    // >>> ANGGA — koreksi 2026-08-06 (REPLAY LIVE lanjutan, laporan Bossfren
+    // "purwokerto timur braderku" -> bot mengarang "Kab. Kebumen" sebagai
+    // opsi kedua, PADAHAL widget debug Bossfren sendiri membuktikan search
+    // API asli utk "purwokerto timur" cuma balik SATU kandidat, Kab.
+    // Banyumas): syarat `askCount(conversationId) > 0` di atas membuat jalur
+    // kata-jawaban-literal (+ jendela panjang kata) ini CUMA berlaku di
+    // giliran BALASAN — giliran PERTAMA pelanggan menyebut tujuan sendiri
+    // (belum pernah kita tanya) selalu jatuh ke `quote({ keyword: city })` di
+    // bawah, yang search-nya 100% pasrah ke `extract.city` (hasil ekstraksi
+    // LLM Langkah 2). Begitu ekstraktor menjatuhkan kata pembeda ("Timur")
+    // atau salah normalisasi gara-gara honorifik asing ("braderku" dst — dan
+    // TIDAK ADA daftar honorifik yang akan pernah lengkap, sudah terbukti 4x
+    // hari ini: kakak/kakakku/boskuuu/braderku), keyword pencarian jadi lebih
+    // lebar dari yang pelanggan maksud → API (BUKAN model) balik >1 kandidat
+    // ASLI (mis. "Purwokerto" sendirian menyeret desa/kelurahan tak terkait
+    // di kabupaten lain) → kelihatan seperti karangan padahal itu hasil
+    // search sungguhan untuk keyword yang salah.
+    //
+    // Fix: jangan pakai `askCount > 0` sebagai syarat — pakai `extract.city`
+    // (LLM SUDAH mendeteksi ada penyebutan tempat giliran ini, terlepas
+    // giliran ke berapa) sebagai syaratnya. Begitu ada indikasi tempat sama
+    // sekali, DAHULUKAN kata-kata LITERAL pelanggan sendiri (data asli via
+    // `resolveDestination`, bukan tebakan kata pengisi) sebelum pasrah ke
+    // `extract.city`. Sapaan/basa-basi murni ("halo", "oke kak") yang
+    // ekstraktornya balik city=null tetap TIDAK menyentuh jalur ini sama
+    // sekali (nol panggilan search tambahan) — persis perilaku lama.
     const jawabanPolosTujuan =
-      this.cache.askCount(conversationId) > 0 &&
+      (this.cache.askCount(conversationId) > 0 || !!(extract.city ?? '').trim()) &&
       !adaKataTanyaUang(lastCustomerText, oc.orderMoneyAskKeywords) &&
       !PLACE_HINT.test(lastCustomerText) &&
       !ORDER_CHANGE_HINT.test(lastCustomerText);

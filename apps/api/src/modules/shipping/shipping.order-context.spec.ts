@@ -2450,5 +2450,43 @@ describe('GERBANG PAKEM — jawaban FRASA (≥ 2 kata) dinilai UTUH, bukan kata 
     const grounding = await h.svc.getGroundingText('c1');
     expect(grounding).toContain('mau ambil berapa pcs kak?'); // funnel lanjut, bukan tanya lokasi lagi
   });
+
+  // >>> ANGGA — REPLAY LIVE (2026-08-06, laporan Bossfren "braderku" —
+  // DIKONFIRMASI di build yang SUDAH di-rebuild ulang, jadi BUKAN soal versi
+  // lama): giliran PERTAMA pelanggan sendiri yang menyebut tujuan
+  // ("purwokerto timur braderku", belum pernah kita tanya apa pun,
+  // askCount masih 0) TIDAK PERNAH masuk jalur kata-jawaban-literal/jendela
+  // di atas — syaratnya dulu `askCount(conversationId) > 0`, jadi giliran
+  // pertama SELALU jatuh ke `quote({ keyword: city })` yang pasrah 100% ke
+  // `extract.city` hasil ekstraksi LLM Langkah 2. Widget debug Bossfren
+  // membuktikan search API ASLI utk "purwokerto timur" (dua kata) cuma balik
+  // SATU kandidat (Kab. Banyumas) — tapi begitu ekstraktor menjatuhkan kata
+  // pembeda "Timur" (LLM cuma balik kota: "Purwokerto", kebingungan oleh
+  // honorifik asing "braderku" yang TIDAK ADA di daftar mana pun, dan tidak
+  // akan pernah ada daftar yang lengkap), search API jadi SATU KATA SAJA ->
+  // API SUNGGUHAN (bukan karangan model) balik kelurahan "Purwokerto" tak
+  // terkait di kabupaten lain sebagai kandidat tambahan -> kelihatan seperti
+  // bot mengarang kabupaten palsu, padahal itu hasil search NYATA untuk
+  // keyword yang salah/terlalu lebar. Fix: ganti syarat `askCount > 0`
+  // dengan `extract.city` truthy (LLM SUDAH tahu giliran ini soal tempat,
+  // apa pun rondenya) — supaya kata LITERAL pelanggan sendiri ("purwokerto
+  // timur") dicoba DULU lewat jendela panjang kata, sebelum pasrah ke
+  // ekstraksi kota yang lebih pendek/kurang presisi. <<<
+  it('giliran PERTAMA (askCount masih 0) "purwokerto timur braderku" -> ekstraktor jatuhkan kata "Timur", jendela kata literal tetap resolve LANGSUNG ke Kab. Banyumas (bukan ambigu palsu Lamongan/Kediri/Blitar)', async () => {
+    const h = harness({
+      lastCustomerText: 'purwokerto timur braderku',
+      // REPLAY: ekstraktor LLM menjatuhkan kata pembeda "Timur" -> cuma balik "Purwokerto".
+      extract: { kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) =>
+      /purwokerto/i.test(kw) ? ROWS_PURWOKERTO_TIMUR_REAL : [],
+    );
+    const res: any = await h.svc.quoteForConversation('c1');
+    // Pra-fix: 'ambiguous' dari quote({ keyword: 'Purwokerto' }) — kelurahan
+    // "Purwokerto" tunggal di Lamongan/Kediri/Blitar ikut nyasar jadi
+    // kandidat palsu (persis pola laporan nyata "Kab. Kebumen ngaco").
+    expect(res.status).toBe('ok');
+    expect(res.quote.city).toBe('BANYUMAS');
+  });
 });
 // <<< ANGGA
