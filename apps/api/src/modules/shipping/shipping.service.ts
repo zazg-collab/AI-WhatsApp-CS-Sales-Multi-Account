@@ -469,6 +469,72 @@ export function pilihKandidat(
  * penyempitan: jawaban "yang lampung kak" mengenai 2 kandidat Lampung →
  * subset itu dibacakan sebagai pertanyaan TERTUTUP, bukan diabaikan.
  */
+// >>> ANGGA — fix (2026-08-06, REPLAY LIVE laporan Bossfren "Purwokerto
+// Timur itu di kabupaten mana? Kab. Lamongan / Kab. Kediri" — Banyumas yang
+// BENAR hilang total dari daftar): akar sebab BUKAN di mekanisme pencarian
+// (`resolveDestination`/jendela panjang kata, sudah dibuktikan benar via
+// widget debug Bossfren SENDIRI hari ini) — tapi di fungsi INI, yang
+// menyempitkan `pendingTujuan` (daftar kandidat TERSIMPAN dari pencarian
+// sebelumnya) memakai jawaban pelanggan TANPA pernah mencari ulang ke API.
+// Sebelumnya kata jawaban dicocokkan ke `kata(p.label)` UTUH — label
+// formatnya "<cityLabel>, <PROVINSI>" saat kandidat berbeda provinsi (mis.
+// "Kab. Banyumas, JAWA TENGAH"; lihat `labelKandidat`), jadi kata PROVINSI
+// ikut jadi bahan cocok. Jawaban "Purwokerto Timur" (nama KECAMATAN — level
+// yang TIDAK PERNAH muncul di city/province mana pun) kebetulan kata
+// "timur"-nya nempel ke provinsi "JAWA TIMUR" milik Lamongan/Kediri —
+// kandidat yang SAMA SEKALI TIDAK RELEVAN — sedangkan Banyumas (JAWA
+// TENGAH, jawaban yang BENAR) skornya 0.
+//
+// DUA percobaan fix pertama (didokumentasikan lengkap di riwayat commit,
+// dibuang di sini biar komentar tidak menumpuk) sama-sama ketahuan
+// kebablasan lewat test suite `shipping.service.spec.ts` /
+// `shipping.order-context.spec.ts` SEBELUM sampai ke Bossfren:
+//   1. Cocokkan HANYA ke `kata(p.city)` (buang label sepenuhnya) — pecah di
+//      kasus "Kota Bogor" vs "Kab. Bogor": `city` keduanya PERSIS SAMA
+//      ("BOGOR"), satu-satunya kata pembeda ("kota" vs "kab") cuma ada di
+//      AWALAN label, bukan di `city`.
+//   2. Buang kata yang muncul di `province` milik kandidat itu SENDIRI —
+//      pecah di kasus REPLAY "mataram": jawaban EKSPLISIT "yang lampung
+//      kak"/"yang lampung timur kak" HARUS mempersempit ke kandidat
+//      Lampung Timur/Lampung Tengah — itu penyempitan PROVINSI/nama-kota
+//      yang justru DIINGINKAN, beda dari kasus Purwokerto yang kata
+//      "timur"-nya nempel ke provinsi kandidat LAIN yang tidak relevan.
+//
+// Fix final: bukan cocok-kata bebas ke SELURUH label, tapi cocok-kata ke
+// `cityLabel`-nya SAJA — yaitu `label` dengan akhiran ", <PROVINSI>" yang
+// ditempel `labelKandidat` (hanya muncul kalau kandidat-kandidat beda
+// provinsi) DIBUANG dulu secara STRUKTURAL sebelum dipecah jadi kata. Ini
+// benar untuk ketiga kasus sekaligus:
+//   - "Kota Bogor" / "Kab. Bogor" → tidak ada akhiran provinsi (satu
+//     provinsi saja), utuh tak berubah → "kota"/"kab" tetap kata pembeda.
+//   - "Kab. Lampung Timur, LAMPUNG" → akhiran ", LAMPUNG" dibuang → sisa
+//     "Kab. Lampung Timur", kata "lampung"/"timur" TETAP ada karena
+//     keduanya bagian dari NAMA KABUPATEN itu sendiri, bukan cuma provinsi.
+//   - "Kab. Banyumas, JAWA TENGAH" / "Kab. Lamongan, JAWA TIMUR" → akhiran
+//     ", JAWA TENGAH"/", JAWA TIMUR" dibuang → sisa "Kab. Banyumas"/"Kab.
+//     Lamongan", kata "jawa"/"tengah"/"timur" TIDAK LAGI ikut jadi bahan
+//     cocok karena bagian itu MURNI nama provinsi yang ditempel di akhir,
+//     bukan bagian dari cityLabel aslinya.
+//
+// Penyempitan lewat PROVINSI yang TIDAK muncul di cityLabel kandidat mana
+// pun (mis. "yang NTB kak" ketika semua kandidat justru di provinsi lain)
+// tetap didukung sistem lewat jalur LAIN yang lebih aman
+// (`normalisasiProvinsi` di `quote()`/jendela panjang kata — pencarian
+// ULANG ke API, bukan cocok-kata statis terhadap daftar tersimpan) — kalau
+// fungsi ini balik [] (tidak ada kata yang cocok sama sekali), alur
+// otomatis jatuh ke mekanisme pencarian literal (`jawabanPolosTujuan`)
+// yang sudah terbukti benar untuk skenario Purwokerto Timur. <<<
+
+/** Buang akhiran ", <PROVINSI>" yang ditempel `labelKandidat` (kalau ada),
+ *  supaya kata pencocokan kandidat cuma memakai `cityLabel` murni — nama
+ *  kota/kabupaten + awalan administratifnya, TANPA nama provinsi. */
+function cityLabelSaja(p: DestinationChoice): string {
+  const akhiran = `, ${p.province}`;
+  return p.label.toLowerCase().endsWith(akhiran.toLowerCase())
+    ? p.label.slice(0, p.label.length - akhiran.length)
+    : p.label;
+}
+
 export function kandidatCocok(
   pilihan: DestinationChoice[],
   teks: string,
@@ -477,13 +543,13 @@ export function kandidatCocok(
   const jawaban = new Set(kata(teks));
   if (!jawaban.size) return [];
 
-  const perLabel = pilihan.map((p) => new Set(kata(p.label)));
+  const perKandidat = pilihan.map((p) => new Set(kata(cityLabelSaja(p))));
   const frekuensi = new Map<string, number>();
-  for (const set of perLabel) {
+  for (const set of perKandidat) {
     for (const w of set) frekuensi.set(w, (frekuensi.get(w) ?? 0) + 1);
   }
 
-  const skor = perLabel.map(
+  const skor = perKandidat.map(
     (set) =>
       [...set].filter((w) => (frekuensi.get(w) ?? 0) < pilihan.length && jawaban.has(w)).length,
   );

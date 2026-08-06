@@ -2602,3 +2602,42 @@ describe('Langkah CLOSING (2026-08-06, ketok Bossfren "harusnya ini sesi klosing
   });
 });
 // <<< ANGGA
+
+// >>> ANGGA — fix (2026-08-06, REPLAY LIVE laporan Bossfren "Purwokerto
+// Timur itu di kabupaten mana? Kab. Lamongan / Kab. Kediri" — Kab. Banyumas
+// yang BENAR hilang total): *"padahal sebelumnya udah bener ngasih opsi kab
+// banyumas dan kediri. ini malah ngaco lagi. kenapa sih gak beres2? lagian
+// purwokerto timur kan kecamatan, dicari di API ongkir lgsg dapat. heran"*.
+// Beda dari SEMUA bug "Purwokerto" sebelumnya hari ini (yang letaknya di
+// mekanisme PENCARIAN/search+resolve) — akar sebab bug INI ada di
+// `kandidatCocok`, fungsi yang menyempitkan daftar kandidat TERSIMPAN
+// (`pendingTujuan`) memakai jawaban pelanggan TANPA mencari ulang ke API
+// sama sekali. Lihat komentar di definisi `kandidatCocok`.
+describe('fix (2026-08-06) — kandidatCocok TIDAK LAGI cocok-kata ke provinsi (REPLAY "Purwokerto Timur" -> Kab. Lamongan/Kediri, Banyumas hilang)', () => {
+  it('ronde 1 ambigu (4 kandidat: Banyumas asli + 3 kelurahan "Purwokerto" tak terkait) -> jawaban "Purwokerto Timur" (kecamatan) TIDAK boleh nyasar cocok ke provinsi "JAWA TIMUR" milik kandidat lain -> tetap resolve ke Kab. Banyumas via pencarian ulang', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke purwokerto berapa kak?',
+      extract: { kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_PURWOKERTO_TIMUR_REAL, // search "purwokerto" (1 kata) -> 4 kandidat: Banyumas + 3 decoy Jawa Timur
+    });
+    const res1: any = await h.svc.quoteForConversation('c1');
+    // Ronde 1: 4 kandidat sungguhan (bukan sempit) -> pertanyaan terbuka, TIDAK ada yang dominan.
+    expect(res1.status).toBe('ambiguous');
+
+    pesanBaru(h, 'm2', 'Purwokerto Timur kak');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Purwokerto Timur', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    const res2: any = await h.svc.quoteForConversation('c1');
+    // Pra-fix: kandidatCocok cocokkan kata "timur" ke PROVINSI "JAWA TIMUR"
+    // milik Lamongan/Kediri/Blitar (kebetulan nempel, sama sekali tak
+    // relevan) -> subset palsu [Lamongan, Kediri, Blitar] tersodor sebagai
+    // "kandidat", Banyumas (jawaban BENAR, provinsi JAWA TENGAH) skornya 0
+    // -> hilang total dari daftar. Pasca-fix: kandidatCocok cuma cocokkan ke
+    // NAMA KOTA (bukan provinsi) -> nol kecocokan -> jatuh ke pencarian ULANG
+    // pakai teks literal pelanggan -> resolve bersih ke Banyumas.
+    expect(res2.status).toBe('ok');
+    expect(res2.quote.city).toBe('BANYUMAS');
+  });
+});
+// <<< ANGGA
