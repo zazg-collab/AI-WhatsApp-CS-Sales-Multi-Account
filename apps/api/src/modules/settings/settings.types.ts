@@ -232,6 +232,23 @@ export interface OrderContextSettings {
    *  dikunci persis walau isinya beda tiap kutipan. <<< */
   orderFunnelAskLandmarkCod: string;
   orderFunnelAskLandmarkTransfer: string;
+  /** >>> ANGGA — fix (2026-08-06, ketok Bossfren "harusnya ini sesi klosing
+   *  bukan malah nanya lagi"): langkah PATOKAN dulu tidak punya "lulus" —
+   *  begitu alamat+patokan terjawab, sistem terus mengulang pertanyaan yang
+   *  sama selamanya (ronde berikutnya SELALU balik ke `pilih('patokan', ...)`
+   *  tanpa syarat). Langkah CLOSING ini yang jadi tujuan akhir funnel:
+   *  konfirmasi detail pesanan (produk+harga, formulir pemesanan: nama/no
+   *  HP/alamat) lalu {{catatan_sk}} (COD) atau permintaan konfirmasi bukti
+   *  transfer (Transfer). Boleh memuat penanda {{...}} — disubstitusi sama
+   *  seperti langkah lain sebelum dikunci verbatim. Penanda baru yang
+   *  tersedia KHUSUS di sini: {{daftar_produk_harga}} (produk+harga per
+   *  baris, dari kutipan aktif), {{nama_pembeli}}/{{no_hp}} (dari data
+   *  kontak WhatsApp — TIDAK PERNAH diketik model, sama filosofinya dengan
+   *  {{rekening_transfer}}), {{alamat_lengkap}} (teks alamat pelanggan APA
+   *  ADANYA, sengaja TIDAK dirapikan/diparafrase sistem — risiko salah
+   *  format alamat lebih berbahaya daripada tampil apa adanya). <<< */
+  orderFunnelClosingCod: string;
+  orderFunnelClosingTransfer: string;
 }
 // <<< ANGGA
 

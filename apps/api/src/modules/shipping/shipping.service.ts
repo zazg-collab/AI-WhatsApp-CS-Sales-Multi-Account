@@ -41,6 +41,9 @@ import {
   SHIPPING_FUNNEL_DIRECTIVE,
   SHIPPING_FUNNEL_TOTAL,
   // <<< ANGGA
+  // >>> ANGGA — fix (2026-08-06, langkah closing)
+  SHIPPING_FUNNEL_CLOSING,
+  // <<< ANGGA
 } from '../../i18n/bot-prompts';
 // >>> ANGGA — Fase 113: satu definisi "angka uang" dipakai ulang dari
 // rules.engine.ts, bukan diduplikasi di sini. rules.engine.ts tidak balik
@@ -116,6 +119,25 @@ export const PLACE_HINT =
  */
 export const ORDER_CHANGE_HINT =
   /(tambah|nambah|sekalian|plus|lagi|jadi\s*\d+|ganti|kurangi|batal(kan)?\s+(satu|yang)|\b\d+\s*(pcs|pc|buah|biji|unit|set|lusin)\b|(beli|pesan|ambil|order|mau)\s*\d+)/i;
+
+/**
+ * >>> ANGGA — fix (2026-08-06, ketok Bossfren "kalau udah dijawab alamat
+ * lengkap patokan opsional. kecuali tidak ada nomer rumah atau nama jalan
+ * wajib tanyakan patokan"): heuristik MURAH mendeteksi apakah suatu teks
+ * alamat SUDAH memuat nama jalan ("Jl."/"Jalan"/"Gg."/"Gang"/dll) + nomor
+ * rumah (angka menempel padanya, dengan/tanpa kata "No"). Sengaja regex
+ * longgar, BUKAN daftar kata yang terus ditambal — tidak ada API ground-
+ * truth untuk validasi alamat level jalan/nomor rumah seperti yang ada
+ * untuk kota/kecamatan (`searchAddress`), jadi heuristik teks adalah yang
+ * terbaik yang tersedia di titik keputusan ini. Dipakai `funnelDirective`
+ * menentukan apakah langkah PATOKAN masih wajib ditanya, atau boleh
+ * langsung lompat ke CLOSING karena alamatnya sudah cukup buat kurir.
+ */
+const NAMA_JALAN_HINT = /\b(jl\.?|jalan|gg\.?|gang|blok|komplek|perumahan|perum)\b/i;
+export function adaAlamatLengkap(text: string): boolean {
+  if (!NAMA_JALAN_HINT.test(text ?? '')) return false;
+  return /\b(jl\.?|jalan|gg\.?|gang|blok|komplek|perumahan|perum)\b[^,\n]{0,40}?(no\.?\s*)?\d+/i.test(text ?? '');
+}
 
 /**
  * Ambang skor pencocokan nama produk ke katalog. `scoreProductMatch` memberi
@@ -2103,7 +2125,17 @@ export class ShippingService {
     // mati → model bebas menyodorkan {{rincian_tagihan}}. Sekarang langkah
     // SELALU dipulangkan (teks null saat capped) + funnelExpect tetap ditulis
     // (kalimat '' = tanpa kewajiban kalimat verbatim, tapi gembok total aktif).
-    const pilih = (step: string, kalimat: string, total = false): { teks: string | null; step: string } => {
+    // >>> ANGGA — fix (2026-08-06, langkah closing): `pilih` kini menerima
+    // varian ketiga `closing` (KONFIRMASI pesanan, bukan pertanyaan) — dibuat
+    // parameter TERPISAH dari `total` (bukan menumpangi enum yang sama)
+    // supaya call-site lama (`pilih('barang', ...)` dkk, cuma 3 argumen)
+    // tetap jalan tanpa diubah sama sekali.
+    const pilih = (
+      step: string,
+      kalimat: string,
+      total = false,
+      closing = false,
+    ): { teks: string | null; step: string } => {
       const bersih = (kalimat ?? '').trim();
       const bolehTanya = bersih.length > 0 && (asks[step] ?? 0) < 2;
       if (!bolehTanya) {
@@ -2112,7 +2144,8 @@ export class ShippingService {
       }
       void this.orderLog?.recordFunnelAsk(conversationId, step, lastMsgId);
       this.cache.setFunnelExpect(conversationId, { messageId: lastMsgId, step, kalimat: bersih });
-      return { teks: t(total ? SHIPPING_FUNNEL_TOTAL : SHIPPING_FUNNEL_DIRECTIVE, lang)(bersih), step };
+      const varian = closing ? SHIPPING_FUNNEL_CLOSING : total ? SHIPPING_FUNNEL_TOTAL : SHIPPING_FUNNEL_DIRECTIVE;
+      return { teks: t(varian, lang)(bersih), step };
     };
     // <<< ANGGA
 
@@ -2175,9 +2208,37 @@ export class ShippingService {
     const totalSudah = (asks['total'] ?? 0) >= 1;
     if (metodeTerjawab) {
       // Metode sudah jelas → TOTAL (kalau belum tersodor) langsung disambung
-      // pertanyaan PATOKAN; kalau total sudah pernah tersodor → patokan saja.
+      // pertanyaan PATOKAN; kalau total sudah pernah tersodor → cek alamat →
+      // patokan opsional/wajib → CLOSING.
       if (!totalSudah) return pilih('total', kalimatPatokan, true);
-      return pilih('patokan', kalimatPatokan);
+
+      // >>> ANGGA — fix (2026-08-06, ketok Bossfren "harusnya ini sesi
+      // klosing bukan malah nanya lagi"): titik ini DULU SELALU balik ke
+      // `pilih('patokan', kalimatPatokan)` tanpa syarat, di GILIRAN APA PUN
+      // sesudah total tersodor — begitu pelanggan sudah menjawab alamat
+      // lengkap (persis yang diminta di kalimat gabungan v3.1), giliran
+      // BERIKUTNYA bot menanyakan PERSIS pertanyaan yang sama lagi alih-alih
+      // lanjut closing. Fix: kalau teks giliran ini (digabung dengan yang
+      // sudah tersimpan dari giliran sebelumnya, jaga-jaga alamat dikirim
+      // bertahap) sudah memuat nama jalan + nomor rumah, PATOKAN OPSIONAL —
+      // langsung CLOSING. Kalau belum, patokan tetap WAJIB ditanya — tapi
+      // CUMA SEKALI (bukan 2x seperti langkah lain): begitu sudah pernah
+      // ditanya sekali, giliran sesudahnya SELALU lanjut closing apa pun
+      // isinya, supaya pelanggan tidak terjebak diminta alamat berulang-
+      // ulang kalau memang tidak lengkap-lengkap.
+      const alamatSebelumnya = this.cache.addressTextOf(conversationId) ?? '';
+      const alamatGabungan = [alamatSebelumnya, teksG].filter((s) => s.trim()).join('\n');
+      if (alamatGabungan.trim()) this.cache.setAddressText(conversationId, alamatGabungan);
+      const alamatSudahLengkap = adaAlamatLengkap(alamatGabungan);
+      const patokanSudahDitanya = (asks['patokan'] ?? 0) >= 1;
+      if (!alamatSudahLengkap && !patokanSudahDitanya) {
+        return pilih('patokan', kalimatPatokan);
+      }
+      const kalimatClosing = (
+        metodeTransfer ? oc.orderFunnelClosingTransfer : oc.orderFunnelClosingCod
+      ) ?? '';
+      return pilih('closing', kalimatClosing, false, true);
+      // <<< ANGGA
     }
     // Invariant Bossfren: metode TIDAK PERNAH ditanya sebelum total tersodor —
     // pertanyaan metode selalu satu paket dengan penyodoran {{rincian_tagihan}}.
@@ -2729,6 +2790,27 @@ export class ShippingService {
       globalTokens[nama] = isi;
     }
     if (cfg.orderClosingNote) globalTokens.catatan_sk = cfg.orderClosingNote;
+    // >>> ANGGA — fix (2026-08-06, langkah closing): identitas pembeli +
+    // alamat verbatim utk template closing. Nama & no HP dari data kontak
+    // WhatsApp (Customer — TIDAK PERNAH diketik model, sama filosofinya
+    // dengan {{rekening_transfer}}: anti-fraud/anti-typo). Alamat dari teks
+    // ASLI pelanggan sendiri yang disimpan `funnelDirective` (lihat
+    // `adaAlamatLengkap`) — sengaja TIDAK diparafrase/dirapikan sistem,
+    // risiko salah format alamat (kurir nyasar) lebih berbahaya daripada
+    // tampil apa adanya.
+    try {
+      const convUntukClosing = await this.prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { customer: { select: { name: true, phoneNumber: true } } },
+      });
+      if (convUntukClosing?.customer?.name) globalTokens.nama_pembeli = convUntukClosing.customer.name;
+      if (convUntukClosing?.customer?.phoneNumber) globalTokens.no_hp = convUntukClosing.customer.phoneNumber;
+    } catch {
+      /* identitas pembeli gagal dibaca = token itu saja tidak tersedia, bukan macet total */
+    }
+    const alamatTersimpan = this.cache.addressTextOf(conversationId);
+    if (alamatTersimpan) globalTokens.alamat_lengkap = alamatTersimpan;
+    // <<< ANGGA
 
     // Bridge-validasi (v1.1 §12.2-8): kutipan giliran ini dihitung dari ASUMSI
     // order berjalan → balasan yang menyebut harga/total WAJIB menyebut nama
@@ -3376,6 +3458,8 @@ export const NAMA_TOKEN_CADANGAN = new Set([
   'diskon_barang', 'total_transfer_nego', 'total_cod_nego',
   'rincian_tagihan', // >>> ANGGA — S2 (2026-08-05) <<<
   'estimasi_tiba', // >>> ANGGA — Q-Chain v3 (2026-08-05) <<<
+  // >>> ANGGA — fix (2026-08-06, langkah closing) <<<
+  'daftar_produk_harga', 'nama_pembeli', 'no_hp', 'alamat_lengkap',
 ]);
 
 /**
@@ -3468,6 +3552,14 @@ export function buildPriceTokens(q: ShippingQuote): Record<string, string> {
   }
   if (q.matchedItems.length) {
     tokens.rincian_order = q.matchedItems.map((m) => `${m.qty} pcs ${m.name}`).join(', ');
+    // >>> ANGGA — fix (2026-08-06, langkah closing): "Produk: X 💰 Harga: RpY"
+    // per barang, dipakai template `orderFunnelClosingCod/Transfer` —
+    // BUKAN {{rincian_tagihan}} (itu blok rekap perkalian+total, closing
+    // cuma perlu daftar produk+harga satuan, pola CS asli Bossfren).
+    tokens.daftar_produk_harga = q.matchedItems
+      .map((m) => `Produk: ${m.name} 💰 Harga: Rp${formatIdr(m.unitPrice)}`)
+      .join('\n');
+    // <<< ANGGA
   }
   tokens.subtotal_barang = `Rp${formatIdr(q.goodsTotal)}`;
   tokens.ongkir = `Rp${formatIdr(q.shippingFee)}`;

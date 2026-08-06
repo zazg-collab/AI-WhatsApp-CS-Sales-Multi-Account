@@ -437,6 +437,30 @@ export class ShippingQuoteCache {
   }
   // <<< ANGGA
 
+  // >>> ANGGA — fix (2026-08-06, ketok Bossfren "harusnya ini sesi klosing
+  // bukan malah nanya lagi"): teks alamat lengkap yang pelanggan KETIK
+  // SENDIRI (verbatim, TIDAK diparafrase/dirapikan sistem) — dipakai (a)
+  // menentukan apakah patokan masih wajib ditanya (`adaAlamatLengkap` di
+  // shipping.service.ts) dan (b) sebagai nilai `{{alamat_lengkap}}` di
+  // template closing. Disimpan terpisah dari `store`/quote cache karena
+  // umurnya beda: alamat tetap relevan sepanjang sesi order ini walau
+  // kutipan ongkir sempat di-reset (ganti qty/metode bayar dsb).
+  private readonly addressTexts = new Map<string, string>();
+
+  setAddressText(conversationId: string, text: string): void {
+    this.addressTexts.set(conversationId, text);
+    while (this.addressTexts.size > MAX_QUOTE_ENTRIES) {
+      const oldest = this.addressTexts.keys().next().value;
+      if (oldest === undefined) break;
+      this.addressTexts.delete(oldest);
+    }
+  }
+
+  addressTextOf(conversationId: string): string | null {
+    return this.addressTexts.get(conversationId) ?? null;
+  }
+  // <<< ANGGA
+
   /** Tandai kutipan giliran ini hasil ASUMSI (default-ke-terbaru / agregat). */
   setAssumed(conversationId: string, productNames: string[], aggregate: boolean): void {
     this.assumeds.set(conversationId, { productNames, aggregate, at: Date.now() });

@@ -68,6 +68,10 @@ const OC = {
   // + patokan sekaligus, beda per metode bayar.
   orderFunnelAskLandmarkCod: 'boleh diinfokan alamat lengkapnya dan dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏☺️',
   orderFunnelAskLandmarkTransfer: 'silakan info alamat lengkapnya dan cantumkan patokan rumahnya ya kak. kemudian untuk menyelesaikan pembayaran silakan transfer ke salah satu rekening berikut ini:\n{{rekening_transfer}}\njika sudah menyelesaikan pembayaran mohon konfirmasi bukti pembayarannya ya, terima kasih 😊',
+  // >>> ANGGA — fix (2026-08-06, ketok Bossfren "harusnya ini sesi klosing
+  // bukan malah nanya lagi"): langkah closing (tujuan akhir funnel).
+  orderFunnelClosingCod: 'Terimakasih kak konfirmasinya. Berikut data pesanannya ya :\n{{daftar_produk_harga}}\n📍 Formulir Pemesanan:\nNama: {{nama_pembeli}}\nNo HP: {{no_hp}}\nAlamat: {{alamat_lengkap}}\n\n{{catatan_sk}}',
+  orderFunnelClosingTransfer: 'Terimakasih kak konfirmasinya. Berikut data pesanannya ya :\n{{daftar_produk_harga}}\n📍 Formulir Pemesanan:\nNama: {{nama_pembeli}}\nNo HP: {{no_hp}}\nAlamat: {{alamat_lengkap}}\n\nJika sudah menyelesaikan pembayaran mohon konfirmasi bukti pembayarannya, terimakasih 😊',
   // <<< ANGGA
 };
 // <<< ANGGA
@@ -167,6 +171,12 @@ interface Opts {
   offers?: any[];
   lastCompleted?: any[];
   // <<< ANGGA
+  // >>> ANGGA — fix (2026-08-06, langkah closing): identitas kontak WA
+  // dipakai {{nama_pembeli}}/{{no_hp}}. Default meniru REPLAY laporan
+  // Bossfren ("Fatih" / "6285722193049") supaya tes closing tidak perlu
+  // mengulang boilerplate ini setiap kali.
+  customer?: { name: string | null; phoneNumber: string | null };
+  // <<< ANGGA
 }
 
 function harness(opts: Opts = {}) {
@@ -174,12 +184,14 @@ function harness(opts: Opts = {}) {
   const products = opts.products ?? [GOLOK, BEDOG];
   const extract = opts.extract ?? { kota: null, items: [] };
   const text = opts.lastCustomerText ?? 'halo kak';
+  const customer = opts.customer ?? { name: 'Fatih', phoneNumber: '6285722193049' };
 
   const prisma: any = {
     conversation: {
       findUnique: jest.fn().mockResolvedValue({
         bot: { language: 'id' },
         messages: [{ senderType: 'customer', content: text }],
+        customer,
       }),
     },
     message: { findFirst: jest.fn().mockResolvedValue({ id: 'm1', content: text }) },
@@ -216,15 +228,20 @@ function harness(opts: Opts = {}) {
   (svc as unknown as { orderLog: unknown }).orderLog = orderLog;
   const notifications = { send: jest.fn() };
   (svc as unknown as { notifications: unknown }).notifications = notifications;
-  return { svc, prisma, settings, provider, mengantar, cache, orderLog, notifications, cfg };
+  return { svc, prisma, settings, provider, mengantar, cache, orderLog, notifications, cfg, customer };
 }
 
 function pesanBaru(h: ReturnType<typeof harness>, id: string, text: string) {
   h.prisma.message.findFirst.mockResolvedValue({ id, content: text });
+  // >>> ANGGA — fix (2026-08-06, langkah closing): pertahankan `customer`
+  // yang sudah dipasang harness() — tanpa ini giliran ke-2/3+ kehilangan
+  // identitas kontak WA dan {{nama_pembeli}}/{{no_hp}} balik kosong.
   h.prisma.conversation.findUnique.mockResolvedValue({
     bot: { language: 'id' },
     messages: [{ senderType: 'customer', content: text }],
+    customer: h.customer,
   });
+  // <<< ANGGA
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2487,6 +2504,101 @@ describe('GERBANG PAKEM — jawaban FRASA (≥ 2 kata) dinilai UTUH, bukan kata 
     // kandidat palsu (persis pola laporan nyata "Kab. Kebumen ngaco").
     expect(res.status).toBe('ok');
     expect(res.quote.city).toBe('BANYUMAS');
+  });
+});
+// <<< ANGGA
+
+// >>> ANGGA — fix (2026-08-06, REPLAY LIVE laporan Bossfren "Fatih"/"COD Bedog
+// Betekok ke Sandubaya, Mataram, NTB"): begitu pelanggan MENJAWAB kalimat
+// gabungan v3.1 ("boleh diinfokan alamat lengkapnya dan dicantumkan patokan
+// rumahnya...") dengan alamat lengkap (nama jalan + nomor rumah SUDAH ada —
+// persis contoh nyata "Jl. Pejanggik No. 45"), langkah PATOKAN tidak punya
+// "lulus" — giliran BERIKUTNYA SELALU balik mengulang PERSIS pertanyaan yang
+// sama, bukan lanjut closing. Ketok Bossfren: *"kalau udah dijawab alamat
+// lengkap patokan opsional. kecuali tidak ada nomer rumah atau nama jalan
+// wajib tanyakan patokan"* + *"harusnya setelah udah kasih alamat lengkap /
+// patokan jika diperlukan. sesi jawaban AI berikutnya adalah konklusi..."*.
+describe('Langkah CLOSING (2026-08-06, ketok Bossfren "harusnya ini sesi klosing bukan malah nanya lagi")', () => {
+  it('alamat SUDAH ada nama jalan + nomor rumah (persis REPLAY "Jl. Pejanggik No. 45") -> patokan OPSIONAL, giliran ini LANGSUNG closing (bukan mengulang pertanyaan alamat/patokan)', async () => {
+    const h = harness({
+      lastCustomerText:
+        'Jalan: Jl. Pejanggik No. 45 Kelurahan: Pejanggik Kecamatan: Mataram Kota: Mataram Provinsi: Nusa Tenggara Barat (NTB) Kode Pos: 83127',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-bedog', name: 'Bedog Betekok', qty: 1 }], { qtyPasti: true })],
+      oc: { orderClosingNote: 'CATATAN SK TEST' },
+    });
+    // Giliran sebelumnya: metode COD sudah terjawab + kalimat gabungan
+    // total+patokan (v3.1) sudah tersodor sekali (step 'total', BUKAN step
+    // 'patokan' terpisah — combined ask itu direkam di bawah step 'total').
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1, metode_terjawab: 1, metode_cod: 1 });
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('ok');
+
+    const grounding = await h.svc.getGroundingText('c1');
+    // Pra-fix: grounding mengulang PERSIS "boleh diinfokan alamat lengkapnya
+    // dan dicantumkan patokan..." lagi (bug yang dilaporkan).
+    expect(grounding).not.toContain('boleh diinfokan alamat lengkapnya dan dicantumkan patokan');
+    expect(grounding).toContain('Terimakasih kak konfirmasinya');
+    expect(grounding).toContain('JANGAN bertanya apa pun lagi soal alamat/patokan/metode bayar');
+
+    const draft =
+      'Terimakasih kak konfirmasinya. Berikut data pesanannya ya :\n{{daftar_produk_harga}}\n📍 Formulir Pemesanan:\nNama: {{nama_pembeli}}\nNo HP: {{no_hp}}\nAlamat: {{alamat_lengkap}}\n\n{{catatan_sk}}';
+    const out = await h.svc.resolvePriceTokens('c1', draft);
+    expect(out.ok).toBe(true);
+    expect(out.text).toContain('Produk: Bedog Betekok 💰 Harga: Rp139.000');
+    expect(out.text).toContain('Nama: Fatih');
+    expect(out.text).toContain('No HP: 6285722193049');
+    // Alamat dikutip APA ADANYA (ketok Bossfren) — TIDAK diparafrase/dirapikan.
+    expect(out.text).toContain('Alamat: Jalan: Jl. Pejanggik No. 45');
+    expect(out.text).toContain('CATATAN SK TEST');
+  });
+
+  it('metode TRANSFER: closing BUKAN {{catatan_sk}} — melainkan permintaan konfirmasi bukti pembayaran', async () => {
+    const h = harness({
+      lastCustomerText: 'Jl. Merdeka No. 12, Kelurahan X, Kecamatan Y, Kota Mataram, NTB',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-bedog', name: 'Bedog Betekok', qty: 1 }], { qtyPasti: true })],
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1, metode_terjawab: 1, metode_transfer: 1 });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('Terimakasih kak konfirmasinya');
+    expect(grounding).toContain('konfirmasi bukti pembayarannya');
+    expect(grounding).not.toContain('{{catatan_sk}}');
+
+    const draft =
+      'Terimakasih kak konfirmasinya. Berikut data pesanannya ya :\n{{daftar_produk_harga}}\n📍 Formulir Pemesanan:\nNama: {{nama_pembeli}}\nNo HP: {{no_hp}}\nAlamat: {{alamat_lengkap}}\n\nJika sudah menyelesaikan pembayaran mohon konfirmasi bukti pembayarannya, terimakasih 😊';
+    const out = await h.svc.resolvePriceTokens('c1', draft);
+    expect(out.ok).toBe(true);
+    expect(out.text).toContain('Produk: Bedog Betekok 💰 Harga: Rp139.000');
+    expect(out.text).toContain('konfirmasi bukti pembayarannya');
+  });
+
+  it('alamat TANPA nama jalan/nomor rumah -> patokan tetap WAJIB ditanya (SEKALI); giliran berikutnya lanjut CLOSING apa pun isinya (tidak nanya berulang-ulang)', async () => {
+    const h = harness({
+      lastCustomerText: 'Kelurahan Pejanggik, Kecamatan Mataram, Kota Mataram, NTB',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-bedog', name: 'Bedog Betekok', qty: 1 }], { qtyPasti: true })],
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1, metode_terjawab: 1, metode_cod: 1 });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    let grounding = await h.svc.getGroundingText('c1');
+    // Belum ada nama jalan/nomor rumah -> patokan MASIH wajib ditanya.
+    expect(grounding).toContain(
+      'boleh diinfokan alamat lengkapnya dan dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏☺️',
+    );
+
+    // Giliran berikutnya: pelanggan jawab patokan tapi TETAP tidak menyebut
+    // nama jalan/nomor rumah -> TIDAK diulang lagi (sudah pernah ditanya
+    // sekali) -> lanjut closing.
+    pesanBaru(h, 'm2', 'deket kantor pos situ aja alamatnya kak, gak ada nama jalannya');
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({
+      total: 1, metode_terjawab: 1, metode_cod: 1, patokan: 1,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).not.toContain('boleh diinfokan alamat lengkapnya dan dicantumkan patokan');
+    expect(grounding).toContain('Terimakasih kak konfirmasinya');
   });
 });
 // <<< ANGGA

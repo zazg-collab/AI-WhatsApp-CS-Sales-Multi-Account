@@ -781,6 +781,22 @@ export const SHIPPING_FUNNEL_TOTAL = {
     `SALES-FLOW RULE — HARD REQUIREMENT: the order data is complete. PRESENT THE TOTAL NOW by placing the {{rincian_tagihan}} placeholder on its own line (do NOT narrate the block), then end your reply with the following question VERBATIM: "${kalimat}" — no translation, no rephrasing. Violations are HELD by the system.`,
 };
 
+// >>> ANGGA — fix (2026-08-06, ketok Bossfren "harusnya ini sesi klosing
+// bukan malah nanya lagi"): dulu tidak ada langkah closing sama sekali —
+// begitu alamat+patokan terjawab, sistem TERUS mengulang pertanyaan patokan
+// yang sama selamanya (tidak ada tempat lain untuk "lulus" ke). Langkah baru
+// ini KHUSUS menutup pesanan — beda dari SHIPPING_FUNNEL_DIRECTIVE/TOTAL
+// (dua-duanya kalimat wajibnya berupa PERTANYAAN); closing wajibnya berupa
+// KONFIRMASI PESANAN (data pembeli + catatan), bukan pertanyaan — jadi
+// framing instruksinya sengaja dibedakan, bukan dipaksakan lewat "kalimat
+// tanya" yang keliru.
+export const SHIPPING_FUNNEL_CLOSING = {
+  id: (kalimat: string) =>
+    `ATURAN ALUR PENJUALAN — PERINGATAN KERAS, WAJIB DITAATI: alamat & metode bayar SUDAH lengkap, pesanan SUDAH final — JANGAN bertanya apa pun lagi soal alamat/patokan/metode bayar. TUTUP percakapan ini dengan mengonfirmasi pesanan memakai teks berikut PERSIS APA ADANYA sebagai isi balasanmu (boleh menambah sapaan singkat di depan, tapi badan & urutan barisnya harus SAMA PERSIS): "${kalimat}" — jangan diterjemahkan/disingkat/diparafrase.`,
+  en: (kalimat: string) =>
+    `SALES-FLOW RULE — HARD REQUIREMENT: address & payment method are COMPLETE, the order is FINAL — do NOT ask about address/landmark/payment again. CLOSE this conversation by confirming the order using the following text VERBATIM as your reply body (a short greeting before it is fine, but the body and line order must match exactly): "${kalimat}" — no translation, no shortening, no paraphrasing.`,
+};
+
 // >>> ANGGA — GERBANG PAKEM (2026-08-06, insiden "Kab. Purwokerto ngaco"):
 // tangga minta-kecamatan/provinsi DULU cuma prompt bebas ("minta KECAMATAN-
 // nya") — model boleh mengarang kalimat sendiri, dan sekali lagi mengarang

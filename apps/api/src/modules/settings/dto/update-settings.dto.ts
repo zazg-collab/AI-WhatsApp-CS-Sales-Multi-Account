@@ -299,6 +299,14 @@ class OrderContextSettingsDto {
 
   @IsOptional() @IsString()
   orderFunnelAskLandmarkTransfer?: string;
+
+  // >>> ANGGA — fix (2026-08-06, ketok Bossfren "harusnya ini sesi klosing
+  // bukan malah nanya lagi"): langkah closing (tujuan akhir funnel).
+  @IsOptional() @IsString()
+  orderFunnelClosingCod?: string;
+
+  @IsOptional() @IsString()
+  orderFunnelClosingTransfer?: string;
   // <<< ANGGA
 }
 // <<< ANGGA

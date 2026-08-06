@@ -301,6 +301,11 @@ export class SettingsService {
         // alamat lengkap + patokan sekaligus, beda kalimat per metode bayar.
         orderFunnelAskLandmarkCod: (this.config.get<string>('ORDER_FUNNEL_ASK_LANDMARK_COD') ?? 'boleh diinfokan alamat lengkapnya dan dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏☺️').trim(),
         orderFunnelAskLandmarkTransfer: (this.config.get<string>('ORDER_FUNNEL_ASK_LANDMARK_TRANSFER') ?? 'silakan info alamat lengkapnya dan cantumkan patokan rumahnya ya kak. kemudian untuk menyelesaikan pembayaran silakan transfer ke salah satu rekening berikut ini:\n{{rekening_transfer}}\njika sudah menyelesaikan pembayaran mohon konfirmasi bukti pembayarannya ya, terima kasih 😊').trim(),
+        // >>> ANGGA — fix (2026-08-06, ketok Bossfren "harusnya ini sesi
+        // klosing bukan malah nanya lagi"): langkah CLOSING — tujuan akhir
+        // funnel, dijalankan sekali alamat+metode bayar sudah didapat.
+        orderFunnelClosingCod: (this.config.get<string>('ORDER_FUNNEL_CLOSING_COD') ?? 'Terimakasih kak konfirmasinya. Berikut data pesanannya ya :\n{{daftar_produk_harga}}\n📍 Formulir Pemesanan:\nNama: {{nama_pembeli}}\nNo HP: {{no_hp}}\nAlamat: {{alamat_lengkap}}\n\n{{catatan_sk}}').trim(),
+        orderFunnelClosingTransfer: (this.config.get<string>('ORDER_FUNNEL_CLOSING_TRANSFER') ?? 'Terimakasih kak konfirmasinya. Berikut data pesanannya ya :\n{{daftar_produk_harga}}\n📍 Formulir Pemesanan:\nNama: {{nama_pembeli}}\nNo HP: {{no_hp}}\nAlamat: {{alamat_lengkap}}\n\nJika sudah menyelesaikan pembayaran mohon konfirmasi bukti pembayarannya, terimakasih 😊').trim(),
         // <<< ANGGA
       },
       // <<< ANGGA (Order Context)
