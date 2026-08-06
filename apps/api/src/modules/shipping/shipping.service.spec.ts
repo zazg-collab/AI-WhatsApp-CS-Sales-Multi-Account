@@ -438,7 +438,19 @@ describe('ANGGA — jawaban pelanggan dipetakan ke pilihan yang tadi ditawarkan'
     extract: { kota: 'Bogor', items: [{ nama: 'Golok Cordova', qty: 1 }] },
   };
 
-  it('"kab bogor" → langsung dihitung, TANPA pencarian alamat kedua', async () => {
+  // >>> ANGGA — koreksi 2026-08-06 (audit lanjutan #4, permintaan Bossfren
+  // "daripada bikin gerbang mending nyari literal, no drama, gak bikin
+  // misleading"): gerbang lama (`pendingTujuan` dicocokkan TANPA cari ulang)
+  // dicabut — giliran balasan SEKARANG SELALU cari ulang ke API (sumber
+  // kebenaran selalu segar, tidak pernah pasrah ke daftar basi giliran
+  // lalu; lihat riwayat #40). Trade-off yang disadari & disetujui: SATU
+  // panggilan search tambahan per giliran balasan tertutup (dulu 1x total,
+  // sekarang 2x) — harga latensi kecil demi tidak pernah lagi ketahuan
+  // "mencocokkan ke sesuatu yang bisa jadi sudah basi". Pemilihan Kota vs
+  // Kab tetap benar: `sempitkanJawaban` mencocokkan jawaban ke `CITY_NAME_SI`
+  // milik kandidat yang BARU SAJA dikembalikan pencarian ulang ini, bukan ke
+  // daftar lama.
+  it('"kab bogor" → dicari ULANG ke API (bukan lagi gerbang ke daftar lama), tetap dikutip benar via cocok CITY_NAME_SI', async () => {
     const h = harness(bogorDua);
     expect((await h.svc.quoteForConversation('c1')).status).toBe('ambiguous');
     expect(h.mengantar.searchAddress).toHaveBeenCalledTimes(1);
@@ -450,7 +462,7 @@ describe('ANGGA — jawaban pelanggan dipetakan ke pilihan yang tadi ditawarkan'
     });
     const res: any = await h.svc.quoteForConversation('c1');
     expect(res.status).toBe('ok');
-    expect(h.mengantar.searchAddress).toHaveBeenCalledTimes(1); // tidak bertambah
+    expect(h.mengantar.searchAddress).toHaveBeenCalledTimes(2); // cari ulang, disengaja
     expect(h.mengantar.estimate).toHaveBeenCalledWith(
       expect.objectContaining({ destinationId: 'kab-bgr' }),
     );

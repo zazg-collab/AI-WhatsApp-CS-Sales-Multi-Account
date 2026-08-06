@@ -2,7 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { MessageStatus, SenderType } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
-import { OrderContextSettings } from '../settings/settings.types';
+import { OrderContextSettings, ShippingSettings } from '../settings/settings.types';
 import { NotificationsService } from '../../notifications/notifications.service'; // >>> ANGGA — addendum v2 P2 <<<
 import { AiProviderService } from '../ai/ai-provider.service';
 import { tokenizeForMatch, scoreProductMatch } from '../products/products.util';
@@ -1327,65 +1327,30 @@ export class ShippingService {
     };
     // <<< ANGGA
 
-    // >>> ANGGA — tangga 1 (jawaban): kalau giliran sebelumnya bot menawarkan
-    // pilihan tertutup dan pesan ini memilih salah satunya, langsung pakai
-    // destination_id yang sudah disimpan. Ini dijalankan SEBELUM pencarian
-    // ulang justru karena pencarian ulang-lah yang gagal untuk teks jawaban
-    // ("Kota Bogor" tidak pernah cocok dengan CITY_NAME "BOGOR").
-    const pendingTujuan = this.cache.pending(conversationId);
-    const dipilih = pilihKandidat(pendingTujuan, lastCustomerText);
-    if (dipilih) {
-      turnViaPilihan = true; // >>> ANGGA — Q-Chain fix (insiden "banyumas kak") <<<
-      this.cache.clearPending(conversationId);
-      this.cache.resetAsks(conversationId);
-      this.cache.reset(conversationId);
-      // >>> ANGGA — koreksi 2026-08-06 (insiden "Purwokertonya mana ya kak?"
-      // ditanya ULANG): ingat istilah yang memicu pertanyaan tujuan ini ->
-      // hasil pilihannya, supaya kalau pelanggan menyebut istilah yang sama
-      // lagi nanti (mis. sesudah sempat pindah ke tujuan lain), jawabannya
-      // langsung dipakai TANPA tanya ulang. Lihat komentar di
-      // `ShippingQuoteCache.resolvedTerms`.
-      const istilahTujuan = (extract.city ?? '').trim().toLowerCase();
-      if (istilahTujuan) {
-        this.cache.rememberDestinationTerm(conversationId, istilahTujuan, dipilih, cfg.quoteCacheTtlMs);
-      }
-      // >>> ANGGA — koreksi 2026-08-06 (audit lanjutan, REPLAY insiden nyata
-      // "sandubaya"/"purwokerto" bolak-balik, laporan Bossfren): `istilahTujuan`
-      // di atas cuma menyimpan istilah dari HASIL EKSTRAKSI LLM giliran ini
-      // (`extract.city`) — kalau ekstraktor menormalkan balik ke nama kota
-      // yang LEBIH LUAS (mis. "Mataram") padahal pelanggan menjawab pakai
-      // nama yang LEBIH SPESIFIK ("Sandubaya"), istilah spesifik itu tidak
-      // pernah tersimpan. Nanti kalau pelanggan pindah tujuan lalu balik lagi
-      // menyebut istilah SPESIFIK itu ("...jadinya ke sandubaya aja deh"),
-      // recall MISS → sistem cari ulang dari nol "sandubaya" SENDIRIAN (tanpa
-      // "mataram") → gampang jatuh ambigu lagi (persis insiden nyata). Fix:
-      // ingat JUGA di bawah kata-kata jawaban pelanggan sendiri yang memang
-      // dipakai `pilihKandidat` buat mencocokkan kandidat ini (irisan kata
-      // jawaban & label kandidat) — supaya istilah luas MAUPUN istilah
-      // spesifik dua-duanya langsung ketemu tanpa cari ulang.
-      const kataLabelDipilih = new Set(kata(dipilih.label));
-      for (const w of kata(lastCustomerText)) {
-        if (w.length < 4) continue; // buang kata pendek generik ("di", "ke", "kab")
-        if (STOPWORDS_LOKASI_GENERIK.has(w)) continue; // >>> ANGGA — koreksi lanjutan #2 <<<
-        if (kataLabelDipilih.has(w)) {
-          this.cache.rememberDestinationTerm(conversationId, w, dipilih, cfg.quoteCacheTtlMs);
-        }
-      }
-      // <<< ANGGA
-      const hasil = await this.quoteUntukTujuan(dipilih, items);
-      return finalize(hasil);
-    }
-    // >>> ANGGA — P0 (2026-08-05): jawaban yang MENYEMPITKAN tapi belum
-    // tunggal ("yang lampung kak" mengenai 2 kandidat Lampung) → subset itu
-    // jadi pertanyaan TERTUTUP berikutnya, bukan diabaikan lalu mencari ulang.
-    if (pendingTujuan.length > 1) {
-      const subset = kandidatCocok(pendingTujuan, lastCustomerText);
-      if (subset.length > 1 && subset.length < pendingTujuan.length) {
-        turnViaPilihan = true; // >>> ANGGA — Q-Chain fix <<<
-        return finalize({ status: 'ambiguous', candidates: subset, sempit: true });
-      }
-    }
-    // <<< ANGGA
+    // >>> ANGGA — koreksi 2026-08-06 (audit lanjutan #4, permintaan Bossfren
+    // "daripada bikin gerbang mending nyari literal, no drama, gak bikin
+    // misleading"): gerbang LAMA yang tadinya ada di sini dicabut. Bentuknya
+    // dulu: `pilihKandidat`/`kandidatCocok` dicocokkan ke `pendingTujuan` —
+    // daftar kandidat TERSIMPAN dari giliran SEBELUMNYA — TANPA PERNAH
+    // dicek ulang ke API di giliran BALASAN. Itu sumber akar masalah
+    // "Purwokerto Timur" hari ini (lihat riwayat #39): daftar tersimpan bisa
+    // memuat kandidat yang sebetulnya tidak relevan (lolos di ronde
+    // pencarian sebelumnya gara-gara data 50-baris), dan cocok-kata
+    // terhadapnya bisa nyasar.
+    //
+    // Ganti: giliran balasan SEKARANG SELALU turun ke pencarian API ulang di
+    // bawah (`jawabanPolosTujuan`/`quote()`) — sumber kebenaran selalu segar,
+    // tidak pernah pasrah ke daftar basi. Begitu hasil pencarian ULANG itu
+    // masih ambigu (>1 kandidat), BARU `pilihKandidat`/`kandidatCocok`
+    // dipakai lagi — tapi terhadap kandidat yang BARU SAJA dikembalikan API
+    // giliran INI (lihat `sempitkanJawaban`, dipanggil di setiap titik
+    // `ambiguous` di bawah), bukan terhadap sisa giliran sebelumnya. Fungsi
+    // cocok-katanya tetap dipertahankan (perlu — bandingkan komentar
+    // `sempitkanJawaban`, dicoba dulu literal search ke `CITY_NAME_SI` tapi
+    // API Mengantar TERBUKTI live 2026-08-05 balik NOL baris untuk keyword
+    // ber-prefiks "kota"/"kabupaten", jadi tidak bisa jadi PARAMETER
+    // pencarian — cuma DIPINDAH supaya selalu memilih di antara data segar,
+    // bukan menggantikan pencarian ulang.
 
     // >>> ANGGA — AUDIT TOTAL (2026-08-05, insiden "ongkir ke purwokerto?"
     // dijawab data MATARAM Rp50.000): kalau ekstraksi GAGAL (LLM error/JSON
@@ -1591,7 +1556,7 @@ export class ShippingService {
             // jendela lebih pendek (yang cuma akan melebarkan ambiguitas
             // lagi, bukan mempersempit).
             turnViaPilihan = true;
-            return finalize({
+            const ambigF: ShippingResult = {
               status: 'ambiguous',
               sempit: true,
               candidates: urutF.map((c) => ({
@@ -1600,7 +1565,8 @@ export class ShippingService {
                 label: labelKandidat(c, urutF),
                 destinationId: c.ids[0],
               })),
-            });
+            };
+            return finalize(await this.sempitkanJawaban(ambigF, lastCustomerText, items, conversationId, cfg));
           }
           // Jendela ini nol hasil (bukan ambigu, benar-benar tak ketemu) —
           // lanjut coba jendela yang lebih pendek berikutnya.
@@ -1687,7 +1653,7 @@ export class ShippingService {
           return finalize(await this.quoteUntukTujuan(pilihanMenang, items));
         }
         turnViaPilihan = true;
-        return finalize({
+        const ambigC: ShippingResult = {
           status: 'ambiguous',
           sempit: true,
           candidates: urut.map((c) => ({
@@ -1696,7 +1662,8 @@ export class ShippingService {
             label: labelKandidat(c, urut),
             destinationId: c.ids[0],
           })),
-        });
+        };
+        return finalize(await this.sempitkanJawaban(ambigC, lastCustomerText, items, conversationId, cfg));
       }
       }
     }
@@ -1753,7 +1720,63 @@ export class ShippingService {
     // >>> ANGGA — P4: provinsi hasil ekstraksi ikut sebagai saringan.
     const result = await this.quote({ keyword: city, items, provinsi: extract.province });
     // <<< ANGGA
-    return finalize(result);
+    const sempitD = await this.sempitkanJawaban(result, lastCustomerText, items, conversationId, cfg);
+    if (sempitD !== result) turnViaPilihan = true;
+    return finalize(sempitD);
+  }
+
+  /**
+   * >>> ANGGA — koreksi 2026-08-06 (audit lanjutan #4, pengganti gerbang
+   * `pendingTujuan` yang dicabut di `quoteForConversation`): dipanggil di
+   * SETIAP titik yang baru saja menghasilkan `status: 'ambiguous'` dari
+   * pencarian API yang SEGAR giliran ini (bukan daftar basi giliran lalu).
+   * Kalau kandidatnya masih >1, coba cocokkan jawaban pelanggan
+   * (`lastCustomerText`) ke `CITY_NAME_SI` (`label`) milik kandidat-kandidat
+   * yang BARU SAJA dikembalikan API — bukan literal parameter pencarian
+   * (sudah dibuktikan live 2026-08-05 di `quote()`: keyword ber-prefiks
+   * "kota"/"kabupaten" balik NOL baris dari API Mengantar, jadi tidak bisa
+   * jadi bahan SEARCH), tapi bahan MEMILIH di antara hasil segar yang sudah
+   * ada di tangan. Cocok tunggal → langsung dihitung (setara Q-Chain
+   * "jawaban atas pertanyaan tertutup"); cocok >1 tapi menyempit → pertanyaan
+   * tertutup dari subset (P0 2026-08-05, "yang lampung kak"); tidak cocok
+   * sama sekali → `result` dikembalikan APA ADANYA (referensi sama,
+   * dipakai pemanggil untuk tahu tidak ada yang berubah).
+   */
+  private async sempitkanJawaban(
+    result: ShippingResult,
+    lastCustomerText: string,
+    items: ExtractedItem[],
+    conversationId: string,
+    cfg: ShippingSettings,
+  ): Promise<ShippingResult> {
+    if (result.status !== 'ambiguous' || !result.candidates?.length) return result;
+
+    const tunggal = pilihKandidat(result.candidates, lastCustomerText);
+    if (tunggal) {
+      this.cache.clearPending(conversationId);
+      this.cache.resetAsks(conversationId);
+      this.cache.reset(conversationId);
+      // Ingat istilah jawaban pelanggan sendiri -> hasil ini, sama seperti
+      // gerbang lama — supaya topik yang sama nanti (sesudah sempat pindah
+      // ke tujuan lain lalu balik lagi) langsung ketemu tanpa cari ulang.
+      const kataLabelDipilih = new Set(kata(tunggal.label));
+      for (const w of kata(lastCustomerText)) {
+        if (w.length < 4) continue; // buang kata pendek generik ("di", "ke", "kab")
+        if (STOPWORDS_LOKASI_GENERIK.has(w)) continue;
+        if (kataLabelDipilih.has(w)) {
+          this.cache.rememberDestinationTerm(conversationId, w, tunggal, cfg.quoteCacheTtlMs);
+        }
+      }
+      return this.quoteUntukTujuan(tunggal, items);
+    }
+
+    if (result.candidates.length > 1) {
+      const subset = kandidatCocok(result.candidates, lastCustomerText);
+      if (subset.length > 1 && subset.length < result.candidates.length) {
+        return { ...result, candidates: subset, sempit: true };
+      }
+    }
+    return result;
   }
 
   /**
