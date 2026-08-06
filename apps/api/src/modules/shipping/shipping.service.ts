@@ -1382,83 +1382,117 @@ export class ShippingService {
       // nama desa "X" di kabupaten lain). Kalau frasa utuh nol hasil (bukan
       // ambigu — benar-benar tak ketemu), baru fallback ke kata satu-satu. <<<
       if (kataJawaban.length > 1) {
-        const frasaGabungan = kataJawaban.join(' ');
         const kotaKonteksF = (extract.city ?? '').trim().toLowerCase();
-        const cobaFrasa = [
-          ...(kotaKonteksF && kotaKonteksF !== frasaGabungan && !kotaKonteksF.includes(frasaGabungan)
-            ? [`${frasaGabungan} ${kotaKonteksF}`]
-            : []),
-          frasaGabungan,
-        ];
-        // >>> ANGGA — fix latensi (2026-08-06, tindak lanjut laporan Bossfren
-        // "kumat lagi"): dulu `cobaFrasa` dicoba SATU-SATU berurutan (await
-        // lalu break kalau ketemu) — sampai 2 round-trip jaringan BERANTAI utk
-        // satu giliran. Kandidatnya independen (bukan hasil satu bergantung
-        // yang lain), jadi ditembak PARALEL sekaligus — prioritas urutan asli
-        // (kombinasi+kota didahulukan atas frasa polos) tetap dijaga lewat
-        // `.find` pada array hasil yang urutannya presis mengikuti `cobaFrasa`
-        // (Promise.all menjaga indeks, BUKAN kecepatan siapa duluan selesai).
-        // Memangkas latensi giliran ini jadi ~1 round-trip alih-alih 2. <<<
-        const hasilF = await Promise.all(
-          cobaFrasa.map((kw) => this.mengantar.searchAddress(terapkanAlias(kw, cfg.destinationAliases))),
+        // >>> ANGGA — fix (2026-08-06, REPLAY LIVE lanjutan "purwokerto timur
+        // kakakku", laporan Bossfren "ngulang dari awal ni"): fix sebelumnya
+        // di sini cuma coba SATU frasa (semua kataJawaban digabung persis).
+        // Begitu ada kata KETIGA yang lolos filter stopword (honorifik
+        // berimbuhan spt "kakakku" — BUKAN "kakak" polos yang baru saja
+        // ditambahkan ke daftar, dan pasti akan selalu ada variasi baru
+        // berikutnya), frasa 3-kata itu TIDAK PERNAH cocok PERSIS ke nama
+        // kecamatan manapun (yang cuma 2 kata, "PURWOKERTO TIMUR") -> jatuh
+        // ke loop kata-per-kata lama -> ULANG bug asli ("purwokerto"
+        // sendirian menyeret kelurahan tak terkait). AKAR masalahnya BUKAN
+        // kurang lengkapnya daftar kata pengisi (whack-a-mole tanpa ujung —
+        // pelanggan selalu bisa menulis honorifik/imbuhan baru) — jadi
+        // solusinya JANGAN andalkan daftar kata sama sekali di titik ini:
+        // coba SEMUA JENDELA panjang kata (mulai dari frasa paling spesifik/
+        // semua-kata, mengecil dengan membuang kata BELAKANG dulu — pola
+        // bicara asli "lokasi lalu honorifik" di kedua insiden nyata; plus
+        // satu percobaan buang kata DEPAN untuk jaga-jaga honorifik di
+        // depan), dan biarkan DATA ALAMAT ASLI (exact-match `levelKecocokan`
+        // via `resolveDestination`) yang menentukan potongan mana yang
+        // sungguh nama tempat — bukan kita menebak kata mana yang "bukan
+        // lokasi". Semua jendela + variannya ditembak SEKALIGUS paralel
+        // (bukan berurutan per jendela, menyambung fix latensi sebelumnya)
+        // — makin banyak kata yang lolos filter cuma menambah jumlah
+        // panggilan PARALEL, BUKAN latensi maupun rantai kegagalan baru. <<<
+        const jendelaKata: string[][] = [];
+        for (let panjang = kataJawaban.length; panjang >= 2; panjang--) {
+          jendelaKata.push(kataJawaban.slice(0, panjang));
+        }
+        if (kataJawaban.length === 3) jendelaKata.push(kataJawaban.slice(1, 3));
+
+        const rencanaJendela = jendelaKata.map((kataF) => {
+          const frasaF = kataF.join(' ');
+          const cobaF = [
+            ...(kotaKonteksF && kotaKonteksF !== frasaF && !kotaKonteksF.includes(frasaF)
+              ? [`${frasaF} ${kotaKonteksF}`]
+              : []),
+            frasaF,
+          ];
+          return { kataF, frasaF, cobaF };
+        });
+        const semuaKeywordJendela = Array.from(new Set(rencanaJendela.flatMap((r) => r.cobaF)));
+        const hasilJendela = new Map<string, MengantarAddress[] | null>();
+        await Promise.all(
+          semuaKeywordJendela.map(async (kw) => {
+            hasilJendela.set(kw, await this.mengantar.searchAddress(terapkanAlias(kw, cfg.destinationAliases)));
+          }),
         );
-        const rowsF = hasilF.find((r) => r?.length) ?? null;
-        // <<< ANGGA
-        let urutF = rowsF?.length ? resolveDestination(rowsF, frasaGabungan) : [];
-        if (urutF.length) {
-          const provJawabF = normalisasiProvinsi(extract.province ?? '');
-          if (provJawabF) {
-            const saringF = urutF.filter((c) => normalisasiProvinsi(c.province) === provJawabF);
-            if (saringF.length) urutF = saringF;
-          }
-          if (urutF.length > 1 && extract.city) {
-            const kotaKF = extract.city.trim().toLowerCase();
-            if (kotaKF) {
-              const silangF = urutF.filter((c) => `${c.city} ${c.cityLabel}`.toLowerCase().includes(kotaKF));
-              if (silangF.length) urutF = silangF;
+
+        for (const { frasaF, cobaF } of rencanaJendela) {
+          const rowsF = cobaF.map((kw) => hasilJendela.get(kw) ?? null).find((r) => r?.length) ?? null;
+          let urutF = rowsF?.length ? resolveDestination(rowsF, frasaF) : [];
+          if (urutF.length) {
+            const provJawabF = normalisasiProvinsi(extract.province ?? '');
+            if (provJawabF) {
+              const saringF = urutF.filter((c) => normalisasiProvinsi(c.province) === provJawabF);
+              if (saringF.length) urutF = saringF;
             }
-          }
-          if (kandidatDominan(urutF)) {
-            turnViaPilihan = true;
-            this.cache.clearPending(conversationId);
-            this.cache.resetAsks(conversationId);
-            this.cache.reset(conversationId);
-            const menangF = urutF[0];
-            const pilihanMenangF: DestinationChoice = {
-              city: menangF.city,
-              province: menangF.province,
-              label: '',
-              destinationId: menangF.ids[0],
-            };
-            if (!STOPWORDS_LOKASI_GENERIK.has(frasaGabungan)) {
-              this.cache.rememberDestinationTerm(conversationId, frasaGabungan, pilihanMenangF, cfg.quoteCacheTtlMs);
-            }
-            for (const wF of kataJawaban) {
-              if (!STOPWORDS_LOKASI_GENERIK.has(wF)) {
-                this.cache.rememberDestinationTerm(conversationId, wF, pilihanMenangF, cfg.quoteCacheTtlMs);
+            if (urutF.length > 1 && extract.city) {
+              const kotaKF = extract.city.trim().toLowerCase();
+              if (kotaKF) {
+                const silangF = urutF.filter((c) => `${c.city} ${c.cityLabel}`.toLowerCase().includes(kotaKF));
+                if (silangF.length) urutF = silangF;
               }
             }
-            return finalize(await this.quoteUntukTujuan(pilihanMenangF, items));
+            if (kandidatDominan(urutF)) {
+              turnViaPilihan = true;
+              this.cache.clearPending(conversationId);
+              this.cache.resetAsks(conversationId);
+              this.cache.reset(conversationId);
+              const menangF = urutF[0];
+              const pilihanMenangF: DestinationChoice = {
+                city: menangF.city,
+                province: menangF.province,
+                label: '',
+                destinationId: menangF.ids[0],
+              };
+              if (!STOPWORDS_LOKASI_GENERIK.has(frasaF)) {
+                this.cache.rememberDestinationTerm(conversationId, frasaF, pilihanMenangF, cfg.quoteCacheTtlMs);
+              }
+              for (const wF of kataJawaban) {
+                if (!STOPWORDS_LOKASI_GENERIK.has(wF)) {
+                  this.cache.rememberDestinationTerm(conversationId, wF, pilihanMenangF, cfg.quoteCacheTtlMs);
+                }
+              }
+              return finalize(await this.quoteUntukTujuan(pilihanMenangF, items));
+            }
+            // Jendela ini KETEMU tapi masih >1 kandidat sungguhan — jendela
+            // yang lebih panjang selalu SAMA ATAU LEBIH presisi daripada
+            // jendela yang lebih pendek (lebih banyak kata = syarat cocok
+            // lebih ketat), jadi begitu SATU jendela membuahkan hasil,
+            // langsung tanya tertutup dari situ — JANGAN diteruskan ke
+            // jendela lebih pendek (yang cuma akan melebarkan ambiguitas
+            // lagi, bukan mempersempit).
+            turnViaPilihan = true;
+            return finalize({
+              status: 'ambiguous',
+              sempit: true,
+              candidates: urutF.map((c) => ({
+                city: c.city,
+                province: c.province,
+                label: labelKandidat(c, urutF),
+                destinationId: c.ids[0],
+              })),
+            });
           }
-          // Frasa utuh KETEMU tapi masih >1 kandidat sungguhan — ini sudah
-          // subset paling presisi yang bisa dihasilkan (frasa 2 kata lebih
-          // spesifik daripada kata tunggal manapun di bawah), jadi langsung
-          // tanya tertutup dari sini, JANGAN diteruskan ke fallback per-kata
-          // (yang cuma akan melebarkan ambiguitas lagi, bukan mempersempit).
-          turnViaPilihan = true;
-          return finalize({
-            status: 'ambiguous',
-            sempit: true,
-            candidates: urutF.map((c) => ({
-              city: c.city,
-              province: c.province,
-              label: labelKandidat(c, urutF),
-              destinationId: c.ids[0],
-            })),
-          });
+          // Jendela ini nol hasil (bukan ambigu, benar-benar tak ketemu) —
+          // lanjut coba jendela yang lebih pendek berikutnya.
         }
-        // Frasa utuh NOL hasil (bukan ambigu, benar-benar tak ketemu) —
-        // lanjut ke fallback kata satu-satu di bawah apa adanya.
+        // Semua jendela (dan variannya) nol hasil — lanjut ke fallback kata
+        // satu-satu di bawah apa adanya.
       }
       // <<< ANGGA
       for (const w of kataJawaban) {

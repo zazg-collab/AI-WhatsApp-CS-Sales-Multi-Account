@@ -2385,7 +2385,7 @@ const ROWS_PURWOKERTO_TIMUR_REAL = [
   { _id: 'r8', PROVINCE_NAME: 'JAWA TIMUR', CITY_NAME: 'BLITAR', CITY_NAME_SI: 'Kab. Blitar', DISTRICT_NAME: 'SRENGAT', SUBDISTRICT_NAME: 'PURWOKERTO' },
 ];
 
-describe('GERBANG PAKEM — jawaban FRASA (≥2 kata) dinilai UTUH, bukan kata per kata (REPLAY widget debug Bossfren "purwokerto timur")', () => {
+describe('GERBANG PAKEM — jawaban FRASA (≥ 2 kata) dinilai UTUH, bukan kata per kata (REPLAY widget debug Bossfren "purwokerto timur")', () => {
   it('"purwokerto timur kak" setelah ronde 1 ambigu -> resolve LANGSUNG ke Kab. Banyumas, TIDAK bertanya lagi', async () => {
     const h = harness({
       lastCustomerText: 'ongkir ke purwokerto berapa kak?',
@@ -2406,6 +2406,46 @@ describe('GERBANG PAKEM — jawaban FRASA (≥2 kata) dinilai UTUH, bukan kata p
     // Blitar ikut kebawa jadi kandidat palsu karena penilaian cuma pakai
     // kata "purwokerto"). Pasca-fix: resolve bersih, TIDAK bertanya lagi.
     expect(res2.status).toBe('ok');
+    expect(res2.quote.city).toBe('BANYUMAS');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('mau ambil berapa pcs kak?'); // funnel lanjut, bukan tanya lokasi lagi
+  });
+
+  // >>> ANGGA — REPLAY LIVE (2026-08-06, laporan Bossfren "ngulang dari awal
+  // ni"): kata KETIGA yang lolos filter honorifik ("kakakku" — bentuk
+  // berimbuhan "-ku", BUKAN "kakak" polos yang baru saja ditambahkan ke
+  // stopword) mematahkan fix frasa-utuh (blok di atas) — frasa gabungan 3
+  // kata ("purwokerto timur kakakku") TIDAK PERNAH cocok PERSIS ke nama
+  // kecamatan manapun (yang cuma 2 kata), jatuh ke loop kata-per-kata lama,
+  // ULANG bug ASLI ("purwokerto" sendirian menyeret kelurahan Lamongan/
+  // Kediri/Blitar yang tak terkait sebagai kandidat palsu). Ini BUKTI KONKRET
+  // kenapa menambal daftar kata pengisi satu-satu ('kakak' -> masih jebol di
+  // 'kakakku') adalah whack-a-mole tanpa ujung — fix generalnya: JENDELA
+  // panjang kata (coba frasa utuh, lalu makin pendek BUANG kata belakang/
+  // depan), biarkan DATA ALAMAT ASLI yang menentukan potongan mana yang
+  // valid, bukan daftar kata yang harus terus di-maintain reaktif. <<<
+  it('"purwokerto timur kakakku" (honorifik berimbuhan BELUM di-filter) -> tetap resolve LANGSUNG ke Kab. Banyumas via jendela panjang kata', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke purwokerto berapa kak?',
+      extract: { kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_PURWOKERTO,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    pesanBaru(h, 'm2', 'purwokerto timur kakakku');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Purwokerto Timur', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    // Mock meniru API nyata: apa pun keyword yang memuat "purwokerto" balik
+    // 8 baris asli (5 relevan Kab. Banyumas + 3 kelurahan tak terkait) —
+    // sengaja TIDAK dibedakan per frasa, supaya tesnya membuktikan bahwa
+    // PENILAIAN LOKAL (resolveDestination per jendela), bukan mock-nya, yang
+    // menyaring kandidat yang benar.
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) =>
+      /purwokerto/i.test(kw) ? ROWS_PURWOKERTO_TIMUR_REAL : [],
+    );
+    const res2: any = await h.svc.quoteForConversation('c1');
+    expect(res2.status).toBe('ok'); // pra-fix jendela: 'ambiguous' lagi (Lamongan/Kediri/Blitar ikut nyasar)
     expect(res2.quote.city).toBe('BANYUMAS');
     const grounding = await h.svc.getGroundingText('c1');
     expect(grounding).toContain('mau ambil berapa pcs kak?'); // funnel lanjut, bukan tanya lokasi lagi
