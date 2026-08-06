@@ -400,6 +400,24 @@ function kata(teks: string): string[] {
     .map((w) => (w === 'kabupaten' ? 'kab' : w));
 }
 
+// >>> ANGGA — koreksi 2026-08-06 (audit lanjutan #2, temuan Bossfren): kata
+// generik administratif/arah-mata-angin/nama-provinsi SERING nempel di label
+// kandidat tujuan (mis. "Kab. Banyumas, JAWA TENGAH") tapi bukan pembeda
+// lokasi sama sekali. Kalau kata seumum ini ikut disimpan sebagai kunci
+// recall tujuan (`rememberDestinationTerm`), ia bisa nyantol ke obrolan LAIN
+// yang kebetulan menyebutnya lalu diam-diam memakai tujuan LAMA yang salah —
+// bukan cuma nanya ulang, bisa nyodorin ongkir yang KELIRU tanpa ketahuan,
+// lebih parah dari bug "tanya ulang" yang sedang diperbaiki di sini. Dipakai
+// HANYA untuk menyaring kunci recall (bukan untuk menyaring kata pencarian
+// alamat — pelanggan yang menjawab pakai nama provinsi saja, mis. tangga
+// SHIPPING_GROUNDING_ASK_PROVINCE, tetap harus bisa dicari).
+const STOPWORDS_LOKASI_GENERIK = new Set([
+  'kota', 'kabupaten', 'kab', 'provinsi', 'daerah', 'kecamatan', 'kelurahan', 'desa',
+  'istimewa', 'khusus', 'ibukota', 'kepulauan',
+  'jawa', 'barat', 'tengah', 'timur', 'utara', 'selatan',
+  'nusa', 'tenggara', 'sumatera', 'sumatra', 'kalimantan', 'sulawesi', 'papua', 'maluku', 'bali',
+]);
+
 /**
  * >>> ANGGA — tangga 1 balik arah: memetakan JAWABAN pelanggan ke salah satu
  * pilihan yang tadi ditawarkan, tanpa mencari ulang ke Mengantar.
@@ -1260,6 +1278,7 @@ export class ShippingService {
       const kataLabelDipilih = new Set(kata(dipilih.label));
       for (const w of kata(lastCustomerText)) {
         if (w.length < 4) continue; // buang kata pendek generik ("di", "ke", "kab")
+        if (STOPWORDS_LOKASI_GENERIK.has(w)) continue; // >>> ANGGA — koreksi lanjutan #2 <<<
         if (kataLabelDipilih.has(w)) {
           this.cache.rememberDestinationTerm(conversationId, w, dipilih, cfg.quoteCacheTtlMs);
         }
@@ -1394,7 +1413,9 @@ export class ShippingService {
           // "SANDUBAYA (SANDUJAYA)" ("sandubaya"). Kalau cuma "mataram" yang
           // diingat, balik ke "sandubaya" nanti cari ulang dari nol dan jatuh
           // ambigu lagi — persis laporan Bossfren. Ingat JUGA di bawah `w`.
-          this.cache.rememberDestinationTerm(conversationId, w, pilihanMenang, cfg.quoteCacheTtlMs);
+          if (!STOPWORDS_LOKASI_GENERIK.has(w)) { // >>> ANGGA — koreksi lanjutan #2 <<<
+            this.cache.rememberDestinationTerm(conversationId, w, pilihanMenang, cfg.quoteCacheTtlMs);
+          }
           // <<< ANGGA
           return finalize(await this.quoteUntukTujuan(pilihanMenang, items));
         }

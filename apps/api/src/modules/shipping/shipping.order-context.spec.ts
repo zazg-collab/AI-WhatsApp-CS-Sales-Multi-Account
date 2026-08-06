@@ -1320,6 +1320,72 @@ describe('Memori tujuan istilah SPESIFIK — REPLAY laporan Bossfren "sandubaya/
 });
 // <<< ANGGA
 
+// >>> ANGGA — koreksi 2026-08-06 (audit lanjutan #2, pertanyaan tajam
+// Bossfren: "kenapa gak digabung jawaban1+jawaban2 aja jadi kuncinya?").
+// Jawabannya bukan "gabung", tapi pertanyaan itu nyenggol lubang beneran di
+// fix #29: kalau kata jawaban pelanggan yang cocok kandidat kebetulan kata
+// generik administratif/provinsi (mis. "jawa"/"tengah" nempel di label "Kab.
+// Banyumas, JAWA TENGAH"), fix #29 (tanpa penyaring) akan ikut menyimpannya
+// sebagai kunci recall — bahaya kalau percakapan LAIN nanti kebetulan
+// menyebut kata seumum itu, bisa diam-diam kepakai tujuan LAMA yang salah
+// (bukan cuma nanya ulang — bisa nyodorin ongkir KELIRU tanpa ketahuan).
+describe('Penyaring kunci recall — kata generik provinsi/arah TIDAK ikut diingat (audit lanjutan #2)', () => {
+  it('jawaban "banyumas kak, yang di jawa tengah itu" -> "banyumas" diingat, "jawa"/"tengah" TIDAK', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke purwokerto berapa kak?',
+      extract: { kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_PURWOKERTO, // 'Kab. Banyumas, JAWA TENGAH' vs 'Kab. Lampung Tengah, LAMPUNG'
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    pesanBaru(h, 'm2', 'banyumas kak, yang di jawa tengah itu');
+    const res2: any = await h.svc.quoteForConversation('c1');
+    expect(res2.status).toBe('ok');
+    expect(res2.quote.city).toBe('BANYUMAS');
+
+    // Kata spesifik & distingtif TETAP diingat (memenuhi fix #29).
+    expect(h.cache.recallDestinationTerm('c1', 'banyumas')).not.toBeNull();
+    // Kata generik provinsi/arah TIDAK ikut diingat (fix lubang #29 ini).
+    expect(h.cache.recallDestinationTerm('c1', 'jawa')).toBeNull();
+    expect(h.cache.recallDestinationTerm('c1', 'tengah')).toBeNull();
+  });
+
+  // >>> ANGGA — catatan jujur: jalur `jawabanPolosTujuan` (jawaban kecamatan,
+  // "sandubaya kak") berhenti di kata jawaban PERTAMA yang berhasil resolve
+  // (short-circuit) -- kata sesudahnya tidak pernah dicoba sama sekali, jadi
+  // tidak lewat penyaring STOPWORDS ataupun tidak, ia memang tidak pernah
+  // sampai diingat. Tes ini HANYA membuktikan kata SPESIFIK yang benar-benar
+  // dipakai resolve (di posisi pertama) tetap diingat seperti mestinya --
+  // bukti utama penyaring stopword ada di tes pertama di atas (jalur
+  // `dipilih`, yang menyisir SEMUA kata jawaban, bukan cuma kata pertama).
+  it('jalur jawaban-kecamatan ("sandubaya mataram"): kata spesifik yang berhasil resolve tetap diingat', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Mataram', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    pesanBaru(h, 'm2', 'sandubaya kak');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Mataram', provinsi: 'Nusa Tenggara Barat', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) => {
+      if (/sandubaya/i.test(kw))
+        return [
+          { _id: 'd-sdb1', PROVINCE_NAME: 'NUSA TENGGARA BARAT (NTB)', CITY_NAME: 'MATARAM', CITY_NAME_SI: 'Kota Mataram', DISTRICT_NAME: 'SANDUBAYA (SANDUJAYA)', SUBDISTRICT_NAME: 'DASAN CERMEN' },
+        ];
+      return ROWS_MATARAM;
+    });
+    const res2: any = await h.svc.quoteForConversation('c1');
+    expect(res2.status).toBe('ok');
+    expect(res2.quote.city).toBe('MATARAM');
+
+    expect(h.cache.recallDestinationTerm('c1', 'sandubaya')).not.toBeNull();
+  });
+});
+// <<< ANGGA
+
 // >>> ANGGA — koreksi 2026-08-06 (REPLAY insiden "GSM Naga Merah" nyasar ke
 // order "bedog betekok, bedog sicepot"): grounding kutipan penuh wajib
 // menyebut nama barang order SECARA EKSPLISIT & WAJIB (bukan cuma via token
