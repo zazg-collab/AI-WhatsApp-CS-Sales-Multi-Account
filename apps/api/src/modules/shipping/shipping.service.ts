@@ -2217,9 +2217,16 @@ export class ShippingService {
         }
         if (ronde > 1) {
           // >>> ANGGA — GERBANG PAKEM: giliran minta-kecamatan wajib benar-benar
-          // memintanya (insiden "sandubaya": draft malah "konfirmasi ke admin"). <<<
-          this.setExpectGiliran(conversationId, 'minta_kecamatan', 'kecamatan');
-          return t(SHIPPING_GROUNDING_ASK_DISTRICT, lang);
+          // memintanya (insiden "sandubaya": draft malah "konfirmasi ke admin").
+          // Fix 2026-08-06 (insiden "Kab. Purwokerto ngaco"): kalimatnya kini
+          // DIRAKIT DARI result.keyword (fakta sah) dan DIKUNCI verbatim lewat
+          // funnelExpect — sebelumnya cuma kata bebas "kecamatan", model bebas
+          // mengarang nama kabupaten palsu di sekelilingnya. <<<
+          const nmD = (result.keyword ?? '').trim() || 'tujuannya';
+          const rapiD = nmD.charAt(0).toUpperCase() + nmD.slice(1);
+          const kalimatD = `${rapiD}nya itu kecamatan apa ya kak?`;
+          this.setExpectGiliran(conversationId, 'minta_kecamatan', kalimatD);
+          return t(SHIPPING_GROUNDING_ASK_DISTRICT, lang)(kalimatD);
         }
         // >>> ANGGA — GERBANG PAKEM (2026-08-05): pertanyaan terbuka tujuan
         // (format ketok) jadi KEWAJIBAN gerbang, bukan sekadar prompt.
@@ -2242,11 +2249,25 @@ export class ShippingService {
         // tangga 1 langsung kecamatan, tangga 2 tawarkan provinsi/kota besar.
         const ronde = this.cache.askCount(conversationId);
         if (ronde > MAX_DESTINATION_ASKS) return t(SHIPPING_GROUNDING_DESTINATION_STUCK, lang);
-        if (ronde > 1) return t(SHIPPING_GROUNDING_ASK_PROVINCE, lang);
+        const nmP = (result.keyword ?? '').trim() || 'tujuannya';
+        const rapiP = nmP.charAt(0).toUpperCase() + nmP.slice(1);
+        if (ronde > 1) {
+          // >>> ANGGA — GERBANG PAKEM (2026-08-06, insiden "Kab. Purwokerto
+          // ngaco"): tangga ini SEBELUMNYA tidak punya funnelExpect SAMA
+          // SEKALI (satu-satunya tangga tujuan yang ungated) — model bebas
+          // menulis apa pun termasuk mengarang nama kabupaten. Kini dikunci
+          // verbatim sama seperti tangga-tangga tujuan lainnya. <<<
+          const kalimatP = `${rapiP}nya itu di provinsi apa atau deket kota besar mana ya kak?`;
+          this.setExpectGiliran(conversationId, 'minta_provinsi', kalimatP);
+          return t(SHIPPING_GROUNDING_ASK_PROVINCE, lang)(kalimatP);
+        }
         // >>> ANGGA — GERBANG PAKEM: wajib benar-benar meminta kecamatan,
-        // bukan menggantung "konfirmasi ke admin" (insiden "sandubaya"). <<<
-        this.setExpectGiliran(conversationId, 'minta_kecamatan', 'kecamatan');
-        return t(SHIPPING_GROUNDING_NEED_DETAIL, lang);
+        // bukan menggantung "konfirmasi ke admin" (insiden "sandubaya").
+        // Fix 2026-08-06: kalimat dirakit dari result.keyword dan dikunci
+        // verbatim (lihat catatan di atas). <<<
+        const kalimatD2 = `${rapiP}nya itu kecamatan apa ya kak?`;
+        this.setExpectGiliran(conversationId, 'minta_kecamatan', kalimatD2);
+        return t(SHIPPING_GROUNDING_NEED_DETAIL, lang)(kalimatD2);
       }
       case 'unresolved_items':
         return t(SHIPPING_GROUNDING_UNRESOLVED_ITEMS, lang);

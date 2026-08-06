@@ -1786,17 +1786,26 @@ describe('JAWABAN KECAMATAN — REPLAY "sandubaya kak"', () => {
     expect(grounding).toContain('mau ambil berapa pcs kak?'); // funnel lanjut (viaPilihan)
   });
 
-  it('giliran minta-kecamatan: draft menggantung "konfirmasi ke admin" → DITAHAN; minta kecamatan → sah', async () => {
+  it('giliran minta-kecamatan: draft menggantung "konfirmasi ke admin" → DITAHAN; kalimat terkunci verbatim → sah', async () => {
     const h = harness({
       lastCustomerText: 'ongkir ke mataram nusa tenggara barat berapa kak?',
       extract: { kota: 'Mataram', provinsi: 'Nusa Tenggara Barat', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
       addresses: ROWS_MATARAM,
     });
-    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('need_more_detail');
+    const res: any = await h.svc.quoteForConversation('c1');
+    expect(res.status).toBe('need_more_detail');
     await h.svc.getGroundingText('c1');
     const buruk = await h.svc.resolvePriceTokens('c1', 'Untuk ongkirnya, saya akan bantu konfirmasi dulu ke admin ya kak 🙏');
     expect(buruk.ok).toBe(false);
-    const baik = await h.svc.resolvePriceTokens('c1', 'Boleh sebut kecamatannya kak? biar ongkirnya langsung ketemu 🙏');
+    // >>> ANGGA — fix (2026-08-06, insiden "Kab. Purwokerto ngaco"): tangga
+    // minta-kecamatan DULU cuma butuh substring bebas "kecamatan" di mana
+    // pun (draft "Boleh sebut kecamatannya kak?" lolos) — sekarang kalimat
+    // dikunci VERBATIM (dirakit dari result.keyword) supaya model tidak bisa
+    // mengarang teks bebas di sekelilingnya (lihat setExpectGiliran). <<<
+    const nm = (res.keyword ?? '').trim() || 'tujuannya';
+    const rapi = nm.charAt(0).toUpperCase() + nm.slice(1);
+    const kalimatWajib = `${rapi}nya itu kecamatan apa ya kak?`;
+    const baik = await h.svc.resolvePriceTokens('c1', `Baik kak, ${kalimatWajib}`);
     expect(baik.ok).toBe(true);
   });
 });
@@ -2110,6 +2119,81 @@ describe('Audit grounding #2 — gerbang bridge ASUMSI kini sinkron dengan kondi
     await h.svc.getGroundingText('c1');
     const out = await h.svc.resolvePriceTokens('c1', 'Harga satuannya {{harga_satuan}} kak.');
     expect(out.ok).toBe(false); // obrolan order + assumed + token uang tanpa nama barang → tetap ditahan
+  });
+});
+// <<< ANGGA
+
+// >>> ANGGA — GERBANG PAKEM (2026-08-06, REPLAY laporan Bossfren "Kab.
+// Purwokerto ngaco"): tangga ronde-2 ("Purwokertonya mana ya kak?" dijawab
+// "purwokerto timur kak" tapi masih belum ketemu) SEBELUMNYA cuma prompt
+// bebas "minta KECAMATAN-nya" — model mengarang kabupaten yang TIDAK ADA
+// ("Kab. Purwokerto") demi menyusun pertanyaan tertutup sendiri. Sama seperti
+// tangga ronde-1 (AMBIGUOUS_OPEN), sekarang kalimatnya DIKUNCI verbatim dan
+// ditegakkan funnelExpect — bukan cuma diminta di prompt.
+describe('GERBANG PAKEM — anti-ngarang lokasi tangga LANJUTAN (REPLAY laporan Bossfren "Kab. Purwokerto ngaco")', () => {
+  it('ronde 2 tujuan AMBIGUOUS (belum tunggal, belum sempit): grounding terkunci verbatim, draft yang mengarang kabupaten palsu DITAHAN', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke purwokerto berapa kak?',
+      extract: { kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_PURWOKERTO,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    // Jawaban yang TIDAK mengandung kata lokasi apa pun (beda dari REPLAY nyata
+    // "purwokerto timur kak" yang di harness ini malah cocok subset sempit yang
+    // SUDAH aman) -> jalur jawabanPolosTujuan gagal total, jatuh balik ke
+    // pencarian dasar "purwokerto" -> ambigu dari NOL (bukan subset), ronde 2
+    // -> tangga minta-kecamatan (bukan daftar kandidat).
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    pesanBaru(h, 'm2', 'masih bingung nih kak, gimana ya enaknya');
+    const res2: any = await h.svc.quoteForConversation('c1');
+    expect(res2.status).toBe('ambiguous');
+    expect(res2.sempit).toBeFalsy();
+
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('kecamatan apa ya kak');
+    // Grounding SENDIRI tidak boleh menyodorkan nama kabupaten kandidat mana
+    // pun ke model (dulu prompt cuma bilang "minta KECAMATAN-nya" tanpa
+    // larangan eksplisit ini di tangga lanjutan).
+    expect(grounding).not.toContain('Kab.');
+
+    // Draft ngaco PERSIS insiden nyata Bossfren: menyebut kabupaten yang
+    // TIDAK ADA ("Kab. Purwokerto") sebagai salah satu pilihan tertutup.
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Mohon maaf kak, saya perlu tahu Purwokerto Timur itu di kabupaten mana, apakah di Kab. Banyumas, JAWA TENGAH atau Kab. Purwokerto, JAWA TENGAH? 🙏',
+    );
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toContain('minta_kecamatan');
+  });
+
+  it('ronde 2 tujuan NEED_MORE_DETAIL (tidak ketemu sama sekali): tangga tawar-provinsi SEBELUMNYA sama sekali TIDAK dikunci — kini ditegakkan juga', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke antahberantah berapa kak?',
+      extract: { kota: 'Antahberantah', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: [], // nol kandidat sama sekali -> need_more_detail
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('need_more_detail');
+
+    pesanBaru(h, 'm2', 'kecamatan antahberantah juga kak, tetep gak ketemu ya?');
+    const res2: any = await h.svc.quoteForConversation('c1');
+    expect(res2.status).toBe('need_more_detail');
+
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain('provinsi apa');
+
+    // Draft yang mengarang nama provinsi/kabupaten dari pengetahuan sendiri
+    // (kelas bug yang sama seperti "Kab. Purwokerto") kini WAJIB ditahan —
+    // pra-fix tangga ini sama sekali tidak punya funnelExpect, jadi apa pun
+    // yang ditulis model lolos begitu saja.
+    const out = await h.svc.resolvePriceTokens(
+      'c1',
+      'Antahberantah itu setahu saya di Provinsi Jawa Tengah ya kak, benar begitu?',
+    );
+    expect(out.ok).toBe(false);
+    expect(out.issues.join(' ')).toContain('minta_provinsi');
   });
 });
 // <<< ANGGA

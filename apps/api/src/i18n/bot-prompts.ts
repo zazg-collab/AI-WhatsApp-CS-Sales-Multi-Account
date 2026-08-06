@@ -746,21 +746,36 @@ export const SHIPPING_FUNNEL_TOTAL = {
     `SALES-FLOW RULE — HARD REQUIREMENT: the order data is complete. PRESENT THE TOTAL NOW by placing the {{rincian_tagihan}} placeholder on its own line (do NOT narrate the block), then end your reply with the following question VERBATIM: "${kalimat}" — no translation, no rephrasing. Violations are HELD by the system.`,
 };
 
+// >>> ANGGA — GERBANG PAKEM (2026-08-06, insiden "Kab. Purwokerto ngaco"):
+// tangga minta-kecamatan/provinsi DULU cuma prompt bebas ("minta KECAMATAN-
+// nya") — model boleh mengarang kalimat sendiri, dan sekali lagi mengarang
+// nama kabupaten yang TIDAK ADA ("Kab. Purwokerto") persis seperti insiden
+// lama "Purwokerto, Banyumas, Jawa Tengah" di atas. Sekarang ketiganya
+// dikunci VERBATIM sama seperti SHIPPING_GROUNDING_AMBIGUOUS_OPEN — kalimat
+// dirakit di kode dari `result.keyword` (fakta yang SAH), bukan dikarang
+// model, dan ditegakkan funnelExpect (lihat setExpectGiliran) — bukan cuma
+// diminta di prompt. Prompt-only TERBUKTI gagal untuk kelas bug ini. <<<
 export const SHIPPING_GROUNDING_NEED_DETAIL = {
-  id: 'DATA ONGKIR: nama daerah yang disebut pelanggan tidak ketemu di data ekspedisi. JANGAN menyebut angka ongkir apa pun, dan JANGAN menebak sendiri daerah itu ada di kabupaten/provinsi mana — sistem belum memastikannya. Minta KECAMATAN-nya — itu yang paling ampuh menemukan lokasinya. Kalau pelanggan terdengar bingung, boleh tawarkan menyebut provinsi atau kota terdekat sebagai gantinya. Jangan menyodorkan daftar panjang.',
-  en: 'SHIPPING DATA: the place the customer mentioned was not found in the carrier data. Do NOT state any shipping cost, and do NOT guess which regency/province it belongs to — the system has not confirmed that. Ask for the DISTRICT (kecamatan) — that resolves the location most reliably. If the customer sounds unsure, offer the province or nearest city instead. Do not dump a long list.',
+  id: (kalimat: string) =>
+    `DATA ONGKIR: nama daerah yang disebut pelanggan tidak ketemu di data ekspedisi. JANGAN menyebut angka ongkir apa pun, dan JANGAN menyebut atau menebak nama kabupaten/kota/kecamatan/provinsi apa pun dari pengetahuanmu sendiri — sistem belum memastikannya, dan mengarang nama daerah (walau terdengar masuk akal) adalah kesalahan fatal yang pernah terjadi. Balasanmu untuk soal ongkir ini = kalimat tanya berikut PERSIS APA ADANYA (boleh menambah SATU sapaan pendek di depannya, tidak lebih): "${kalimat}" — JANGAN diterjemahkan ke bahasa lain, JANGAN diubah kata-katanya, JANGAN ditambah penjelasan atau nama daerah apa pun.`,
+  en: (kalimat: string) =>
+    `SHIPPING DATA: the place the customer mentioned was not found in the carrier data. Do NOT state any shipping cost, and do NOT name or guess any regency/city/district/province from your own knowledge — the system has not confirmed it, and inventing a place name (even a plausible-sounding one) is a fatal mistake that has happened before. Your reply for this shipping question = the following question VERBATIM (you may prepend ONE short greeting, nothing more): "${kalimat}" — do NOT translate it, do NOT rephrase it, do NOT add explanations or any place name.`,
 };
 
 // Tangga 2 — pertanyaan tertutup sudah dicoba tapi tujuannya masih belum pasti.
 export const SHIPPING_GROUNDING_ASK_DISTRICT = {
-  id: 'DATA ONGKIR: tujuan masih belum pasti dan pertanyaan sebelumnya belum terjawab jelas. JANGAN mengulang pertanyaan yang sama. JANGAN menyebut angka ongkir apa pun. Kali ini minta KECAMATAN-nya — sebutkan bahwa itu yang paling cepat memastikan lokasi.',
-  en: 'SHIPPING DATA: the destination is still unresolved and the previous question was not answered clearly. Do NOT repeat the same question. Do NOT state any shipping cost. This time ask for the DISTRICT (kecamatan), noting it is the fastest way to pin the location.',
+  id: (kalimat: string) =>
+    `DATA ONGKIR: tujuan masih belum pasti dan pertanyaan sebelumnya belum terjawab jelas. JANGAN mengulang pertanyaan yang sama. JANGAN menyebut angka ongkir apa pun. JANGAN menyebut nama kabupaten/kota/provinsi kandidat mana pun dari pengetahuanmu sendiri — sistem belum memastikannya. Balasanmu untuk soal ongkir ini = kalimat tanya berikut PERSIS APA ADANYA (boleh menambah SATU sapaan pendek di depannya, tidak lebih): "${kalimat}" — JANGAN diterjemahkan, JANGAN diubah kata-katanya, JANGAN ditambah penjelasan atau nama daerah apa pun.`,
+  en: (kalimat: string) =>
+    `SHIPPING DATA: the destination is still unresolved and the previous question was not answered clearly. Do NOT repeat the same question. Do NOT state any shipping cost. Do NOT name any candidate regency/city/province from your own knowledge — the system has not confirmed it. Your reply for this shipping question = the following question VERBATIM (you may prepend ONE short greeting, nothing more): "${kalimat}" — do NOT translate it, do NOT rephrase it, do NOT add explanations or any place name.`,
 };
 
 // Tangga 2 untuk kasus "tidak ketemu sama sekali" — kecamatan sudah diminta.
 export const SHIPPING_GROUNDING_ASK_PROVINCE = {
-  id: 'DATA ONGKIR: tujuan masih belum pasti walau kecamatan sudah ditanyakan. JANGAN mengulang pertanyaan yang sama. JANGAN menyebut angka ongkir apa pun. Tawarkan cara lain yang lebih gampang: sebutkan PROVINSI atau kota besar terdekat.',
-  en: 'SHIPPING DATA: the destination is still unresolved even after asking for the district. Do NOT repeat the same question. Do NOT state any shipping cost. Offer an easier route instead: ask for the PROVINCE or the nearest major city.',
+  id: (kalimat: string) =>
+    `DATA ONGKIR: tujuan masih belum pasti walau kecamatan sudah ditanyakan. JANGAN mengulang pertanyaan yang sama. JANGAN menyebut angka ongkir apa pun. JANGAN menyebut nama kabupaten/kota/provinsi mana pun dari pengetahuanmu sendiri — sistem belum memastikannya. Balasanmu untuk soal ongkir ini = kalimat tanya berikut PERSIS APA ADANYA (boleh menambah SATU sapaan pendek di depannya, tidak lebih): "${kalimat}" — JANGAN diterjemahkan, JANGAN diubah kata-katanya, JANGAN ditambah penjelasan atau nama daerah apa pun.`,
+  en: (kalimat: string) =>
+    `SHIPPING DATA: the destination is still unresolved even after asking for the district. Do NOT repeat the same question. Do NOT state any shipping cost. Do NOT name any regency/city/province from your own knowledge — the system has not confirmed it. Your reply for this shipping question = the following question VERBATIM (you may prepend ONE short greeting, nothing more): "${kalimat}" — do NOT translate it, do NOT rephrase it, do NOT add explanations or any place name.`,
 };
 
 // Tangga 3 — sudah dua kali bertanya, tetap buntu. Serahkan ke manusia.
