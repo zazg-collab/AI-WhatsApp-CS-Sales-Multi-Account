@@ -1253,6 +1253,73 @@ describe('Memori tujuan lintas-topik — REPLAY "Purwokertonya mana ya kak?" dit
 });
 // <<< ANGGA
 
+// >>> ANGGA — koreksi 2026-08-06 (audit lanjutan, REPLAY laporan Bossfren
+// langsung: "sandubaya udah disebutin dan udah info ongkirnya, tapi pas aku
+// ganti ke purwokerto trus ganti ke sandubaya eh malah jawabnya ngaco...
+// nanya lagi sandubaya mana... malah muter lagi"). BEDA dari REPLAY
+// "Purwokertonya mana ya kak?" di atas: di situ pelanggan balik pakai
+// istilah LUAS yang SAMA PERSIS ("purwokerto") dengan yang tersimpan. Di
+// sini pelanggan disambiguasi via istilah SPESIFIK ("sandubaya") yang
+// ekstraktor petakan balik jadi istilah LUAS ("mataram") saat disimpan
+// (lihat komentar "JAWABAN KECAMATAN" / "insiden sandubaya kak" di kode) —
+// lalu pelanggan balik lagi memakai istilah SPESIFIK itu sendiri, yang
+// SEBELUM fix ini TIDAK PERNAH tersimpan sebagai kunci recall.
+describe('Memori tujuan istilah SPESIFIK — REPLAY laporan Bossfren "sandubaya/purwokerto bolak-balik"', () => {
+  it('balik ke istilah SPESIFIK ("sandubaya") yang dipakai menjawab disambiguasi (bukan istilah luas "mataram" yang tersimpan) -> langsung dipakai, TIDAK tanya ulang', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke mataram berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Mataram', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+      addresses: ROWS_MATARAM,
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ambiguous');
+
+    // Giliran 2: jawab "sandubaya kak" -> resolve via GABUNG DUA JAWABAN.
+    // Ekstraktor memetakan balik ke kota="Mataram" (persis insiden nyata).
+    pesanBaru(h, 'm2', 'sandubaya kak');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Mataram', provinsi: 'Nusa Tenggara Barat', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) => {
+      if (/^sandubaya mataram$/i.test(kw))
+        return [
+          { _id: 'd-sdb1', PROVINCE_NAME: 'NUSA TENGGARA BARAT (NTB)', CITY_NAME: 'MATARAM', CITY_NAME_SI: 'Kota Mataram', DISTRICT_NAME: 'SANDUBAYA (SANDUJAYA)', SUBDISTRICT_NAME: 'DASAN CERMEN' },
+          { _id: 'd-sdb2', PROVINCE_NAME: 'NUSA TENGGARA BARAT (NTB)', CITY_NAME: 'MATARAM', CITY_NAME_SI: 'Kota Mataram', DISTRICT_NAME: 'SANDUBAYA (SANDUJAYA)', SUBDISTRICT_NAME: 'BERTAIS' },
+        ];
+      if (/^sandubaya$/i.test(kw)) return []; // persis data API nyata: kata polos sendirian = 0 baris
+      if (/purwokerto/i.test(kw))
+        return [{ _id: 'd-pwt', PROVINCE_NAME: 'JAWA TENGAH', CITY_NAME: 'BANYUMAS', CITY_NAME_SI: 'Kab. Banyumas', DISTRICT_NAME: 'PURWOKERTO TIMUR', SUBDISTRICT_NAME: 'X' }];
+      return ROWS_MATARAM;
+    });
+    const res2: any = await h.svc.quoteForConversation('c1');
+    expect(res2.status).toBe('ok');
+    expect(res2.quote.city).toBe('MATARAM');
+
+    // Giliran 3: pelanggan pindah ke tujuan lain sama sekali (Purwokerto).
+    pesanBaru(h, 'm3', 'waduh mahal ya, kalau gitu ke purwokerto aja berapa kak?');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Purwokerto', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    const res3: any = await h.svc.quoteForConversation('c1');
+    expect(res3.status).toBe('ok');
+    expect(res3.quote.city).not.toBe('MATARAM');
+
+    // Giliran 4: balik lagi ke "sandubaya" -- istilah SPESIFIK, BUKAN "mataram"
+    // yang tersimpan di giliran 2. TIDAK boleh tanya ulang / cari ulang dari
+    // nol (yang di data API nyata bakal gagal lagi -- "sandubaya" sendirian
+    // = 0 baris, cuma gabungan "sandubaya mataram" yang presisi).
+    const searchCallsSebelum = (h.mengantar.searchAddress as jest.Mock).mock.calls.length;
+    pesanBaru(h, 'm4', '1 pcs aja kak jadinya ke sandubaya aja deh');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Sandubaya', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    const res4: any = await h.svc.quoteForConversation('c1');
+    expect(res4.status).toBe('ok'); // pra-fix: 'need_more_detail' -> "Sandubayanya mana ya kak?"
+    expect(res4.quote.city).toBe('MATARAM');
+    expect((h.mengantar.searchAddress as jest.Mock).mock.calls.length).toBe(searchCallsSebelum);
+  });
+});
+// <<< ANGGA
+
 // >>> ANGGA — koreksi 2026-08-06 (REPLAY insiden "GSM Naga Merah" nyasar ke
 // order "bedog betekok, bedog sicepot"): grounding kutipan penuh wajib
 // menyebut nama barang order SECARA EKSPLISIT & WAJIB (bukan cuma via token

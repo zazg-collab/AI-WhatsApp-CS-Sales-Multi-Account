@@ -1243,6 +1243,27 @@ export class ShippingService {
       if (istilahTujuan) {
         this.cache.rememberDestinationTerm(conversationId, istilahTujuan, dipilih, cfg.quoteCacheTtlMs);
       }
+      // >>> ANGGA — koreksi 2026-08-06 (audit lanjutan, REPLAY insiden nyata
+      // "sandubaya"/"purwokerto" bolak-balik, laporan Bossfren): `istilahTujuan`
+      // di atas cuma menyimpan istilah dari HASIL EKSTRAKSI LLM giliran ini
+      // (`extract.city`) — kalau ekstraktor menormalkan balik ke nama kota
+      // yang LEBIH LUAS (mis. "Mataram") padahal pelanggan menjawab pakai
+      // nama yang LEBIH SPESIFIK ("Sandubaya"), istilah spesifik itu tidak
+      // pernah tersimpan. Nanti kalau pelanggan pindah tujuan lalu balik lagi
+      // menyebut istilah SPESIFIK itu ("...jadinya ke sandubaya aja deh"),
+      // recall MISS → sistem cari ulang dari nol "sandubaya" SENDIRIAN (tanpa
+      // "mataram") → gampang jatuh ambigu lagi (persis insiden nyata). Fix:
+      // ingat JUGA di bawah kata-kata jawaban pelanggan sendiri yang memang
+      // dipakai `pilihKandidat` buat mencocokkan kandidat ini (irisan kata
+      // jawaban & label kandidat) — supaya istilah luas MAUPUN istilah
+      // spesifik dua-duanya langsung ketemu tanpa cari ulang.
+      const kataLabelDipilih = new Set(kata(dipilih.label));
+      for (const w of kata(lastCustomerText)) {
+        if (w.length < 4) continue; // buang kata pendek generik ("di", "ke", "kab")
+        if (kataLabelDipilih.has(w)) {
+          this.cache.rememberDestinationTerm(conversationId, w, dipilih, cfg.quoteCacheTtlMs);
+        }
+      }
       // <<< ANGGA
       const hasil = await this.quoteUntukTujuan(dipilih, items);
       return finalize(hasil);
@@ -1364,6 +1385,16 @@ export class ShippingService {
           if (kotaKonteks) {
             this.cache.rememberDestinationTerm(conversationId, kotaKonteks, pilihanMenang, cfg.quoteCacheTtlMs);
           }
+          // >>> ANGGA — koreksi 2026-08-06 (audit lanjutan, REPLAY insiden
+          // nyata "sandubaya"/"purwokerto" bolak-balik, laporan Bossfren):
+          // INI JALUR PERSIS insiden aslinya (lihat komentar "JAWABAN
+          // KECAMATAN" di atas) — `kotaKonteks` di sini SELALU istilah LUAS
+          // hasil ekstraksi ("mataram"), sedangkan `w` adalah kata jawaban
+          // pelanggan SENDIRI yang justru berhasil mencocokkan baris
+          // "SANDUBAYA (SANDUJAYA)" ("sandubaya"). Kalau cuma "mataram" yang
+          // diingat, balik ke "sandubaya" nanti cari ulang dari nol dan jatuh
+          // ambigu lagi — persis laporan Bossfren. Ingat JUGA di bawah `w`.
+          this.cache.rememberDestinationTerm(conversationId, w, pilihanMenang, cfg.quoteCacheTtlMs);
           // <<< ANGGA
           return finalize(await this.quoteUntukTujuan(pilihanMenang, items));
         }
