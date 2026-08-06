@@ -295,7 +295,12 @@ export class SettingsService {
         orderFunnelAskQty: (this.config.get<string>('ORDER_FUNNEL_ASK_QTY') ?? 'mau ambil berapa pcs kak?').trim(),
         orderFunnelAskPayment: (this.config.get<string>('ORDER_FUNNEL_ASK_PAYMENT') ?? 'mau diproses COD atau transfer kak? 😊').trim(),
         // >>> ANGGA — Q-Chain v3: patokan rumah (audit transkrip Aluna+Defa).
+        // DEPRECATED sejak v3.1 — fallback saja, lihat settings.types.ts.
         orderFunnelAskLandmark: (this.config.get<string>('ORDER_FUNNEL_ASK_LANDMARK') ?? 'boleh dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏').trim(),
+        // >>> ANGGA — Q-Chain v3.1 (2026-08-06, revisi Bossfren): patokan ->
+        // alamat lengkap + patokan sekaligus, beda kalimat per metode bayar.
+        orderFunnelAskLandmarkCod: (this.config.get<string>('ORDER_FUNNEL_ASK_LANDMARK_COD') ?? 'boleh diinfokan alamat lengkapnya dan dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏☺️').trim(),
+        orderFunnelAskLandmarkTransfer: (this.config.get<string>('ORDER_FUNNEL_ASK_LANDMARK_TRANSFER') ?? 'silakan info alamat lengkapnya dan cantumkan patokan rumahnya ya kak. kemudian untuk menyelesaikan pembayaran silakan transfer ke salah satu rekening berikut ini:\n{{rekening_transfer}}\njika sudah menyelesaikan pembayaran mohon konfirmasi bukti pembayarannya ya, terima kasih 😊').trim(),
         // <<< ANGGA
       },
       // <<< ANGGA (Order Context)

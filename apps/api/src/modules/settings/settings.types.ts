@@ -211,8 +211,27 @@ export interface OrderContextSettings {
   orderFunnelAskQty: string;
   orderFunnelAskPayment: string;
   /** Q-Chain v3 — PATOKAN rumah, ditanya setelah metode bayar terjawab
-   *  (pola tetap Aluna & Defa), sebelum closing. */
+   *  (pola tetap Aluna & Defa), sebelum closing.
+   *  >>> ANGGA — DEPRECATED sejak Q-Chain v3.1 (2026-08-06, revisi Bossfren
+   *  "harusnya gak cuman patokan"): dipertahankan cuma sebagai FALLBACK kalau
+   *  `orderFunnelAskLandmarkCod`/`orderFunnelAskLandmarkTransfer` di bawah
+   *  kosong (mis. deployment lama yang belum sempat diisi ulang dari
+   *  dashboard) — jangan dipakai untuk field baru. <<< */
   orderFunnelAskLandmark: string;
+  /** >>> ANGGA — Q-Chain v3.1 (2026-08-06, revisi Bossfren atas v3): langkah
+   *  PATOKAN direvisi jadi ALAMAT LENGKAP + patokan SEKALIGUS (bukan cuma
+   *  patokan) — temuan lapangan: CS asli selalu minta alamat lengkap juga,
+   *  bukan cuma patokan. Kalimatnya kini BEDA per metode bayar: COD cukup
+   *  alamat+patokan; Transfer TAMBAH instruksi rekening (via penanda
+   *  {{rekening_transfer}} — anti-fraud, nomor tidak pernah diketik model)
+   *  + permintaan konfirmasi bukti pembayaran. Dipilih di `funnelDirective`
+   *  berdasar metode yang terdeteksi/tersimpan (`metode_cod`/
+   *  `metode_transfer`). Boleh memuat penanda {{...}} — funnelExpect kini
+   *  mensubstitusi penanda di `kalimat` sebelum dibandingkan verbatim (lihat
+   *  `resolvePriceTokens`), supaya kalimat wajib yang memuat token tetap bisa
+   *  dikunci persis walau isinya beda tiap kutipan. <<< */
+  orderFunnelAskLandmarkCod: string;
+  orderFunnelAskLandmarkTransfer: string;
 }
 // <<< ANGGA
 

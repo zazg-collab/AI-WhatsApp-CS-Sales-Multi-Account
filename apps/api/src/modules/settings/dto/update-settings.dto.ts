@@ -290,7 +290,15 @@ class OrderContextSettingsDto {
   orderFunnelAskPayment?: string;
 
   @IsOptional() @IsString()
-  orderFunnelAskLandmark?: string; // >>> ANGGA — Q-Chain v3 <<<
+  orderFunnelAskLandmark?: string; // >>> ANGGA — Q-Chain v3, DEPRECATED (fallback) sejak v3.1 <<<
+
+  // >>> ANGGA — Q-Chain v3.1 (2026-08-06, revisi Bossfren): patokan -> alamat
+  // lengkap + patokan, beda kalimat per metode bayar.
+  @IsOptional() @IsString()
+  orderFunnelAskLandmarkCod?: string;
+
+  @IsOptional() @IsString()
+  orderFunnelAskLandmarkTransfer?: string;
   // <<< ANGGA
 }
 // <<< ANGGA

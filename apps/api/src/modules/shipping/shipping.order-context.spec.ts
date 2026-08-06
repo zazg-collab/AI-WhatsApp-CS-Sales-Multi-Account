@@ -64,6 +64,10 @@ const OC = {
   orderFunnelAskQty: 'mau ambil berapa pcs kak?',
   orderFunnelAskPayment: 'mau diproses COD atau transfer kak? 😊',
   orderFunnelAskLandmark: 'boleh dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏',
+  // >>> ANGGA — Q-Chain v3.1 (2026-08-06, revisi Bossfren): alamat lengkap
+  // + patokan sekaligus, beda per metode bayar.
+  orderFunnelAskLandmarkCod: 'boleh diinfokan alamat lengkapnya dan dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏☺️',
+  orderFunnelAskLandmarkTransfer: 'silakan info alamat lengkapnya dan cantumkan patokan rumahnya ya kak. kemudian untuk menyelesaikan pembayaran silakan transfer ke salah satu rekening berikut ini:\n{{rekening_transfer}}\njika sudah menyelesaikan pembayaran mohon konfirmasi bukti pembayarannya ya, terima kasih 😊',
   // <<< ANGGA
 };
 // <<< ANGGA
@@ -1052,6 +1056,62 @@ describe('Q-Chain — funnel pertanyaan berantai (urutan pakem)', () => {
     expect(out.issues.join(' ')).toContain('mengulang rincian total');
   });
 
+  it('Q-Chain v3.1 (revisi Bossfren 2026-08-06): metode COD -> langkah PATOKAN minta ALAMAT LENGKAP sekaligus patokan, bukan patokan doang', async () => {
+    const h = harness({
+      lastCustomerText: 'COD deh kak. beli 2 ya',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }], { qtyPasti: true })],
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1 }); // total sudah pernah tersodor giliran lalu
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1');
+    expect(grounding).toContain(
+      'boleh diinfokan alamat lengkapnya dan dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏☺️',
+    );
+    expect(grounding).not.toContain('{{rekening_transfer}}'); // COD: tidak ada urusan rekening
+
+    const sah = await h.svc.resolvePriceTokens(
+      'c1',
+      'Baik kak, boleh diinfokan alamat lengkapnya dan dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏☺️',
+    );
+    expect(sah.ok).toBe(true);
+
+    // Kalimat PATOKAN versi lama (cuma minta patokan, tanpa minta alamat
+    // lengkap) TIDAK LAGI memenuhi kunci verbatim baru.
+    const tertahan = await h.svc.resolvePriceTokens(
+      'c1',
+      'Baik kak, boleh dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏',
+    );
+    expect(tertahan.ok).toBe(false);
+  });
+
+  it('Q-Chain v3.1 (revisi Bossfren 2026-08-06): metode TRANSFER -> langkah PATOKAN minta alamat lengkap + patokan + rekening + konfirmasi bukti bayar', async () => {
+    const rek = 'BCA 6765556680 a.n Cordova Digital Inovasi';
+    const h = harness({
+      lastCustomerText: 'transfer aja deh kak. beli 2 ya',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 1 }], { qtyPasti: true })],
+      oc: { orderGlobalTokens: { rekening_transfer: rek } },
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1 }); // total sudah pernah tersodor giliran lalu
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1');
+    // Grounding memuat kalimat template APA ADANYA — token rekening BELUM
+    // disubstitusi di tahap ini (baru resolve saat draft model diverifikasi).
+    expect(grounding).toContain('silakan info alamat lengkapnya dan cantumkan patokan rumahnya ya kak');
+    expect(grounding).toContain('{{rekening_transfer}}');
+    expect(grounding).toContain('konfirmasi bukti pembayarannya');
+
+    const draft =
+      'Baik kak, silakan info alamat lengkapnya dan cantumkan patokan rumahnya ya kak. kemudian untuk menyelesaikan pembayaran silakan transfer ke salah satu rekening berikut ini:\n{{rekening_transfer}}\njika sudah menyelesaikan pembayaran mohon konfirmasi bukti pembayarannya ya, terima kasih 😊';
+    const out = await h.svc.resolvePriceTokens('c1', draft);
+    // Kunci verbatim harus disubstitusi token DULU sebelum dibandingkan —
+    // kalau tidak, "{{rekening_transfer}}" literal di kalimat wajib tidak
+    // akan pernah cocok dengan nomor rekening asli yang tersisip di balasan.
+    expect(out.ok).toBe(true);
+    expect(out.text).toContain(rek); // nomor rekening tersisip sistem, bukan diketik model
+  });
+
   it('v3: blok {{rincian_tagihan}} memuat estimasi tiba dari API (estimatedDate)', async () => {
     const h = harness({
       lastCustomerText: 'ongkir ke medan berapa? golok sembelih multifungsi 2 pcs',
@@ -1493,7 +1553,7 @@ describe('Q-Chain fix 2 — REPLAY "mataram dobel": total prematur + teater pros
     expect(grounding).toContain('{{rincian_tagihan}}'); // langkah total: TIDAK disensor
     const out = await h.svc.resolvePriceTokens(
       'c1',
-      'Ini ya kak:\n{{rincian_tagihan}}\nboleh dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏',
+      'Ini ya kak:\n{{rincian_tagihan}}\nboleh diinfokan alamat lengkapnya dan dicantumkan patokan rumahnya dekat apa kak? biar kurir gampang nemuin alamatnya 🙏☺️',
     );
     expect(out.ok).toBe(true);
   });

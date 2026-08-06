@@ -2059,17 +2059,42 @@ export class ShippingService {
     // menjawab pertanyaan metode, MAUPUN menyebutnya duluan ("COD deh kak.
     // beli 2 ya") — supaya bot tidak bebal menanyakan metode yang sudah
     // dijawab. Jejaknya dipersist (`funnel_ask` step `metode_terjawab`).
-    const sebutMetode = /\b(cod|tf)\b|transfer/i.test(teksG);
+    // >>> ANGGA — Q-Chain v3.1 (2026-08-06, revisi Bossfren atas v3 —
+    // "harusnya gak cuman patokan, minta alamat lengkap sekalian, dan kalau
+    // transfer tambahin rekeningnya"): kalimat langkah PATOKAN kini BEDA per
+    // metode bayar, jadi metode yang terdeteksi/pernah dijawab disimpan
+    // eksplisit (bukan cuma boolean "metode_terjawab" seperti sebelumnya) —
+    // supaya giliran BERIKUTNYA (yang teksnya sendiri belum tentu menyebut
+    // cod/transfer lagi) tetap tahu kalimat mana yang wajib dipakai.
+    const isCodNow = /\bcod\b/i.test(teksG);
+    const isTransferNow = /\b(tf|transfer)\b/i.test(teksG);
+    const sebutMetode = isCodNow || isTransferNow;
     const metodeTerjawab = (asks['metode_terjawab'] ?? 0) >= 1 || sebutMetode;
     if (sebutMetode && !(asks['metode_terjawab'] ?? 0)) {
       void this.orderLog.recordFunnelAsk(conversationId, 'metode_terjawab', lastMsgId);
+      void this.orderLog.recordFunnelAsk(conversationId, isCodNow ? 'metode_cod' : 'metode_transfer', lastMsgId);
     }
+    // Giliran INI menang kalau menyebut metode eksplisit; kalau tidak, pakai
+    // yang tersimpan dari giliran sebelumnya (COD didahulukan pada kasus
+    // ambigu langka di mana dua-duanya sempat tersimpan).
+    const metodeCod = isCodNow || (!isTransferNow && (asks['metode_cod'] ?? 0) >= 1);
+    const metodeTransfer = !metodeCod && (isTransferNow || (asks['metode_transfer'] ?? 0) >= 1);
+    // Kalimat baru (alamat lengkap + patokan, +rekening & konfirmasi bukti
+    // untuk transfer) — fallback ke `orderFunnelAskLandmark` lama kalau field
+    // barunya belum diisi (mis. belum sempat dikonfigurasi ulang dari
+    // dashboard) supaya langkah ini TIDAK PERNAH mati gara-gara field kosong.
+    const kalimatPatokan = (
+      metodeTransfer
+        ? oc.orderFunnelAskLandmarkTransfer || oc.orderFunnelAskLandmark
+        : oc.orderFunnelAskLandmarkCod || oc.orderFunnelAskLandmark
+    ) ?? '';
+    // <<< ANGGA
     const totalSudah = (asks['total'] ?? 0) >= 1;
     if (metodeTerjawab) {
       // Metode sudah jelas → TOTAL (kalau belum tersodor) langsung disambung
       // pertanyaan PATOKAN; kalau total sudah pernah tersodor → patokan saja.
-      if (!totalSudah) return pilih('total', oc.orderFunnelAskLandmark, true);
-      return pilih('patokan', oc.orderFunnelAskLandmark);
+      if (!totalSudah) return pilih('total', kalimatPatokan, true);
+      return pilih('patokan', kalimatPatokan);
     }
     // Invariant Bossfren: metode TIDAK PERNAH ditanya sebelum total tersodor —
     // pertanyaan metode selalu satu paket dengan penyodoran {{rincian_tagihan}}.
@@ -2767,9 +2792,23 @@ export class ShippingService {
       if (expectF && msgIdNow && expectF.messageId === msgIdNow) {
         const normF = (s: string) =>
           (s ?? '').toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
-        if (!normF(substituted).includes(normF(expectF.kalimat))) {
+        // >>> ANGGA — fix (2026-08-06, Q-Chain v3.1: kalimat patokan transfer
+        // kini memuat penanda {{rekening_transfer}}): `expectF.kalimat` bisa
+        // memuat penanda {{...}} sejak revisi ini (mis. "...transfer ke
+        // rekening berikut: {{rekening_transfer}}..."). Tanpa substitusi di
+        // sini, perbandingan verbatim akan SELALU gagal — `substituted` sudah
+        // berisi nomor rekening ASLI, sedangkan `expectF.kalimat` masih
+        // literal teks "{{rekening_transfer}}", jadi tidak akan pernah cocok
+        // walau modelnya menulis kalimat yang PERSIS benar. Kalimat wajib
+        // ikut disubstitusi pakai `tokens` yang sama sebelum dibandingkan.
+        const kalimatWajibTersubstitusi = (expectF.kalimat ?? '').replace(
+          /\{\{([a-z_]+)\}\}/gi,
+          (utuh, nama: string) => tokens[nama] ?? utuh,
+        );
+        // <<< ANGGA
+        if (!normF(substituted).includes(normF(kalimatWajibTersubstitusi))) {
           issues.push(
-            `Balasan melanggar alur penjualan wajib — tidak menutup dengan pertanyaan langkah "${expectF.step}". Tulis ulang dan akhiri PERSIS dengan: "${expectF.kalimat}"`,
+            `Balasan melanggar alur penjualan wajib — tidak menutup dengan pertanyaan langkah "${expectF.step}". Tulis ulang dan akhiri PERSIS dengan: "${kalimatWajibTersubstitusi}"`,
           );
         }
         // >>> ANGGA — Q-Chain fix 2 (2026-08-05, insiden "mataram dobel"):
