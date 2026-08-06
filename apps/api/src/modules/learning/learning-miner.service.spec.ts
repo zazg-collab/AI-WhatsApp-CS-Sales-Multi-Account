@@ -72,4 +72,44 @@ describe('LearningMinerService.mineConversation (Sentinel auto-learn)', () => {
     expect(res).toEqual({ knowledge: 0, customerMemory: 0, skipped: 0 });
     expect(prisma.conversation.update).not.toHaveBeenCalled();
   });
+
+  // >>> ANGGA — koreksi 2026-08-06: draft KITA yang ditahan gerbang uang
+  // (pending) atau kedaluwarsa (failed) tidak boleh ikut ditambang jadi
+  // "fakta" knowledge/customer_memory — lihat komentar di learning-miner.service.ts.
+  it('mengecualikan draft KITA yang pending/failed dari transkrip mineConversation (bukan pesan pelanggan)', async () => {
+    prisma.conversation.findUnique.mockResolvedValue({ id: 'c1', learnedAt: null, customerId: 'cu1', bot: { id: 'b1', language: 'id' } });
+    prisma.message.findMany.mockResolvedValue([]);
+    await service.mineConversation('c1');
+    const arg = prisma.message.findMany.mock.calls[0][0];
+    expect(arg.where.OR).toEqual([
+      { senderType: 'customer' },
+      { status: { notIn: ['pending', 'failed'] } },
+    ]);
+  });
+
+  it('mengecualikan draft KITA yang pending/failed dari histori mineCustomerMemory', async () => {
+    prisma.bot.findUnique.mockResolvedValue({ id: 'b1', language: 'id', accounts: [{ id: 'acc1' }] });
+    prisma.customer = { findMany: jest.fn().mockResolvedValue([{ id: 'cu1', name: 'Budi', phoneNumber: '6281' }]) };
+    prisma.message.findMany.mockResolvedValue([]);
+    await service.mineCustomerMemory('b1');
+    const call = prisma.message.findMany.mock.calls.find((c: any) => c[0]?.where?.conversation?.customerId);
+    expect(call).toBeDefined();
+    expect(call[0].where.OR).toEqual([
+      { senderType: 'customer' },
+      { status: { notIn: ['pending', 'failed'] } },
+    ]);
+  });
+
+  it('mengecualikan draft KITA yang pending/failed dari transkrip mineKnowledge (gatherTranscripts)', async () => {
+    prisma.bot.findUnique.mockResolvedValue({ id: 'b1', language: 'id', accounts: [{ id: 'acc1' }] });
+    prisma.message.findMany.mockResolvedValue([]);
+    await service.mineKnowledge('b1');
+    const call = prisma.message.findMany.mock.calls.find((c: any) => c[0]?.where?.conversation?.whatsappAccountId);
+    expect(call).toBeDefined();
+    expect(call[0].where.OR).toEqual([
+      { senderType: 'customer' },
+      { status: { notIn: ['pending', 'failed'] } },
+    ]);
+  });
+  // <<< ANGGA
 });

@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SenderType } from '@sentinel/database';
+import { SenderType, MessageStatus } from '@sentinel/database';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AiProviderService, ChatMessage } from '../ai/ai-provider.service';
 import { logAudit } from '../../common/audit.util';
@@ -152,12 +152,26 @@ export class LearningMinerService {
     const botId = convo.bot.id;
     const lang = convo.bot.language ?? 'en';
 
+    // >>> ANGGA — koreksi 2026-08-06 (temuan audit prompt-builder.service.ts:
+    // pintu kedua buat racun yang sama seperti insiden "{{subtotal_barang}}
+    // berulang" — draft KITA yang ditahan gerbang uang (pending) atau
+    // kedaluwarsa (failed) sebelumnya ikut ditambang jadi "fakta" knowledge/
+    // customer_memory, lalu fakta itu balik lagi ke prompt masa depan lewat
+    // customer.aiMemory. Pesan pelanggan tidak pernah disaring oleh status ini.
     const msgs = await this.prisma.message.findMany({
-      where: { conversationId, content: { not: '' } },
+      where: {
+        conversationId,
+        content: { not: '' },
+        OR: [
+          { senderType: SenderType.customer },
+          { status: { notIn: [MessageStatus.pending, MessageStatus.failed] } },
+        ],
+      },
       orderBy: { createdAt: 'asc' },
       take: MAX_MESSAGES,
       select: { id: true, content: true, senderType: true },
     });
+    // <<< ANGGA
     const transcript = this.formatMessages(msgs);
 
     // Too little substance to learn anything — mark done and move on.
@@ -272,12 +286,21 @@ export class LearningMinerService {
 
     const withText: Array<{ id: string; name: string | null; phoneNumber: string; text: string }> = [];
     for (const c of candidates) {
+      // >>> ANGGA — koreksi 2026-08-06: sama seperti mineConversation di atas —
+      // draft kita yang pending/failed jangan ikut jadi bahan customer_memory.
       const history = await this.prisma.message.findMany({
-        where: { conversation: { customerId: c.id, whatsappAccountId: { in: accountIds } } },
+        where: {
+          conversation: { customerId: c.id, whatsappAccountId: { in: accountIds } },
+          OR: [
+            { senderType: SenderType.customer },
+            { status: { notIn: [MessageStatus.pending, MessageStatus.failed] } },
+          ],
+        },
         orderBy: { createdAt: 'asc' },
         take: 60,
         select: { content: true, senderType: true },
       });
+      // <<< ANGGA
       const text = this.formatMessages(history.map((m) => ({ ...m, id: '' })), CUSTOMER_TRANSCRIPT_CAP).text;
       if (text.length >= 80) withText.push({ ...c, text });
     }
@@ -386,12 +409,24 @@ Balas HANYA JSON: {"botId": string, "reason": string}. reason singkat Bahasa Ind
     const accountIds = bot.accounts.map((a) => a.id);
     if (accountIds.length === 0) return { text: '', messageIds: [] };
 
+    // >>> ANGGA — koreksi 2026-08-06: sama seperti mineConversation di atas —
+    // draft kita yang pending/failed jangan ikut jadi bahan knowledge/persona/
+    // playbook mining lintas-bot.
     const messages = await this.prisma.message.findMany({
-      where: { conversation: { whatsappAccountId: { in: accountIds } }, ...(opts.adminOnly ? { senderType: SenderType.admin } : {}), content: { not: '' } },
+      where: {
+        conversation: { whatsappAccountId: { in: accountIds } },
+        ...(opts.adminOnly ? { senderType: SenderType.admin } : {}),
+        content: { not: '' },
+        OR: [
+          { senderType: SenderType.customer },
+          { status: { notIn: [MessageStatus.pending, MessageStatus.failed] } },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       take: MAX_MESSAGES,
       select: { id: true, content: true, senderType: true, conversationId: true },
     });
+    // <<< ANGGA
     if (messages.length === 0) return { text: '', messageIds: [] };
 
     const lang = bot.language ?? 'en';
