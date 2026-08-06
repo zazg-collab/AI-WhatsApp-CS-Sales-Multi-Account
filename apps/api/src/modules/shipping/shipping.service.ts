@@ -1890,6 +1890,18 @@ export class ShippingService {
   // <<< ANGGA
 
   async getGroundingText(conversationId: string, lang = 'id'): Promise<string> {
+    // >>> ANGGA — keputusan Bossfren 2026-08-06 (audit grounding #3): toko ini
+    // Indonesia-only, dan katalogPenanda()+belasan lines.push('• …') di bawah
+    // 100% hardcode Bahasa Indonesia tanpa pernah menerima `lang` — sementara
+    // sebagian instruksi lain (SHIPPING_GROUNDING_*) SUDAH id/en. Kalau ada
+    // bot di-set 'en' (opsi ini beneran ada di pengaturan bot web), giliran
+    // itu dapat grounding campur aduk setengah Inggris setengah Indonesia.
+    // Daripada menambal separuh (scope-nya besar: setiap baris katalog +
+    // larangan keras perlu versi Inggris), keputusannya: grounding order
+    // SELALU Bahasa Indonesia, parameter `lang` di sini sengaja diabaikan.
+    // (Bagian LAIN dari sistem — ekstraksi SHIPPING_EXTRACT_*, dst — TIDAK
+    // ikut berubah, ini scope-nya cuma teks grounding order/ongkir.)
+    lang = 'id';
     let result: ShippingResult;
     try {
       result = await this.quoteForConversation(conversationId);

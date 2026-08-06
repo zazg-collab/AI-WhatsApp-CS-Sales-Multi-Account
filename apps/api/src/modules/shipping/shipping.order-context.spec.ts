@@ -1871,3 +1871,24 @@ describe('P5 — alat debug search keyword (dipakai widget Settings Ongkir)', ()
   });
 });
 // <<< ANGGA
+
+// >>> ANGGA — audit grounding #3 (2026-08-06, keputusan Bossfren "fixkan aja
+// semua ID"): toko ini Indonesia-only; katalogPenanda()+lines.push internal
+// 100% hardcode Bahasa Indonesia tanpa pernah menerima `lang`, sementara
+// SEBAGIAN instruksi lain (SHIPPING_GROUNDING_*) sudah id/en dan bot BISA
+// di-set 'en' dari pengaturan web — kalau tidak dijaga, giliran itu dapat
+// grounding campur aduk setengah Inggris. Keputusan: grounding order SELALU
+// Bahasa Indonesia, `lang` diabaikan di dalam getGroundingText.
+describe('Audit grounding #3 — grounding order SELALU Bahasa Indonesia (parameter lang diabaikan)', () => {
+  it('getGroundingText("c1", "en") tetap mengeluarkan teks Bahasa Indonesia, bukan Inggris', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak? golok sembelih multifungsi',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    const grounding = await h.svc.getGroundingText('c1', 'en');
+    expect(grounding).toContain('DATA ONGKIR TERKINI');
+    expect(grounding).not.toContain('CURRENT AUTHORITATIVE SHIPPING DATA');
+  });
+});
+// <<< ANGGA
