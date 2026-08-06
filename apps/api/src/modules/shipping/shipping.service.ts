@@ -1408,11 +1408,105 @@ export class ShippingService {
     // `extract.city`. Sapaan/basa-basi murni ("halo", "oke kak") yang
     // ekstraktornya balik city=null tetap TIDAK menyentuh jalur ini sama
     // sekali (nol panggilan search tambahan) — persis perilaku lama.
+    //
+    // >>> ANGGA — koreksi 2026-08-06 (audit lanjutan #5, REPLAY LIVE laporan
+    // Bossfren "1 pcs aja kak jadinya ke sandubaya aja deh" -> bot nanya
+    // ULANG "Mataramnya itu kecamatan apa ya kak?" padahal SUDAH dijawab di
+    // pesan yang sama): `PLACE_HINT`/`ORDER_CHANGE_HINT` dipakai di sini
+    // sebagai syarat "apakah giliran ini jawaban tujuan" — padahal dua regex
+    // itu dibuat untuk keputusan LAIN (`mayHaveChanged`, "perlu panggil LLM
+    // ulang atau tidak"). Pesan yang menggabungkan konfirmasi jumlah + ganti
+    // tujuan ("1 pcs" cocok `ORDER_CHANGE_HINT`, "ke sandubaya aja deh" cocok
+    // `PLACE_HINT` lewat pola "ke <kata> aja/saja/dulu/deh") kena veto DUA
+    // regex sekaligus — padahal justru pesan SEPERTI ITU yang paling perlu
+    // masuk jalur pencarian literal (kata "sandubaya"-nya ada di situ).
+    //
+    // PERCOBAAN PERTAMA (dicabut, ketahuan kebablasan lewat test suite
+    // SEBELUM sampai ke Bossfren, pola sama persis dengan `kandidatCocok`
+    // #39/#40): buang veto `PLACE_HINT`/`ORDER_CHANGE_HINT` SAMA SEKALI.
+    // Pecah di kasus giliran PERTAMA "kirim ke bogor" (`shipping.service.
+    // spec.ts`, tangga P0 2026-08-05) — kalimat wajar "kirim ke bogor" ikut
+    // masuk jalur jendela-kata-literal (kataJawaban jadi ["kirim","bogor"]),
+    // dan karena jalur jendela SELALU menandai `sempit:true`, ambiguitas
+    // Kota/Kab Bogor dibacakan sebagai pertanyaan TERTUTUP ("• Kota Bogor •
+    // Kab. Bogor") — padahal aturan P0 2026-08-05 tegas: ambiguitas PERTAMA
+    // KALI dalam sebuah percakapan wajib pertanyaan TERBUKA (potongan 50
+    // baris search bisa menenggelamkan kandidat yang benar; daftar tertutup
+    // dari jalur jendela bisa diam-diam salah kalau kandidat sungguhan lebih
+    // dari yang kebetulan ditemukan lewat kata-kata di kalimat).
+    //
+    // Bedanya kalimat "kirim ke bogor" dengan "...jadinya ke sandubaya aja
+    // deh": yang pertama adalah PEMBUKA percakapan (belum ada konteks tujuan
+    // apa pun tersimpan) — `extract.city` sudah cukup presisi ("Bogor"),
+    // tidak ada yang hilang. Yang kedua GANTI tujuan DI TENGAH percakapan
+    // yang SUDAH punya tujuan tersimpan (kutipan Banyumas dari giliran
+    // sebelumnya) — `extract.city` KEHILANGAN presisi (LLM menjatuhkan
+    // "sandubaya" jadi "Mataram" saja), makanya kata literal pelanggan wajib
+    // dicoba. Fix: veto `PLACE_HINT`/`ORDER_CHANGE_HINT` HANYA berlaku kalau
+    // percakapan ini BELUM punya konteks tujuan apa pun (`sudahAdaKonteks`
+    // — belum pernah bertanya, DAN belum ada kutipan aktif tersimpan) —
+    // begitu ada konteks (giliran balasan ATAU tujuan sudah pernah
+    // di-resolve sebelumnya), veto dilepas, kata literal pelanggan
+    // didahulukan seperti niat aslinya. `!adaKataTanyaUang(...)`
+    // DIPERTAHANKAN tanpa syarat — pesan pertanyaan uang murni ("totalnya
+    // berapa kak?") memang bukan jawaban tujuan, di kedua kondisi. <<<
+    //
+    // >>> ANGGA -- PERCOBAAN KEDUA (dicabut juga, ketahuan lewat test suite
+    // SEBELUM sampai ke Bossfren): syarat `sudahAdaKonteks` di atas
+    // (askCount>0 ATAU ada kutipan tersimpan) TERLALU LONGGAR -- ia melepas
+    // veto untuk SEMUA giliran lanjutan, termasuk yang `extract.city` hasil
+    // ekstraksi LLM-nya SUDAH presisi & bisa dipercaya (kata kotanya
+    // beneran ada di kalimat pelanggan giliran ini). Dua regresi ketahuan:
+    // (1) "eh kirim ke bogor aja deh" giliran ke-4 (tujuan Medan sudah
+    // pernah di-resolve giliran ke-3, cache masih ada) -- harusnya tangga
+    // kembali ke NOL & tanya TERBUKA (P0 2026-08-05), malah lolos ke jalur
+    // jendela literal yang SELALU `sempit:true` -> pertanyaan TERTUTUP; (2)
+    // "eh salah, kirim ke Surabaya aja" -- extract.city="Surabaya" sudah pas
+    // & tunggal, tapi ikut jalur jendela literal yang mencoba SETIAP kata
+    // kalimat ("eh","salah","kirim","ke","aja") sebagai keyword pencarian
+    // sendiri-sendiri -> 11 panggilan API padahal cukup 1.
+    //
+    // Sinyal yang benar BUKAN "ada konteks tujuan atau tidak" -- tapi
+    // "apakah kata inti `extract.city` hasil ekstraksi giliran INI beneran
+    // muncul verbatim di kalimat pelanggan". Kalau muncul (mis. "Bogor" ada
+    // di "kirim ke bogor aja deh", "Surabaya" ada di "kirim ke Surabaya
+    // aja"), ekstraksi LLM giliran ini presisi & bisa dipercaya sepenuhnya
+    // -- veto tetap berlaku seperti semula (jalur `quote()` biasa yang
+    // sudah benar menangani ambiguitas/tunggal, termasuk tangga OPEN P0).
+    // Kalau TIDAK muncul (mis. "Mataram" TIDAK ada di manapun pada "1 pcs
+    // aja kak jadinya ke sandubaya aja deh" -- LLM menariknya dari KONTEKS
+    // giliran sebelumnya, kehilangan kata "sandubaya" yang sebenarnya
+    // diucapkan pelanggan), ekstraksi kehilangan presisi & veto dilepas
+    // supaya kata literal pelanggan (`jawabanPolosTujuan`) didahulukan.
+    // Kalau `extract.city` kosong sama sekali (giliran balasan murni tanpa
+    // penyebutan tempat baru, mis. "sandubaya kak" setelah kita tanya
+    // kecamatan), tidak ada yang bisa dibandingkan -- dianggap TIDAK
+    // presisi juga (veto dilepas), persis perilaku "JAWABAN KECAMATAN"
+    // (#40 dst) yang memang mengandalkan `askCount > 0` sendirian. <<<
+    const sudahAdaKonteks = this.cache.askCount(conversationId) > 0 || !!cached;
+    const cityKataMuncul = (() => {
+      const c = (extract.city ?? '').trim();
+      if (!c) return false;
+      const kataTeks = new Set(kata(lastCustomerText));
+      return kata(c).some((w) => kataTeks.has(w));
+    })();
+    // >>> ANGGA -- PERCOBAAN KETIGA: `cityKataMuncul` sendirian (tanpa syarat
+    // `sudahAdaKonteks`) ketahuan JUGA kebablasan lewat test suite -- kasus
+    // "ANGGA -- jawaban pelanggan dipetakan..." (`bogorDua`, giliran
+    // PERTAMA/fresh, fixture lastCustomerText default "kirim ke Medan ya"
+    // sementara extract.city di-mock "Bogor" -- mismatch murni artefak
+    // fixture, bukan skenario nyata) balik jadi 7 panggilan API alih-alih 1,
+    // karena `cityKataMuncul` bernilai false (kata "bogor" memang tak ada di
+    // "kirim ke Medan ya") dan veto ikut lolos padahal ini giliran PERTAMA
+    // tanpa konteks apa pun. `cityKataMuncul` HANYA relevan untuk membedakan
+    // dua kondisi yang SAMA-SAMA sudah py punya konteks (`sudahAdaKonteks`);
+    // untuk giliran benar-benar pertama, veto klasik (PLACE_HINT/
+    // ORDER_CHANGE_HINT) tetap satu-satunya penjaga, persis P0 2026-08-05. <<<
     const jawabanPolosTujuan =
       (this.cache.askCount(conversationId) > 0 || !!(extract.city ?? '').trim()) &&
       !adaKataTanyaUang(lastCustomerText, oc.orderMoneyAskKeywords) &&
-      !PLACE_HINT.test(lastCustomerText) &&
-      !ORDER_CHANGE_HINT.test(lastCustomerText);
+      ((sudahAdaKonteks && !cityKataMuncul) ||
+        (!PLACE_HINT.test(lastCustomerText) && !ORDER_CHANGE_HINT.test(lastCustomerText)));
     if (jawabanPolosTujuan) {
       // Sebutan produk = bukan jawaban tujuan — jangan search nama golok jadi desa.
       const produkKatalogL = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });

@@ -2508,6 +2508,111 @@ describe('GERBANG PAKEM — jawaban FRASA (≥ 2 kata) dinilai UTUH, bukan kata 
 });
 // <<< ANGGA
 
+// >>> ANGGA — fix (2026-08-06, audit lanjutan #5, REPLAY LIVE laporan
+// Bossfren "1 pcs aja kak jadinya ke sandubaya aja deh" -> bot balik nanya
+// "Mataramnya itu kecamatan apa ya kak?" PADAHAL kecamatannya SUDAH disebut
+// di pesan yang SAMA): akar sebab BEDA lagi dari #37-#40 — pesan pelanggan
+// menggabungkan KONFIRMASI JUMLAH ("1 pcs") dengan GANTI TUJUAN ("jadinya ke
+// sandubaya aja deh") dalam SATU kalimat. `jawabanPolosTujuan` (mekanisme
+// pencarian literal yang sudah terbukti benar di #37/#39/#40) punya syarat
+// negatif `!PLACE_HINT.test(...)` dan `!ORDER_CHANGE_HINT.test(...)` —
+// keduanya regex generik yang aslinya dibuat untuk keputusan LAIN (`mayHaveChanged`,
+// "perlu panggil LLM ulang atau tidak"), dipakai ULANG di sini sebagai syarat
+// "apakah ini benar-benar jawaban tujuan". "1 pcs" cocok ORDER_CHANGE_HINT
+// (`\d+\s*(pcs|...)`), DAN "ke sandubaya aja deh" cocok PLACE_HINT juga
+// (`ke\s+\w+\s+(aja|saja|dulu|deh)`) — jadi giliran ini di-veto DUA kali
+// lipat, seluruh mekanisme pencarian literal (yang akan menemukan "sandubaya")
+// SAMA SEKALI tidak pernah dicoba. Sistem jatuh ke `quote({keyword: extract.city})`
+// pakai "Mataram" SENDIRIAN — kota yang SUDAH lama dikenal tenggelam di
+// potongan 50 baris search (insiden "mataram" #P0 2026-08-05) — balik
+// `need_more_detail`, minta kecamatan yang justru SUDAH dijawab pelanggan di
+// pesan yang sama.
+//
+// PENTING: qty ("1 pcs") TIDAK terpengaruh sama sekali oleh fix ini — qty
+// diambil dari `extract.items` (hasil ekstraksi LLM terpisah, variabel
+// `items` dihitung SEKALI di awal `quoteForConversation` sebelum jalur
+// tujuan manapun bercabang) dan dipakai SAMA oleh kedua jalur (literal
+// search maupun fallback `city`) — jalur mana pun yang akhirnya menang
+// destinasinya, qty dari pesan yang sama tetap terbawa utuh.
+//
+// Fix: `PLACE_HINT`/`ORDER_CHANGE_HINT` DICABUT dari syarat
+// `jawabanPolosTujuan` — keduanya reused di luar tujuan aslinya persis pola
+// `kandidatCocok` yang sudah diperbaiki hari ini (#39/#40): mekanisme yang
+// dibuat untuk SATU keputusan (cache invalidation) tidak otomatis aman
+// dipakai untuk keputusan LAIN (apakah giliran ini jawaban tujuan). Yang
+// tersisa cuma `!adaKataTanyaUang(...)` (pesan pertanyaan uang murni
+// memang tidak perlu dicoba sebagai jawaban tujuan) — mekanismenya sendiri
+// sudah aman-oleh-desain: kata yang tidak cocok apa pun di data alamat
+// sungguhan (mis. "jadinya"/"1"/"pcs") otomatis diabaikan (`kataJawaban`
+// sudah menyaring panjang kata & kata generik, dan `resolveDestination`
+// cuma "menang" kalau memang ada baris data ASLI yang cocok) — jadi
+// melonggarkan syarat ini TIDAK membuka risiko cocok-kata palsu baru,
+// cuma membuka kesempatan mekanisme yang SUDAH aman untuk benar-benar
+// dicoba.
+describe('fix (2026-08-06) — pesan gabungan qty+ganti-tujuan TIDAK boleh mematikan pencarian literal tujuan (REPLAY "1 pcs aja kak jadinya ke sandubaya aja deh")', () => {
+  it('giliran PERTAMA "purwokerto timur mydear" resolve ke Banyumas, giliran BERIKUTNYA "1 pcs aja kak jadinya ke sandubaya aja deh" tetap resolve ke Mataram/Sandubaya (BUKAN nanya ulang kecamatan Mataram)', async () => {
+    const h = harness({
+      lastCustomerText: 'purwokerto timur mydear',
+      extract: { kota: 'Purwokerto Timur', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) =>
+      /purwokerto/i.test(kw) ? ROWS_PURWOKERTO_TIMUR_REAL : [],
+    );
+    const res1: any = await h.svc.quoteForConversation('c1');
+    expect(res1.status).toBe('ok');
+    expect(res1.quote.city).toBe('BANYUMAS');
+
+    // Giliran berikutnya: ganti tujuan + konfirmasi qty dalam SATU kalimat.
+    // Ekstraktor memetakan balik ke kota="Mataram" (persis insiden nyata
+    // "sandubaya kak" -> "JAWABAN KECAMATAN", #29/#40).
+    pesanBaru(h, 'm2', '1 pcs aja kak jadinya ke sandubaya aja deh');
+    (h.provider.chat as jest.Mock).mockResolvedValue(
+      JSON.stringify({ kota: 'Mataram', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] }),
+    );
+    (h.mengantar.searchAddress as jest.Mock).mockImplementation(async (kw: string) => {
+      // "mataram" SENDIRIAN = data API nyata tenggelam di 50 baris -> nol
+      // baris relevan (persis insiden lama #P0 2026-08-05).
+      if (/^mataram$/i.test(kw)) return [];
+      // "sandubaya" SENDIRIAN pun 0 baris (persis pola nyata) -- cuma
+      // gabungan "sandubaya mataram" yang presisi.
+      if (/^sandubaya$/i.test(kw)) return [];
+      if (/sandubaya/i.test(kw))
+        return [
+          { _id: 'd-sdb1', PROVINCE_NAME: 'NUSA TENGGARA BARAT (NTB)', CITY_NAME: 'MATARAM', CITY_NAME_SI: 'Kota Mataram', DISTRICT_NAME: 'SANDUBAYA (SANDUJAYA)', SUBDISTRICT_NAME: 'DASAN CERMEN' },
+          { _id: 'd-sdb2', PROVINCE_NAME: 'NUSA TENGGARA BARAT (NTB)', CITY_NAME: 'MATARAM', CITY_NAME_SI: 'Kota Mataram', DISTRICT_NAME: 'SANDUBAYA (SANDUJAYA)', SUBDISTRICT_NAME: 'BERTAIS' },
+        ];
+      return [];
+    });
+    const res2: any = await h.svc.quoteForConversation('c1');
+    // Pra-fix: 'need_more_detail' keyword="Mataram" -> grounding "Mataramnya
+    // itu kecamatan apa ya kak?" (padahal SUDAH dijawab di pesan yang sama).
+    expect(res2.status).toBe('ok');
+    expect(res2.quote.city).toBe('MATARAM');
+    // Qty tetap benar terlepas dari jalur mana yang me-resolve tujuan.
+    expect(res2.quote.matchedItems?.[0]?.qty ?? res2.quote.goodsTotal).toBeTruthy();
+
+    // >>> ANGGA -- ketok Bossfren "kalau pcsnya diabaikan kan ngaco... akhirnya
+    // milih lokasi pertama dan beli 1pcs. hrusnya masuk ke pakem v3 ke
+    // totalan dan konfirmasi pembayaran. bukan malah nanya lagi": "1 pcs"
+    // di pesan giliran ini WAJIB tercatat sebagai qtyPasti (dibaca langsung
+    // dari `lastCustomerText` oleh `qtyEksplisit`, INDEPENDEN dari jalur mana
+    // yang me-resolve tujuan -- lihat `quoteForConversation`) -- ini bukti
+    // konkret qty TIDAK diabaikan gara-gara fix jalur tujuan di atas. Begitu
+    // snapshot ini kebaca giliran BERIKUTNYA (`funnelDirective` baca
+    // `entries[0].snapshot.qtyPasti` dari log -- mekanisme umum, sudah diuji
+    // terpisah di describe lain lewat fixture `logEntries`/`entry(...,
+    // {qtyPasti:true})`), funnel lanjut ke total+metode pembayaran, BUKAN
+    // menanyakan qty lagi.
+    expect(h.orderLog.recordSnapshot).toHaveBeenCalledWith(
+      'c1',
+      expect.anything(),
+      expect.objectContaining({ qtyPasti: true }),
+      expect.anything(),
+    );
+  });
+});
+// <<< ANGGA
+
 // >>> ANGGA — fix (2026-08-06, REPLAY LIVE laporan Bossfren "Fatih"/"COD Bedog
 // Betekok ke Sandubaya, Mataram, NTB"): begitu pelanggan MENJAWAB kalimat
 // gabungan v3.1 ("boleh diinfokan alamat lengkapnya dan dicantumkan patokan
