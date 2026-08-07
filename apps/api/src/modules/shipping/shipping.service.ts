@@ -1772,7 +1772,10 @@ export class ShippingService {
     } = fCtx;
 
     // >>> ANGGA — UPGRADE ONGKIR-DOANG (2026-08-06, insiden "sandubaya 1 pcs")
-    if (result.status === 'ok' && result.quote.shippingOnly && !result.quote.unmatchedNames?.length && this.orderLog) {
+    // Guard tambahan: result.quote !== cached memastikan kita TIDAK mengulang
+    // upgrade pada cache-hit murni — kutipan cached sudah melalui upgrade saat
+    // pertama kali dihitung; re-fetch orderLog di sini hanya membuang resource.
+    if (result.status === 'ok' && result.quote.shippingOnly && !result.quote.unmatchedNames?.length && this.orderLog && result.quote !== cached) {
       try {
         const unik = new Map<string, { name: string; qty: number }>();
         for (const o of (await this.orderLog.recentOffers(conversationId)).filter((x) => x.fresh)) {
