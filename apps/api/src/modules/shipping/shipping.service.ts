@@ -1044,108 +1044,24 @@ export class ShippingService {
     }
     // <<< ANGGA
 
-    // ── TEMA A: Cache deterministik & Log-hit (Langkah 1) ────────────────────
-    // Gerbang tercepat: jawab dari cache in-memory atau snapshot log ter-persist
-    // TANPA memanggil LLM. Hanya berakhir early jika kondisi AMAN (tidak ada
-    // perubahan kota/barang, tidak ada pending pilihan, tidak sebut produk baru).
-    //
-    // Langkah 1 — cek cache dulu, deterministik, tanpa LLM.
+    // ── TEMA A → Fase 2c: classifyTurn() dispatch ─────────────────────────────
+    // Semua sinyal deterministik (cached, mayHaveChanged, tanyaUang, dll)
+    // kini dihitung SATU KALI di classifyTurn() tanpa side-effect.
     const cached = this.cache.get(conversationId);
-    const mayHaveChanged =
-      PLACE_HINT.test(lastCustomerText) || ORDER_CHANGE_HINT.test(lastCustomerText);
-    // >>> ANGGA — F1 (2026-08-05, insiden "halo" dijawab rekap order kemarin):
-    // jalur ASUMSI (log-hit & carry-over) layak jalan hanya kalau pelanggan
-    // memang bicara uang/order — bukan untuk sapaan/basa-basi. `tanyaUang`
-    // pakai substring (BUKAN batas-kata seperti hasAggregateKeyword) karena
-    // bahasa kita hobi imbuhan: "totalnya", "harganya", "ongkirnya" wajib
-    // tetap tertangkap oleh kata dasar di daftar AppSetting.
-    const tanyaUang =
-      adaKataTanyaUang(lastCustomerText, oc.orderMoneyAskKeywords) ||
-      hasAggregateKeyword(lastCustomerText, oc.orderAggregateKeywords);
-    // Afirmasi utuh ("iya", "oke kak") = lanjutan order yang sedang berjalan —
-    // tetap boleh pakai konteks (jawaban bridge tidak boleh mendadak pikun).
-    const afirmasiUtuh = wholeMessageMatch(
-      lastCustomerText,
-      oc.orderAffirmationKeywords,
-      oc.orderFillerWords,
-      oc.orderNegationKeywords,
-    );
-    // <<< ANGGA
-    if (!mayHaveChanged) {
-      // >>> ANGGA — Q-Chain: ada pertanyaan pilihan (barang/keranjang) yang
-      // sedang menunggu jawaban → JANGAN puas dengan cache/log-hit; jawaban
-      // pelanggan harus diproses tangga pilihan di bawah.
-      const adaPendingPilihan = !!this.cache.pendingItems(conversationId);
-      // <<< ANGGA
-      // >>> ANGGA — TANGGA BARANG di giliran HARGA (2026-08-05, ketok Bossfren,
-      // insiden "kalau golok sembelih berapa kak?" dijawab "konfirmasi dulu ke
-      // admin"): giliran uang yang MENYEBUT nama produk katalog TIDAK boleh
-      // ditelan cache/log-hit — sebutan itu wajib turun ke jalur ekstraksi
-      // supaya tangga BARANG bisa bertanya "yang mana" saat cocok >1 produk
-      // (jujur, jangan sotoy), atau mengutip langsung saat cocok tunggal.
-      let sebutProduk = false;
-      if (tanyaUang && (cached || (this.orderLog && !adaPendingPilihan))) {
-        const produkAktif = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
-        sebutProduk = mentionsCatalogProduct(lastCustomerText, produkAktif);
-      }
-      // <<< ANGGA
-      // >>> ANGGA — insiden "GSM Naga Merah" (2026-08-05): jawaban QTY polos
-      // ("1 aja kak") TIDAK boleh dijawab cache apa adanya — qty-nya berubah,
-      // kutipan wajib dihitung ulang (jalur carry/penawaran menerapkan qty
-      // baru; kutipan ongkir-doang naik kelas jadi kutipan penuh). <<<
-      if (cached && !adaPendingPilihan && !sebutProduk && patchQty(lastCustomerText) == null) {
-        this.cache.recordOutcome(conversationId, 'ok');
-        return finish({ status: 'ok', quote: cached });
-      }
-      // >>> ANGGA — Order Context Log, jalur LOG-HIT (v1.1 §12.1-2): cache
-      // in-memory hilang saat proses restart, tapi log ter-persist. Snapshot
-      // segar menyimpan INPUT order (destinationId + barang) → hitung ulang
-      // deterministik TANPA LLM; angka tidak pernah dibaca dari log. Ini juga
-      // jalur "totalnya berapa?"/"total semuanya" (tanpa hint perubahan):
-      // kata agregat → GABUNGAN semua entri segar per identitas produk
-      // (v1.1 §12.1-4). Dua-duanya jalur ASUMSI → ditandai untuk
-      // bridge-validasi (jawaban wajib menyebut nama barang).
-      // >>> ANGGA — addendum v2: frasa TUNJUK ("yg ini") atau REFERENSI
-      // ("sama yg tadi") butuh resolusi penuh (offer registry / lintas-marker)
-      // — jangan puas dengan snapshot terakhir; jatuh ke jalur ekstraksi.
-      const adaTunjukAtauReferensi =
-        hasAggregateKeyword(lastCustomerText, oc.orderDeixisKeywords) ||
-        hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords);
-      // <<< ANGGA
-      // >>> ANGGA — F1: gerbang tanya-uang. Sapaan tanpa kata uang/agregat/
-      // afirmasi jatuh ke alur lama (ekstraksi) — TIDAK dijawab kutipan
-      // instan dari log.
-      if (this.orderLog && !sebutProduk && !adaTunjukAtauReferensi && !adaPendingPilihan && (tanyaUang || afirmasiUtuh)) {
-        const entries = (await this.orderLog.candidates(conversationId)).filter(
-          (e) => e.fresh && e.snapshot.items.length > 0 && e.snapshot.destinationId,
-        );
-        if (entries.length) {
-          const latest = entries[0];
-          const aggregateAsk = hasAggregateKeyword(lastCustomerText, oc.orderAggregateKeywords);
-          const logItems = aggregateAsk
-            ? mergeSnapshots(entries.map((e) => e.snapshot)).map((m) => ({ name: m.name, qty: m.qty }))
-            : latest.snapshot.items.map((i) => ({ name: i.name, qty: i.qty }));
-          const hasil = await this.quoteUntukTujuan(
-            {
-              city: latest.snapshot.city,
-              province: latest.snapshot.province,
-              label: '',
-              destinationId: latest.snapshot.destinationId,
-            },
-            logItems,
-          );
-          if (hasil.status === 'ok') {
-            this.cache.set(conversationId, hasil.quote, cfg.quoteCacheTtlMs);
-            this.cache.setAssumed(conversationId, logItems.map((i) => i.name), aggregateAsk);
-          }
-          this.cache.recordOutcome(conversationId, hasil.status);
-          return finish(hasil);
-        }
-      }
-      // Tidak ada konteks sama sekali → lanjut alur lama (ekstraksi), perilaku
-      // persis seperti sebelum modul log ada.
-      // <<< ANGGA
+    const ctx = await this.classifyTurn(conversationId, lastCustomerText, cached, oc);
+    // Destructure sinyal ke variable lokal supaya TEMA B/C/D tidak berubah
+    const { tanyaUang, afirmasiUtuh, mayHaveChanged } = ctx;
+
+    // Fast-path deterministik (tanpa LLM)
+    if (ctx.state === 'CACHE_HIT') {
+      return finish(this.handleCacheHit(ctx));
     }
+    if (ctx.state === 'LOG_HIT') {
+      const logResult = await this.handleLogHit(ctx, cfg, oc);
+      if (logResult !== null) return finish(logResult);
+      // null = tidak ada log segar → fall-through ke EXTRACT
+    }
+    // <<< ANGGA
 
     // ── TEMA B: Resolusi pilihan barang (Q-Chain) & Frasa Tunjuk (Deixis) ────
     // Kalau giliran sebelumnya bot bertanya pilihan produk ("yang mana kak?"),
