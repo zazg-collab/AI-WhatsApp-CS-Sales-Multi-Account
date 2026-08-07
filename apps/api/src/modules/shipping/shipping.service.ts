@@ -1805,7 +1805,169 @@ export class ShippingService {
   }
 
   // ── (end Fase 2b handlers — ITEM_CHOICE, DEIXIS, DESTINATION, EXTRACT
-  //    akan ditambahkan di sub-fase berikutnya) ─────────────────────────────
+  //    ITEM_CHOICE, DEIXIS, DESTINATION sudah di bawah) ──────────────────────
+
+  /**
+   * ITEM_CHOICE — pelanggan sedang menjawab pertanyaan pilihan barang.
+   * Resolve dari pendingItems cache, TANPA ekstraksi LLM ulang.
+   * Kembalikan null jika tidak ada pendingItems atau pilihan tidak cocok.
+   */
+  private async handleItemChoice(
+    ctx: QuoteTurnContext,
+    cfg: ShippingSettings,
+    oc: OrderContextSettings,
+  ): Promise<{ result: ShippingResult; turnViaPilihan: boolean; konklusiKeranjang: boolean } | null> {
+    const { conversationId, lastCustomerText } = ctx;
+    const pendingItems = this.cache.pendingItems(conversationId);
+    if (!pendingItems) return null;
+
+    let itemsFromChoice: ExtractedItem[] | null = null;
+    let choiceCity: string | null = null;
+    let konklusiKeranjang = false;
+    let turnViaPilihan = false;
+
+    // >>> ANGGA — Q-Chain (2026-08-05): mode 'keranjang' + jawaban AGREGAT
+    if (
+      pendingItems.mode === 'keranjang' &&
+      this.orderLog &&
+      hasAggregateKeyword(lastCustomerText, oc.orderAggregateKeywords)
+    ) {
+      this.cache.clearPendingItems(conversationId);
+      const ids = new Set(pendingItems.candidates.map((c) => c.productId));
+      const union = mergeSnapshots(
+        (await this.orderLog.candidates(conversationId))
+          .filter((e) => e.fresh)
+          .map((e) => e.snapshot),
+      ).filter((m) => ids.has(m.productId));
+      itemsFromChoice = union.length
+        ? union.map((m) => ({ name: m.name, qty: m.qty }))
+        : pendingItems.candidates.map((c) => ({ name: c.name, qty: 1 }));
+      choiceCity = pendingItems.city;
+      konklusiKeranjang = true;
+      turnViaPilihan = true;
+    } else {
+      const chosen = pilihBarang(pendingItems.candidates, lastCustomerText, oc);
+      if (chosen) {
+        this.cache.clearPendingItems(conversationId);
+        itemsFromChoice = [{ name: chosen.name, qty: patchQty(lastCustomerText) ?? pendingItems.qty }];
+        choiceCity = pendingItems.city;
+        if (pendingItems.mode === 'keranjang') konklusiKeranjang = true;
+        turnViaPilihan = true;
+      }
+    }
+    // <<< ANGGA
+
+    if (!itemsFromChoice) return null; // tidak ada pilihan cocok
+
+    // Resolve tujuan dari cache/choice
+    const cached = this.cache.get(conversationId);
+    const city = choiceCity ?? cached?.city ?? null;
+    const destinationId = cached?.destinationId ?? null;
+    if (!city || !destinationId) return null;
+
+    const result = await this.quoteUntukTujuan(
+      { city, province: cached?.province ?? '', label: '', destinationId },
+      itemsFromChoice,
+    );
+    if (result.status === 'ok') {
+      this.cache.set(conversationId, result.quote, cfg.quoteCacheTtlMs);
+    }
+    this.cache.recordOutcome(conversationId, result.status);
+    return { result, turnViaPilihan, konklusiKeranjang };
+  }
+
+  /**
+   * DEIXIS — frasa tunjuk ("yg itu/tadi") di-resolve ke offer registry.
+   * Kembalikan null jika tidak ada offer atau frasa tidak cocok.
+   * Kembalikan ShippingResult jika ada satu kandidat, atau item_ambiguous
+   * jika ada ≥2 kandidat.
+   */
+  private async handleDeixis(
+    ctx: QuoteTurnContext,
+    cfg: ShippingSettings,
+    oc: OrderContextSettings,
+  ): Promise<{ result: ShippingResult; turnViaPilihan: boolean } | null> {
+    const { conversationId, lastCustomerText, cached } = ctx;
+    if (!this.orderLog || !hasAggregateKeyword(lastCustomerText, oc.orderDeixisKeywords)) return null;
+
+    const offers = (await this.orderLog.recentOffers(conversationId)).filter((o) => o.fresh);
+    if (!offers.length) return null;
+
+    // Build offer pool
+    const offerPool = new Map<string, { productId: string; name: string }>();
+    for (const o of offers) {
+      for (const it of o.items) {
+        if (!offerPool.has(it.productId)) offerPool.set(it.productId, { productId: it.productId, name: it.name });
+      }
+    }
+    const products = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
+    const generik = catalogMatchesInText(lastCustomerText, products as never);
+    let pool = Array.from(offerPool.values());
+    if (generik.length) {
+      const generikIds = new Set(generik.map((g) => g.productId));
+      const inter = pool.filter((c) => generikIds.has(c.productId));
+      if (inter.length) pool = inter;
+    }
+
+    if (pool.length === 0) return null;
+
+    if (pool.length >= 2) {
+      // Ambiguous → pertanyaan tertutup
+      const candidates = pool;
+      this.cache.setPendingItems(conversationId, {
+        candidates,
+        qty: patchQty(lastCustomerText) ?? 1,
+        city: cached?.city ?? null,
+      });
+      this.cache.recordOutcome(conversationId, 'item_ambiguous');
+      return {
+        result: {
+          status: 'item_ambiguous',
+          keyword: lastCustomerText.slice(0, 40),
+          itemCandidates: candidates,
+        },
+        turnViaPilihan: false,
+      };
+    }
+
+    // pool.length === 1 → langsung quote
+    const item: ExtractedItem = { name: pool[0].name, qty: patchQty(lastCustomerText) ?? 1 };
+    if (!cached?.destinationId) return null;
+
+    const result = await this.quoteUntukTujuan(
+      { city: cached.city, province: cached.province, label: '', destinationId: cached.destinationId },
+      [item],
+    );
+    if (result.status === 'ok') {
+      this.cache.set(conversationId, result.quote, cfg.quoteCacheTtlMs);
+    }
+    this.cache.recordOutcome(conversationId, result.status);
+    return { result, turnViaPilihan: false };
+  }
+
+  /**
+   * DESTINATION — jawabanPolosTujuan: resolve literal kota/kecamatan.
+   * Thin wrapper di atas resolveDestinationFromText() yang sudah ada.
+   * Kembalikan null jika tidak ada jawabanPolosTujuan.
+   */
+  private async handleDestination(
+    ctx: QuoteTurnContext,
+    cfg: ShippingSettings,
+    oc: OrderContextSettings,
+    items: ExtractedItem[],
+    extract: { city: string | null; province: string | null; failed?: boolean },
+  ): Promise<{ result: ShippingResult; turnViaPilihan: boolean } | null> {
+    const { conversationId, lastCustomerText, cached } = ctx;
+    return this.resolveDestinationFromText({
+      lastCustomerText,
+      extract,
+      cached,
+      conversationId,
+      items,
+      cfg,
+      oc,
+    });
+  }
 
   /**
    * (sudah dibuktikan live 2026-08-05 di `quote()`: keyword ber-prefiks
