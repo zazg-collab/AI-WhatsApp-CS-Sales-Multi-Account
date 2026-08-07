@@ -1105,125 +1105,27 @@ export class ShippingService {
     // <<< ANGGA
 
 
-    // ── TEMA C: Carry-over barang dari log (T2) & Referensi order lama (M4) ──
-    // Ekstraksi tidak membawa barang DAN tidak menyebut produk katalog?
-    // Cari dari entri log segar (atau order selesai terakhir untuk referensi).
-    // Semua jalur di sini ditandai ASUMSI untuk bridge-validasi.
-    //
-    // >>> ANGGA — Order Context Log T2 (menyimetrikan fallback baris `city`
-    // di bawah — dulu kota jatuh ke konteks lama tapi BARANG tidak, akar
-    // insiden "COD deh kak. beli 2 ya"): ekstraksi tidak membawa barang DAN
-    // pesan tidak menyebut produk katalog apa pun (deteksi murah tanpa LLM)
-    // DAN ada entri log segar → pakai barang dari log. Pola angka pendek
-    // ("beli 2") mengubah qty DI KODE, bukan lewat LLM. Kata agregat
-    // ("total semuanya") → gabungan SEMUA entri segar per identitas produk
-    // (v1.1 §12.1-4, anti hitung-dobel). Dua-duanya ditandai ASUMSI untuk
-    // enforcement bridge-validasi di `resolvePriceTokens`.
-    let items = itemsFromChoice ?? itemsFromDeixis ?? extract.items;
-    let source = itemsFromChoice ? 'confirmation' : itemsFromDeixis ? 'offer' : 'extractor';
-    let carriedEntry: OrderContextEntry | null = null;
-    let assumedNames: string[] | null = itemsFromDeixis ? itemsFromDeixis.map((i) => i.name) : null;
-
-    let aggregate = false;
-    // >>> ANGGA — F1 (lanjutan): carry-over juga jalur ASUMSI — gerbang yang
-    // sama. Tanpa ini, "halo" yang lolos gerbang log-hit tetap kena rekap
-    // lewat pintu belakang (ekstraksi kosong → barang diseret dari log).
-    // Hint tempat/perubahan & frasa referensi ikut membuka gerbang: "COD deh
-    // kak. beli 2 ya" (insiden asal T2) dan "sama yg tadi" (M4) tetap jalan.
+    // ── TEMA C → Fase 3a: dispatch ke resolveCarryOver() ───────────────────
+    // Carry-over log (T2) & Referensi order lama (M4) dikerjakan satu method.
     const bicaraOrder =
       tanyaUang ||
       afirmasiUtuh ||
       mayHaveChanged ||
-      patchQty(lastCustomerText) != null || // >>> ANGGA — Q-Chain: jawaban qty polos ("2 deh") <<<
+      patchQty(lastCustomerText) != null || // >>> ANGGA — Q-Chain: jawaban qty polos <<<
       hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords);
-    if (!items.length && this.orderLog && bicaraOrder) {
-      // <<< ANGGA
-      const products = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
-      if (!mentionsCatalogProduct(lastCustomerText, products)) {
-        // >>> ANGGA — addendum v2 M4: frasa referensi eksplisit ("sama yg
-        // tadi") membuka jangkauan ke SATU order completed terakhir — input
-        // dihitung ulang (bukan angkanya), wajib bridge, hasil konfirmasi
-        // jadi snapshot baru (revisi order pasca-closing).
-        const refAsk = hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords);
-        const aggAsk = hasAggregateKeyword(lastCustomerText, oc.orderAggregateKeywords);
-        const cw = refAsk
-          ? await this.orderLog.candidatesWithCompleted(conversationId)
-          : { current: await this.orderLog.candidates(conversationId), lastCompleted: [] };
-        const entries = cw.current.filter((e) => e.snapshot.items.length > 0);
-        const freshEntries = entries.filter((e) => e.fresh);
-        const refEntries = refAsk
-          ? cw.lastCompleted.filter((e) => e.snapshot.items.length > 0)
-          : [];
-        if ((freshEntries.length || refEntries.length) && (aggAsk || (refAsk && freshEntries.length && refEntries.length))) {
-          // Agregat / agregat+referensi → union per identitas produk.
-          const merged = mergeSnapshots([...freshEntries, ...refEntries].map((e) => e.snapshot));
-          items = merged.map((m) => ({ name: m.name, qty: m.qty }));
-          carriedEntry = freshEntries[0] ?? refEntries[0];
-          assumedNames = merged.map((m) => m.name);
-          aggregate = true;
-          source = 'carryover';
-        } else if (freshEntries.length) {
-          const latest = freshEntries[0];
-          items = latest.snapshot.items.map((i) => ({ name: i.name, qty: i.qty }));
-          const q = patchQty(lastCustomerText);
-          if (q != null && items.length === 1) items = [{ ...items[0], qty: q }];
-          carriedEntry = latest;
-          assumedNames = items.map((i) => i.name);
-          source = 'carryover';
-        } else if (refAsk && refEntries.length) {
-          // Referensi ke order completed terakhir tanpa order berjalan.
-          const latest = refEntries[0];
-          items = latest.snapshot.items.map((i) => ({ name: i.name, qty: i.qty }));
-          const q = patchQty(lastCustomerText);
-          if (q != null && items.length === 1) items = [{ ...items[0], qty: q }];
-          carriedEntry = latest;
-          assumedNames = items.map((i) => i.name);
-          source = 'carryover';
-        } else {
-          // >>> ANGGA — addendum v2 M1/M3, fallback PENAWARAN: belum ada
-          // kutipan sama sekali, tapi ada penawaran segar (mis. seed form) →
-          // barang dari penawaran (satu produk unik), jalur ASUMSI + bridge.
-          const offers = (await this.orderLog.recentOffers(conversationId)).filter((o) => o.fresh);
-          const unik = new Map<string, { productId: string; name: string }>();
-          for (const o of offers) for (const it of o.items) if (!unik.has(it.productId)) unik.set(it.productId, it);
-          if (unik.size === 1) {
-            const satu = Array.from(unik.values())[0];
-            items = [{ name: satu.name, qty: patchQty(lastCustomerText) ?? 1 }];
-            assumedNames = [satu.name];
-            source = 'offer';
-          }
-          // <<< ANGGA
-        }
-      }
-    }
-    // >>> ANGGA — addendum v2 M4 (lanjutan): referensi eksplisit SAAT barang
-    // baru juga disebut ("kalau 2 sama yg tadi") — union nama barang baru +
-    // isi order completed terakhir, dedupe per nama. Deterministik.
-    if (
-      items.length &&
-      this.orderLog &&
-      hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords)
-    ) {
-      const cw = await this.orderLog.candidatesWithCompleted(conversationId);
-      const refLatest = cw.lastCompleted.find((e) => e.snapshot.items.length > 0);
-      if (refLatest) {
-        const ada = new Set(items.map((i) => i.name.toLowerCase().trim()));
-        const tambahan = refLatest.snapshot.items
-          .filter((i) => !ada.has(i.name.toLowerCase().trim()))
-          .map((i) => ({ name: i.name, qty: i.qty }));
-        if (tambahan.length) {
-          items = [...items, ...tambahan];
-          carriedEntry = carriedEntry ?? refLatest;
-          assumedNames = items.map((i) => i.name);
-          aggregate = true;
-          source = 'carryover';
-        }
-      }
-    }
-    // <<< ANGGA
+    const carryResult = await this.resolveCarryOver({
+      conversationId,
+      lastCustomerText,
+      extractItems: extract.items,
+      itemsFromChoice,
+      itemsFromDeixis,
+      oc,
+      bicaraOrder,
+    });
+    let { items, source, assumedNames, aggregate } = carryResult;
+    const carriedEntry = carryResult.carriedEntry;
     if (assumedNames) this.cache.setAssumed(conversationId, assumedNames, aggregate);
     else this.cache.clearAssumed(conversationId);
-    // <<< ANGGA
 
     // ── TEMA D: Pasca-proses terpusat (finalize) ─────────────────────────────
     // Satu-satunya tempat yang menyentuh cache, log snapshot, tangga pertanyaan,
@@ -1801,6 +1703,116 @@ export class ShippingService {
       oc,
     });
   }
+
+  // ── Fase 3a — resolveCarryOver ────────────────────────────────────────────
+
+  /**
+   * TEMA C — Carry-over barang dari log (T2) & Referensi order lama (M4).
+   * Dipanggil saat `items` kosong setelah ITEM_CHOICE & DEIXIS — cari barang
+   * dari entri log segar atau order completed terakhir.
+   *
+   * Kembalikan {items, source, assumedNames, aggregate, carriedEntry}.
+   * Side-effect: tidak ada — caller yang panggil cache.setAssumed/clearAssumed.
+   */
+  private async resolveCarryOver(params: {
+    conversationId: string;
+    lastCustomerText: string;
+    extractItems: ExtractedItem[];
+    itemsFromChoice: ExtractedItem[] | null;
+    itemsFromDeixis: ExtractedItem[] | null;
+    oc: OrderContextSettings;
+    bicaraOrder: boolean;
+  }): Promise<{
+    items: ExtractedItem[];
+    source: string;
+    assumedNames: string[] | null;
+    aggregate: boolean;
+    carriedEntry: OrderContextEntry | null;
+  }> {
+    const { conversationId, lastCustomerText, extractItems, itemsFromChoice, itemsFromDeixis, oc, bicaraOrder } = params;
+
+    let items = itemsFromChoice ?? itemsFromDeixis ?? extractItems;
+    let source = itemsFromChoice ? 'confirmation' : itemsFromDeixis ? 'offer' : 'extractor';
+    let carriedEntry: OrderContextEntry | null = null;
+    let assumedNames: string[] | null = itemsFromDeixis ? itemsFromDeixis.map((i) => i.name) : null;
+    let aggregate = false;
+
+    // >>> ANGGA — F1 (lanjutan): carry-over hanya jika pelanggan bicara order.
+    if (!items.length && this.orderLog && bicaraOrder) {
+      const products = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
+      if (!mentionsCatalogProduct(lastCustomerText, products)) {
+        const refAsk = hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords);
+        const aggAsk = hasAggregateKeyword(lastCustomerText, oc.orderAggregateKeywords);
+        const cw = refAsk
+          ? await this.orderLog.candidatesWithCompleted(conversationId)
+          : { current: await this.orderLog.candidates(conversationId), lastCompleted: [] };
+        const entries = cw.current.filter((e) => e.snapshot.items.length > 0);
+        const freshEntries = entries.filter((e) => e.fresh);
+        const refEntries = refAsk
+          ? cw.lastCompleted.filter((e) => e.snapshot.items.length > 0)
+          : [];
+        if ((freshEntries.length || refEntries.length) && (aggAsk || (refAsk && freshEntries.length && refEntries.length))) {
+          const merged = mergeSnapshots([...freshEntries, ...refEntries].map((e) => e.snapshot));
+          items = merged.map((m) => ({ name: m.name, qty: m.qty }));
+          carriedEntry = freshEntries[0] ?? refEntries[0];
+          assumedNames = merged.map((m) => m.name);
+          aggregate = true;
+          source = 'carryover';
+        } else if (freshEntries.length) {
+          const latest = freshEntries[0];
+          items = latest.snapshot.items.map((i) => ({ name: i.name, qty: i.qty }));
+          const q = patchQty(lastCustomerText);
+          if (q != null && items.length === 1) items = [{ ...items[0], qty: q }];
+          carriedEntry = latest;
+          assumedNames = items.map((i) => i.name);
+          source = 'carryover';
+        } else if (refAsk && refEntries.length) {
+          const latest = refEntries[0];
+          items = latest.snapshot.items.map((i) => ({ name: i.name, qty: i.qty }));
+          const q = patchQty(lastCustomerText);
+          if (q != null && items.length === 1) items = [{ ...items[0], qty: q }];
+          carriedEntry = latest;
+          assumedNames = items.map((i) => i.name);
+          source = 'carryover';
+        } else {
+          // >>> ANGGA — addendum v2 M1/M3, fallback PENAWARAN
+          const offers = (await this.orderLog.recentOffers(conversationId)).filter((o) => o.fresh);
+          const unik = new Map<string, { productId: string; name: string }>();
+          for (const o of offers) for (const it of o.items) if (!unik.has(it.productId)) unik.set(it.productId, it);
+          if (unik.size === 1) {
+            const satu = Array.from(unik.values())[0];
+            items = [{ name: satu.name, qty: patchQty(lastCustomerText) ?? 1 }];
+            assumedNames = [satu.name];
+            source = 'offer';
+          }
+          // <<< ANGGA
+        }
+      }
+    }
+
+    // >>> ANGGA — addendum v2 M4 (lanjutan): referensi saat barang baru juga disebut
+    if (items.length && this.orderLog && hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords)) {
+      const cw = await this.orderLog.candidatesWithCompleted(conversationId);
+      const refLatest = cw.lastCompleted.find((e) => e.snapshot.items.length > 0);
+      if (refLatest) {
+        const ada = new Set(items.map((i) => i.name.toLowerCase().trim()));
+        const tambahan = refLatest.snapshot.items
+          .filter((i) => !ada.has(i.name.toLowerCase().trim()))
+          .map((i) => ({ name: i.name, qty: i.qty }));
+        if (tambahan.length) {
+          items = [...items, ...tambahan];
+          carriedEntry = carriedEntry ?? refLatest;
+          assumedNames = items.map((i) => i.name);
+          aggregate = true;
+          source = 'carryover';
+        }
+      }
+    }
+    // <<< ANGGA
+
+    return { items, source, assumedNames, aggregate, carriedEntry };
+  }
+
 
   /**
    * (sudah dibuktikan live 2026-08-05 di `quote()`: keyword ber-prefiks
