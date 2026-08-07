@@ -861,6 +861,25 @@ export class ShippingService {
 
   // ── Langkah 1-9 — alur utama ─────────────────────────────────────────────
 
+  /**
+   * Alur utama pengutipan ongkir per percakapan. Terbagi 4+1 tema:
+   *
+   * TEMA A — Cache & Log-hit (tanpa LLM): jawab dari cache in-memory atau
+   *   snapshot log ter-persist; early-return jika kondisi aman.
+   *
+   * TEMA B — Pilihan barang & Frasa Tunjuk: resolve jawaban Q-Chain (pending
+   *   item choice) dan frasa tunjuk (offer registry); tanpa ekstraksi ulang.
+   *
+   * TEMA C — Carry-over barang: saat ekstraksi kosong + ada log segar, barang
+   *   diseret dari log (jalur ASUMSI, wajib bridge-validasi).
+   *
+   * TEMA D — finalize() terpusat: satu-satunya titik menyentuh cache write,
+   *   log snapshot, tangga pertanyaan, dan outcome counter.
+   *
+   * TEMA E — Resolusi tujuan literal (→ resolveDestinationFromText()):
+   *   jawabanPolosTujuan + cascade jendela kata + loop kata satu-satu.
+   *   Diekstrak Fase 1 (2026-08-07) karena inilah akar 7 insiden produksi.
+   */
   async quoteForConversation(conversationId: string): Promise<ShippingResult> {
     const cfg = await this.settings.shipping();
     // >>> ANGGA — addendum v2 M5: kebijakan memori order kini kategori sendiri.
@@ -916,6 +935,11 @@ export class ShippingService {
     }
     // <<< ANGGA
 
+    // ── TEMA A: Cache deterministik & Log-hit (Langkah 1) ────────────────────
+    // Gerbang tercepat: jawab dari cache in-memory atau snapshot log ter-persist
+    // TANPA memanggil LLM. Hanya berakhir early jika kondisi AMAN (tidak ada
+    // perubahan kota/barang, tidak ada pending pilihan, tidak sebut produk baru).
+    //
     // Langkah 1 — cek cache dulu, deterministik, tanpa LLM.
     const cached = this.cache.get(conversationId);
     const mayHaveChanged =
@@ -1014,6 +1038,11 @@ export class ShippingService {
       // <<< ANGGA
     }
 
+    // ── TEMA B: Resolusi pilihan barang (Q-Chain) & Frasa Tunjuk (Deixis) ────
+    // Kalau giliran sebelumnya bot bertanya pilihan produk ("yang mana kak?"),
+    // jawaban pelanggan di-resolve di sini — TANPA ekstraksi LLM ulang.
+    // Frasa tunjuk ("yg itu", "yang tadi") di-resolve ke offer registry segar.
+    //
     // Langkah 2 — deteksi tujuan & item.
     const extract = await this.extractOrderTarget(conversationId);
     // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{subtotal_barang}}
@@ -1126,6 +1155,11 @@ export class ShippingService {
     }
     // <<< ANGGA
 
+    // ── TEMA C: Carry-over barang dari log (T2) & Referensi order lama (M4) ──
+    // Ekstraksi tidak membawa barang DAN tidak menyebut produk katalog?
+    // Cari dari entri log segar (atau order selesai terakhir untuk referensi).
+    // Semua jalur di sini ditandai ASUMSI untuk bridge-validasi.
+    //
     // >>> ANGGA — Order Context Log T2 (menyimetrikan fallback baris `city`
     // di bawah — dulu kota jatuh ke konteks lama tapi BARANG tidak, akar
     // insiden "COD deh kak. beli 2 ya"): ekstraksi tidak membawa barang DAN
@@ -1240,6 +1274,11 @@ export class ShippingService {
     else this.cache.clearAssumed(conversationId);
     // <<< ANGGA
 
+    // ── TEMA D: Pasca-proses terpusat (finalize) ─────────────────────────────
+    // Satu-satunya tempat yang menyentuh cache, log snapshot, tangga pertanyaan,
+    // dan outcome counter — semua jalur (cache-hit, log-hit, resolusi tujuan,
+    // ekstraksi biasa) melewati sini agar perilaku after-quote konsisten.
+    //
     // >>> ANGGA — pasca-proses terpusat: cache, snapshot log, tangga
     // pertanyaan, outcome — SATU tempat supaya semua jalur (jawaban pilihan
     // kota, jalur carry-over, jalur ekstraksi) diperlakukan identik.
