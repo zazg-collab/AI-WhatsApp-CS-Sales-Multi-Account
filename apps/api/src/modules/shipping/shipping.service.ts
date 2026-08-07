@@ -238,6 +238,37 @@ export type ShippingResult =
   | { status: 'api_error' }
   | { status: 'not_configured' };
 
+// ── State Machine — Fase 2 ────────────────────────────────────────────────────
+// Setiap giliran diklasifikasikan ke SATU state oleh classifyTurn().
+// Handler per-state menerima QuoteTurnContext dan mengembalikan ShippingResult.
+// Menambah jalur baru: (1) tambah entry ke QuoteTurnState, (2) buat handler,
+// (3) tambah cabang di switch di classifyTurn & quoteForConversation.
+
+export type QuoteTurnState =
+  | 'CACHE_HIT'      // cache in-memory valid, aman dijawab langsung
+  | 'LOG_HIT'        // tidak ada cache tapi log segar tersedia + pertanyaan uang
+  | 'ITEM_CHOICE'    // Q-Chain: pendingItems ada dan pesan adalah jawaban pilihan
+  | 'DEIXIS'         // frasa tunjuk (yg itu/tadi) → resolve dari offer registry
+  | 'DESTINATION'    // jawabanPolosTujuan → resolusi literal kota/kecamatan
+  | 'EXTRACT';       // jalur default: ekstraksi LLM + carry-over + quote()
+
+/** Konteks satu giliran yang sudah diklasifikasikan oleh classifyTurn(). */
+export interface QuoteTurnContext {
+  conversationId: string;
+  lastCustomerText: string;
+  state: QuoteTurnState;
+  // Sinyal deterministik (dihitung tanpa LLM)
+  cached: ShippingQuote | null;
+  mayHaveChanged: boolean;
+  tanyaUang: boolean;
+  afirmasiUtuh: boolean;
+  adaTunjukAtauReferensi: boolean;
+  adaPendingPilihan: boolean;
+  sebutProduk: boolean;
+}
+
+// ── (end State Machine types) ─────────────────────────────────────────────────
+
 // ── Pembantu murni (diekspor supaya bisa diuji tanpa Nest/DB) ──────────────
 
 /** Rule 11 — bulatkan ke kelipatan terdekat. inc <= 1 → tanpa pembulatan. */
@@ -860,6 +891,84 @@ export class ShippingService {
   }
 
   // ── Langkah 1-9 — alur utama ─────────────────────────────────────────────
+
+  /**
+   * Fase 2 — Classifier: membaca sinyal deterministik (tanpa LLM) dan
+   * mengembalikan satu QuoteTurnState. Tidak ada side-effect: tidak
+   * menulis cache, tidak memanggil extractOrderTarget.
+   *
+   * Urutan prioritas state (descending):
+   *  ITEM_CHOICE > DEIXIS > CACHE_HIT > LOG_HIT > DESTINATION > EXTRACT
+   *
+   * extractOrderTarget dipanggil LAZY (di handler masing-masing) karena
+   * CACHE_HIT / LOG_HIT / ITEM_CHOICE / DEIXIS tidak butuh LLM.
+   */
+  private async classifyTurn(
+    conversationId: string,
+    lastCustomerText: string,
+    cached: ShippingQuote | null,
+    oc: OrderContextSettings,
+  ): Promise<QuoteTurnContext> {
+    const mayHaveChanged =
+      PLACE_HINT.test(lastCustomerText) || ORDER_CHANGE_HINT.test(lastCustomerText);
+    const tanyaUang =
+      adaKataTanyaUang(lastCustomerText, oc.orderMoneyAskKeywords) ||
+      hasAggregateKeyword(lastCustomerText, oc.orderAggregateKeywords);
+    const afirmasiUtuh = wholeMessageMatch(
+      lastCustomerText,
+      oc.orderAffirmationKeywords,
+      oc.orderFillerWords,
+      oc.orderNegationKeywords,
+    );
+    const adaTunjukAtauReferensi =
+      hasAggregateKeyword(lastCustomerText, oc.orderDeixisKeywords) ||
+      hasAggregateKeyword(lastCustomerText, oc.orderReferenceKeywords);
+    const adaPendingPilihan = !!this.cache.pendingItems(conversationId);
+
+    // sebutProduk hanya relevan kalau ada peluang cache/log-hit
+    let sebutProduk = false;
+    if (!mayHaveChanged && tanyaUang && (cached || (this.orderLog && !adaPendingPilihan))) {
+      const produkAktif = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
+      sebutProduk = mentionsCatalogProduct(lastCustomerText, produkAktif);
+    }
+
+    // ── Prioritas state ───────────────────────────────────────────────────
+    let state: QuoteTurnState;
+
+    if (!mayHaveChanged && adaPendingPilihan) {
+      // Pelanggan sedang menjawab pertanyaan pilihan barang
+      state = 'ITEM_CHOICE';
+    } else if (!mayHaveChanged && !adaPendingPilihan && adaTunjukAtauReferensi && this.orderLog) {
+      // Frasa tunjuk tanpa pending → resolve dari offer registry
+      state = 'DEIXIS';
+    } else if (!mayHaveChanged && cached && !sebutProduk && patchQty(lastCustomerText) == null) {
+      // Cache valid, tidak ada perubahan, tidak sebut produk baru, tidak ganti qty
+      state = 'CACHE_HIT';
+    } else if (
+      !mayHaveChanged && this.orderLog && !sebutProduk && !adaTunjukAtauReferensi &&
+      !adaPendingPilihan && (tanyaUang || afirmasiUtuh)
+    ) {
+      // Tidak ada cache tapi ada log segar + pertanyaan uang → log-hit
+      state = 'LOG_HIT';
+    } else {
+      // Semua kondisi deterministik tidak terpenuhi → ekstraksi penuh
+      // (jawabanPolosTujuan akan dievaluasi di dalam EXTRACT / handleDestination)
+      state = 'EXTRACT';
+    }
+
+    return {
+      conversationId,
+      lastCustomerText,
+      state,
+      cached,
+      mayHaveChanged,
+      tanyaUang,
+      afirmasiUtuh,
+      adaTunjukAtauReferensi,
+      adaPendingPilihan,
+      sebutProduk,
+    };
+  }
 
   /**
    * Alur utama pengutipan ongkir per percakapan. Terbagi 4+1 tema:
