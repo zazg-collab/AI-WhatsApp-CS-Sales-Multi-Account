@@ -1132,122 +1132,25 @@ export class ShippingService {
     // dan outcome counter — semua jalur (cache-hit, log-hit, resolusi tujuan,
     // ekstraksi biasa) melewati sini agar perilaku after-quote konsisten.
     //
-    // >>> ANGGA — pasca-proses terpusat: cache, snapshot log, tangga
-    // pertanyaan, outcome — SATU tempat supaya semua jalur (jawaban pilihan
-    // kota, jalur carry-over, jalur ekstraksi) diperlakukan identik.
-    const finalize = async (result: ShippingResult): Promise<ShippingResult> => {
-      // >>> ANGGA — UPGRADE ONGKIR-DOANG (2026-08-06, insiden "sandubaya 1 pcs"
-      // — kutipan jatuh ongkir-doang PADAHAL barang dikenal, model lalu
-      // mengarang "{{subtotal_barang}} (Harga+Ongkir)" dan tertahan gerbang):
-      // apa pun jalur hulunya yang menjatuhkan barang, kutipan ongkir-doang
-      // dengan TEPAT SATU produk dikenal (penawaran form/log segar) langsung
-      // dihitung ulang jadi kutipan PENUH — alur total Bossfren (berat + COD
-      // amount → estimate API → estimatedPrice+Date → harga barang + ongkir)
-      // baru bisa jalan kalau barangnya ikut. Ambigu (>1 produk) TIDAK
-      // di-upgrade — biar funnel/keranjang yang bertanya, jangan sok tau.
-      // Pengecualian T4: pelanggan MENYEBUT barang baru yang tak cocok katalog
-      // (unmatchedNames terisi) → JANGAN diam-diam balik ke barang lama —
-      // biarkan alur konfirmasi T4/unmatched yang bertanya (anti sok-tau).
-      if (result.status === 'ok' && result.quote.shippingOnly && !result.quote.unmatchedNames?.length && this.orderLog) {
-        try {
-          const unik = new Map<string, { name: string; qty: number }>();
-          for (const o of (await this.orderLog.recentOffers(conversationId)).filter((x) => x.fresh)) {
-            for (const it of o.items ?? []) if (it.productId) unik.set(it.productId, { name: it.name, qty: 1 });
-          }
-          for (const e of (await this.orderLog.candidates(conversationId)).filter((x) => x.fresh)) {
-            for (const it of e.snapshot.items) unik.set(it.productId, { name: it.name, qty: it.qty });
-          }
-          if (unik.size === 1) {
-            const satu = Array.from(unik.values())[0];
-            const qtyU = patchQty(lastCustomerText) ?? satu.qty ?? 1;
-            const hasil2 = await this.quoteUntukTujuan(
-              { city: result.quote.city, province: result.quote.province, label: '', destinationId: result.quote.destinationId },
-              [{ name: satu.name, qty: qtyU }],
-            );
-            if (hasil2.status === 'ok' && !hasil2.quote.shippingOnly) {
-              this.logger.warn(
-                `Upgrade ongkir-doang → kutipan penuh di ${conversationId}: barang "${satu.name}" x${qtyU} dikenal dari penawaran/log tapi hilang di jalur hulu (items ekstraksi giliran ini kosong/tak cocok) — periksa extractOrderTarget.`,
-              );
-              result = hasil2;
-            }
-          }
-        } catch { /* upgrade gagal = pakai hasil apa adanya */ }
-      }
-      // <<< ANGGA
-      if (result.status === 'ok') {
-        this.cache.set(conversationId, result.quote, cfg.quoteCacheTtlMs);
-        this.cache.resetAsks(conversationId);
-        this.cache.clearPending(conversationId);
-        // Snapshot = INPUT order tervalidasi katalog; ongkir-saja tidak
-        // membawa barang, tidak ada yang layak diingat.
-        if (!result.quote.shippingOnly) {
-          // >>> ANGGA — Q-Chain (2026-08-05): qtyPasti = pelanggan menyebut
-          // angka eksplisit di giliran ini, ATAU sudah pasti di snapshot yang
-          // dibawa carry-over (basket sama). konklusi = jawaban pertanyaan
-          // keranjang. Dua-duanya slot funnel.
-          const qtyEksplisit =
-            patchQty(lastCustomerText) != null ||
-            /\b\d{1,3}\s*(pcs|pc|buah|biji|unit|set)\b/i.test(lastCustomerText);
-          // <<< ANGGA
-          await this.orderLog?.recordSnapshot(
-            conversationId,
-            lastMsg.id,
-            {
-              city: result.quote.city,
-              province: result.quote.province,
-              destinationId: result.quote.destinationId,
-              // >>> ANGGA — Q-Chain
-              qtyPasti: qtyEksplisit || carriedEntry?.snapshot.qtyPasti === true,
-              ...(konklusiKeranjang ? { konklusi: true } : {}),
-              // <<< ANGGA
-              // Item tanpa productId (tidak seharusnya terjadi di jalur ini)
-              // dibuang — identitas produk wajib untuk merge log (v1.1 §12.1-4).
-              items: result.quote.matchedItems
-                .filter((m): m is typeof m & { productId: string } => !!m.productId)
-                .map((m) => ({
-                  productId: m.productId,
-                  sku: m.sku ?? null,
-                  name: m.name,
-                  qty: m.qty,
-                })),
-            },
-            source,
-          );
-        }
-        this.cache.recordOutcome(conversationId, 'ok');
-        return finish(result);
-      }
-      if (result.status === 'item_ambiguous') {
-        // Tangga BARANG: simpan pilihan, biarkan grounding menyuruh bertanya
-        // tertutup. Penanda uang TIDAK tersedia untuk giliran ini.
-        this.cache.setPendingItems(conversationId, {
-          candidates: result.itemCandidates,
-          qty: items.find((i) => i.name === result.keyword)?.qty ?? 1,
-          city: extract.city?.trim() || choiceCity || carriedEntry?.snapshot.city || cached?.city || null,
-        });
-        this.cache.recordOutcome(conversationId, 'item_ambiguous');
-        return finish(result);
-      }
-      if (result.status === 'ambiguous' || result.status === 'need_more_detail') {
-        const ronde = this.cache.bumpAsk(conversationId, lastMsg.id);
-        // SELURUH kandidat disimpan (bukan cuma dua yang dibacakan) supaya
-        // "bukan kak, yang Pati" tetap ketemu tanpa panggilan API lagi.
-        this.cache.setPending(
-          conversationId,
-          result.status === 'ambiguous' ? result.candidates : [],
-        );
-        this.cache.recordOutcome(
-          conversationId,
-          ronde > MAX_DESTINATION_ASKS ? 'destination_stuck' : result.status,
-        );
-        return finish(result);
-      }
-      // Tujuan akhirnya jelas (atau masalahnya bukan soal tujuan) → tangga direset.
-      this.cache.resetAsks(conversationId);
-      this.cache.clearPending(conversationId);
-      this.cache.recordOutcome(conversationId, result.status);
-      return finish(result);
+    // ── TEMA D → Fase 3b: build fCtx + dispatch ke finalizeQuote() ──────────
+    // Satu-satunya tempat yang menyentuh cache, log snapshot, tangga pertanyaan,
+    // dan outcome counter — semua jalur melewati sini.
+    const fCtx = {
+      conversationId,
+      lastCustomerText,
+      lastMsgId: lastMsg.id,
+      items,
+      source,
+      choiceCity,
+      konklusiKeranjang,
+      carriedEntry,
+      extractCity: extract.city ?? null,
+      cached: cached ?? null,
+      cfg,
     };
+    const finalize = async (result: ShippingResult): Promise<ShippingResult> =>
+      finish(await this.finalizeQuote(fCtx, result));
+
     // <<< ANGGA
 
     // >>> ANGGA — koreksi 2026-08-06 (audit lanjutan #4, permintaan Bossfren
@@ -1813,6 +1716,128 @@ export class ShippingService {
     return { items, source, assumedNames, aggregate, carriedEntry };
   }
 
+
+  // ── Fase 3b — FinalizeContext + finalizeQuote ───────────────────────────
+
+  /**
+   * TEMA D pasca-proses terpusat: cache, snapshot log, tangga pertanyaan,
+   * outcome counter — SATU tempat supaya semua jalur diperlakukan identik.
+   *
+   * Berbeda dengan closure `finalize` lama: method ini return ShippingResult
+   * (bukan memanggil finish() sendiri) — caller yang panggil finish().
+   * Side-effect: cache.set, cache.resetAsks, cache.clearPending,
+   *   cache.setPendingItems, cache.setPending, cache.bumpAsk, orderLog.recordSnapshot.
+   */
+  private async finalizeQuote(
+    fCtx: {
+      conversationId: string;
+      lastCustomerText: string;
+      lastMsgId: string;
+      items: ExtractedItem[];
+      source: string;
+      choiceCity: string | null;
+      konklusiKeranjang: boolean;
+      carriedEntry: OrderContextEntry | null;
+      extractCity: string | null;
+      cached: ShippingQuote | null;
+      cfg: ShippingSettings;
+    },
+    result: ShippingResult,
+  ): Promise<ShippingResult> {
+    const {
+      conversationId, lastCustomerText, lastMsgId, items, source,
+      choiceCity, konklusiKeranjang, carriedEntry, extractCity, cached, cfg,
+    } = fCtx;
+
+    // >>> ANGGA — UPGRADE ONGKIR-DOANG (2026-08-06, insiden "sandubaya 1 pcs")
+    if (result.status === 'ok' && result.quote.shippingOnly && !result.quote.unmatchedNames?.length && this.orderLog) {
+      try {
+        const unik = new Map<string, { name: string; qty: number }>();
+        for (const o of (await this.orderLog.recentOffers(conversationId)).filter((x) => x.fresh)) {
+          for (const it of o.items ?? []) if (it.productId) unik.set(it.productId, { name: it.name, qty: 1 });
+        }
+        for (const e of (await this.orderLog.candidates(conversationId)).filter((x) => x.fresh)) {
+          for (const it of e.snapshot.items) unik.set(it.productId, { name: it.name, qty: it.qty });
+        }
+        if (unik.size === 1) {
+          const satu = Array.from(unik.values())[0];
+          const qtyU = patchQty(lastCustomerText) ?? satu.qty ?? 1;
+          const hasil2 = await this.quoteUntukTujuan(
+            { city: result.quote.city, province: result.quote.province, label: '', destinationId: result.quote.destinationId },
+            [{ name: satu.name, qty: qtyU }],
+          );
+          if (hasil2.status === 'ok' && !hasil2.quote.shippingOnly) {
+            this.logger.warn(
+              `Upgrade ongkir-doang → kutipan penuh di ${conversationId}: barang "${satu.name}" x${qtyU} dikenal dari penawaran/log tapi hilang di jalur hulu — periksa extractOrderTarget.`,
+            );
+            result = hasil2;
+          }
+        }
+      } catch { /* upgrade gagal = pakai hasil apa adanya */ }
+    }
+    // <<< ANGGA
+
+    if (result.status === 'ok') {
+      this.cache.set(conversationId, result.quote, cfg.quoteCacheTtlMs);
+      this.cache.resetAsks(conversationId);
+      this.cache.clearPending(conversationId);
+      if (!result.quote.shippingOnly) {
+        // >>> ANGGA — Q-Chain: qtyPasti & konklusi
+        const qtyEksplisit =
+          patchQty(lastCustomerText) != null ||
+          /\b\d{1,3}\s*(pcs|pc|buah|biji|unit|set)\b/i.test(lastCustomerText);
+        // <<< ANGGA
+        await this.orderLog?.recordSnapshot(
+          conversationId,
+          lastMsgId,
+          {
+            city: result.quote.city,
+            province: result.quote.province,
+            destinationId: result.quote.destinationId,
+            qtyPasti: qtyEksplisit || carriedEntry?.snapshot.qtyPasti === true,
+            ...(konklusiKeranjang ? { konklusi: true } : {}),
+            items: result.quote.matchedItems
+              .filter((m): m is typeof m & { productId: string } => !!m.productId)
+              .map((m) => ({
+                productId: m.productId,
+                sku: m.sku ?? null,
+                name: m.name,
+                qty: m.qty,
+              })),
+          },
+          source,
+        );
+      }
+      this.cache.recordOutcome(conversationId, 'ok');
+      return result;
+    }
+    if (result.status === 'item_ambiguous') {
+      this.cache.setPendingItems(conversationId, {
+        candidates: result.itemCandidates,
+        qty: items.find((i) => i.name === result.keyword)?.qty ?? 1,
+        city: extractCity?.trim() || choiceCity || carriedEntry?.snapshot.city || cached?.city || null,
+      });
+      this.cache.recordOutcome(conversationId, 'item_ambiguous');
+      return result;
+    }
+    if (result.status === 'ambiguous' || result.status === 'need_more_detail') {
+      const ronde = this.cache.bumpAsk(conversationId, lastMsgId);
+      this.cache.setPending(
+        conversationId,
+        result.status === 'ambiguous' ? result.candidates : [],
+      );
+      this.cache.recordOutcome(
+        conversationId,
+        ronde > MAX_DESTINATION_ASKS ? 'destination_stuck' : result.status,
+      );
+      return result;
+    }
+    // Tujuan akhirnya jelas (atau masalahnya bukan soal tujuan) → tangga direset.
+    this.cache.resetAsks(conversationId);
+    this.cache.clearPending(conversationId);
+    this.cache.recordOutcome(conversationId, result.status);
+    return result;
+  }
 
   /**
    * (sudah dibuktikan live 2026-08-05 di `quote()`: keyword ber-prefiks
