@@ -1329,29 +1329,58 @@ export class ShippingService {
       return finalize(destResolve.result);
     }
     // <<< ANGGA
+    // ── TEMA D tail → Fase 3c: dispatch ke resolveQuoteForCity() ─────────────
     const city =
       extract.city?.trim() || choiceCity || carriedEntry?.snapshot.city || cached?.city || null;
     if (!city) {
       this.cache.recordOutcome(conversationId, 'no_destination');
       return finish({ status: 'no_destination' });
     }
+    const cityResolve = await this.resolveQuoteForCity({
+      conversationId,
+      lastCustomerText,
+      city,
+      extractProvince: extract.province ?? null,
+      cached: cached ?? null,
+      carriedEntry,
+      items,
+      cfg,
+    });
+    if (cityResolve.turnViaPilihan) turnViaPilihan = true;
+    return finalize(cityResolve.result);
+  }
+
+  // ── Fase 3c — resolveQuoteForCity ────────────────────────────────────────
+
+  /**
+   * TEMA D tail — resolusi kota ke quote final.
+   * Urutan: cached sameCity/sameItems → carriedEntry shortcut →
+   *   recallDestinationTerm → quote() + sempitkanJawaban.
+   * Return {result, turnViaPilihan} — caller memanggil finalize().
+   */
+  private async resolveQuoteForCity(params: {
+    conversationId: string;
+    lastCustomerText: string;
+    city: string;
+    extractProvince: string | null;
+    cached: ShippingQuote | null;
+    carriedEntry: OrderContextEntry | null;
+    items: ExtractedItem[];
+    cfg: ShippingSettings;
+  }): Promise<{ result: ShippingResult; turnViaPilihan: boolean }> {
+    const { conversationId, lastCustomerText, city, extractProvince, cached, carriedEntry, items, cfg } = params;
+    let turnViaPilihan = false;
 
     // Kutipan lama masih sah kalau kota DAN isi order sama persis.
     if (cached && sameCity(cached.city, city) && sameItems(cached.items, items)) {
       this.cache.recordOutcome(conversationId, 'ok');
-      return finish({ status: 'ok', quote: cached });
+      return { result: { status: 'ok', quote: cached }, turnViaPilihan };
     }
     // Tujuan/isi berubah → reset (Rule 8: direset, bukan ditambah).
     this.cache.reset(conversationId);
 
-    // >>> ANGGA — Order Context Log: kalau barang dibawa dari log dan kotanya
-    // tidak berubah, destination_id sudah di tangan — langsung hitung, tanpa
-    // mengulang pencarian alamat (yang bisa gagal untuk teks pendek).
-    if (
-      carriedEntry &&
-      carriedEntry.snapshot.destinationId &&
-      sameCity(carriedEntry.snapshot.city, city)
-    ) {
+    // >>> ANGGA — Order Context Log: carriedEntry shortcut (kota sama, destinationId tersedia)
+    if (carriedEntry && carriedEntry.snapshot.destinationId && sameCity(carriedEntry.snapshot.city, city)) {
       const hasil = await this.quoteUntukTujuan(
         {
           city: carriedEntry.snapshot.city,
@@ -1361,30 +1390,26 @@ export class ShippingService {
         },
         items,
       );
-      return finalize(hasil);
+      return { result: hasil, turnViaPilihan };
     }
     // <<< ANGGA
 
-    // >>> ANGGA — koreksi 2026-08-06 (insiden "Purwokertonya mana ya kak?"
-    // ditanya ULANG): sebelum mencari alamat dari nol (yang bisa jatuh
-    // ambigu lagi persis seperti giliran pertama), cek dulu apakah istilah
-    // kota/kecamatan yang disebut SEKARANG pernah berhasil didisambiguasi di
-    // percakapan ini (mis. pelanggan sempat pindah ke tujuan lain lalu balik
-    // lagi) — kalau ya, pakai LANGSUNG hasilnya, jangan tanya ulang.
+    // >>> ANGGA — koreksi 2026-08-06: recall tujuan yang sudah pernah didisambiguasi
     const tujuanDiingat = this.cache.recallDestinationTerm(conversationId, city.trim().toLowerCase());
     if (tujuanDiingat) {
       turnViaPilihan = true;
-      return finalize(await this.quoteUntukTujuan(tujuanDiingat, items));
+      return { result: await this.quoteUntukTujuan(tujuanDiingat, items), turnViaPilihan };
     }
     // <<< ANGGA
 
     // >>> ANGGA — P4: provinsi hasil ekstraksi ikut sebagai saringan.
-    const result = await this.quote({ keyword: city, items, provinsi: extract.province });
+    const result = await this.quote({ keyword: city, items, provinsi: extractProvince });
     // <<< ANGGA
     const sempitD = await this.sempitkanJawaban(result, lastCustomerText, items, conversationId, cfg);
     if (sempitD !== result) turnViaPilihan = true;
-    return finalize(sempitD);
+    return { result: sempitD, turnViaPilihan };
   }
+
 
   /**
    * >>> ANGGA — koreksi 2026-08-06 (audit lanjutan #4, pengganti gerbang
