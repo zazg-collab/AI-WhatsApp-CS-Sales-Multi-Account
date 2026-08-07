@@ -1127,14 +1127,10 @@ export class ShippingService {
     if (assumedNames) this.cache.setAssumed(conversationId, assumedNames, aggregate);
     else this.cache.clearAssumed(conversationId);
 
-    // ── TEMA D: Pasca-proses terpusat (finalize) ─────────────────────────────
-    // Satu-satunya tempat yang menyentuh cache, log snapshot, tangga pertanyaan,
-    // dan outcome counter — semua jalur (cache-hit, log-hit, resolusi tujuan,
-    // ekstraksi biasa) melewati sini agar perilaku after-quote konsisten.
-    //
     // ── TEMA D → Fase 3b: build fCtx + dispatch ke finalizeQuote() ──────────
-    // Satu-satunya tempat yang menyentuh cache, log snapshot, tangga pertanyaan,
-    // dan outcome counter — semua jalur melewati sini.
+    // Pasca-proses terpusat: satu-satunya tempat yang menyentuh cache, log
+    // snapshot, tangga pertanyaan, dan outcome counter — semua jalur
+    // (cache-hit, log-hit, resolusi tujuan, ekstraksi biasa) melewati sini.
     const fCtx = {
       conversationId,
       lastCustomerText,
@@ -1372,8 +1368,9 @@ export class ShippingService {
     let turnViaPilihan = false;
 
     // Kutipan lama masih sah kalau kota DAN isi order sama persis.
+    // recordOutcome('ok') tidak dipanggil di sini — finalizeQuote() yang handle
+    // konsisten untuk semua jalur.
     if (cached && sameCity(cached.city, city) && sameItems(cached.items, items)) {
-      this.cache.recordOutcome(conversationId, 'ok');
       return { result: { status: 'ok', quote: cached }, turnViaPilihan };
     }
     // Tujuan/isi berubah → reset (Rule 8: direset, bukan ditambah).
