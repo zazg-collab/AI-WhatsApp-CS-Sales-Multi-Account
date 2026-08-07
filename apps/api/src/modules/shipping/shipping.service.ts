@@ -3449,8 +3449,10 @@ export class ShippingService {
         where: { id: conversationId },
         select: { customer: { select: { name: true, phoneNumber: true } } },
       });
-      if (convUntukClosing?.customer?.name) globalTokens.nama_pembeli = convUntukClosing.customer.name;
-      if (convUntukClosing?.customer?.phoneNumber) globalTokens.no_hp = convUntukClosing.customer.phoneNumber;
+      if (convUntukClosing?.customer) {
+        globalTokens.nama_pembeli = convUntukClosing.customer.name || convUntukClosing.customer.phoneNumber || 'Kak';
+        if (convUntukClosing.customer.phoneNumber) globalTokens.no_hp = convUntukClosing.customer.phoneNumber;
+      }
     } catch {
       /* identitas pembeli gagal dibaca = token itu saja tidak tersedia, bukan macet total */
     }
@@ -3618,7 +3620,7 @@ export class ShippingService {
         // ikut disubstitusi pakai `tokens` yang sama sebelum dibandingkan.
         const kalimatWajibTersubstitusi = (expectF.kalimat ?? '').replace(
           /\{\{([a-z_]+)\}\}/gi,
-          (utuh, nama: string) => tokens[nama] ?? utuh,
+          (utuh, nama: string) => tokens[nama] ?? '',
         );
         // <<< ANGGA
         const normSubstituted = normF(substituted);
