@@ -1747,6 +1747,67 @@ export class ShippingService {
    * Kalau kandidatnya masih >1, coba cocokkan jawaban pelanggan
    * (`lastCustomerText`) ke `CITY_NAME_SI` (`label`) milik kandidat-kandidat
    * yang BARU SAJA dikembalikan API — bukan literal parameter pencarian
+  // ── Fase 2b — Handlers per-state ─────────────────────────────────────────
+  //
+  // Setiap handler menerima QuoteTurnContext (sinyal sudah diklasifikasikan)
+  // dan mengembalikan ShippingResult. Handler TIDAK memanggil finish()/finalize()
+  // — itu tanggung jawab orchestrator di quoteForConversation.
+  //
+  // Prinsip: mechanical extraction dari TEMA A/B/C/E — zero logic change.
+
+  /**
+   * CACHE_HIT — cache in-memory masih valid, tidak ada perubahan apapun.
+   * Langsung kembalikan dari cache tanpa LLM.
+   */
+  private handleCacheHit(ctx: QuoteTurnContext): ShippingResult {
+    const { conversationId, cached } = ctx;
+    // cached pasti non-null saat state ini (classifyTurn sudah memverifikasi)
+    this.cache.recordOutcome(conversationId, 'ok');
+    return { status: 'ok', quote: cached! };
+  }
+
+  /**
+   * LOG_HIT — tidak ada cache tapi log segar tersedia + pertanyaan uang.
+   * Hitung ulang deterministik dari snapshot log TANPA LLM.
+   * Jika tidak ada log segar → kembalikan null (caller lanjut ke EXTRACT).
+   */
+  private async handleLogHit(
+    ctx: QuoteTurnContext,
+    cfg: ShippingSettings,
+    oc: OrderContextSettings,
+  ): Promise<ShippingResult | null> {
+    const { conversationId, lastCustomerText } = ctx;
+    if (!this.orderLog) return null;
+    const entries = (await this.orderLog.candidates(conversationId)).filter(
+      (e) => e.fresh && e.snapshot.items.length > 0 && e.snapshot.destinationId,
+    );
+    if (!entries.length) return null;
+    const latest = entries[0];
+    const aggregateAsk = hasAggregateKeyword(lastCustomerText, oc.orderAggregateKeywords);
+    const logItems = aggregateAsk
+      ? mergeSnapshots(entries.map((e) => e.snapshot)).map((m) => ({ name: m.name, qty: m.qty }))
+      : latest.snapshot.items.map((i) => ({ name: i.name, qty: i.qty }));
+    const hasil = await this.quoteUntukTujuan(
+      {
+        city: latest.snapshot.city,
+        province: latest.snapshot.province,
+        label: '',
+        destinationId: latest.snapshot.destinationId,
+      },
+      logItems,
+    );
+    if (hasil.status === 'ok') {
+      this.cache.set(conversationId, hasil.quote, cfg.quoteCacheTtlMs);
+      this.cache.setAssumed(conversationId, logItems.map((i) => i.name), aggregateAsk);
+    }
+    this.cache.recordOutcome(conversationId, hasil.status);
+    return hasil;
+  }
+
+  // ── (end Fase 2b handlers — ITEM_CHOICE, DEIXIS, DESTINATION, EXTRACT
+  //    akan ditambahkan di sub-fase berikutnya) ─────────────────────────────
+
+  /**
    * (sudah dibuktikan live 2026-08-05 di `quote()`: keyword ber-prefiks
    * "kota"/"kabupaten" balik NOL baris dari API Mengantar, jadi tidak bisa
    * jadi bahan SEARCH), tapi bahan MEMILIH di antara hasil segar yang sudah
