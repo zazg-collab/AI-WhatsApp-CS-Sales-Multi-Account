@@ -1573,7 +1573,6 @@ export class ShippingService {
       return finalize(destResolve.result);
     }
     // <<< ANGGA
-    // <<< ANGGA
     const city =
       extract.city?.trim() || choiceCity || carriedEntry?.snapshot.city || cached?.city || null;
     if (!city) {
@@ -1992,6 +1991,7 @@ export class ShippingService {
     // Tidak masuk jawabanPolosTujuan — caller lanjut ke quote() biasa.
     return null;
   }
+
   async quote(input: {
     keyword: string;
     items: ExtractedItem[];
