@@ -1033,6 +1033,10 @@ export class ShippingService {
     // golok aja") TIDAK cocok whole-message dan jatuh ke alur ekstraksi biasa
     // (menghasilkan snapshot baru berisi item sisa).
     if (this.orderLog && wholeMessageMatch(lastCustomerText, oc.orderCancelKeywords, oc.orderFillerWords)) {
+      // >>> DEEPSEEK — INTENTIONAL finalizeQuote() BYPASS: pembatalan ORDER
+      // UTUH (seluruh pesan hanya kata pembatalan). Tidak ada kutipan untuk
+      // difinalisasi — semua state cache + log direset langsung. Ini adalah
+      // jalur pembatalan, bukan finalisasi. <<< DEEPSEEK
       this.cache.reset(conversationId);
       this.cache.clearPending(conversationId);
       this.cache.clearPendingItems(conversationId);
@@ -1131,11 +1135,15 @@ export class ShippingService {
     // Pasca-proses terpusat: satu-satunya tempat yang menyentuh cache, log
     // snapshot, tangga pertanyaan, dan outcome counter — semua jalur
     // (cache-hit, log-hit, resolusi tujuan, ekstraksi biasa) melewati sini.
+    // >>> DEEPSEEK — defensive shallow copy: fCtx.items harus snapshot, bukan
+    // reference hidup ke array yang sama yang dioper ke resolveDestinationFromText
+    // dan resolveQuoteForCity. Kalau method itu suatu saat memutasikan array
+    // in-place, fCtx akan ikut berubah tanpa disadari. <<< DEEPSEEK
     const fCtx = {
       conversationId,
       lastCustomerText,
       lastMsgId: lastMsg.id,
-      items,
+      items: [...items],
       source,
       choiceCity,
       konklusiKeranjang,
@@ -1190,6 +1198,11 @@ export class ShippingService {
       // Kutipan lama ikut dikosongkan: tanpa ini model masih bisa menyisipkan
       // {{ongkir}} kota LAMA di giliran gagal ini dan lolos gerbang (digit
       // sisipan sah). Log ter-persist — giliran berikutnya recompute normal.
+      // >>> DEEPSEEK — INTENTIONAL finalizeQuote() BYPASS: ini adalah jalur
+      // pembatalan total (ekstraksi GAGAL pada giliran ber-hint). Tidak ada
+      // kutipan untuk difinalisasi — reset + recordOutcome('api_error') di sini
+      // adalah side-effect pembatalan, bukan finalisasi. FinalizeQuote tidak
+      // memiliki handler untuk status 'api_error' tanpa quote. <<< DEEPSEEK
       this.cache.reset(conversationId);
       this.cache.recordOutcome(conversationId, 'api_error');
       return finish({ status: 'api_error' });
@@ -1329,6 +1342,12 @@ export class ShippingService {
     const city =
       extract.city?.trim() || choiceCity || carriedEntry?.snapshot.city || cached?.city || null;
     if (!city) {
+      // >>> DEEPSEEK — INTENTIONAL finalizeQuote() BYPASS: tidak ada kota =
+      // tidak ada kutipan. recordOutcome('no_destination') di sini adalah
+      // pencatatan outcome untuk jalur non-ok tanpa hasil — finalizeQuote
+      // sudah memiliki handler untuk 'no_destination' (tail else), tapi
+      // mengoper no_destination tanpa city sebagai ctx tidak praktis:
+      // finalizeQuote perlu city untuk setPendingItems. <<< DEEPSEEK
       this.cache.recordOutcome(conversationId, 'no_destination');
       return finish({ status: 'no_destination' });
     }
@@ -1431,6 +1450,11 @@ export class ShippingService {
   private handleCacheHit(ctx: QuoteTurnContext): ShippingResult {
     const { conversationId, cached } = ctx;
     // cached pasti non-null saat state ini (classifyTurn sudah memverifikasi)
+    // >>> DEEPSEEK — INTENTIONAL finalizeQuote() BYPASS: CACHE_HIT tidak
+    // menghasilkan objek quote baru (hanya reference ke cached), tidak ada
+    // snapshot log untuk ditulis, dan outcome sudah tercatat saat quote pertama
+    // kali difinalisasi. recordOutcome('ok') di sini memastikan counter tetap
+    // jalan untuk monitoring. <<< DEEPSEEK
     this.cache.recordOutcome(conversationId, 'ok');
     return { status: 'ok', quote: cached! };
   }
@@ -1466,6 +1490,13 @@ export class ShippingService {
       logItems,
     );
     if (hasil.status === 'ok') {
+      // >>> DEEPSEEK — INTENTIONAL finalizeQuote() BYPASS: LOG_HIT menghitung
+      // ulang quote dari snapshot log deterministik TANPA ekstraksi LLM. Quote
+      // ini baru (bukan reference cached), jadi cache.set + recordOutcome harus
+      // dilakukan di sini. Snapshot log SUDAH ada dari giliran sebelumnya dan
+      // TIDAK BOLEH ditulis ulang (itu akan membuat entri duplikat dan merusak
+      // fresh/staleness tracking). resetAsks/clearPending TIDAK disentuh — hanya
+      // dipakai untuk jalur yang melibatkan tangga pertanyaan. <<< DEEPSEEK
       this.cache.set(conversationId, hasil.quote, cfg.quoteCacheTtlMs);
       this.cache.setAssumed(conversationId, logItems.map((i) => i.name), aggregateAsk);
     }
@@ -1720,9 +1751,13 @@ export class ShippingService {
       const cw = await this.orderLog.candidatesWithCompleted(conversationId);
       const refLatest = cw.lastCompleted.find((e) => e.snapshot.items.length > 0);
       if (refLatest) {
-        const ada = new Set(items.map((i) => i.name.toLowerCase().trim()));
+        // >>> DEEPSEEK — normalisasi agresif: replace(/\s+/g, ' ') selain
+        // toLowerCase().trim() supaya "Beras  5kg" (spasi ganda internal)
+        // tidak lolos dedup sebagai item berbeda dari "Beras 5kg". <<< DEEPSEEK
+        const normName = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ');
+        const ada = new Set(items.map((i) => normName(i.name)));
         const tambahan = refLatest.snapshot.items
-          .filter((i) => !ada.has(i.name.toLowerCase().trim()))
+          .filter((i) => !ada.has(normName(i.name)))
           .map((i) => ({ name: i.name, qty: i.qty }));
         if (tambahan.length) {
           items = [...items, ...tambahan];
@@ -1775,6 +1810,15 @@ export class ShippingService {
     // Guard tambahan: result.quote !== cached memastikan kita TIDAK mengulang
     // upgrade pada cache-hit murni — kutipan cached sudah melalui upgrade saat
     // pertama kali dihitung; re-fetch orderLog di sini hanya membuang resource.
+    // >>> DEEPSEEK — guard ini PAKAI REFERENCE EQUALITY (===, bukan deep-equal)
+    // secara sengaja. resolveQuoteForCity mengembalikan objek cached yang SAMA
+    // (reference) pada path sameCity && sameItems — itu penanda cache-hit murni.
+    // Kalau guard diganti deep-equal, kasus di mana quoteUntukTujuan dipanggil
+    // ulang dengan parameter sama (menghasilkan objek berbeda tapi isi identik)
+    // akan memicu upgrade yang tidak perlu. Itu boros tapi IDEMPOTEN — hasilnya
+    // tetap benar. Tidak diganti ke flag fromCache eksplisit karena akan
+    // membutuhkan perubahan signature resolveQuoteForCity + resolveDestinationFromText
+    // + quoteUntukTujuan — melampaui scope zero-logic-change refactoring Fase 1-3. <<< DEEPSEEK
     if (result.status === 'ok' && result.quote.shippingOnly && !result.quote.unmatchedNames?.length && this.orderLog && result.quote !== cached) {
       try {
         const unik = new Map<string, { name: string; qty: number }>();
