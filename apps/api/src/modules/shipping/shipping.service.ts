@@ -1063,122 +1063,47 @@ export class ShippingService {
     }
     // <<< ANGGA
 
-    // ── TEMA B: Resolusi pilihan barang (Q-Chain) & Frasa Tunjuk (Deixis) ────
-    // Kalau giliran sebelumnya bot bertanya pilihan produk ("yang mana kak?"),
-    // jawaban pelanggan di-resolve di sini — TANPA ekstraksi LLM ulang.
-    // Frasa tunjuk ("yg itu", "yang tadi") di-resolve ke offer registry segar.
-    //
-    // Langkah 2 — deteksi tujuan & item.
+
+    // ── TEMA B → Fase 2c: dispatch ke resolveItemChoice() & handleDeixis() ────
+    // Langkah 2 — deteksi tujuan & item (TEMA C/D masih butuh hasil extract).
+    // >>> ANGGA — koreksi 2026-08-04: jejak ekstraksi untuk tracing insiden.
     const extract = await this.extractOrderTarget(conversationId);
-    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, insiden "{{subtotal_barang}}
-    // tidak dikenal" — pelanggan konfirmasi COD + qty baru TANPA menyebut nama
-    // barang lagi): dulu tidak ada jejak sama sekali soal apa yang sungguh
-    // dikembalikan ekstraksi ini, jadi insiden seperti itu mustahil dikonfirmasi
-    // dari log — cuma bisa diduga. debug, bukan warn/log — dipanggil tiap kali
-    // grounding ongkir jalan (bisa sering), dan ini bukan sinyal masalah dengan
-    // sendirinya, cuma jejak buat ditelusuri KALAU ada insiden serupa lagi.
     this.logger.debug(
       `extractOrderTarget('${conversationId}'): kota=${JSON.stringify(extract.city)} provinsi=${JSON.stringify(extract.province)} items=${JSON.stringify(extract.items)}`,
     );
 
-    // >>> ANGGA — Order Context Log, tangga BARANG (jawaban): kalau giliran
-    // sebelumnya bot menawarkan pilihan produk ("Bedog Betekok maksudnya
-    // kak?") dan pesan ini memilihnya — lewat kata pembeda ("yg betekok") atau
-    // afirmasi whole-message ("iya yg itu") — barang terpilih itulah isi order,
-    // TANPA bergantung pada ekstraksi ulang. Baru pada titik ini barang masuk
-    // log (lewat snapshot di `finalize`), sesuai gerbang konfirmasi Bossfren.
+    // ITEM_CHOICE — Q-Chain: resolve jawaban pilihan produk dari pendingItems.
+    // resolveItemChoice() hanya mengambil items+flags; finalize() yg handle destination.
     let itemsFromChoice: ExtractedItem[] | null = null;
     let choiceCity: string | null = null;
-    // >>> ANGGA — Q-Chain: jawaban pertanyaan KONKLUSI keranjang menghasilkan
-    // snapshot berpenanda `konklusi` — funnel baru boleh maju ke qty/total.
     let konklusiKeranjang = false;
-    // <<< ANGGA
-    const pendingItems = this.cache.pendingItems(conversationId);
-    if (pendingItems) {
-      // >>> ANGGA — Q-Chain (2026-08-05): pada mode 'keranjang', jawaban
-      // AGREGAT ("dua-duanya", "sekalian", "semuanya") = ambil SEMUA kandidat.
-      // Qty per produk diambil dari union memori (anti hitung-dobel yang sama
-      // dengan jalur agregat), fallback qty 1.
-      if (
-        pendingItems.mode === 'keranjang' &&
-        this.orderLog &&
-        hasAggregateKeyword(lastCustomerText, oc.orderAggregateKeywords)
-      ) {
-        this.cache.clearPendingItems(conversationId);
-        const ids = new Set(pendingItems.candidates.map((c) => c.productId));
-        const union = mergeSnapshots(
-          (await this.orderLog.candidates(conversationId))
-            .filter((e) => e.fresh)
-            .map((e) => e.snapshot),
-        ).filter((m) => ids.has(m.productId));
-        itemsFromChoice = (union.length
-          ? union.map((m) => ({ name: m.name, qty: m.qty }))
-          : pendingItems.candidates.map((c) => ({ name: c.name, qty: 1 })));
-        choiceCity = pendingItems.city;
-        konklusiKeranjang = true;
-        turnViaPilihan = true; // >>> ANGGA — Q-Chain fix <<<
-      } else {
-        // <<< ANGGA
-        const chosen = pilihBarang(pendingItems.candidates, lastCustomerText, oc);
-        if (chosen) {
-          this.cache.clearPendingItems(conversationId);
-          itemsFromChoice = [{ name: chosen.name, qty: patchQty(lastCustomerText) ?? pendingItems.qty }];
-          choiceCity = pendingItems.city;
-          if (pendingItems.mode === 'keranjang') konklusiKeranjang = true; // >>> ANGGA — Q-Chain <<<
-          turnViaPilihan = true; // >>> ANGGA — Q-Chain fix <<<
+    const choiceResolved = await this.resolveItemChoice(conversationId, lastCustomerText, oc);
+    if (choiceResolved !== null) {
+      itemsFromChoice = choiceResolved.itemsFromChoice;
+      choiceCity = choiceResolved.choiceCity;
+      if (choiceResolved.turnViaPilihan) turnViaPilihan = true;
+      if (choiceResolved.konklusiKeranjang) konklusiKeranjang = true;
+    }
+
+    // DEIXIS — frasa tunjuk: handler mengelola offer registry lookup.
+    // item_ambiguous → return early (pendingItems sudah di-set handler).
+    // ok tunggal → set itemsFromDeixis supaya TEMA C lanjut normal.
+    // >>> ANGGA — addendum v2 M1 + amendemen interseksi ("golok yg itu")
+    let itemsFromDeixis: ExtractedItem[] | null = null;
+    if (!itemsFromChoice && (ctx.state === 'DEIXIS' || ctx.adaTunjukAtauReferensi)) {
+      const deixisResult = await this.handleDeixis(ctx, cfg, oc);
+      if (deixisResult !== null) {
+        if (deixisResult.result.status === 'item_ambiguous') {
+          return finish(deixisResult.result);
+        }
+        // Single-match deixis: tambahkan sebagai itemsFromDeixis agar TEMA C bisa finalize
+        if (deixisResult.result.status === 'ok' && deixisResult.result.quote?.items?.length) {
+          itemsFromDeixis = deixisResult.result.quote.items.map((i) => ({ name: i.name, qty: i.qty }));
         }
       }
     }
     // <<< ANGGA
 
-    // >>> ANGGA — addendum v2 M1 + amendemen interseksi ("golok yg itu"):
-    // frasa TUNJUK me-resolve ke PENAWARAN (offer registry). Urutan preseden:
-    //  1. nama produk UNIK di pesan → alur ekstraksi biasa (di bawah);
-    //  2. kata generik + frasa tunjuk → kandidat katalog ∩ penawaran segar;
-    //  3. frasa tunjuk saja → penawaran segar terakhir;
-    //  interseksi/pool = 1 → jawab + bridge; ≥2 → tangga pertanyaan barang;
-    //  0 penawaran → jatuh ke alur lama (tanya/ekstraksi).
-    let itemsFromDeixis: ExtractedItem[] | null = null;
-    let deixisAmbiguous: Array<{ productId: string; name: string }> | null = null;
-    if (!itemsFromChoice && this.orderLog && hasAggregateKeyword(lastCustomerText, oc.orderDeixisKeywords)) {
-      const offers = (await this.orderLog.recentOffers(conversationId)).filter((o) => o.fresh);
-      if (offers.length) {
-        // Kandidat penawaran unik per productId, terbaru dulu.
-        const offerPool = new Map<string, { productId: string; name: string }>();
-        for (const o of offers) {
-          for (const it of o.items) {
-            if (!offerPool.has(it.productId)) offerPool.set(it.productId, { productId: it.productId, name: it.name });
-          }
-        }
-        const products = await this.prisma.product.findMany({ where: { status: 'active' }, take: 500 });
-        const generik = catalogMatchesInText(lastCustomerText, products as never);
-        let pool = Array.from(offerPool.values());
-        if (generik.length) {
-          const generikIds = new Set(generik.map((g) => g.productId));
-          const inter = pool.filter((c) => generikIds.has(c.productId));
-          if (inter.length) pool = inter; // interseksi kosong → tetap pool penawaran (cabang 2)
-        }
-        if (pool.length === 1) {
-          itemsFromDeixis = [{ name: pool[0].name, qty: patchQty(lastCustomerText) ?? 1 }];
-        } else if (pool.length >= 2) {
-          deixisAmbiguous = pool;
-        }
-      }
-    }
-    if (deixisAmbiguous) {
-      this.cache.setPendingItems(conversationId, {
-        candidates: deixisAmbiguous,
-        qty: patchQty(lastCustomerText) ?? 1,
-        city: extract.city?.trim() || choiceCity || cached?.city || null,
-      });
-      this.cache.recordOutcome(conversationId, 'item_ambiguous');
-      return finish({
-        status: 'item_ambiguous',
-        keyword: lastCustomerText.slice(0, 40),
-        itemCandidates: deixisAmbiguous,
-      });
-    }
-    // <<< ANGGA
 
     // ── TEMA C: Carry-over barang dari log (T2) & Referensi order lama (M4) ──
     // Ekstraksi tidak membawa barang DAN tidak menyebut produk katalog?
@@ -1198,6 +1123,7 @@ export class ShippingService {
     let source = itemsFromChoice ? 'confirmation' : itemsFromDeixis ? 'offer' : 'extractor';
     let carriedEntry: OrderContextEntry | null = null;
     let assumedNames: string[] | null = itemsFromDeixis ? itemsFromDeixis.map((i) => i.name) : null;
+
     let aggregate = false;
     // >>> ANGGA — F1 (lanjutan): carry-over juga jalur ASUMSI — gerbang yang
     // sama. Tanpa ini, "halo" yang lolos gerbang log-hit tetap kena rekap
@@ -1726,14 +1652,20 @@ export class ShippingService {
   /**
    * ITEM_CHOICE — pelanggan sedang menjawab pertanyaan pilihan barang.
    * Resolve dari pendingItems cache, TANPA ekstraksi LLM ulang.
+   * Kembalikan {items, choiceCity, konklusiKeranjang, turnViaPilihan} jika ada pilihan cocok.
    * Kembalikan null jika tidak ada pendingItems atau pilihan tidak cocok.
+   * CATATAN: handler TIDAK memanggil quoteUntukTujuan — caller meneruskan ke finalize().
    */
-  private async handleItemChoice(
-    ctx: QuoteTurnContext,
-    cfg: ShippingSettings,
+  private async resolveItemChoice(
+    conversationId: string,
+    lastCustomerText: string,
     oc: OrderContextSettings,
-  ): Promise<{ result: ShippingResult; turnViaPilihan: boolean; konklusiKeranjang: boolean } | null> {
-    const { conversationId, lastCustomerText } = ctx;
+  ): Promise<{
+    itemsFromChoice: ExtractedItem[];
+    choiceCity: string | null;
+    konklusiKeranjang: boolean;
+    turnViaPilihan: boolean;
+  } | null> {
     const pendingItems = this.cache.pendingItems(conversationId);
     if (!pendingItems) return null;
 
@@ -1773,23 +1705,8 @@ export class ShippingService {
     }
     // <<< ANGGA
 
-    if (!itemsFromChoice) return null; // tidak ada pilihan cocok
-
-    // Resolve tujuan dari cache/choice
-    const cached = this.cache.get(conversationId);
-    const city = choiceCity ?? cached?.city ?? null;
-    const destinationId = cached?.destinationId ?? null;
-    if (!city || !destinationId) return null;
-
-    const result = await this.quoteUntukTujuan(
-      { city, province: cached?.province ?? '', label: '', destinationId },
-      itemsFromChoice,
-    );
-    if (result.status === 'ok') {
-      this.cache.set(conversationId, result.quote, cfg.quoteCacheTtlMs);
-    }
-    this.cache.recordOutcome(conversationId, result.status);
-    return { result, turnViaPilihan, konklusiKeranjang };
+    if (!itemsFromChoice) return null;
+    return { itemsFromChoice, choiceCity, konklusiKeranjang, turnViaPilihan };
   }
 
   /**
