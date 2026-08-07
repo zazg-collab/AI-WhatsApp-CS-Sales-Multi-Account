@@ -139,6 +139,37 @@ export function adaAlamatLengkap(text: string): boolean {
   return /\b(jl\.?|jalan|gg\.?|gang|blok|komplek|perumahan|perum)\b[^,\n]{0,40}?(no\.?\s*)?\d+/i.test(text ?? '');
 }
 
+// >>> GEMINI — Helper Presisi Validasi Alamat (2026-08-06, Mandat Bossfren):
+// (1) Cek apakah teks murni pilihan metode pembayaran (COD/Transfer)
+// (2) Cek apakah teks memuat penanda jalan/wilayah/patokan (lokasi fisik)
+// (3) Sanitasi cache alamat agar tidak tercemar pengulangan teks metode bayar
+
+export function isPaymentMethodChoice(text: string): boolean {
+  if (!text || !text.trim()) return false;
+  const hasPaymentWord = /\b(cod|bayar\s*di\s*tempat|transfer|tf|trf|trx|rekening)\b/i.test(text);
+  const hasStreetOrWilayah = /\b(jalan|jl\.?|jln\.?|rt\.?|rw\.?|no\.?|nomor|kelurahan|kel\.?|kecamatan|kec\.?|kabupaten|kab\.?|provinsi|prov\.?|kode\s*pos)\b/i.test(text);
+  return hasPaymentWord && !hasStreetOrWilayah;
+}
+
+export function containsAddressOrLandmark(text: string): boolean {
+  if (!text || !text.trim()) return false;
+  const t = text.toLowerCase();
+  const hasStreet = /\b(jalan|jl\.?|jln\.?|rt\.?|rw\.?|no\.?|nomor|gang|gk\.?|blok|kav\.?|kavling|perum\.?|perumahan|residence|gedung|lantai)\b/i.test(t);
+  const hasWilayah = /\b(kelurahan|kel\.?|kecamatan|kec\.?|kabupaten|kab\.?|kota|provinsi|prov\.?|kode\s*pos|\d{5})\b/i.test(t);
+  const hasLandmark = /\b(dekat|sebelah|depan|belakang|samping|seberang|pertigaan|perempatan|lampu\s*merah|masjid|musholla|gereja|sekolah|sd|smp|sma|smk|kampus|universitas|rs|rumah\s*sakit|puskesmas|pasar|toko|warung|indomaret|alfamart|pos\s*ronda|lapangan|stasiun|terminal|bandara|gapura)\b/i.test(t);
+  return hasStreet || hasWilayah || hasLandmark;
+}
+
+export function sanitizeAddressText(address: string): string {
+  if (!address) return '';
+  return address
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !isPaymentMethodChoice(line))
+    .join('\n');
+}
+// <<< GEMINI
+
 /**
  * Ambang skor pencocokan nama produk ke katalog. `scoreProductMatch` memberi
  * 2 poin untuk token yang cocok di name/sku dan 1 poin untuk category/
@@ -1483,6 +1514,163 @@ export class ShippingService {
     // kecamatan), tidak ada yang bisa dibandingkan -- dianggap TIDAK
     // presisi juga (veto dilepas), persis perilaku "JAWABAN KECAMATAN"
     // (#40 dst) yang memang mengandalkan `askCount > 0` sendirian. <<<
+    // >>> ANGGA — Fase 1 Refactor (2026-08-07): logika resolusi tujuan literal
+    // (jawabanPolosTujuan + cascade jendela + kata-per-kata + sempitkanJawaban)
+    // dipindahkan ke resolveDestinationFromText() untuk keterbacaan — ZERO
+    // perubahan logika, murni ekstraksi mekanis ke method terpisah.
+    // CATATAN: finalize dipanggil di SINI (bukan di dalam method) supaya
+    // closure finish() membaca turnViaPilihan yang SUDAH ter-update.
+    const destResolve = await this.resolveDestinationFromText({
+      lastCustomerText,
+      extract,
+      cached,
+      conversationId,
+      items,
+      cfg,
+      oc,
+    });
+    if (destResolve !== null) {
+      if (destResolve.turnViaPilihan) turnViaPilihan = true;
+      return finalize(destResolve.result);
+    }
+    // <<< ANGGA
+    // <<< ANGGA
+    const city =
+      extract.city?.trim() || choiceCity || carriedEntry?.snapshot.city || cached?.city || null;
+    if (!city) {
+      this.cache.recordOutcome(conversationId, 'no_destination');
+      return finish({ status: 'no_destination' });
+    }
+
+    // Kutipan lama masih sah kalau kota DAN isi order sama persis.
+    if (cached && sameCity(cached.city, city) && sameItems(cached.items, items)) {
+      this.cache.recordOutcome(conversationId, 'ok');
+      return finish({ status: 'ok', quote: cached });
+    }
+    // Tujuan/isi berubah → reset (Rule 8: direset, bukan ditambah).
+    this.cache.reset(conversationId);
+
+    // >>> ANGGA — Order Context Log: kalau barang dibawa dari log dan kotanya
+    // tidak berubah, destination_id sudah di tangan — langsung hitung, tanpa
+    // mengulang pencarian alamat (yang bisa gagal untuk teks pendek).
+    if (
+      carriedEntry &&
+      carriedEntry.snapshot.destinationId &&
+      sameCity(carriedEntry.snapshot.city, city)
+    ) {
+      const hasil = await this.quoteUntukTujuan(
+        {
+          city: carriedEntry.snapshot.city,
+          province: carriedEntry.snapshot.province,
+          label: '',
+          destinationId: carriedEntry.snapshot.destinationId,
+        },
+        items,
+      );
+      return finalize(hasil);
+    }
+    // <<< ANGGA
+
+    // >>> ANGGA — koreksi 2026-08-06 (insiden "Purwokertonya mana ya kak?"
+    // ditanya ULANG): sebelum mencari alamat dari nol (yang bisa jatuh
+    // ambigu lagi persis seperti giliran pertama), cek dulu apakah istilah
+    // kota/kecamatan yang disebut SEKARANG pernah berhasil didisambiguasi di
+    // percakapan ini (mis. pelanggan sempat pindah ke tujuan lain lalu balik
+    // lagi) — kalau ya, pakai LANGSUNG hasilnya, jangan tanya ulang.
+    const tujuanDiingat = this.cache.recallDestinationTerm(conversationId, city.trim().toLowerCase());
+    if (tujuanDiingat) {
+      turnViaPilihan = true;
+      return finalize(await this.quoteUntukTujuan(tujuanDiingat, items));
+    }
+    // <<< ANGGA
+
+    // >>> ANGGA — P4: provinsi hasil ekstraksi ikut sebagai saringan.
+    const result = await this.quote({ keyword: city, items, provinsi: extract.province });
+    // <<< ANGGA
+    const sempitD = await this.sempitkanJawaban(result, lastCustomerText, items, conversationId, cfg);
+    if (sempitD !== result) turnViaPilihan = true;
+    return finalize(sempitD);
+  }
+
+  /**
+   * >>> ANGGA — koreksi 2026-08-06 (audit lanjutan #4, pengganti gerbang
+   * `pendingTujuan` yang dicabut di `quoteForConversation`): dipanggil di
+   * SETIAP titik yang baru saja menghasilkan `status: 'ambiguous'` dari
+   * pencarian API yang SEGAR giliran ini (bukan daftar basi giliran lalu).
+   * Kalau kandidatnya masih >1, coba cocokkan jawaban pelanggan
+   * (`lastCustomerText`) ke `CITY_NAME_SI` (`label`) milik kandidat-kandidat
+   * yang BARU SAJA dikembalikan API — bukan literal parameter pencarian
+   * (sudah dibuktikan live 2026-08-05 di `quote()`: keyword ber-prefiks
+   * "kota"/"kabupaten" balik NOL baris dari API Mengantar, jadi tidak bisa
+   * jadi bahan SEARCH), tapi bahan MEMILIH di antara hasil segar yang sudah
+   * ada di tangan. Cocok tunggal → langsung dihitung (setara Q-Chain
+   * "jawaban atas pertanyaan tertutup"); cocok >1 tapi menyempit → pertanyaan
+   * tertutup dari subset (P0 2026-08-05, "yang lampung kak"); tidak cocok
+   * sama sekali → `result` dikembalikan APA ADANYA (referensi sama,
+   * dipakai pemanggil untuk tahu tidak ada yang berubah).
+   */
+  private async sempitkanJawaban(
+    result: ShippingResult,
+    lastCustomerText: string,
+    items: ExtractedItem[],
+    conversationId: string,
+    cfg: ShippingSettings,
+  ): Promise<ShippingResult> {
+    if (result.status !== 'ambiguous' || !result.candidates?.length) return result;
+
+    const tunggal = pilihKandidat(result.candidates, lastCustomerText);
+    if (tunggal) {
+      this.cache.clearPending(conversationId);
+      this.cache.resetAsks(conversationId);
+      this.cache.reset(conversationId);
+      // Ingat istilah jawaban pelanggan sendiri -> hasil ini, sama seperti
+      // gerbang lama — supaya topik yang sama nanti (sesudah sempat pindah
+      // ke tujuan lain lalu balik lagi) langsung ketemu tanpa cari ulang.
+      const kataLabelDipilih = new Set(kata(tunggal.label));
+      for (const w of kata(lastCustomerText)) {
+        if (w.length < 4) continue; // buang kata pendek generik ("di", "ke", "kab")
+        if (STOPWORDS_LOKASI_GENERIK.has(w)) continue;
+        if (kataLabelDipilih.has(w)) {
+          this.cache.rememberDestinationTerm(conversationId, w, tunggal, cfg.quoteCacheTtlMs);
+        }
+      }
+      return this.quoteUntukTujuan(tunggal, items);
+    }
+
+    if (result.candidates.length > 1) {
+      const subset = kandidatCocok(result.candidates, lastCustomerText);
+      if (subset.length > 1 && subset.length < result.candidates.length) {
+        return { ...result, candidates: subset, sempit: true };
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Inti Langkah 3-9, tanpa percakapan — dipakai juga oleh endpoint uji manual
+   * admin di controller (pola "kolom uji pertanyaan" di menu Knowledge).
+   */
+
+  /**
+   * >>> ANGGA — Fase 1 Refactor Klaster A (2026-08-07): logika resolusi tujuan
+   * literal dipindahkan dari quoteForConversation ke method terpisah.
+   * Dipanggil setelah gerbang cache/log-hit (Tema A) dan gerbang pilihan-barang
+   * (Tema B). Mengurus: jawabanPolosTujuan, cascade jendela kata, loop
+   * kata-per-kata, dan sempitkanJawaban. Mengembalikan null jika kondisi
+   * jawabanPolosTujuan tidak terpenuhi (caller lanjut ke quote() biasa).
+   * ZERO perubahan logika dari versi inline.
+   */
+  private async resolveDestinationFromText(params: {
+    lastCustomerText: string;
+    extract: { city: string | null; province: string | null; failed?: boolean };
+    cached: ShippingQuote | null;
+    conversationId: string;
+    items: ExtractedItem[];
+    cfg: ShippingSettings;
+    oc: OrderContextSettings;
+  }): Promise<{ result: ShippingResult; turnViaPilihan: boolean } | null> {
+    const { lastCustomerText, extract, cached, conversationId, items, cfg, oc } = params;
+    let turnViaPilihan = false;
     const sudahAdaKonteks = this.cache.askCount(conversationId) > 0 || !!cached;
     const cityKataMuncul = (() => {
       const c = (extract.city ?? '').trim();
@@ -1640,7 +1828,7 @@ export class ShippingService {
                   this.cache.rememberDestinationTerm(conversationId, wF, pilihanMenangF, cfg.quoteCacheTtlMs);
                 }
               }
-              return finalize(await this.quoteUntukTujuan(pilihanMenangF, items));
+              return { result: await this.quoteUntukTujuan(pilihanMenangF, items), turnViaPilihan };
             }
             // Jendela ini KETEMU tapi masih >1 kandidat sungguhan — jendela
             // yang lebih panjang selalu SAMA ATAU LEBIH presisi daripada
@@ -1660,7 +1848,7 @@ export class ShippingService {
                 destinationId: c.ids[0],
               })),
             };
-            return finalize(await this.sempitkanJawaban(ambigF, lastCustomerText, items, conversationId, cfg));
+            return { result: await this.sempitkanJawaban(ambigF, lastCustomerText, items, conversationId, cfg), turnViaPilihan };
           }
           // Jendela ini nol hasil (bukan ambigu, benar-benar tak ketemu) —
           // lanjut coba jendela yang lebih pendek berikutnya.
@@ -1744,7 +1932,7 @@ export class ShippingService {
             this.cache.rememberDestinationTerm(conversationId, w, pilihanMenang, cfg.quoteCacheTtlMs);
           }
           // <<< ANGGA
-          return finalize(await this.quoteUntukTujuan(pilihanMenang, items));
+          return { result: await this.quoteUntukTujuan(pilihanMenang, items), turnViaPilihan };
         }
         turnViaPilihan = true;
         const ambigC: ShippingResult = {
@@ -1757,126 +1945,14 @@ export class ShippingService {
             destinationId: c.ids[0],
           })),
         };
-        return finalize(await this.sempitkanJawaban(ambigC, lastCustomerText, items, conversationId, cfg));
+        return { result: await this.sempitkanJawaban(ambigC, lastCustomerText, items, conversationId, cfg), turnViaPilihan };
       }
       }
     }
-    // <<< ANGGA
-    const city =
-      extract.city?.trim() || choiceCity || carriedEntry?.snapshot.city || cached?.city || null;
-    if (!city) {
-      this.cache.recordOutcome(conversationId, 'no_destination');
-      return finish({ status: 'no_destination' });
-    }
 
-    // Kutipan lama masih sah kalau kota DAN isi order sama persis.
-    if (cached && sameCity(cached.city, city) && sameItems(cached.items, items)) {
-      this.cache.recordOutcome(conversationId, 'ok');
-      return finish({ status: 'ok', quote: cached });
-    }
-    // Tujuan/isi berubah → reset (Rule 8: direset, bukan ditambah).
-    this.cache.reset(conversationId);
-
-    // >>> ANGGA — Order Context Log: kalau barang dibawa dari log dan kotanya
-    // tidak berubah, destination_id sudah di tangan — langsung hitung, tanpa
-    // mengulang pencarian alamat (yang bisa gagal untuk teks pendek).
-    if (
-      carriedEntry &&
-      carriedEntry.snapshot.destinationId &&
-      sameCity(carriedEntry.snapshot.city, city)
-    ) {
-      const hasil = await this.quoteUntukTujuan(
-        {
-          city: carriedEntry.snapshot.city,
-          province: carriedEntry.snapshot.province,
-          label: '',
-          destinationId: carriedEntry.snapshot.destinationId,
-        },
-        items,
-      );
-      return finalize(hasil);
-    }
-    // <<< ANGGA
-
-    // >>> ANGGA — koreksi 2026-08-06 (insiden "Purwokertonya mana ya kak?"
-    // ditanya ULANG): sebelum mencari alamat dari nol (yang bisa jatuh
-    // ambigu lagi persis seperti giliran pertama), cek dulu apakah istilah
-    // kota/kecamatan yang disebut SEKARANG pernah berhasil didisambiguasi di
-    // percakapan ini (mis. pelanggan sempat pindah ke tujuan lain lalu balik
-    // lagi) — kalau ya, pakai LANGSUNG hasilnya, jangan tanya ulang.
-    const tujuanDiingat = this.cache.recallDestinationTerm(conversationId, city.trim().toLowerCase());
-    if (tujuanDiingat) {
-      turnViaPilihan = true;
-      return finalize(await this.quoteUntukTujuan(tujuanDiingat, items));
-    }
-    // <<< ANGGA
-
-    // >>> ANGGA — P4: provinsi hasil ekstraksi ikut sebagai saringan.
-    const result = await this.quote({ keyword: city, items, provinsi: extract.province });
-    // <<< ANGGA
-    const sempitD = await this.sempitkanJawaban(result, lastCustomerText, items, conversationId, cfg);
-    if (sempitD !== result) turnViaPilihan = true;
-    return finalize(sempitD);
+    // Tidak masuk jawabanPolosTujuan — caller lanjut ke quote() biasa.
+    return null;
   }
-
-  /**
-   * >>> ANGGA — koreksi 2026-08-06 (audit lanjutan #4, pengganti gerbang
-   * `pendingTujuan` yang dicabut di `quoteForConversation`): dipanggil di
-   * SETIAP titik yang baru saja menghasilkan `status: 'ambiguous'` dari
-   * pencarian API yang SEGAR giliran ini (bukan daftar basi giliran lalu).
-   * Kalau kandidatnya masih >1, coba cocokkan jawaban pelanggan
-   * (`lastCustomerText`) ke `CITY_NAME_SI` (`label`) milik kandidat-kandidat
-   * yang BARU SAJA dikembalikan API — bukan literal parameter pencarian
-   * (sudah dibuktikan live 2026-08-05 di `quote()`: keyword ber-prefiks
-   * "kota"/"kabupaten" balik NOL baris dari API Mengantar, jadi tidak bisa
-   * jadi bahan SEARCH), tapi bahan MEMILIH di antara hasil segar yang sudah
-   * ada di tangan. Cocok tunggal → langsung dihitung (setara Q-Chain
-   * "jawaban atas pertanyaan tertutup"); cocok >1 tapi menyempit → pertanyaan
-   * tertutup dari subset (P0 2026-08-05, "yang lampung kak"); tidak cocok
-   * sama sekali → `result` dikembalikan APA ADANYA (referensi sama,
-   * dipakai pemanggil untuk tahu tidak ada yang berubah).
-   */
-  private async sempitkanJawaban(
-    result: ShippingResult,
-    lastCustomerText: string,
-    items: ExtractedItem[],
-    conversationId: string,
-    cfg: ShippingSettings,
-  ): Promise<ShippingResult> {
-    if (result.status !== 'ambiguous' || !result.candidates?.length) return result;
-
-    const tunggal = pilihKandidat(result.candidates, lastCustomerText);
-    if (tunggal) {
-      this.cache.clearPending(conversationId);
-      this.cache.resetAsks(conversationId);
-      this.cache.reset(conversationId);
-      // Ingat istilah jawaban pelanggan sendiri -> hasil ini, sama seperti
-      // gerbang lama — supaya topik yang sama nanti (sesudah sempat pindah
-      // ke tujuan lain lalu balik lagi) langsung ketemu tanpa cari ulang.
-      const kataLabelDipilih = new Set(kata(tunggal.label));
-      for (const w of kata(lastCustomerText)) {
-        if (w.length < 4) continue; // buang kata pendek generik ("di", "ke", "kab")
-        if (STOPWORDS_LOKASI_GENERIK.has(w)) continue;
-        if (kataLabelDipilih.has(w)) {
-          this.cache.rememberDestinationTerm(conversationId, w, tunggal, cfg.quoteCacheTtlMs);
-        }
-      }
-      return this.quoteUntukTujuan(tunggal, items);
-    }
-
-    if (result.candidates.length > 1) {
-      const subset = kandidatCocok(result.candidates, lastCustomerText);
-      if (subset.length > 1 && subset.length < result.candidates.length) {
-        return { ...result, candidates: subset, sempit: true };
-      }
-    }
-    return result;
-  }
-
-  /**
-   * Inti Langkah 3-9, tanpa percakapan — dipakai juga oleh endpoint uji manual
-   * admin di controller (pola "kolom uji pertanyaan" di menu Knowledge).
-   */
   async quote(input: {
     keyword: string;
     items: ExtractedItem[];
@@ -2409,9 +2485,23 @@ export class ShippingService {
       // ditanya sekali, giliran sesudahnya SELALU lanjut closing apa pun
       // isinya, supaya pelanggan tidak terjebak diminta alamat berulang-
       // ulang kalau memang tidak lengkap-lengkap.
-      const alamatSebelumnya = this.cache.addressTextOf(conversationId) ?? '';
-      const alamatGabungan = [alamatSebelumnya, teksG].filter((s) => s.trim()).join('\n');
-      if (alamatGabungan.trim()) this.cache.setAddressText(conversationId, alamatGabungan);
+      // >>> GEMINI — Pembersihan & Validasi Presisi Alamat (2026-08-06, Mandat Bossfren):
+      // 1. Jika teks murni pilihan metode (COD/Transfer), HARAM masuk cache alamat.
+      // 2. Teks hanya disimpan ke cache alamat jika VALID memuat penanda lokasi/patokan.
+      // 3. Sanitasi otomatis jika ada cache lama yang sempat tercemar "COD aja braderku".
+      const rawAlamat = this.cache.addressTextOf(conversationId) ?? '';
+      const sanitizedPrev = sanitizeAddressText(rawAlamat);
+
+      let newAddressPart = '';
+      if (!isPaymentMethodChoice(teksG)) {
+        newAddressPart = teksG.trim();
+      }
+
+      const alamatGabungan = [sanitizedPrev, newAddressPart].filter((s) => s.trim()).join('\n');
+      if (alamatGabungan !== rawAlamat) {
+        this.cache.setAddressText(conversationId, alamatGabungan);
+      }
+      // <<< GEMINI
       const alamatSudahLengkap = adaAlamatLengkap(alamatGabungan);
       const patokanSudahDitanya = (asks['patokan'] ?? 0) >= 1;
       if (!alamatSudahLengkap && !patokanSudahDitanya) {
@@ -2498,12 +2588,32 @@ export class ShippingService {
           // <<< ANGGA
           return lines.join('\n');
         }
+        // >>> GEMINI — Deteksi Pasca-Metode & Langkah Closing Murni (2026-08-06):
+        // (1) Evaluasi kondisi closing secara murni (tanpa memanggil funnelDirective lebih awal agar tidak merusak side-effect Postgres/cache).
+        // (2) Jika total & metode sudah terjawab, hidePriceUnits = true KHUSUS di langkah tengah (patokan) agar LLM tidak berhitung "+" manual.
+        // (3) Pada langkah 'closing', hidePriceUnits WAJIB false agar {{daftar_produk_harga}} terisi utuh "Produk: X 💰 Harga: RpY"
+        //     sehingga Money Gate template closing resmi AppSettings LULUS 100%.
+        const memoNego = this.turnMemo.get(conversationId);
+        const asksGrounding: Record<string, number> = (await this.orderLog?.funnelAsks(conversationId).catch(() => ({}))) ?? {};
+        const teksMemoG = memoNego?.lastText ?? '';
+        const metodeTerjawabG = /\b(cod|bayar\s*di\s*tempat|tf|trf|trx|transfer|rekening)\b/i.test(teksMemoG) || (asksGrounding['metode_terjawab'] ?? 0) >= 1;
+        const totalSudahG = (asksGrounding['total'] ?? 0) >= 1 || metodeTerjawabG;
+
+        const rawAlamatG = this.cache.addressTextOf(conversationId) ?? '';
+        const sanitizedAlamatG = sanitizeAddressText(rawAlamatG);
+        const alamatSudahLengkapG = adaAlamatLengkap(sanitizedAlamatG);
+        const patokanSudahDitanyaG = (asksGrounding['patokan'] ?? 0) >= 1;
+        const isClosingStepG = totalSudahG && metodeTerjawabG && (alamatSudahLengkapG || patokanSudahDitanyaG);
+
+        const hidePriceUnits = totalSudahG && metodeTerjawabG && !isClosingStepG;
+
         const lines = [
           t(SHIPPING_MONEY_RULE, lang),
           t(SHIPPING_GROUNDING_DATA_READY, lang), // >>> ANGGA — P2 <<<
           t(SHIPPING_GROUNDING_INTRO, lang),
-          ...katalogPenanda(q),
+          ...katalogPenanda(q, hidePriceUnits),
         ];
+        // <<< GEMINI
         if (q.codBlockedReason === 'region') {
           lines.push('• COD TIDAK tersedia untuk wilayah ini (kebijakan toko). Tawarkan transfer saja.');
         } else if (!q.codCourier) {
@@ -2520,7 +2630,6 @@ export class ShippingService {
         // pelanggan sudah pindah ke basa-basi; tanpa gerbang ini, "halo"/
         // "makasih kak" dengan cache hangat ikut dijawab rekap.
         const assumed = this.cache.assumed(conversationId);
-        const memoNego = this.turnMemo.get(conversationId);
         const oc = await this.settings.orderContext();
         const teksTerakhir = memoNego?.lastText ?? '';
         // >>> ANGGA — refactor (2026-08-06, audit grounding #2+#4): pindah
@@ -2590,9 +2699,12 @@ export class ShippingService {
             // draft yang tetap menulis penandanya sendiri.
             if (arah.step === 'patokan') {
               this.buangBarisTotalDariKatalog(lines);
+              // >>> GEMINI — Pembersihan Spesifik Patokan (2026-08-06): buang seluruh penanda harga (termasuk harga_satuan & ongkir) khusus langkah patokan agar LLM tidak berhitung "+" manual
+              this.buangSemuaTokenHargaDariKatalog(lines);
               lines.push(
                 '• LARANGAN KERAS GILIRAN INI: total/rincian tagihan SUDAH pernah disodorkan di giliran sebelumnya — JANGAN mengulang subtotal/total/rekap tagihan lagi. Jawab singkat (mis. konfirmasi metode) lalu tutup dengan pertanyaan patokan di bawah.',
               );
+              // <<< GEMINI
             }
             // <<< ANGGA
             if (arah.teks) lines.push(arah.teks);
@@ -2802,6 +2914,16 @@ export class ShippingService {
       if (/^• \{\{/.test(lines[i]) && POLA_TOKEN_TOTAL.test(lines[i])) lines.splice(i, 1);
     }
   }
+
+  // >>> GEMINI — Pembersihan Spesifik Patokan (2026-08-06): buang seluruh penanda harga (termasuk harga_satuan, ongkir, dan baris rekap rincian_tagihan) khusus saat langkah patokan agar LLM tidak berhitung "+" manual
+  private buangSemuaTokenHargaDariKatalog(lines: string[]): void {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (/^• (\{\{(harga_satuan|ongkir|subtotal_barang|diskon_ongkir|diskon_barang|total_|blok_total|rincian_tagihan)|Subtotal|Ongkir|Total|Rp)/i.test(lines[i])) {
+        lines.splice(i, 1);
+      }
+    }
+  }
+  // <<< GEMINI
 
   /**
    * >>> ANGGA — Fase 113 (2026-08-04): MENGGANTIKAN `getGroundingNumbers()`
@@ -3900,7 +4022,7 @@ export function buildPriceTokens(q: ShippingQuote): Record<string, string> {
  * sesudah model menjawab). Kondisinya SAMA PERSIS dengan `buildPriceTokens`
  * supaya model tidak pernah ditawari penanda yang ternyata tidak bisa diisi.
  */
-export function katalogPenanda(q: ShippingQuote): string[] {
+export function katalogPenanda(q: ShippingQuote, hidePriceUnits = false): string[] {
   if (q.shippingOnly) {
     const dasar = [
       '• {{kota_tujuan}} = kota/kabupaten tujuan',
@@ -3932,19 +4054,23 @@ export function katalogPenanda(q: ShippingQuote): string[] {
   }
   // <<< ANGGA
   // >>> ANGGA — S2 (2026-08-05): kondisi SAMA PERSIS dengan buildPriceTokens.
-  if (q.matchedItems.length) {
+  if (q.matchedItems.length && !hidePriceUnits) {
     lines.push(
       '• {{rincian_tagihan}} = BLOK rekap tagihan LENGKAP siap pakai (tiap barang + perkaliannya, subtotal, ongkir, total Transfer/COD). Saat MEREKAP order, tulis penanda ini LANGSUNG sebagai isi jawabanmu di baris sendiri — JANGAN menyusun rekap angka manual dari penanda satuan, JANGAN menjelaskan/menarasikan bahwa kamu "akan menggunakan" blok ini, dan JANGAN menaruhnya di tengah kalimat',
     );
   }
   // <<< ANGGA
   const satuanUnik = new Set(q.matchedItems.map((m) => m.unitPrice));
-  if (satuanUnik.size === 1 && q.matchedItems.length > 0) {
-    lines.push('• {{harga_satuan}} = harga satu barang');
+  if (!hidePriceUnits) {
+    if (satuanUnik.size === 1 && q.matchedItems.length > 0) {
+      lines.push('• {{harga_satuan}} = harga satu barang');
+    }
+    lines.push(
+      '• {{subtotal_barang}} = total harga barang saja (belum termasuk ongkir)',
+      '• {{ongkir}} = ongkir saja',
+    );
   }
   lines.push(
-    '• {{subtotal_barang}} = total harga barang saja (belum termasuk ongkir)',
-    '• {{ongkir}} = ongkir saja',
     '• {{kurir_transfer}} = kurir untuk TRANSFER',
     '• {{total_transfer}} = total akhir TRANSFER (sudah termasuk ongkir)',
   );
