@@ -3914,29 +3914,33 @@ export type IssueCode =
   | 'kalimat_dobel'
   | 'lainnya';
 
+// >>> ANGGA — Klaster C (2026-08-06): fungsi ini HANYA untuk telemetri histori
+// (membaca moneyGateIssues lama di DB). Jalur live pakai pushIssue() langsung.
+// Tabel lookup: urutan PENTING — 'kalimat_dobel' wajib lebih dulu dari
+// 'funnel_dilanggar' (keduanya pelanggaran funnel tapi butuh hint berbeda).
+// Menambah kategori baru: tambah 1 baris ke ISSUE_MAP + 1 entry ke IssueCode.
+const ISSUE_MAP: Array<[string, IssueCode]> = [
+  ['membuat labelnya salah',                    'label_rancu'],
+  ['tidak dikenal/tidak tersedia',              'token_tak_dikenal'],
+  ['Angka panjang (nomor rekening',             'rekening_mentah'],    // anti-fraud M2
+  ['ditulis langsung oleh model',               'digit_mentah'],
+  ['ASUMSI order yang sedang berjalan',         'bridge_asumsi'],
+  ['istilah internal',                          'istilah_internal'],   // E3
+  ['menyangkal data yang sudah tersedia',       'kontradiksi_data'],   // P2
+  ['berpura-pura masih mengecek',               'kontradiksi_data'],   // anti-teater (2026-08-05)
+  ['mengulang kalimat wajib',                   'kalimat_dobel'],      // ← WAJIB sebelum funnel_dilanggar
+  ['melanggar alur penjualan wajib',            'funnel_dilanggar'],   // Q-Chain
+  ['mengulang rincian total',                   'funnel_dilanggar'],   // insiden "cod aja kak" (2026-08-06)
+  ['menempelkan angka kutipan ke produk',       'salah_produk'],       // Gerbang Pakem #1
+  ['menjumlahkan penanda sendiri',              'jumlah_manual'],      // Gerbang Pakem (2026-08-06)
+];
+
 export function klasifikasiAlasanGate(issue: string): IssueCode {
   const s = issue ?? '';
-  if (s.includes('membuat labelnya salah')) return 'label_rancu';
-  if (s.includes('tidak dikenal/tidak tersedia')) return 'token_tak_dikenal';
-  if (s.includes('Angka panjang (nomor rekening')) return 'rekening_mentah'; // >>> ANGGA — anti-fraud M2 <<<
-  if (s.includes('ditulis langsung oleh model')) return 'digit_mentah';
-  if (s.includes('ASUMSI order yang sedang berjalan')) return 'bridge_asumsi';
-  if (s.includes('istilah internal')) return 'istilah_internal'; // >>> ANGGA — E3 <<<
-  if (s.includes('menyangkal data yang sudah tersedia')) return 'kontradiksi_data'; // >>> ANGGA — P2 <<<
-  if (s.includes('berpura-pura masih mengecek')) return 'kontradiksi_data'; // >>> ANGGA — anti-teater (2026-08-05) <<<
-  // >>> ANGGA — fix (2026-08-06, REPLAY "trs knp ini doble2"): dicek SEBELUM
-  // 'melanggar alur penjualan wajib' generik di bawah — dua-duanya sama-sama
-  // pelanggaran funnel, tapi kelas ini butuh hint BEDA (jangan diulang,
-  // bukan jangan disebut sama sekali), jadi dipisah sendiri.
-  if (s.includes('mengulang kalimat wajib')) return 'kalimat_dobel';
-  // <<< ANGGA
-  if (s.includes('melanggar alur penjualan wajib')) return 'funnel_dilanggar'; // >>> ANGGA — Q-Chain <<<
-  if (s.includes('mengulang rincian total')) return 'funnel_dilanggar'; // >>> ANGGA — koreksi 2026-08-06, insiden "cod aja kak" <<<
-  if (s.includes('menempelkan angka kutipan ke produk yang salah')) return 'salah_produk'; // >>> ANGGA — Gerbang Pakem #1 <<<
-  if (s.includes('menjumlahkan penanda sendiri')) return 'jumlah_manual'; // >>> ANGGA — Gerbang Pakem (2026-08-06) <<<
-  return 'lainnya';
+  return ISSUE_MAP.find(([needle]) => s.includes(needle))?.[1] ?? 'lainnya';
 }
 // <<< ANGGA
+
 
 export function penjagaKata(text: string): string | null {
   // >>> ANGGA — F3 (2026-08-05, insiden draft "total harga 2 x
