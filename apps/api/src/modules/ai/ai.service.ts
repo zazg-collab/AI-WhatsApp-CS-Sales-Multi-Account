@@ -274,13 +274,14 @@ export class AiService {
       lastUser.length > 0 &&
       lastUser.length < CACHEABLE_MAX_QUESTION_CHARS;
 
-    let botId: string | null = null;
+    const conv = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { botId: true, bot: { select: { knowledgeBaseId: true } } },
+    });
+    const botId = conv?.botId ?? null;
+    const knowledgeBaseId = conv?.bot?.knowledgeBaseId ?? null;
+
     if (cacheable) {
-      const conv = await this.prisma.conversation.findUnique({
-        where: { id: conversationId },
-        select: { botId: true },
-      });
-      botId = conv?.botId ?? null;
       if (botId) {
         const hit = this.cache.get(botId, lastUser as string);
         if (hit !== null) {
@@ -290,14 +291,135 @@ export class AiService {
       }
     }
 
-    let text: string;
+    const ragMode = this.prompts['settings'] ? (await this.prompts['settings'].ai()).ragMode : 'hybrid';
+    
+    let tools: any[] | undefined = [];
+    if (this.shipping) {
+      tools.push(
+        {
+          type: 'function',
+          function: {
+            name: 'search_destinations',
+            description: 'Cari daftar ID tujuan pengiriman (kecamatan/kota) jika pelanggan menanyakan ongkir ke suatu daerah namun spesifikasinya kurang jelas.',
+            parameters: {
+              type: 'object',
+              properties: {
+                keyword: { type: 'string', description: 'Nama kota atau kecamatan yang diketik pelanggan' },
+                province: { type: 'string', description: 'Nama provinsi jika pelanggan menyebutkannya' }
+              },
+              required: ['keyword']
+            }
+          }
+        },
+        {
+          type: 'function',
+          function: {
+            name: 'calculate_shipping',
+            description: 'Hitung ongkos kirim dan total harga (termasuk COD) ke destinasi yang dipilih.',
+            parameters: {
+              type: 'object',
+              properties: {
+                destination_id: { type: 'string' },
+                city: { type: 'string' },
+                province: { type: 'string' },
+                label: { type: 'string' },
+                items: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      qty: { type: 'number' }
+                    },
+                    required: ['name', 'qty']
+                  }
+                }
+              },
+              required: ['destination_id', 'city', 'province', 'label', 'items']
+            }
+          }
+        }
+      );
+    }
+    
+    // >>> ANGGA: Fase 6.5, jika mode agentic, tambahkan RAG sebagai tool
+    if (ragMode === 'agentic') {
+      tools.push({
+        type: 'function',
+        function: {
+          name: 'search_knowledge',
+          description: 'Cari informasi produk, promo, jam operasional, atau kebijakan toko dari basis pengetahuan (knowledge base). Gunakan tool ini jika pelanggan menanyakan info seputar produk atau toko.',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: 'Kata kunci pencarian, misalnya nama produk atau topik (contoh: "harga sepatu nike", "jam buka", "promo lebaran")' }
+            },
+            required: ['query']
+          }
+        }
+      });
+    }
+
+    if (tools.length === 0) tools = undefined;
+
+    let text = '';
     const stopTimer = this.metrics?.aiRequestDuration.startTimer();
     try {
-      text = await this.provider.chat(messages, {
-        model,
-        // temperature omitted → uses the admin-configured value from settings.
-        maxTokens: 500,
-      });
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await this.provider.chatWithTools(messages, {
+          model,
+          maxTokens: 500,
+          tools,
+        });
+
+        text = res.content;
+        const toolCalls = res.tool_calls;
+
+        if (!toolCalls || toolCalls.length === 0) {
+          break; // LLM returned final text
+        }
+
+        // LLM wants to call tools. Append its response to history.
+        messages.push({
+          role: 'assistant',
+          content: text || null,
+          tool_calls: toolCalls,
+        });
+
+        // Execute each tool
+        for (const call of toolCalls) {
+          if (call.type !== 'function') continue;
+          const fnName = call.function.name;
+          let resultStr = '';
+          try {
+            const args = JSON.parse(call.function.arguments);
+            if (fnName === 'search_destinations') {
+              const res = await this.shipping!.llmSearchDestinations(args.keyword, args.province);
+              resultStr = JSON.stringify(res);
+            } else if (fnName === 'calculate_shipping') {
+              const dest = { id: args.destination_id, city: args.city, province: args.province, label: args.label };
+              const res = await this.shipping!.llmCalculateShipping(conversationId, dest, args.items);
+              resultStr = JSON.stringify(res);
+            } else if (fnName === 'search_knowledge') {
+              const lang = await this.botLang(conversationId);
+              const res = await this.prompts.llmSearchKnowledge(knowledgeBaseId, args.query, lang);
+              resultStr = JSON.stringify(res);
+            } else {
+              resultStr = JSON.stringify({ error: `Unknown function ${fnName}` });
+            }
+          } catch (e: any) {
+            this.logger.warn(`Tool call ${fnName} failed: ${e.message}`);
+            resultStr = JSON.stringify({ error: e.message || String(e) });
+          }
+
+          messages.push({
+            role: 'tool',
+            content: resultStr,
+            tool_call_id: call.id,
+            name: fnName,
+          });
+        }
+      }
     } catch (err) {
       stopTimer?.();
       this.metrics?.aiRequests.inc({ outcome: 'error' });
@@ -533,7 +655,7 @@ export class AiService {
     // flaky model, but the LLM may still score higher for nuance the keywords
     // miss — we never suppress a potential hot lead on a sales tool.
     const signals = detectBuyingSignals(
-      history.filter((m) => m.role === 'user').map((m) => m.content),
+      history.filter((m) => m.role === 'user').map((m) => m.content || ''),
     );
     const result = this.blendLeadScore(this.parseLeadScore(raw), signals);
 

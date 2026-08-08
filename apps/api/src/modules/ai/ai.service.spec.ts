@@ -13,7 +13,7 @@ describe('AiService', () => {
   beforeEach(() => {
     prisma = {
       conversation: {
-        findUnique: jest.fn().mockResolvedValue({ customerId: 'cust1', bot: { language: 'id' }, whatsappAccountId: 'a1' }),
+        findUnique: jest.fn().mockResolvedValue({ customerId: 'cust1', bot: { language: 'id', knowledgeBaseId: 'kb_id' }, whatsappAccountId: 'a1' }),
         update: jest.fn().mockReturnValue({ catch: jest.fn() }),
       },
       customer: {
@@ -25,11 +25,21 @@ describe('AiService', () => {
     };
     provider = {
       chat: jest.fn(),
+      chatWithTools: jest.fn().mockImplementation(async () => {
+        const content = await provider.chat();
+        return { content, tool_calls: [] };
+      }),
       listModels: jest.fn().mockResolvedValue(['m1']),
       getConfig: jest.fn().mockReturnValue({ baseUrl: 'x', defaultModel: 'm' }),
       defaultModel: jest.fn().mockResolvedValue('default-model'),
     };
-    prompts = { buildForConversation: jest.fn().mockResolvedValue([]) };
+    prompts = {
+      buildForConversation: jest.fn().mockResolvedValue([]),
+      llmSearchKnowledge: jest.fn(),
+      settings: {
+        ai: jest.fn().mockResolvedValue({ ragMode: 'hybrid' }),
+      }
+    };
     notifications = { send: jest.fn() };
     cache = {
       get: jest.fn().mockReturnValue(null),
@@ -194,6 +204,81 @@ describe('AiService', () => {
       expect(r.moneyBlocked).toBe(true);
       expect(r.text).toBe('Bedog Betekok harganya Rp139.000, kak.');
       expect(r.moneyGateIssues).toEqual(['percobaan pertama: 139000']);
+    });
+
+    it('executes tool calling for agentic knowledge and returns result', async () => {
+      prompts.settings.ai.mockResolvedValueOnce({ ragMode: 'agentic' });
+      provider.chatWithTools.mockResolvedValueOnce({
+        content: '',
+        tool_calls: [{
+          id: 'call_1',
+          type: 'function',
+          function: { name: 'search_knowledge', arguments: '{"query":"jam buka"}' }
+        }]
+      }).mockResolvedValueOnce({
+        content: 'Toko buka jam 8 pagi',
+        tool_calls: []
+      });
+      prompts.llmSearchKnowledge.mockResolvedValueOnce([{ content: 'Buka jam 8 pagi' }]);
+
+      const r = await service.generateReply('c1');
+      expect(provider.chatWithTools).toHaveBeenCalledTimes(2);
+      expect(prompts.llmSearchKnowledge).toHaveBeenCalledWith('kb_id', 'jam buka', 'id');
+      expect(r.text).toBe('Toko buka jam 8 pagi');
+    });
+
+    it('executes tool calling for shipping operations', async () => {
+      const shipping = {
+        llmSearchDestinations: jest.fn().mockResolvedValue([{ id: '123', label: 'Mataram' }]),
+        llmCalculateShipping: jest.fn().mockResolvedValue({ status: 'success', hasCod: true }),
+        resolvePriceTokens: jest.fn().mockResolvedValue({ ok: true, text: 'Ongkir 10rb', issues: [], issueCodes: [] })
+      };
+      const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
+      
+      provider.chatWithTools.mockResolvedValueOnce({
+        content: '',
+        tool_calls: [{
+          id: 'call_1',
+          type: 'function',
+          function: { name: 'search_destinations', arguments: '{"keyword":"mataram"}' }
+        }]
+      }).mockResolvedValueOnce({
+        content: 'Ongkir 10rb',
+        tool_calls: []
+      });
+
+      const r = await svc.generateReply('c1');
+      expect(provider.chatWithTools).toHaveBeenCalledTimes(2);
+      expect(shipping.llmSearchDestinations).toHaveBeenCalledWith('mataram', undefined);
+      expect(r.text).toBe('Ongkir 10rb');
+    });
+
+    it('handles tool execution errors gracefully', async () => {
+      const shipping = {
+        llmSearchDestinations: jest.fn().mockRejectedValue(new Error('Shipping API down')),
+        resolvePriceTokens: jest.fn().mockResolvedValue({ ok: true, text: 'Maaf ongkir error', issues: [], issueCodes: [] })
+      };
+      const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
+      
+      provider.chatWithTools.mockResolvedValueOnce({
+        content: '',
+        tool_calls: [{
+          id: 'call_1',
+          type: 'function',
+          function: { name: 'search_destinations', arguments: '{"keyword":"mataram"}' }
+        }]
+      }).mockResolvedValueOnce({
+        content: 'Maaf ongkir error',
+        tool_calls: []
+      });
+
+      const r = await svc.generateReply('c1');
+      expect(provider.chatWithTools).toHaveBeenCalledTimes(2);
+      const secondCallArgs = provider.chatWithTools.mock.calls[1][0];
+      const toolMsg = secondCallArgs[secondCallArgs.length - 1];
+      expect(toolMsg.role).toBe('tool');
+      expect(toolMsg.content).toContain('Shipping API down');
+      expect(r.text).toBe('Maaf ongkir error');
     });
   });
 

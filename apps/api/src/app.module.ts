@@ -8,6 +8,7 @@ import { RealtimeModule } from './realtime/realtime.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AuthModule } from './auth/auth.module';
 import { HealthController } from './health.controller';
+import { TestHarnessUiController } from './test-harness-ui.controller'; // >>> ANGGA — Test Harness UI (2026-08-08)
 import { WaModule } from './modules/wa/wa.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { AiModule } from './modules/ai/ai.module';
@@ -30,6 +31,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { ShippingModule } from './modules/shipping/shipping.module'; // >>> ANGGA <<<
 import { AgentModule } from './modules/agent/agent.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
+import { TestHarnessModule } from './test-harness/test-harness.module'; // >>> ANGGA — Test Harness v2 (2026-08-08)
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { MetricsModule } from './common/metrics/metrics.module';
 import { ErrorReporterModule } from './common/error-reporter.service';
@@ -88,8 +90,9 @@ import { SecurityHeadersMiddleware } from './common/security-headers.middleware'
     ShippingModule, // >>> ANGGA <<<
     AgentModule,
     AlertsModule,
+    TestHarnessModule, // >>> ANGGA — Test Harness v2 (2026-08-08): port-safe, MOCK replies
   ],
-  controllers: [HealthController],
+  controllers: [HealthController, TestHarnessUiController], // >>> ANGGA — Test Harness UI
   providers: [
     // Cross-cutting production hardening: consistent errors, rate limits,
     // request tracing/logging. Feature modules stay focused on domain logic.

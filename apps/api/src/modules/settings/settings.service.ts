@@ -87,6 +87,7 @@ export class SettingsService {
         timeoutMs: this.num(this.config.get('AI_TIMEOUT_MS'), 30_000),
         embedModel: this.config.get<string>('AI_EMBED_MODEL') ?? '',
         embedDim: this.num(this.config.get('AI_EMBED_DIM'), 1536),
+        ragMode: (this.config.get<string>('AI_RAG_MODE') as 'hybrid' | 'agentic') ?? 'hybrid',
       },
       wa: {
         humanDelayMinMs: this.num(this.config.get('WA_HUMAN_DELAY_MIN_MS'), 600),

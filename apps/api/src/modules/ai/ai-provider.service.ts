@@ -8,8 +8,11 @@ import { SettingsService } from '../settings/settings.service';
 import { MetricsService } from '../../common/metrics/metrics.service';
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | null;
+  tool_calls?: any[];
+  tool_call_id?: string;
+  name?: string;
 }
 
 export interface ChatOptions {
@@ -18,6 +21,12 @@ export interface ChatOptions {
   maxTokens?: number;
   /** Ask the provider for a JSON object response when supported. */
   json?: boolean;
+  tools?: any[];
+}
+
+export interface ChatResponse {
+  content: string;
+  tool_calls?: any[];
 }
 
 /**
@@ -84,6 +93,11 @@ export class AiProviderService {
   }
 
   async chat(messages: ChatMessage[], opts: ChatOptions = {}): Promise<string> {
+    const res = await this.chatWithTools(messages, opts);
+    return res.content;
+  }
+
+  async chatWithTools(messages: ChatMessage[], opts: ChatOptions = {}): Promise<ChatResponse> {
     const ai = await this.settings.ai();
     const payload: Record<string, unknown> = {
       model: opts.model ?? ai.model,
@@ -92,6 +106,10 @@ export class AiProviderService {
     };
     if (opts.maxTokens) payload.max_tokens = opts.maxTokens;
     if (opts.json) payload.response_format = { type: 'json_object' };
+    if (opts.tools && opts.tools.length > 0) {
+      payload.tools = opts.tools;
+      payload.tool_choice = 'auto';
+    }
 
     const model = String(payload.model);
     const total = AiProviderService.RETRIES + 1;
@@ -130,11 +148,15 @@ export class AiProviderService {
       }
 
       const body = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
+        choices?: Array<{ message?: { content?: string, tool_calls?: any[] } }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
       this.recordTokens(model, body.usage);
-      return body.choices?.[0]?.message?.content?.trim() ?? '';
+      const msg = body.choices?.[0]?.message;
+      return {
+        content: msg?.content?.trim() ?? '',
+        tool_calls: msg?.tool_calls,
+      };
     }
     // Unreachable (loop either returns or throws) — satisfy the type checker.
     throw new ServiceUnavailableException(`Could not reach AI provider: ${lastErr}`);

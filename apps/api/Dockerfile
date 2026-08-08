@@ -21,6 +21,7 @@ RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 hermes
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/public ./apps/api/public
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/package.json ./package.json
 COPY apps/api/docker-entrypoint.sh ./docker-entrypoint.sh

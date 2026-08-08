@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentinel Test Harness v2</title>
+  <link rel="stylesheet" href="/api/v1/test-harness-ui/style.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <h1>🧪 Sentinel Test Harness v2</h1>
+      <p class="subtitle">Web Chat Simulator — MOCK Mode (Fase 1)</p>
+    </header>
+
+    <!-- Main Layout: Sidebar (20%) + Chat (50%) + Debug Panel (30%) -->
+    <div class="main-layout">
+      <!-- Sidebar -->
+      <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <h2>Conversations</h2>
+        </div>
+        <div class="session-tabs" id="sessionTabs">
+          <button class="tab-btn active" data-session="new">+ New Session</button>
+        </div>
+      </div>
+
+      <!-- Chat Area -->
+      <div class="chat-area">
+        <!-- Session Info -->
+        <div class="session-info" id="sessionInfo">
+          <span id="sessionName">No session selected</span>
+          <div class="provider-switcher">
+            <select id="providerSelect" disabled>
+              <option value="mock">🎭 mock</option>
+              <option value="anthropic">🤖 anthropic</option>
+              <option value="openrouter" selected>🌐 openrouter</option>
+            </select>
+            <select id="modelSelect" disabled>
+              <option value="meta-llama/llama-3.3-70b-instruct">meta-llama/llama-3.3-70b-instruct</option>
+            </select>
+            <button id="switchProviderBtn" disabled>Switch</button>
+            <button id="clearSessionBtn" class="btn-danger" disabled>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <span>Delete</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Messages -->
+        <div class="messages" id="messages">
+          <div class="welcome-message">
+            <p>👋 Selamat datang di Sentinel Test Harness v2!</p>
+            <p>Klik <strong>+ New Session</strong> untuk mulai testing.</p>
+          </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-area">
+          <input 
+            type="text" 
+            id="messageInput" 
+            placeholder="Ketik pesan... (contoh: ada golok?)"
+            disabled
+          />
+          <button id="sendBtn" disabled>Send</button>
+          <button id="scenarioBtn" disabled>Load Scenario</button>
+        </div>
+      </div>
+
+      <!-- Debug Panel -->
+      <div class="debug-panel">
+        <h3>🔍 Debug Info</h3>
+        
+        <div class="debug-section">
+          <label>Funnel Mode:</label>
+          <span id="debugFunnel" class="badge">—</span>
+        </div>
+
+        <div class="debug-section">
+          <label>Status:</label>
+          <span id="debugStatus">—</span>
+        </div>
+
+        <div class="debug-section">
+          <label>Kota Tujuan:</label>
+          <span id="debugKota">—</span>
+        </div>
+
+        <div class="debug-section">
+          <label>Ongkir:</label>
+          <span id="debugOngkir">—</span>
+        </div>
+
+        <div class="debug-section">
+          <label>Items:</label>
+          <div id="debugItems" class="debug-items">—</div>
+        </div>
+
+        <div class="debug-section">
+          <label>Tokens:</label>
+          <pre id="debugTokens" class="debug-tokens">—</pre>
+        </div>
+
+        <div class="debug-section">
+          <div class="debug-label">Money Gate</div>
+          <div id="debugGate" class="debug-gate">—</div>
+        </div>
+        <div class="debug-item">
+          <div class="debug-label">Tool Calls</div>
+          <div id="debugTools" class="debug-value pre-wrap">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scenario Modal -->
+  <div id="scenarioModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>Load Test Scenario</h3>
+      <div class="scenario-list" id="scenarioList">
+        <div class="scenario-item" data-scenario="golden-case-normal">
+          <h4>Golden Case: Normal</h4>
+          <p>Happy path: pilih produk → qty → alamat → quote ongkir → closing</p>
+        </div>
+        <div class="scenario-item" data-scenario="money-gate-rekap">
+          <h4>Money Gate: Rekap Total</h4>
+          <p>User minta rekap total sebelum pilih produk (Money Gate violation)</p>
+        </div>
+        <div class="scenario-item" data-scenario="qty-pasti-regression">
+          <h4>qtyPasti Regression</h4>
+          <p>User sebutkan qty explicit (5 pisau dapur)</p>
+        </div>
+      </div>
+      <button id="closeModalBtn" class="btn-secondary">Cancel</button>
+    </div>
+  </div>
+
+  <script src="/api/v1/test-harness-ui/app.js"></script>
+</body>
+</html>

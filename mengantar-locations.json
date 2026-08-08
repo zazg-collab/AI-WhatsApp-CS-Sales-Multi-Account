@@ -1,0 +1,485 @@
+{
+  "generatedAt": "2026-08-06T11:44:17.937Z",
+  "kota": [
+    {
+      "label": "Kota Ambon",
+      "province": "MALUKU"
+    },
+    {
+      "label": "Kota Banda Aceh",
+      "province": "NANGGROE ACEH DARUSSALAM (NAD)"
+    },
+    {
+      "label": "Kota Bandung",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kota Banjarbaru",
+      "province": "KALIMANTAN SELATAN"
+    },
+    {
+      "label": "Kota Banjarmasin",
+      "province": "KALIMANTAN SELATAN"
+    },
+    {
+      "label": "Kota Bekasi",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kota Bengkulu",
+      "province": "BENGKULU"
+    },
+    {
+      "label": "Kota Binjai",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kota Bogor",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kota Cimahi",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kota Depok",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kota Gorontalo",
+      "province": "GORONTALO"
+    },
+    {
+      "label": "Kota Jakarta Barat",
+      "province": "DKI JAKARTA"
+    },
+    {
+      "label": "Kota Jakarta Pusat",
+      "province": "DKI JAKARTA"
+    },
+    {
+      "label": "Kota Jakarta Timur",
+      "province": "DKI JAKARTA"
+    },
+    {
+      "label": "Kota Jambi",
+      "province": "JAMBI"
+    },
+    {
+      "label": "Kota Kendari",
+      "province": "SULAWESI TENGGARA"
+    },
+    {
+      "label": "Kota Lubuk Linggau",
+      "province": "SUMATERA SELATAN"
+    },
+    {
+      "label": "Kota Makassar",
+      "province": "SULAWESI SELATAN"
+    },
+    {
+      "label": "Kota Mataram",
+      "province": "NUSA TENGGARA BARAT (NTB)"
+    },
+    {
+      "label": "Kota Medan",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kota Metro",
+      "province": "LAMPUNG"
+    },
+    {
+      "label": "Kota Parepare",
+      "province": "SULAWESI SELATAN"
+    },
+    {
+      "label": "Kota Pariaman",
+      "province": "SUMATERA BARAT"
+    },
+    {
+      "label": "Kota Pekanbaru",
+      "province": "RIAU"
+    },
+    {
+      "label": "Kota Pematang Siantar",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kota Subulussalam",
+      "province": "NANGGROE ACEH DARUSSALAM (NAD)"
+    },
+    {
+      "label": "Kota Sukabumi",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kota Tangerang",
+      "province": "BANTEN"
+    },
+    {
+      "label": "Kota Tanjung Balai",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kota Yogyakarta",
+      "province": "DI YOGYAKARTA"
+    }
+  ],
+  "kabupaten": [
+    {
+      "label": "Kab. Aceh Tamiang",
+      "province": "NANGGROE ACEH DARUSSALAM (NAD)"
+    },
+    {
+      "label": "Kab. Aceh Tengah",
+      "province": "NANGGROE ACEH DARUSSALAM (NAD)"
+    },
+    {
+      "label": "Kab. Aceh Timur",
+      "province": "NANGGROE ACEH DARUSSALAM (NAD)"
+    },
+    {
+      "label": "Kab. Asahan",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Bandung",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kab. Bandung Barat",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kab. Banggai",
+      "province": "SULAWESI TENGAH"
+    },
+    {
+      "label": "Kab. Bangka Selatan",
+      "province": "BANGKA BELITUNG"
+    },
+    {
+      "label": "Kab. Banjar",
+      "province": "KALIMANTAN SELATAN"
+    },
+    {
+      "label": "Kab. Bantul",
+      "province": "DI YOGYAKARTA"
+    },
+    {
+      "label": "Kab. Barito Kuala",
+      "province": "KALIMANTAN SELATAN"
+    },
+    {
+      "label": "Kab. Barru",
+      "province": "SULAWESI SELATAN"
+    },
+    {
+      "label": "Kab. Batu Bara",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Bekasi",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kab. Bengkalis",
+      "province": "RIAU"
+    },
+    {
+      "label": "Kab. Biak Numfor",
+      "province": "PAPUA"
+    },
+    {
+      "label": "Kab. Bogor",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kab. Cianjur",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kab. Dairi",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Deli Serdang",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Empat Lawang",
+      "province": "SUMATERA SELATAN"
+    },
+    {
+      "label": "Kab. Fakfak",
+      "province": "PAPUA BARAT"
+    },
+    {
+      "label": "Kab. Gorontalo",
+      "province": "GORONTALO"
+    },
+    {
+      "label": "Kab. Gorontalo Utara",
+      "province": "GORONTALO"
+    },
+    {
+      "label": "Kab. Hulu Sungai Selatan",
+      "province": "KALIMANTAN SELATAN"
+    },
+    {
+      "label": "Kab. Hulu Sungai Tengah",
+      "province": "KALIMANTAN SELATAN"
+    },
+    {
+      "label": "Kab. Karawang",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kab. Kepulauan Meranti",
+      "province": "RIAU"
+    },
+    {
+      "label": "Kab. Kepulauan Yapen",
+      "province": "PAPUA"
+    },
+    {
+      "label": "Kab. Kotabaru",
+      "province": "KALIMANTAN SELATAN"
+    },
+    {
+      "label": "Kab. Kuantan Singingi",
+      "province": "RIAU"
+    },
+    {
+      "label": "Kab. Labuhanbatu",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Labuhanbatu Selatan",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Labuhanbatu Utara",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Lampung Tengah",
+      "province": "LAMPUNG"
+    },
+    {
+      "label": "Kab. Lampung Timur",
+      "province": "LAMPUNG"
+    },
+    {
+      "label": "Kab. Langkat",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Lombok Barat",
+      "province": "NUSA TENGGARA BARAT (NTB)"
+    },
+    {
+      "label": "Kab. Lombok Tengah",
+      "province": "NUSA TENGGARA BARAT (NTB)"
+    },
+    {
+      "label": "Kab. Lombok Timur",
+      "province": "NUSA TENGGARA BARAT (NTB)"
+    },
+    {
+      "label": "Kab. Lombok Utara",
+      "province": "NUSA TENGGARA BARAT (NTB)"
+    },
+    {
+      "label": "Kab. Majene",
+      "province": "SULAWESI BARAT"
+    },
+    {
+      "label": "Kab. Maluku Barat Daya",
+      "province": "MALUKU"
+    },
+    {
+      "label": "Kab. Maluku Tengah",
+      "province": "MALUKU"
+    },
+    {
+      "label": "Kab. Maluku Tenggara Barat",
+      "province": "MALUKU"
+    },
+    {
+      "label": "Kab. Mamasa",
+      "province": "SULAWESI BARAT"
+    },
+    {
+      "label": "Kab. Mamuju",
+      "province": "SULAWESI BARAT"
+    },
+    {
+      "label": "Kab. Mamuju Tengah",
+      "province": "SULAWESI BARAT"
+    },
+    {
+      "label": "Kab. Mamuju Utara",
+      "province": "SULAWESI BARAT"
+    },
+    {
+      "label": "Kab. Mandailing Natal",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Manggarai Barat",
+      "province": "NUSA TENGGARA TIMUR (NTT)"
+    },
+    {
+      "label": "Kab. Manokwari",
+      "province": "PAPUA BARAT"
+    },
+    {
+      "label": "Kab. Manokwari Selatan",
+      "province": "PAPUA BARAT"
+    },
+    {
+      "label": "Kab. Maros",
+      "province": "SULAWESI SELATAN"
+    },
+    {
+      "label": "Kab. Maybrat",
+      "province": "PAPUA BARAT"
+    },
+    {
+      "label": "Kab. Nias Utara",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Ogan Komering Ulu Timur",
+      "province": "SUMATERA SELATAN"
+    },
+    {
+      "label": "Kab. Padang Lawas Utara",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Pangkajene Kepulauan",
+      "province": "SULAWESI SELATAN"
+    },
+    {
+      "label": "Kab. Pegunungan Arfak",
+      "province": "PAPUA BARAT"
+    },
+    {
+      "label": "Kab. Pesisir Barat",
+      "province": "LAMPUNG"
+    },
+    {
+      "label": "Kab. Polewali Mandar",
+      "province": "SULAWESI BARAT"
+    },
+    {
+      "label": "Kab. Pringsewu",
+      "province": "LAMPUNG"
+    },
+    {
+      "label": "Kab. Purwakarta",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kab. Raja Ampat",
+      "province": "PAPUA BARAT"
+    },
+    {
+      "label": "Kab. Rejang Lebong",
+      "province": "BENGKULU"
+    },
+    {
+      "label": "Kab. Serdang Bedagai",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Simalungun",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Subang",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kab. Sukabumi",
+      "province": "JAWA BARAT"
+    },
+    {
+      "label": "Kab. Supiori",
+      "province": "PAPUA"
+    },
+    {
+      "label": "Kab. Tanah Laut",
+      "province": "KALIMANTAN SELATAN"
+    },
+    {
+      "label": "Kab. Tanjung Jabung Timur",
+      "province": "JAMBI"
+    },
+    {
+      "label": "Kab. Tapanuli Utara",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Tapin",
+      "province": "KALIMANTAN SELATAN"
+    },
+    {
+      "label": "Kab. Teluk Wondama",
+      "province": "PAPUA BARAT"
+    },
+    {
+      "label": "Kab. Toba Samosir",
+      "province": "SUMATERA UTARA"
+    },
+    {
+      "label": "Kab. Way Kanan",
+      "province": "LAMPUNG"
+    }
+  ],
+  "lainnya": [],
+  "kosongProvinces": [
+    "Papua Barat Daya"
+  ],
+  "cappedProvinces": [
+    "Aceh (50 baris)",
+    "Sumatera Utara (50 baris)",
+    "Sumatera Barat (50 baris)",
+    "Riau (50 baris)",
+    "Kepulauan Riau (50 baris)",
+    "Jambi (50 baris)",
+    "Sumatera Selatan (50 baris)",
+    "Bengkulu (50 baris)",
+    "Lampung (50 baris)",
+    "DKI Jakarta (50 baris)",
+    "Jawa Barat (50 baris)",
+    "Jawa Tengah (50 baris)",
+    "DI Yogyakarta (50 baris)",
+    "Jawa Timur (50 baris)",
+    "Banten (50 baris)",
+    "Bali (50 baris)",
+    "Nusa Tenggara Barat (50 baris)",
+    "Nusa Tenggara Timur (50 baris)",
+    "Kalimantan Barat (50 baris)",
+    "Kalimantan Tengah (50 baris)",
+    "Kalimantan Selatan (50 baris)",
+    "Kalimantan Timur (50 baris)",
+    "Kalimantan Utara (50 baris)",
+    "Sulawesi Utara (50 baris)",
+    "Sulawesi Tengah (50 baris)",
+    "Sulawesi Selatan (50 baris)",
+    "Sulawesi Tenggara (50 baris)",
+    "Gorontalo (50 baris)",
+    "Sulawesi Barat (50 baris)",
+    "Maluku (50 baris)",
+    "Maluku Utara (50 baris)",
+    "Papua (50 baris)",
+    "Papua Barat (50 baris)",
+    "Papua Tengah (50 baris)",
+    "Papua Pegunungan (50 baris)",
+    "Papua Selatan (50 baris)"
+  ]
+}

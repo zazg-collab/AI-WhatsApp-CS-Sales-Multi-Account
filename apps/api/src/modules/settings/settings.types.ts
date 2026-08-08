@@ -15,6 +15,8 @@ export interface AiSettings {
   embedModel: string;
   /** Embedding vector dimension. Must match the DB `vector(N)` column. */
   embedDim: number;
+  /** RAG mode: 'hybrid' (native injection) vs 'agentic' (tool call). */
+  ragMode?: 'hybrid' | 'agentic';
 }
 
 export interface WaSettings {

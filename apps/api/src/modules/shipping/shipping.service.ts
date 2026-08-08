@@ -2279,9 +2279,18 @@ export class ShippingService {
     /** >>> ANGGA — P4: provinsi (kalau pelanggan menyebutnya) = saringan
      *  deterministik atas kelompok kandidat. <<< */
     provinsi?: string | null;
+    /** >>> ANGGA — TOOL-CALLING: Bypass search jika LLM sudah punya ID dari tool search_destinations <<< */
+    prefetchedDestination?: { id: string; city: string; province: string; label: string };
   }): Promise<ShippingResult> {
     const cfg = await this.settings.shipping();
     if (!cfg.mengantarApiKey || !cfg.mengantarOriginId) return { status: 'not_configured' };
+
+    if (input.prefetchedDestination) {
+      return this.quoteUntukTujuan(
+        { city: input.prefetchedDestination.city, province: input.prefetchedDestination.province, label: input.prefetchedDestination.label, destinationId: input.prefetchedDestination.id },
+        input.items,
+      );
+    }
 
     // Langkah 2b — tukar nama panggilan dengan nama resmi SEBELUM mencari.
     // Kalau tidak ada aliasnya, `dicari` sama persis dengan yang diketik.
@@ -2298,12 +2307,16 @@ export class ShippingService {
       return { status: 'api_error' };
     }
     let urut = resolveDestination(rows, dicari);
-    // >>> ANGGA — DICABUT 2026-08-05 malam (uji API NYATA Bossfren via widget):
-    // varian "kota <nama>"/"kabupaten <nama>" TIDAK berguna — search "kota
-    // mataram" mengembalikan NOL baris di API Mengantar. Solusi yang benar =
-    // GABUNG DUA JAWABAN di tangga jawaban ("sandubaya mataram" → 7 baris
-    // presisi Kota Mataram NTB), lihat tangga jawaban-polos di
-    // quoteForConversation. <<<
+    // >>> ANGGA — temuan widget Bossfren (2026-08-05): keyword GABUNGAN
+    // ("sandubaya mataram") memunculkan baris tapi NOL kelompok kandidat —
+    // pencocok level tak pernah cocok dengan frasa utuh. Nilai per kata. <<<
+    if (!urut.length && /\s/.test(dicari)) {
+      for (const w of dicari.split(/\s+/).filter((x) => x.length >= 4)) {
+        urut = resolveDestination(rows, w);
+        if (urut.length) break;
+      }
+    }
+    
     if (!urut.length) {
       this.logger.warn(`Ongkir [need_more_detail]: "${dicari}" — ${rows.length} baris hasil search, nol kandidat kota/kabupaten yang cocok (kemungkinan tenggelam di potongan 50 baris; minta kecamatan)`);
     }
@@ -4056,6 +4069,86 @@ export class ShippingService {
     const totalGrams = matched.reduce((sum, m) => sum + m.qty * m.grams, 0);
     const totalPrice = matched.reduce((sum, m) => sum + m.qty * m.price, 0);
     return { matched, unmatched, ambiguous, totalGrams, totalPrice };
+  }
+
+  // ── MENGANTAR TOOL CALLING API UNTUK LLM ──────────────────────────────────
+  // Kedua fungsi ini menjembatani LLM dengan aturan bisnis ongkir di backend.
+
+  public async llmSearchDestinations(keyword: string, province?: string): Promise<any> {
+    const cfg = await this.settings.shipping();
+    if (!cfg.mengantarApiKey || !cfg.mengantarOriginId) throw new Error('Konfigurasi API Mengantar belum diatur');
+
+    const dicari = terapkanAlias(keyword, cfg.destinationAliases);
+    const rows = await this.mengantar.searchAddress(dicari);
+    if (!rows) throw new Error('Gagal menghubungi server ongkir');
+
+    let urut = resolveDestination(rows, dicari);
+    const prov = normalisasiProvinsi(province ?? '');
+    if (prov && urut.length) {
+      const seprovinsi = urut.filter((c) => {
+        const p = normalisasiProvinsi(c.province);
+        return p.includes(prov) || prov.includes(p);
+      });
+      if (seprovinsi.length) urut = seprovinsi;
+    }
+
+    if (urut.length === 0) {
+      return `PENTING: Tidak ada lokasi yang cocok untuk "${keyword}". JANGAN panggil calculate_shipping. INSTRUKSI: Balas pelanggan dengan ramah, beri tahu bahwa lokasinya tidak ditemukan, dan minta mereka menyebutkan nama kecamatan beserta kabupaten/kota-nya.`;
+    }
+
+    if (urut.length > 1 && !kandidatDominan(urut)) {
+      const list = urut.slice(0, 3).map(c => `- ${c.cityLabel}, ${c.province}`).join('\n');
+      return `PENTING: Ditemukan beberapa lokasi ambigu untuk "${keyword}":\n${list}\n\nINSTRUKSI: JANGAN panggil calculate_shipping dan JANGAN menebak sendiri! Kamu WAJIB membalas pelanggan, sebutkan beberapa pilihan di atas secara natural, dan minta mereka memilih kecamatan yang tepat.`;
+    }
+
+    // Jika kandidat dominan atau hanya 1, kembalikan JSON array dengan 1 item saja.
+    const top = urut[0];
+    return [{
+      id: top.ids[0],
+      city: top.city,
+      province: top.province,
+      label: `${top.cityLabel}, ${top.province}`,
+    }];
+  }
+
+  public async llmCalculateShipping(
+    conversationId: string,
+    destination: { id: string, city: string, province: string, label: string },
+    items: { name: string, qty: number }[]
+  ): Promise<any> {
+    // Kita panggil quote() dengan memotong langkah search.
+    const result = await this.quote({
+      keyword: destination.label, // keyword hanya formalitas, tidak disearch
+      items,
+      prefetchedDestination: destination,
+    });
+
+    if (result.status === 'ok') {
+      // WAJIB: Simpan hasil akhir ke cache, persis seperti quoteForConversation lama,
+      // agar nanti saat LLM generate {{total_cod}}, parser token bisa membacanya dari DB!
+      await this.cache.set(conversationId, result.quote, 2 * 60 * 60 * 1000); // hardcode TTL 2 jam untuk tools, bisa disesuaikan nanti
+
+      // Kembalikan metadata ringan yang memicu LLM melanjutkan dialog dengan Pede.
+      return `Ongkir berhasil dihitung! SEKARANG balas pelanggan dengan ramah dan gunakan token {{blok_total}} untuk menampilkan rincian harga. Jangan sebut angka ongkir sendiri, cukup sisipkan {{blok_total}} di dalam balasanmu.`;
+    } else if (result.status === 'need_more_detail') {
+      return {
+        status: 'error',
+        reason: result.status,
+        message: `Tujuan terlalu umum atau ambigu. Minta pelanggan menyebutkan KECAMATAN yang lebih spesifik. Keyword sebelumnya: ${destination.label}`,
+      };
+    } else if (result.status === 'not_configured') {
+      return {
+        status: 'error',
+        reason: result.status,
+        message: 'Gagal menghitung ongkir. Sistem belum dikonfigurasi (API Key kurir kosong).',
+      };
+    } else {
+      return {
+        status: 'error',
+        reason: result.status,
+        message: `Gagal menghitung ongkir (${result.status}). Beri tahu pelanggan bahwa alamat tujuan sedang bermasalah dengan kurir.`,
+      };
+    }
   }
 }
 

@@ -5,6 +5,7 @@ import { ChatMessage } from './ai-provider.service';
 import { ProductsService } from '../products/products.service';
 import { KnowledgeIndexService, RetrievedKnowledge } from './knowledge-index.service';
 import { ShippingService } from '../shipping/shipping.service'; // >>> ANGGA <<<
+import { SettingsService } from '../settings/settings.service'; // >>> ANGGA <<<
 import {
   t,
   BASE_RULES,
@@ -78,6 +79,7 @@ export class PromptBuilderService {
     // >>> ANGGA: opsional supaya seluruh spec lama yang membangun service ini
     // dengan 3 argumen tetap jalan tanpa diubah.
     @Optional() private readonly shipping?: ShippingService,
+    @Optional() private readonly settings?: SettingsService,
     // <<< ANGGA
   ) {}
 
@@ -165,11 +167,14 @@ export class PromptBuilderService {
       .map((m) => m.content as string)
       .join(' ');
 
-    const knowledge = await this.loadKnowledge(
-      conversation.bot?.knowledgeBaseId ?? null,
-      query,
-      lang,
-    );
+    const ragMode = this.settings ? (await this.settings.ai()).ragMode : 'hybrid';
+    const knowledge = ragMode === 'hybrid' 
+      ? await this.loadKnowledge(
+          conversation.bot?.knowledgeBaseId ?? null,
+          query,
+          lang,
+        )
+      : null;
 
     const memory = this.customerMemory(conversation.customer, lang);
 
@@ -328,14 +333,14 @@ export class PromptBuilderService {
     // di history — model tidak melihat isi balasan sebelumnya sama sekali.
     // Arsitektural, bukan tambalan regex by-case.
     if (this.shipping) {
-      history = (await this.shipping.compressHistory(conversationId, history)) as ChatMessage[];
+      history = (await this.shipping.compressHistory(conversationId, history as any)) as ChatMessage[];
     }
     // <<< ANGGA
 
     // Token-budget trim: drop oldest history turns until under MAX_CONTEXT_CHARS.
     // System prompt + knowledge stay intact; only chat history is trimmed.
     const historyChars = (msgs: ChatMessage[]) =>
-      msgs.reduce((sum, m) => sum + m.content.length, 0);
+      msgs.reduce((sum, m) => sum + (m.content?.length || 0), 0);
     let budgetTrimmed = false;
     while (history.length > 1 && historyChars(history) > MAX_CONTEXT_CHARS) {
       history.shift();
@@ -420,6 +425,18 @@ export class PromptBuilderService {
       orderBy: { updatedAt: 'desc' },
     });
   }
+
+  // >>> ANGGA: Ekspos pencarian RAG sebagai fungsi untuk Tool Calling LLM.
+  async llmSearchKnowledge(
+    knowledgeBaseId: string | null,
+    query: string,
+    lang = 'id',
+  ): Promise<{ results: string }> {
+    if (!knowledgeBaseId) return { results: t(KNOWLEDGE_EMPTY_NOTE, lang as any) };
+    const knowledge = await this.loadKnowledge(knowledgeBaseId, query, lang);
+    return { results: knowledge || t(KNOWLEDGE_EMPTY_NOTE, lang as any) };
+  }
+  // <<< ANGGA
 
   private async loadKnowledge(
     knowledgeBaseId: string | null,

@@ -72,6 +72,13 @@ const dict: Dict = {
   ragReindexOff: { id: 'RAG belum aktif di server — nyalakan lalu Simpan dulu.', en: 'RAG is not enabled on the server — turn it on and save first.' },
   ragReindexFail: { id: 'Gagal membangun indeks. Cek model embedding & API key.', en: 'Reindex failed. Check the embedding model & API key.' },
   ragDirty: { id: 'Ada perubahan RAG yang belum disimpan.', en: 'Unsaved RAG changes.' },
+  ragMode: { id: 'Mode RAG', en: 'RAG Mode' },
+  ragModeHint: {
+    id: 'Hybrid: disuntikkan ke prompt utama. Agentic: AI memanggil pencarian sebagai alat saat butuh.',
+    en: 'Hybrid: injected into main prompt. Agentic: AI calls search as a tool when needed.',
+  },
+  modeHybrid: { id: 'Hybrid (Native)', en: 'Hybrid (Native)' },
+  modeAgentic: { id: 'Agentic (Tool)', en: 'Agentic (Tool)' },
   // <<< ANGGA
   // WA
   waIntro: { id: 'Jeda mirip-manusia menurunkan risiko banned. Nilai dalam milidetik.', en: 'Human-like delays reduce ban risk. Values in milliseconds.' },
@@ -120,7 +127,7 @@ type Tab = 'ai' | 'wa' | 'notif' | 'sentinel' | 'campaign';
 
 interface SettingsShape {
   // >>> ANGGA: embedModel/embedDim ditambahkan (sakelar RAG)
-  ai: { baseUrl: string; model: string; sentinelModel: string; temperature: number; timeoutMs: number; apiKeySet: boolean; embedModel: string; embedDim: number };
+  ai: { baseUrl: string; model: string; sentinelModel: string; temperature: number; timeoutMs: number; apiKeySet: boolean; embedModel: string; embedDim: number; ragMode?: 'hybrid' | 'agentic' };
   // <<< ANGGA
   wa: { humanDelayMinMs: number; humanDelayMaxMs: number; typingPerCharMs: number; typingMinMs: number; typingMaxMs: number };
   notifications: { hermesNotifyTarget: string };
@@ -242,6 +249,7 @@ export default function SettingsPage() {
           // >>> ANGGA: sakelar RAG. embedModel kosong = RAG mati.
           embedModel: (data.ai.embedModel ?? '').trim(),
           embedDim: Number(data.ai.embedDim) || 1536,
+          ragMode: data.ai.ragMode ?? 'hybrid',
           // <<< ANGGA
         };
       } else if (tab === 'wa') {
@@ -441,6 +449,14 @@ export default function SettingsPage() {
                         <input type="number" min="64" max="8192" className={fieldCls} disabled={!canEdit}
                           value={data.ai.embedDim ?? 1536}
                           onChange={(e) => { patch('ai', 'embedDim', e.target.value); setRagDirty(true); }} />
+                      </Field>
+                      <Field label={t('ragMode')} hint={t('ragModeHint')}>
+                        <select className={fieldCls} disabled={!canEdit}
+                          value={data.ai.ragMode ?? 'hybrid'}
+                          onChange={(e) => { patch('ai', 'ragMode', e.target.value as 'hybrid' | 'agentic'); setRagDirty(true); }}>
+                          <option value="hybrid">{t('modeHybrid')}</option>
+                          <option value="agentic">{t('modeAgentic')}</option>
+                        </select>
                       </Field>
                       <div>
                         <Button variant="outline" size="sm" onClick={reindexAll}
