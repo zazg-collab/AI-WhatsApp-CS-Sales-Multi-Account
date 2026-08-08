@@ -227,10 +227,11 @@ describe('AiService', () => {
       expect(r.text).toBe('Toko buka jam 8 pagi');
     });
 
+    // >>> DEEPSEEK — update mock untuk arsitektur response tool baru (2026-08-08) <<<
     it('executes tool calling for shipping operations', async () => {
       const shipping = {
-        llmSearchDestinations: jest.fn().mockResolvedValue([{ id: '123', label: 'Mataram' }]),
-        llmCalculateShipping: jest.fn().mockResolvedValue({ status: 'success', hasCod: true }),
+        llmSearchDestinations: jest.fn().mockResolvedValue({ ok: true, data: { destinations: [{ id: '123', label: 'Mataram' }] }, action: 'proceed' }),
+        llmCalculateShipping: jest.fn().mockResolvedValue({ ok: true, data: { quote: { status: 'success' } }, action: 'reply_to_user' }),
         resolvePriceTokens: jest.fn().mockResolvedValue({ ok: true, text: 'Ongkir 10rb', issues: [], issueCodes: [] })
       };
       const svc = new (service.constructor as any)(prisma, provider, prompts, notifications, cache, undefined, metrics, shipping);
@@ -249,7 +250,7 @@ describe('AiService', () => {
 
       const r = await svc.generateReply('c1');
       expect(provider.chatWithTools).toHaveBeenCalledTimes(2);
-      expect(shipping.llmSearchDestinations).toHaveBeenCalledWith('mataram', undefined);
+      expect(shipping.llmSearchDestinations).toHaveBeenCalledWith('mataram', undefined, undefined);
       expect(r.text).toBe('Ongkir 10rb');
     });
 

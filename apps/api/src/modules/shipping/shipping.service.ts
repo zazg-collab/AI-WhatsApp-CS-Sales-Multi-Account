@@ -4073,16 +4073,53 @@ export class ShippingService {
 
   // ── MENGANTAR TOOL CALLING API UNTUK LLM ──────────────────────────────────
   // Kedua fungsi ini menjembatani LLM dengan aturan bisnis ongkir di backend.
+  //
+  // >>> DEEPSEEK — ROMBAK TOTAL (2026-08-08): arsitektur response tool yang
+  // INKONSISTEN (string vs JSON) menyebabkan LLM (terutama LLaMA) infinite
+  // loop saat hasil ambigu. 7x percobaan Gemini gagal karena cuma mengutak-
+  // atik kata-kata "PENTING" / "INSTRUKSI" di return string, tanpa menyadari
+  // bahwa return value tool HARUS JSON terstruktur — instruksi di dalam
+  // output tool TIDAK PERNAH dipatuhi LLM (function-calling protocol).
+  //
+  // KONTRAK BARU: semua return value = JSON { ok, data?, error?, action }
+  //   action: 'proceed'      → LLM LANJUT ke calculate_shipping
+  //   action: 'ask_user'     → LLM WAJIB balas user (tanya/minta klarifikasi)
+  //   action: 'reply_to_user'→ LLM WAJIB balas user (hasil final)
+  //
+  // Tambahan: parameter `previousKeyword` + auto-combine di backend supaya
+  // LLM tidak perlu pintar menggabungkan keyword sendiri (flow: "Mataram"
+  // ambigu → user jawab "Sandubaya" → backend coba "Sandubaya Mataram").
 
-  public async llmSearchDestinations(keyword: string, province?: string): Promise<any> {
+  public async llmSearchDestinations(
+    keyword: string,
+    province?: string,
+    previousKeyword?: string,
+  ): Promise<any> {
     const cfg = await this.settings.shipping();
-    if (!cfg.mengantarApiKey || !cfg.mengantarOriginId) throw new Error('Konfigurasi API Mengantar belum diatur');
+    if (!cfg.mengantarApiKey || !cfg.mengantarOriginId) {
+      return { ok: false, error: 'Konfigurasi API Mengantar belum diatur', action: 'ask_user' };
+    }
 
     const dicari = terapkanAlias(keyword, cfg.destinationAliases);
     const rows = await this.mengantar.searchAddress(dicari);
-    if (!rows) throw new Error('Gagal menghubungi server ongkir');
+    if (!rows) {
+      return { ok: false, error: 'Gagal menghubungi server ongkir', action: 'ask_user' };
+    }
 
     let urut = resolveDestination(rows, dicari);
+
+    // >>> DEEPSEEK — fallback multi-kata (salin dari quote() baris 2313):
+    // keyword GABUNGAN ("Sandubaya Mataram") bisa menghasilkan 0 kandidat
+    // karena levelKecocokan cocokkan frasa UTUH — pecah per kata.
+    if (!urut.length && /\s/.test(dicari)) {
+      for (const w of dicari.split(/\s+/).filter((x) => x.length >= 4)) {
+        urut = resolveDestination(rows, w);
+        if (urut.length) break;
+      }
+    }
+    // <<< DEEPSEEK
+
+    // Filter provinsi
     const prov = normalisasiProvinsi(province ?? '');
     if (prov && urut.length) {
       const seprovinsi = urut.filter((c) => {
@@ -4092,64 +4129,117 @@ export class ShippingService {
       if (seprovinsi.length) urut = seprovinsi;
     }
 
+    // >>> DEEPSEEK — auto-combine: kalau masih ambigu DAN ada previousKeyword,
+    // coba gabung keyword + previousKeyword dalam SATU panggilan API baru.
+    if (urut.length > 1 && !kandidatDominan(urut) && previousKeyword) {
+      const combined = `${keyword} ${previousKeyword}`;
+      this.logger.debug(`[Tool] auto-combine: "${keyword}" ambigu → coba "${combined}"`);
+      const combinedRows = await this.mengantar.searchAddress(combined);
+      if (combinedRows) {
+        let combinedUrut = resolveDestination(combinedRows, combined);
+        // fallback multi-kata untuk hasil combine juga
+        if (!combinedUrut.length && /\s/.test(combined)) {
+          for (const w of combined.split(/\s+/).filter((x) => x.length >= 4)) {
+            combinedUrut = resolveDestination(combinedRows, w);
+            if (combinedUrut.length) break;
+          }
+        }
+        if (combinedUrut.length === 1 || kandidatDominan(combinedUrut)) {
+          urut = combinedUrut;
+        }
+      }
+    }
+    // <<< DEEPSEEK
+
+    // ── Response ──────────────────────────────────────────────────────────
+
     if (urut.length === 0) {
-      return `PENTING: Tidak ada lokasi yang cocok untuk "${keyword}". JANGAN panggil calculate_shipping. INSTRUKSI: Balas pelanggan dengan ramah, beri tahu bahwa lokasinya tidak ditemukan, dan minta mereka menyebutkan nama kecamatan beserta kabupaten/kota-nya.`;
+      return {
+        ok: false,
+        error: `Tidak ada lokasi cocok untuk "${keyword}". Minta pelanggan menyebutkan nama kecamatan beserta kabupaten/kota-nya.`,
+        action: 'ask_user',
+      };
     }
 
     if (urut.length > 1 && !kandidatDominan(urut)) {
-      const list = urut.slice(0, 3).map(c => `- ${c.cityLabel}, ${c.province}`).join('\n');
-      return `PENTING: Ditemukan beberapa lokasi ambigu untuk "${keyword}":\n${list}\n\nINSTRUKSI: JANGAN panggil calculate_shipping dan JANGAN menebak sendiri! Kamu WAJIB membalas pelanggan, sebutkan beberapa pilihan di atas secara natural, dan minta mereka memilih kecamatan yang tepat.`;
+      const destinations = urut.slice(0, 5).map((c) => ({
+        id: c.ids[0],
+        city: c.city,
+        province: c.province,
+        label: labelKandidat(c, urut),
+      }));
+      return {
+        ok: true,
+        data: { destinations, ambiguous: true },
+        action: 'ask_user',
+      };
     }
 
-    // Jika kandidat dominan atau hanya 1, kembalikan JSON array dengan 1 item saja.
+    // Kandidat dominan atau tunggal — langsung proceed
     const top = urut[0];
-    return [{
-      id: top.ids[0],
-      city: top.city,
-      province: top.province,
-      label: `${top.cityLabel}, ${top.province}`,
-    }];
+    return {
+      ok: true,
+      data: {
+        destinations: [{
+          id: top.ids[0],
+          city: top.city,
+          province: top.province,
+          label: `${top.cityLabel}, ${top.province}`,
+        }],
+        ambiguous: false,
+      },
+      action: 'proceed',
+    };
   }
 
   public async llmCalculateShipping(
     conversationId: string,
-    destination: { id: string, city: string, province: string, label: string },
-    items: { name: string, qty: number }[]
+    destination: { id: string; city: string; province: string; label: string },
+    items: { name: string; qty: number }[],
   ): Promise<any> {
-    // Kita panggil quote() dengan memotong langkah search.
     const result = await this.quote({
-      keyword: destination.label, // keyword hanya formalitas, tidak disearch
+      keyword: destination.label,
       items,
       prefetchedDestination: destination,
     });
 
     if (result.status === 'ok') {
-      // WAJIB: Simpan hasil akhir ke cache, persis seperti quoteForConversation lama,
-      // agar nanti saat LLM generate {{total_cod}}, parser token bisa membacanya dari DB!
-      await this.cache.set(conversationId, result.quote, 2 * 60 * 60 * 1000); // hardcode TTL 2 jam untuk tools, bisa disesuaikan nanti
+      // WAJIB: Simpan hasil akhir ke cache, persis seperti quoteForConversation
+      // lama, agar nanti saat LLM generate {{total_cod}}, parser token bisa
+      // membacanya dari DB!
+      await this.cache.set(conversationId, result.quote, 2 * 60 * 60 * 1000);
 
-      // Kembalikan metadata ringan yang memicu LLM melanjutkan dialog dengan Pede.
-      return `Ongkir berhasil dihitung! SEKARANG balas pelanggan dengan ramah dan gunakan token {{blok_total}} untuk menampilkan rincian harga. Jangan sebut angka ongkir sendiri, cukup sisipkan {{blok_total}} di dalam balasanmu.`;
-    } else if (result.status === 'need_more_detail') {
       return {
-        status: 'error',
-        reason: result.status,
-        message: `Tujuan terlalu umum atau ambigu. Minta pelanggan menyebutkan KECAMATAN yang lebih spesifik. Keyword sebelumnya: ${destination.label}`,
-      };
-    } else if (result.status === 'not_configured') {
-      return {
-        status: 'error',
-        reason: result.status,
-        message: 'Gagal menghitung ongkir. Sistem belum dikonfigurasi (API Key kurir kosong).',
-      };
-    } else {
-      return {
-        status: 'error',
-        reason: result.status,
-        message: `Gagal menghitung ongkir (${result.status}). Beri tahu pelanggan bahwa alamat tujuan sedang bermasalah dengan kurir.`,
+        ok: true,
+        data: { quote: result.quote },
+        action: 'reply_to_user',
       };
     }
+
+    // ── Error paths ───────────────────────────────────────────────────────
+    if (result.status === 'need_more_detail') {
+      return {
+        ok: false,
+        error: `Tujuan terlalu umum atau ambigu. Minta pelanggan menyebutkan KECAMATAN yang lebih spesifik. Keyword: ${destination.label}`,
+        action: 'ask_user',
+      };
+    }
+
+    if (result.status === 'not_configured') {
+      return {
+        ok: false,
+        error: 'Gagal menghitung ongkir. Sistem belum dikonfigurasi (API Key kurir kosong).',
+        action: 'ask_user',
+      };
+    }
+
+    return {
+      ok: false,
+      error: `Gagal menghitung ongkir (${result.status}). Beri tahu pelanggan bahwa alamat tujuan sedang bermasalah dengan kurir.`,
+      action: 'ask_user',
+    };
   }
+  // <<< DEEPSEEK
 }
 
 // ── Pembantu murni tingkat modul ────────────────────────────────────────────

@@ -93,11 +93,16 @@ export class ChatSessionManager {
       t(MEDIA_EMPTY_NOTE, lang),
       '',
       `Ini adalah mode TEST HARNESS. Anggap userText adalah input pelanggan asli. Jangan sebut kamu sedang dalam mode simulasi. Jawab sesuai persona dan aturan.`,
-      `ATURAN PENTING PENCARIAN ONGKIR:`,
-      `1. Jika hasil 'search_destinations' KOSONG, minta maaf dan tanyakan nama kecamatan dan kabupatennya dengan lebih spesifik.`,
-      `2. Jika hasil 'search_destinations' LEBIH DARI SATU (banyak opsi), JANGAN asal tebak. Sebutkan secara natural ada beberapa pilihan, dan minta pelanggan untuk menegaskan nama kecamatan/kabupaten yang benar.`,
-      `3. JANGAN PERNAH menyebutkan istilah teknis (seperti destination_id atau array json) kepada pelanggan.`,
-      `4. SANGAT PENTING: SETELAH kamu memanggil tool apapun dan menerima hasilnya, kamu WAJIB menuliskan kalimat balasan (text response) untuk pelanggan berdasarkan hasil tool tersebut. JANGAN PERNAH mengembalikan respons kosong (empty string)!`
+      // >>> DEEPSEEK — ROMBAK (2026-08-08): aturan flow ongkir yang
+      // menceritakan alur secara natural. Return value tool sudah berisi
+      // field `action` yang memberi tahu langkah selanjutnya — tidak perlu
+      // instruksi "JANGAN" bertele-tele yang membingungkan LLM.
+      `ATURAN FLOW ONGKIR:`,
+      `- search_destinations mengembalikan field "action". Kalau "proceed" → lanjut calculate_shipping. Kalau "ask_user" → balas pelanggan.`,
+      `- calculate_shipping mengembalikan field "action". Kalau "reply_to_user" → balas pelanggan (pakai {{blok_total}}).`,
+      `- JANGAN menyebut istilah teknis (destination_id, JSON) ke pelanggan.`,
+      `- SETELAH semua tool call selesai, WAJIB tulis balasan untuk pelanggan.`,
+      // <<< DEEPSEEK
     ].join('\n');
 
     return sharedSystem;
@@ -141,17 +146,25 @@ export class ChatSessionManager {
     const bot = await this.prisma.bot.findFirst({ orderBy: { createdAt: 'desc' } });
     const kbId = bot?.knowledgeBaseId ?? null;
 
+    // >>> DEEPSEEK — ROMBAK tool definitions (2026-08-08) <<<
     let tools: any[] | undefined = [
       {
         type: 'function',
         function: {
           name: 'search_destinations',
-          description: 'WAJIB DIPANGGIL KETIKA pelanggan menanyakan ongkos kirim. Gunakan ini untuk memvalidasi kecamatan/kota tujuan pengiriman di sistem logistik sebelum menghitung ongkos kirim. Jangan pernah menebak/mengira-ngira ongkos kirim tanpa memanggil tool ini terlebih dahulu.',
+          description: `Mencari destinasi pengiriman di sistem logistik. Panggil saat pelanggan menanyakan ongkir atau menyebut lokasi pengiriman.
+
+CARA KERJA tool ini (return value berisi field "action"):
+- action: "proceed" → destinasi sudah PASTI (1 hasil). LANJUT panggil calculate_shipping.
+- action: "ask_user" → hasil ambigu atau tidak ditemukan. BALAS pelanggan, minta klarifikasi. JANGAN panggil calculate_shipping.
+
+TIPS: Jika sebelumnya kamu sudah mencari lokasi dan hasilnya ambigu, isi parameter previous_keyword dengan kata kunci sebelumnya. Sistem akan otomatis menggabungkan kata kunci.`,
           parameters: {
             type: 'object',
             properties: {
-              keyword: { type: 'string', description: 'Masukkan GABUNGAN nama Kecamatan dan Kota/Kabupaten yang disebut pelanggan untuk pencarian terbaik. Contoh: "Sandubaya Mataram" atau "Cibinong Bogor".' },
-              province: { type: 'string', description: 'Nama provinsi jika pelanggan menyebutkannya spesifik, jika tidak biarkan kosong.' }
+              keyword: { type: 'string', description: 'Nama kecamatan, kota, atau kabupaten yang disebut pelanggan. Gabungkan kecamatan+kota untuk hasil terbaik. Contoh: "Sandubaya Mataram".' },
+              province: { type: 'string', description: 'Nama provinsi jika pelanggan menyebutkannya spesifik. Boleh dikosongkan.' },
+              previous_keyword: { type: 'string', description: 'Kata kunci pencarian SEBELUMNYA jika hasil sebelumnya ambigu. Contoh: sebelumnya cari "Mataram", pelanggan jawab "Sandubaya" → isi "Mataram".' },
             },
             required: ['keyword']
           }
@@ -161,17 +174,21 @@ export class ChatSessionManager {
         type: 'function',
         function: {
           name: 'calculate_shipping',
-          description: 'WAJIB dipanggil SETELAH berhasil mendapatkan hasil dari search_destinations. Gunakan tool ini untuk menghitung ongkos kirim. Masukkan data dari search_destinations ke dalam parameter yang diminta. JANGAN PERNAH MENGHITUNG ONGKIR SENDIRI tanpa tool ini.',
+          description: `Menghitung ongkos kirim ke destinasi yang SUDAH PASTI. HANYA panggil setelah search_destinations mengembalikan action: "proceed".
+
+Return value tool ini berisi field "action":
+- action: "reply_to_user" → ongkir berhasil. BALAS pelanggan, gunakan token {{blok_total}}.
+- action: "ask_user" → terjadi kendala. Sampaikan error ke pelanggan.`,
           parameters: {
             type: 'object',
             properties: {
-              destination_id: { type: 'string', description: 'ID lokasi dari hasil search_destinations' },
-              city: { type: 'string', description: 'Nama kota dari hasil search_destinations' },
-              province: { type: 'string', description: 'Nama provinsi dari hasil search_destinations' },
-              label: { type: 'string', description: 'Label lengkap dari hasil search_destinations' },
+              destination_id: { type: 'string', description: 'ID lokasi dari hasil search_destinations (field id).' },
+              city: { type: 'string', description: 'Nama kota dari hasil search_destinations.' },
+              province: { type: 'string', description: 'Nama provinsi dari hasil search_destinations.' },
+              label: { type: 'string', description: 'Label lengkap dari hasil search_destinations.' },
               items: {
                 type: 'array',
-                description: 'Daftar produk yang ingin dibeli pelanggan (kosongkan jika belum tahu/tidak disebutkan)',
+                description: 'Daftar produk yang ingin dibeli ([] jika belum tahu).',
                 items: {
                   type: 'object',
                   properties: {
@@ -209,11 +226,14 @@ export class ChatSessionManager {
 
     let text = '';
     const executedToolCalls: any[] = [];
+    // >>> DEEPSEEK — loop detection (2026-08-08) <<<
+    const seenCalls = new Set<string>();
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         const res = await this.aiProvider.chatWithTools(messages, {
           model: resolvedModel,
-          maxTokens: 400,
+          // >>> DEEPSEEK — maxTokens 400 → 800 (2026-08-08) <<<
+          maxTokens: 800,
           tools,
         });
 
@@ -223,6 +243,24 @@ export class ChatSessionManager {
         if (!toolCalls || toolCalls.length === 0) {
           break;
         }
+
+        // >>> DEEPSEEK — loop detection (2026-08-08) <<<
+        const callSig = JSON.stringify(
+          toolCalls.map((c: any) => `${c.function?.name ?? '?'}:${c.function?.arguments ?? '{}'}`),
+        );
+        if (seenCalls.has(callSig)) {
+          this.logger.warn(
+            `[TestHarness] Loop terdeteksi — LLM memanggil tool yang sama: ${callSig}. Memaksa reply.`,
+          );
+          seenCalls.clear();
+          messages.push({
+            role: 'system',
+            content:
+              'Kamu sudah memanggil tool yang sama berulang kali. JANGAN panggil tool lagi. Sekarang WAJIB membalas pelanggan.',
+          });
+        }
+        seenCalls.add(callSig);
+        // <<< DEEPSEEK
 
         messages.push({
           role: 'assistant',
@@ -240,7 +278,8 @@ export class ChatSessionManager {
             const args = JSON.parse(call.function.arguments);
             parsedArgs = args;
             if (fnName === 'search_destinations') {
-              const res = await this.shipping.llmSearchDestinations(args.keyword, args.province);
+              // >>> DEEPSEEK — pass previous_keyword untuk auto-combine (2026-08-08) <<<
+              const res = await this.shipping.llmSearchDestinations(args.keyword, args.province, args.previous_keyword);
               parsedResult = res;
               resultStr = JSON.stringify(res);
             } else if (fnName === 'calculate_shipping') {
@@ -282,15 +321,18 @@ export class ChatSessionManager {
       }
 
       this.logger.debug(`[TestHarness] AI Response: text=${text}, tools=${JSON.stringify(executedToolCalls)}`);
+      // >>> DEEPSEEK — fallback empty text (2026-08-08):
+      // Kalau setelah loop selesai text masih kosong (LLM terus-terusan
+      // panggil tool tanpa menghasilkan balasan), isi dengan fallback
+      // supaya UI tidak menampilkan bubble kosong.
       if (!text || text.trim() === '') {
-        // Jika model tidak mengembalikan apa-apa (biasanya karena strict system prompt collision),
-        // fallback agar loop tidak mandek tanpa jejak (empty bubble).
         if (executedToolCalls.length > 0) {
           text = "Menghitung ongkos kirim... \n\n{{blok_total}}";
         } else {
           text = "Maaf, saya tidak bisa memproses permintaan tersebut saat ini.";
         }
       }
+      // <<< DEEPSEEK
     } catch (err) {
       this.logger.error(`[TestHarness] AI Error: ${err}`);
       throw err;

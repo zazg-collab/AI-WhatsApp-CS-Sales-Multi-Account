@@ -300,12 +300,24 @@ export class AiService {
           type: 'function',
           function: {
             name: 'search_destinations',
-            description: 'Cari daftar ID tujuan pengiriman (kecamatan/kota) jika pelanggan menanyakan ongkir ke suatu daerah namun spesifikasinya kurang jelas.',
+            // >>> DEEPSEEK — ROMBAK (2026-08-08): deskripsi yang menceritakan
+            // alur secara natural, bukan daftar instruksi. LLM akan membaca
+            // return value tool yang berisi `action` field untuk tahu langkah
+            // selanjutnya — tidak perlu instruksi "JANGAN" di sini.
+            description: `Mencari destinasi pengiriman di sistem logistik. Panggil saat pelanggan menanyakan ongkir atau menyebut lokasi pengiriman.
+
+CARA KERJA tool ini (return value berisi field "action"):
+- action: "proceed" → destinasi sudah PASTI (1 hasil). LANJUT panggil calculate_shipping.
+- action: "ask_user" → hasil ambigu atau tidak ditemukan. BALAS pelanggan, minta klarifikasi kecamatan/kabupaten. JANGAN panggil calculate_shipping.
+
+TIPS: Jika sebelumnya kamu sudah mencari lokasi dan hasilnya ambigu, isi parameter previous_keyword dengan kata kunci sebelumnya. Sistem akan otomatis menggabungkan kata kunci untuk hasil yang lebih akurat.`,
             parameters: {
               type: 'object',
               properties: {
-                keyword: { type: 'string', description: 'Nama kota atau kecamatan yang diketik pelanggan' },
-                province: { type: 'string', description: 'Nama provinsi jika pelanggan menyebutkannya' }
+                keyword: { type: 'string', description: 'Nama kecamatan, kota, atau kabupaten yang disebut pelanggan. Contoh: "Mataram", "Sandubaya", "Cibinong Bogor".' },
+                province: { type: 'string', description: 'Nama provinsi jika pelanggan menyebutkannya spesifik. Boleh dikosongkan.' },
+                // >>> DEEPSEEK — parameter baru untuk auto-combine keyword <<<
+                previous_keyword: { type: 'string', description: 'Kata kunci pencarian SEBELUMNYA, jika hasil sebelumnya ambigu dan pelanggan memberi detail tambahan. Contoh: sebelumnya cari "Mataram" (ambigu), pelanggan jawab "Sandubaya" → isi previous_keyword: "Mataram". Sistem akan otomatis coba gabungkan "Sandubaya Mataram".' },
               },
               required: ['keyword']
             }
@@ -315,16 +327,22 @@ export class AiService {
           type: 'function',
           function: {
             name: 'calculate_shipping',
-            description: 'Hitung ongkos kirim dan total harga (termasuk COD) ke destinasi yang dipilih.',
+            // >>> DEEPSEEK — ROMBAK (2026-08-08) <<<
+            description: `Menghitung ongkos kirim dan total tagihan ke destinasi yang SUDAH PASTI. HANYA panggil setelah search_destinations mengembalikan action: "proceed".
+
+Return value tool ini berisi field "action":
+- action: "reply_to_user" → ongkir berhasil dihitung. BALAS pelanggan dengan hasil perhitungan, gunakan token {{blok_total}} untuk rincian harga.
+- action: "ask_user" → terjadi kendala. Sampaikan pesan error ke pelanggan.`,
             parameters: {
               type: 'object',
               properties: {
-                destination_id: { type: 'string' },
-                city: { type: 'string' },
-                province: { type: 'string' },
-                label: { type: 'string' },
+                destination_id: { type: 'string', description: 'ID lokasi dari hasil search_destinations (field id di dalam destinations[]).' },
+                city: { type: 'string', description: 'Nama kota dari hasil search_destinations.' },
+                province: { type: 'string', description: 'Nama provinsi dari hasil search_destinations.' },
+                label: { type: 'string', description: 'Label lengkap dari hasil search_destinations.' },
                 items: {
                   type: 'array',
+                  description: 'Daftar produk yang ingin dibeli pelanggan (kosongkan [] jika belum tahu/tidak disebutkan).',
                   items: {
                     type: 'object',
                     properties: {
@@ -335,7 +353,7 @@ export class AiService {
                   }
                 }
               },
-              required: ['destination_id', 'city', 'province', 'label', 'items']
+              required: ['destination_id', 'city', 'province', 'label']
             }
           }
         }
@@ -364,11 +382,18 @@ export class AiService {
 
     let text = '';
     const stopTimer = this.metrics?.aiRequestDuration.startTimer();
+    // >>> DEEPSEEK — loop detection (2026-08-08): kalau LLM panggil tool
+    // yang SAMA dengan argumen yang SAMA, itu tanda infinite loop —
+    // paksa hentikan dan suruh LLM balas user berdasarkan hasil sebelumnya.
+    const seenCalls = new Set<string>();
+    // <<< DEEPSEEK
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         const res = await this.provider.chatWithTools(messages, {
           model,
-          maxTokens: 500,
+          // >>> DEEPSEEK — maxTokens 500 → 800 saat LLM perlu
+          // output tool_calls + text reply sekaligus (2026-08-08).
+          maxTokens: 800,
           tools,
         });
 
@@ -378,6 +403,28 @@ export class AiService {
         if (!toolCalls || toolCalls.length === 0) {
           break; // LLM returned final text
         }
+
+        // >>> DEEPSEEK — loop detection (2026-08-08) <<<
+        const callSig = JSON.stringify(
+          toolCalls.map((c: any) => `${c.function?.name ?? '?'}:${c.function?.arguments ?? '{}'}`),
+        );
+        if (seenCalls.has(callSig)) {
+          this.logger.warn(
+            `[Tool] Loop terdeteksi — LLM memanggil tool yang sama: ${callSig}. Memaksa reply.`,
+          );
+          // Hapus seen calls + push system message yang MEMAKSA LLM reply
+          seenCalls.clear();
+          messages.push({
+            role: 'system',
+            content:
+              'Kamu sudah memanggil tool yang sama berulang kali. JANGAN panggil tool lagi. Sekarang WAJIB membalas pelanggan berdasarkan hasil tool sebelumnya — sampaikan pilihan yang ada atau minta klarifikasi.',
+          });
+          // Fallback: kalau LLM tetap return tool_calls setelah ini,
+          // iterasi berikutnya akan kena deteksi lagi dan loop akan habis
+          // secara natural di attempt < 3.
+        }
+        seenCalls.add(callSig);
+        // <<< DEEPSEEK
 
         // LLM wants to call tools. Append its response to history.
         messages.push({
@@ -394,7 +441,8 @@ export class AiService {
           try {
             const args = JSON.parse(call.function.arguments);
             if (fnName === 'search_destinations') {
-              const res = await this.shipping!.llmSearchDestinations(args.keyword, args.province);
+              // >>> DEEPSEEK — pass previous_keyword untuk auto-combine (2026-08-08) <<<
+              const res = await this.shipping!.llmSearchDestinations(args.keyword, args.province, args.previous_keyword);
               resultStr = JSON.stringify(res);
             } else if (fnName === 'calculate_shipping') {
               const dest = { id: args.destination_id, city: args.city, province: args.province, label: args.label };
@@ -420,6 +468,16 @@ export class AiService {
           });
         }
       }
+
+      // >>> DEEPSEEK — fallback empty text (2026-08-08):
+      // Kalau setelah loop selesai text masih kosong (LLM terus-terusan
+      // panggil tool tanpa menghasilkan balasan), isi dengan fallback
+      // supaya pelanggan tidak dapat chat kosong.
+      if (!text || text.trim() === '') {
+        this.logger.warn('[Tool] Text kosong setelah tool-calling loop — fallback');
+        text = 'Mohon maaf, terjadi kendala saat menghitung ongkos kirim. Silakan coba lagi atau hubungi admin.';
+      }
+      // <<< DEEPSEEK
     } catch (err) {
       stopTimer?.();
       this.metrics?.aiRequests.inc({ outcome: 'error' });
