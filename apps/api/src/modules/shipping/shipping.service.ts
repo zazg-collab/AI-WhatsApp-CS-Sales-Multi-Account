@@ -2870,6 +2870,21 @@ export class ShippingService {
     mode: 'total' | 'patokan' | 'closing' | 'normal';
     hidePriceUnits: boolean;
   }> {
+    // >>> ANGGA — fix (2026-08-08, Bug #2 ongkir bocor di patokan):
+    // funnelDirective sudah dijalankan SEBELUM getGroundingText dipanggil,
+    // dan hasilnya disimpan di cache.funnelExpect. Itu adalah sumber kebenaran
+    // paling akurat. Sebelumnya fungsi ini recompute dari funnelAsks (async DB)
+    // yang bisa stale — giliran total baru saja disodorkan tapi log belum
+    // ter-commit → totalSudahDariLog=false → mode:'total' → hidePriceUnits=false
+    // → grounding bocorkan penanda harga → LLM ikut menyebut ongkir di patokan.
+    const expectFromCache = this.cache.funnelExpect(conversationId);
+    if (expectFromCache?.step === 'patokan') return { mode: 'patokan', hidePriceUnits: true };
+    if (expectFromCache?.step === 'closing') return { mode: 'closing', hidePriceUnits: true };
+    if (expectFromCache?.step === 'total') return { mode: 'total', hidePriceUnits: false };
+    // <<< ANGGA
+
+    // Fallback: funnelExpect belum diset (mis. percakapan baru / step awal
+    // sebelum funnelDirective pernah dipanggil) → derive dari DB seperti semula.
     const asks: Record<string, number> = (await this.orderLog?.funnelAsks(conversationId).catch(() => ({} as Record<string, number>))) ?? ({} as Record<string, number>);
     const memo = this.turnMemo.get(conversationId);
     const teks = memo?.lastText ?? '';
