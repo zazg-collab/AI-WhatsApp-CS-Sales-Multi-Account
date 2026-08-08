@@ -664,6 +664,18 @@ export const SHIPPING_MONEY_RULE = {
   en: 'Never write a rupiah amount yourself for this order — use the PLACEHOLDER below exactly as written (including the double curly braces), the system fills in the real value after you finish answering. WRONG example (forbidden): writing the number yourself, e.g. "it is Rp[typed by you], kak." Another WRONG example (forbidden): adding two unit placeholders yourself with a "+" to build your own total, e.g. "the total is [price placeholder] + [shipping placeholder]" — if this order already has a TOTAL placeholder computed by the system, use that TOTAL placeholder directly from the list below (never sum other placeholders yourself), and NEVER reuse the same placeholder for both the COD total and the Transfer total — they must differ because of the COD fee. RIGHT example: state the price using a PLACEHOLDER that is actually listed below, exactly as written — never type the number yourself or invent your own placeholder name.',
 };
 
+// >>> ANGGA — Fase 5 (2026-08-07): varian SHIPPING_MONEY_RULE untuk
+// langkah POST-TOTAL (patokan & closing). Beda dari SHIPPING_MONEY_RULE:
+// di sini tidak ada penanda uang yang tersedia (hidePriceUnits), jadi
+// instruksinya BUKAN "pakai penanda" melainkan "JANGAN sebut sama sekali."
+// Berfungsi sebagai REM untuk product stock block yang selalu menyuruh
+// model "jawab harga LANGSUNG." Dipasang di getGroundingText saat
+// hidePriceUnits=true.
+export const SHIPPING_MONEY_RULE_POST_TOTAL = {
+  id: 'JANGAN menyebutkan harga, ongkir, subtotal, atau total APAPUN di giliran ini. Informasi itu SUDAH diberikan di pesan sebelumnya — pelanggan bisa scroll ke atas. Fokus HANYA pada pertanyaan pelanggan saat ini dan ikuti arahan alur penjualan di bawah.',
+  en: 'Do NOT mention any price, shipping cost, subtotal, or total in this turn. That information was ALREADY provided in a previous message — the customer can scroll up. Focus ONLY on the current question and follow the sales-flow instructions below.',
+};
+
 // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren, audit gerbang uang #2):
 // kalau balasan pertama ditahan gerbang uang, dicoba SEKALI LAGI dengan
 // pesan koreksi konkret (bukan cuma tolak & serahkan admin langsung) —

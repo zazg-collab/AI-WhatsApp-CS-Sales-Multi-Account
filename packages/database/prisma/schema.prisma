@@ -796,3 +796,34 @@ model OrderContextEvent {
   @@map("order_context_events")
 }
 // <<< ANGGA
+
+// >>> ANGGA — Test Harness v2 (2026-08-08): Web Chat Simulator untuk debugging
+// Sentinel tanpa WhatsApp. Isolated tables (no FK ke production). Port-safe
+// design: running di NestJS app yang sama di port 3001 (tidak ganti port).
+model TestSession {
+  id        String   @id @default(cuid())
+  name      String
+  provider  String
+  model     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  messages TestMessage[]
+
+  @@map("test_sessions")
+}
+
+model TestMessage {
+  id        String   @id @default(cuid())
+  sessionId String   @map("session_id")
+  role      String   // 'user' | 'assistant' | 'system'
+  content   String   @db.Text
+  timestamp DateTime @default(now())
+  debugInfo Json?    @map("debug_info") // DebugSnapshot
+
+  session TestSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, timestamp])
+  @@map("test_messages")
+}
+// <<< ANGGA

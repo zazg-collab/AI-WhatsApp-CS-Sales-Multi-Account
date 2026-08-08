@@ -1193,8 +1193,6 @@ describe('pembantu murni & kontrak grounding', () => {
     const h = harness();
     await h.svc.quoteForConversation('c1');
     const text = await h.svc.getGroundingText('c1');
-    // Tidak ada angka 3+ digit sama sekali (ongkir dasar, estimatedSpecialPrice,
-    // codFee, ATAU total akhir) — semuanya cuma jadi nama penanda.
     expect(text).not.toMatch(/\d{3,}/);
     expect(text).toMatch(/jangan pernah menulis nominal rupiah/i);
     expect(text).toContain('{{total_transfer}}');

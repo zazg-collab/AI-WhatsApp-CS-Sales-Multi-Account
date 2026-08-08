@@ -323,6 +323,15 @@ export class PromptBuilderService {
       content: m.promptContent,
     }));
 
+    // >>> ANGGA — Fase 4 (2026-08-07): universal history compression.
+    // Saat post-total (hidePriceUnits), kompres SEMUA pesan assistant
+    // di history — model tidak melihat isi balasan sebelumnya sama sekali.
+    // Arsitektural, bukan tambalan regex by-case.
+    if (this.shipping) {
+      history = (await this.shipping.compressHistory(conversationId, history)) as ChatMessage[];
+    }
+    // <<< ANGGA
+
     // Token-budget trim: drop oldest history turns until under MAX_CONTEXT_CHARS.
     // System prompt + knowledge stay intact; only chat history is trimmed.
     const historyChars = (msgs: ChatMessage[]) =>

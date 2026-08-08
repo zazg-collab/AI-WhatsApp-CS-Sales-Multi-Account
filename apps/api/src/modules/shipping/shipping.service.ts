@@ -14,6 +14,7 @@ import {
   SHIPPING_EXTRACT_SYSTEM,
   SHIPPING_EXTRACT_USER,
   SHIPPING_MONEY_RULE, // >>> ANGGA — Fase 113 <<<
+  SHIPPING_MONEY_RULE_POST_TOTAL, // >>> ANGGA — Fase 5 <<<
   SHIPPING_GROUNDING_INTRO,
   SHIPPING_GROUNDING_UNKNOWN,
   SHIPPING_GROUNDING_AMBIGUOUS,
@@ -98,7 +99,16 @@ export const PLACE_HINT =
   // ongkirnya?" dijawab ongkir MATARAM): + urutan TERBALIK "berapa ongkir(nya)"
   // dan "ke <tempat> aja/dulu/deh" — frasa ganti-tujuan paling umum yang dulu
   // lolos → giliran ketelan cache → angka kota lama nempel ke kota baru. <<<
-  /(kirim(kan)?\s+ke|ongkir(nya)?\s+(ke|berapa)|berapa\s+ongkir|ke\s+\w+\s+(aja|saja|dulu|deh)|dikirim\s+ke|alamat|domisili|lokasi\s?(saya|ku|aku)?|kota|kabupaten|kab\.|provinsi|daerah|luar\s+(kota|pulau)|jne|sicepat|j&t|kurir|ekspedisi)/i;
+  // >>> ANGGA — PERKUAT PLACE HINT (2026-08-08): + `pindah\s+ke`,
+// + `ganti\s+(ke|tujuan|kota|alamat)`, + `(ubah|rubah)\s+(ke|tujuan|kota)`.
+// Tameng tambahan untuk pola ganti-tujuan yang TIDAK pakai "ke ... aja"
+// (contoh: "pindah ke purwokerto timur", "ganti tujuan ke bogor").
+  /(kirim(kan)?\s+ke|ongkir(nya)?\s+(ke|berapa)|berapa\s+ongkir|ke\s+[\w\s]+?\s+(aja|saja|dulu|deh)|dikirim\s+ke|pindah\s+ke|ganti\s+(ke|tujuan|kota|alamat)|(ubah|rubah)\s+(ke|tujuan|kota)|alamat|domisili|lokasi\s?(saya|ku|aku)?|kota|kabupaten|kab\.|provinsi|daerah|luar\s+(kota|pulau)|jne|sicepat|j&t|kurir|ekspedisi)/i;
+// <<< ANGGA
+// >>> ANGGA — fix (2026-08-07): `ke\s+\w+\s+(aja)` → `ke\s+[\w\s]+?\s+(aja)`
+// supaya kota multi-kata seperti "purwokerto timur" ikut tertangkap.
+// Sebelumnya cuma 1 kata — "ke purwokerto timur aja" gagal match,
+// cache kota lama tidak di-reset → ongkir salah (insiden Purwokerto 50rb).
 
 /**
  * Perubahan isi order juga membatalkan cache — di luar teks LAMPIRAN, tapi
@@ -2683,7 +2693,11 @@ export class ShippingService {
       entries.some((e) => e.snapshot.destinationId);
     const latest = entries[0];
     const perluKonklusi = produk.size > 1 && latest?.snapshot.konklusi !== true;
-    const qtyPasti = latest?.snapshot.qtyPasti === true;
+    // >>> ANGGA — fix (2026-08-07, audit temuan #4): cek SEMUA entry aktif,
+    // bukan cuma latest[0]. Entry terbaru bisa dibuat tanpa qtyPasti
+    // (mis. dari cache-hit/resolve) padahal entry sebelumnya sudah pasti.
+    const qtyPasti = entries.some((e) => e.snapshot.qtyPasti === true);
+    // <<< ANGGA
 
     const asks = await this.orderLog.funnelAsks(conversationId);
     // >>> ANGGA — Q-Chain fix 3 (2026-08-05, insiden "cakranegara kak" dijawab
@@ -2807,7 +2821,14 @@ export class ShippingService {
         newAddressPart = teksG.trim();
       }
 
-      const alamatGabungan = [sanitizedPrev, newAddressPart].filter((s) => s.trim()).join('\n');
+      // >>> ANGGA — fix (2026-08-07, audit temuan #5): sanitasi HASIL GABUNGAN
+      // final, bukan cuma data lama. Teks baru bisa bercampur metode bayar
+      // parsial yang lolos dari isPaymentMethodChoice (karena mengandung kata
+      // jalan/wilayah) — sanitizeAddressText membuang baris murni metode.
+      const alamatGabungan = sanitizeAddressText(
+        [sanitizedPrev, newAddressPart].filter((s) => s.trim()).join('\n'),
+      );
+      // <<< ANGGA
       if (alamatGabungan !== rawAlamat) {
         this.cache.setAddressText(conversationId, alamatGabungan);
       }
@@ -2820,6 +2841,17 @@ export class ShippingService {
       const kalimatClosing = (
         metodeTransfer ? oc.orderFunnelClosingTransfer : oc.orderFunnelClosingCod
       ) ?? '';
+      // >>> ANGGA — guard (2026-08-07, audit temuan #3): template closing
+      // WAJIB terisi. Kalau kosong (AppSetting belum dikonfigurasi), jangan
+      // masuk closing — fallback ke patokan supaya setidaknya masih ada
+      // gerbang funnel yang berfungsi, bukan closing zombie tanpa template.
+      if (!kalimatClosing.trim()) {
+        this.logger.warn(
+          `Closing template kosong di ${conversationId} (metode=${metodeTransfer ? 'transfer' : 'cod'}) — fallback ke patokan`,
+        );
+        return pilih('patokan', kalimatPatokan);
+      }
+      // <<< ANGGA
       return pilih('closing', kalimatClosing, false, true);
       // <<< ANGGA
     }
@@ -2829,6 +2861,78 @@ export class ShippingService {
     // <<< ANGGA
   }
   // <<< ANGGA
+
+  // >>> ANGGA — Fase 5 (2026-08-07): SATU sumber kebenaran untuk mode
+  // funnel. Dulu cuma return boolean hidePriceUnits — kini return tipe
+  // kaya: mode step + hidePriceUnits. Dipakai getGroundingText untuk
+  // memilih komponen grounding per mode (total vs patokan vs closing).
+  private async computeFunnelMeta(conversationId: string): Promise<{
+    mode: 'total' | 'patokan' | 'closing' | 'normal';
+    hidePriceUnits: boolean;
+  }> {
+    const asks: Record<string, number> = (await this.orderLog?.funnelAsks(conversationId).catch(() => ({} as Record<string, number>))) ?? ({} as Record<string, number>);
+    const memo = this.turnMemo.get(conversationId);
+    const teks = memo?.lastText ?? '';
+    const metodeTerjawab =
+      /\b(cod|bayar\s*di\s*tempat|tf|trf|trx|transfer|rekening)\b/i.test(teks) ||
+      (asks['metode_terjawab'] ?? 0) >= 1;
+    const totalSudahDariLog = (asks['total'] ?? 0) >= 1;
+    const totalSudah = totalSudahDariLog || metodeTerjawab;
+    // >>> ANGGA — audit fix (2026-08-08): mode 'total' = total belum pernah
+    // disodorkan (log belum catat 'total') tapi metode sudah terjawab.
+    // Kondisi: totalSudahDariLog=false && metodeTerjawab=true.
+    // (Sebelumnya: !totalSudah && metodeTerjawab — ini dead code karena
+    // totalSudah = totalSudahDariLog || metodeTerjawab, jadi kalau
+    // metodeTerjawab=true maka totalSudah selalu true juga.)
+    if (!totalSudahDariLog && metodeTerjawab) {
+      return { mode: 'total', hidePriceUnits: false };
+    }
+
+    if (totalSudah && metodeTerjawab) {
+      const rawAlamat = this.cache.addressTextOf(conversationId) ?? '';
+      const sanitizedAlamat = sanitizeAddressText(rawAlamat);
+      const alamatSudahLengkap = adaAlamatLengkap(sanitizedAlamat);
+      const patokanSudahDitanya = (asks['patokan'] ?? 0) >= 1;
+      if (alamatSudahLengkap || patokanSudahDitanya) {
+        return { mode: 'closing', hidePriceUnits: true };
+      }
+      return { mode: 'patokan', hidePriceUnits: true };
+    }
+
+    return { mode: 'normal', hidePriceUnits: false };
+  }
+  // <<< ANGGA
+
+  /**
+     * >>> ANGGA — Fase 4 Universal History Compression (2026-08-07):
+     * Saat funnel step post-total (hidePriceUnits), kompres SEMUA pesan
+     * assistant di chat history menjadi placeholder. Tanpa regex, tanpa
+     * deteksi pola — satu aturan sederhana: post-total → bot messages
+     * dikompres. Ini menutup Known Issue #1 (Halusinasi Rekap Total) di
+     * level arsitektur, bukan tambalan by-case.
+     *
+     * @param messages  Riwayat chat (role: 'user'|'assistant'|'system')
+     * @returns         Riwayat dengan pesan assistant dikompres
+     */
+    async compressHistory(
+      conversationId: string,
+      messages: Array<{ role: string; content: string }>,
+    ): Promise<Array<{ role: string; content: string }>> {
+      const meta = await this.computeFunnelMeta(conversationId).catch(() => ({ mode: 'normal' as const, hidePriceUnits: false }));
+      if (!meta.hidePriceUnits) return messages;
+
+      return messages.map((msg) => {
+        // Pesan customer TIDAK dikompres — model perlu konteks percakapan
+        if (msg.role !== 'assistant') return msg;
+        // Kompres semua pesan bot — model tidak perlu lihat isinya
+        return {
+          role: msg.role,
+          content:
+            '[Balasan sebelumnya sudah berisi informasi lengkap. JANGAN mengulangnya. Fokus pada pertanyaan pelanggan saat ini dan ikuti arahan funnel.]',
+        };
+      });
+    }
+    // <<< ANGGA
 
   async getGroundingText(conversationId: string, lang = 'id'): Promise<string> {
     // >>> ANGGA — keputusan Bossfren 2026-08-06 (audit grounding #3): toko ini
@@ -2898,32 +3002,47 @@ export class ShippingService {
           // <<< ANGGA
           return lines.join('\n');
         }
-        // >>> GEMINI — Deteksi Pasca-Metode & Langkah Closing Murni (2026-08-06):
-        // (1) Evaluasi kondisi closing secara murni (tanpa memanggil funnelDirective lebih awal agar tidak merusak side-effect Postgres/cache).
-        // (2) Jika total & metode sudah terjawab, hidePriceUnits = true KHUSUS di langkah tengah (patokan) agar LLM tidak berhitung "+" manual.
-        // (3) Pada langkah 'closing', hidePriceUnits WAJIB false agar {{daftar_produk_harga}} terisi utuh "Produk: X 💰 Harga: RpY"
-        //     sehingga Money Gate template closing resmi AppSettings LULUS 100%.
+        // >>> ANGGA — Fase 5 (2026-08-07): grounding text KONTEKS-AWARE
+        // per mode funnel. Tiga mode — tiga set instruksi berbeda:
+        //   total:   semua token + DATA_READY (model harus jawab data)
+        //   patokan: tanpa token harga + tanpa DATA_READY (model harus diam)
+        //   closing: tanpa token harga + tanpa DATA_READY (model harus copy template)
         const memoNego = this.turnMemo.get(conversationId);
-        const asksGrounding: Record<string, number> = (await this.orderLog?.funnelAsks(conversationId).catch(() => ({}))) ?? {};
-        const teksMemoG = memoNego?.lastText ?? '';
-        const metodeTerjawabG = /\b(cod|bayar\s*di\s*tempat|tf|trf|trx|transfer|rekening)\b/i.test(teksMemoG) || (asksGrounding['metode_terjawab'] ?? 0) >= 1;
-        const totalSudahG = (asksGrounding['total'] ?? 0) >= 1 || metodeTerjawabG;
+        const meta = await this.computeFunnelMeta(conversationId);
+        const { mode, hidePriceUnits } = meta;
+        // <<< ANGGA
 
-        const rawAlamatG = this.cache.addressTextOf(conversationId) ?? '';
-        const sanitizedAlamatG = sanitizeAddressText(rawAlamatG);
-        const alamatSudahLengkapG = adaAlamatLengkap(sanitizedAlamatG);
-        const patokanSudahDitanyaG = (asksGrounding['patokan'] ?? 0) >= 1;
-        const isClosingStepG = totalSudahG && metodeTerjawabG && (alamatSudahLengkapG || patokanSudahDitanyaG);
-
-        const hidePriceUnits = totalSudahG && metodeTerjawabG && !isClosingStepG;
-
-        const lines = [
-          t(SHIPPING_MONEY_RULE, lang),
-          t(SHIPPING_GROUNDING_DATA_READY, lang), // >>> ANGGA — P2 <<<
-          t(SHIPPING_GROUNDING_INTRO, lang),
-          ...katalogPenanda(q, hidePriceUnits),
-        ];
-        // <<< GEMINI
+        const lines: string[] = [];
+        // SHIPPING_MONEY_RULE: selama token harga MASIH ditampilkan
+        // (!hidePriceUnits), model butuh instruksi "pakai penanda"
+        if (!hidePriceUnits) lines.push(t(SHIPPING_MONEY_RULE, lang));
+        // SHIPPING_MONEY_RULE_POST_TOTAL: saat token harga DISEMBUNYIKAN
+        // (hidePriceUnits), model butuh REM untuk product stock block
+        // yang selalu menyuruh "jawab harga LANGSUNG".
+        // >>> ANGGA — fix (2026-08-08): closing DIPERKECUALIKAN dari
+        // aturan ini karena template closing SUDAH mengandung token
+        // harga ({{daftar_produk_harga}}) yang di-resolve sistem.
+        // Kalau aturan ini aktif di closing, model bingung: grounding
+        // bilang "jangan sebut harga" tapi funnel bilang "pakai template
+        // ini PERSIS (yang ada harganya)" → gagal funnel_dilanggar.
+        if (hidePriceUnits && mode !== 'closing') lines.push(t(SHIPPING_MONEY_RULE_POST_TOTAL, lang));
+        // SHIPPING_GROUNDING_DATA_READY: SELALU — seperti old code
+        // sebelum Fase 5. Instruksi ini punya contoh eksplisit
+        // pola SALAH yang persis dengan bug grounding leak:
+        // "Mataram, Sandubaya, {{kota_tujuan}} adalah Mataram".
+        // Tanpa instruksi ini di mode normal, model literalizing katalog.
+        lines.push(t(SHIPPING_GROUNDING_DATA_READY, lang));
+        // SHIPPING_GROUNDING_INTRO: selalu
+        lines.push(t(SHIPPING_GROUNDING_INTRO, lang));
+        // Katalog penanda: hidePriceUnits=true → tanpa token harga
+        lines.push(...katalogPenanda(q, hidePriceUnits));
+        // >>> ANGGA — fix (2026-08-08): anti-literalization guard.
+        // Model kadang membaca baris katalog di atas sebagai template
+        // kalimat dan menarasikannya verbatim ("Rp50.000 adalah ongkir
+        // yang akan kami hitung..."). Tameng: instruksi eksplisit bahwa
+        // katalog BUKAN template, model harus menyusun kalimat SENDIRI.
+        lines.push('• PENTING: daftar penanda di atas BUKAN template kalimat — jangan menarasikan "X = Y" atau "X adalah X" mentah-mentah. Gunakan penanda dalam kalimat natural dan santai seperti pelayan toko.');
+        // <<< ANGGA
         if (q.codBlockedReason === 'region') {
           lines.push('• COD TIDAK tersedia untuk wilayah ini (kebijakan toko). Tawarkan transfer saja.');
         } else if (!q.codCourier) {
@@ -3007,13 +3126,23 @@ export class ShippingService {
             // pernah dikasih, jangan direkap lagi"). Baris katalog kelas
             // total ikut dibuang; gerbang di `resolvePriceTokens` menahan
             // draft yang tetap menulis penandanya sendiri.
-            if (arah.step === 'patokan') {
+            // >>> ANGGA — refactor (2026-08-07, audit temuan #6): ikat ke
+            // `hidePriceUnits` (SATU sumber kebenaran), bukan ke
+            // `arah.step === 'patokan'` — dua lapis ON/OFF dari satu kondisi.
+            if (hidePriceUnits) {
               this.buangBarisTotalDariKatalog(lines);
               // >>> GEMINI — Pembersihan Spesifik Patokan (2026-08-06): buang seluruh penanda harga (termasuk harga_satuan & ongkir) khusus langkah patokan agar LLM tidak berhitung "+" manual
               this.buangSemuaTokenHargaDariKatalog(lines);
-              lines.push(
-                '• LARANGAN KERAS GILIRAN INI: total/rincian tagihan SUDAH pernah disodorkan di giliran sebelumnya — JANGAN mengulang subtotal/total/rekap tagihan lagi. Jawab singkat (mis. konfirmasi metode) lalu tutup dengan pertanyaan patokan di bawah.',
-              );
+              // >>> ANGGA — fix (2026-08-08): LARANGAN KERAS ini
+              // DIPERKECUALIKAN untuk closing karena template closing
+              // SUDAH mengandung harga ({{daftar_produk_harga}}).
+              // Model bingung kalau dilarang rekap total tapi template-nya
+              // sendiri ada harganya → gagal funnel_dilanggar.
+              if (mode !== 'closing') {
+                lines.push(
+                  '• LARANGAN KERAS GILIRAN INI: total/rincian tagihan SUDAH pernah disodorkan di giliran sebelumnya — JANGAN mengulang subtotal/total/rekap tagihan lagi. Jawab singkat (mis. konfirmasi metode) lalu tutup dengan pertanyaan di bawah.',
+                );
+              }
               // <<< GEMINI
             }
             // <<< ANGGA
@@ -3531,7 +3660,12 @@ export class ShippingService {
     const substituted = text.replace(/\{\{([a-z_]+)\}\}/gi, (utuh, nama: string) => {
       const nilai = tokens[nama];
       if (nilai === undefined) return utuh; // biar ketahan sebagai "tak dikenal" di bawah
-      for (const n of angkaUtuh(nilai)) inserted.add(n);
+      // >>> ANGGA — fix (2026-08-07): pakai mode loose (true) supaya
+      // konsisten dengan pemindaian akhir di bawah (line 3543).
+      // Strict mode sebelumnya tidak menangkap angka 5-digit polos
+      // seperti kode pos "83127" dari {{alamat_lengkap}} → false positive.
+      for (const n of angkaUtuh(nilai, true)) inserted.add(n);
+      // <<< ANGGA
       return nilai;
     });
 
@@ -3677,6 +3811,29 @@ export class ShippingService {
               'funnel_dilanggar',
               `Balasan mengulang rincian total (${tokenTotalUlang[0]}) padahal total sudah pernah disodorkan di giliran sebelumnya — jangan direkap ulang, cukup tutup dengan pertanyaan langkah "${expectF.step}".`,
             );
+          }
+        }
+        // >>> ANGGA — fix (2026-08-07, audit temuan #2): langkah CLOSING =
+        // total sudah final. Model tidak boleh menambah rekap total di luar
+        // kalimat closing wajib. Token total yang muncul DI LUAR kalimat wajib
+        // -> model mencoba merekap ulang -> tahan (funnel_dilanggar).
+        if (expectF.step === 'closing' && expectF.kalimat) {
+          const tokenTotalClosing = text.match(POLA_TOKEN_TOTAL);
+          if (tokenTotalClosing) {
+            const normKalimat = normF(kalimatWajibTersubstitusi);
+            const normTeks = normSubstituted;
+            // >>> ANGGA — audit fix (2026-08-08): pakai split().join() bukan
+            // .replace(str, '') supaya aman terhadap karakter regex-special
+            // di normKalimat (mis. kurung, titik dari template closing).
+            // Konsisten dengan pola split().join() di baris cek duplikasi.
+            const teksTanpaWajib = normTeks.split(normKalimat).join('');
+            const tokenDiluarWajib = teksTanpaWajib.match(POLA_TOKEN_TOTAL);
+            if (tokenDiluarWajib) {
+              pushIssue(
+                'funnel_dilanggar',
+                `Balasan menambahkan rekap total (${tokenDiluarWajib.join(', ')}) di luar template closing — total sudah final, jangan direkap ulang. Hanya tulis kalimat closing PERSIS: "${kalimatWajibTersubstitusi}".`,
+              );
+            }
           }
         }
         // <<< ANGGA

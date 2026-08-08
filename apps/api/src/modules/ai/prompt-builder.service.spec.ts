@@ -274,6 +274,7 @@ describe('PromptBuilderService', () => {
         // produk sekarang SELALU ditokenkan (lihat describe di bawah), jadi
         // cacheProductPriceTokens ikut terpanggil di sini juga.
         cacheProductPriceTokens: jest.fn(),
+        compressHistory: jest.fn((_cid: any, msgs: any) => msgs),
       };
       const svc = new PromptBuilderService(prisma, products as any, knowledgeIndex, shipping as any);
       prisma.conversation.findUnique.mockResolvedValue({
@@ -291,7 +292,7 @@ describe('PromptBuilderService', () => {
 
     it('TIDAK menempelkan precedence text di blok stok produk kalau belum ada order berongkir aktif', async () => {
       const products = { relevantForQuery: jest.fn().mockResolvedValue(productWithPrice) };
-      const shipping = { getGroundingText: jest.fn().mockResolvedValue(''), cacheProductPriceTokens: jest.fn() }; // belum ada tujuan/order
+      const shipping = { getGroundingText: jest.fn().mockResolvedValue(''), cacheProductPriceTokens: jest.fn(), compressHistory: jest.fn((_cid: any, msgs: any) => msgs) }; // belum ada tujuan/order
       const svc = new PromptBuilderService(prisma, products as any, knowledgeIndex, shipping as any);
       prisma.conversation.findUnique.mockResolvedValue({
         id: 'c1',
@@ -332,6 +333,7 @@ describe('PromptBuilderService', () => {
       const shipping = {
         getGroundingText: jest.fn().mockResolvedValue(''), // belum ada tujuan/order
         cacheProductPriceTokens,
+        compressHistory: jest.fn((_cid: any, msgs: any) => msgs),
       };
       const svc = new PromptBuilderService(prisma, products as any, knowledgeIndex, shipping as any);
       prisma.conversation.findUnique.mockResolvedValue({
@@ -356,7 +358,7 @@ describe('PromptBuilderService', () => {
     it('tidak ada produk berharga → cacheProductPriceTokens TIDAK dipanggil sama sekali', async () => {
       const products = { relevantForQuery: jest.fn().mockResolvedValue([]) };
       const cacheProductPriceTokens = jest.fn();
-      const shipping = { getGroundingText: jest.fn().mockResolvedValue(''), cacheProductPriceTokens };
+      const shipping = { getGroundingText: jest.fn().mockResolvedValue(''), cacheProductPriceTokens, compressHistory: jest.fn((_cid: any, msgs: any) => msgs) };
       const svc = new PromptBuilderService(prisma, products as any, knowledgeIndex, shipping as any);
       prisma.conversation.findUnique.mockResolvedValue({
         id: 'c1',
@@ -389,6 +391,7 @@ describe('PromptBuilderService', () => {
             'Jangan pernah menulis nominal rupiah sendiri...\n• {{harga_satuan}} = harga satu barang',
           ),
         cacheProductPriceTokens,
+        compressHistory: jest.fn((_cid: any, msgs: any) => msgs),
       };
       const svc = new PromptBuilderService(prisma, products as any, knowledgeIndex, shipping as any);
       prisma.conversation.findUnique.mockResolvedValue({
