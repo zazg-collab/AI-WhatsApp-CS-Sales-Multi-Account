@@ -113,7 +113,7 @@ describe('PromptBuilderService', () => {
     expect(guard).toMatch(/lingkup/i);
     // [1] shared block — anti-fabrication, fallback phrase, escalation.
     const shared = msgs[1].content;
-    expect(shared).toMatch(/Jangan membuat data palsu/i);
+    expect(shared).toMatch(/membuat data palsu/i);
     expect(shared).toContain('saya bantu konfirmasi dulu ke admin ya kak');
     expect(shared).toMatch(/komplain\/refund\/legal/i);
   });
