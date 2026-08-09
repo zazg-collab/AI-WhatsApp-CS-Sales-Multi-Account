@@ -18,6 +18,11 @@ import { AiCacheService } from './ai-cache.service';
 // resmi lewat AiService supaya sejajar dengan `leadScore`/`analyzeSentiment`
 // dan bisa dipakai controller/uji tanpa menyentuh modul shipping langsung.
 import { ShippingService, type ShippingOrderExtract } from '../shipping/shipping.service';
+// >>> ANGGA — F1 (2026-08-09, cowork): skema tool ongkir TIDAK lagi ditulis
+// inline di sini. Satu-satunya definisi ada di `shipping.tools.ts`, dipakai
+// bersama jalur produksi ini DAN test-harness. <<<
+import { shippingTools } from '../shipping/shipping.tools';
+import { searchKnowledgeTool } from '../knowledge/knowledge.tools';
 // <<< ANGGA
 import {
   t,
@@ -299,69 +304,12 @@ export class AiService {
     
     let tools: any[] | undefined = [];
     if (this.shipping) {
-      tools.push(
-        {
-          type: 'function',
-          function: {
-            name: 'search_destinations',
-            description: 'Cari daftar ID tujuan pengiriman (kecamatan/kota) jika pelanggan menanyakan ongkir ke suatu daerah namun spesifikasinya kurang jelas.',
-            parameters: {
-              type: 'object',
-              properties: {
-                keyword: { type: 'string', description: 'Nama kota atau kecamatan yang diketik pelanggan' },
-                province: { type: 'string', description: 'Nama provinsi jika pelanggan menyebutkannya' }
-              },
-              required: ['keyword']
-            }
-          }
-        },
-        {
-          type: 'function',
-          function: {
-            name: 'calculate_shipping',
-            description: 'Hitung ongkos kirim dan total harga (termasuk COD) ke destinasi yang dipilih.',
-            parameters: {
-              type: 'object',
-              properties: {
-                destination_id: { type: 'string' },
-                city: { type: 'string' },
-                province: { type: 'string' },
-                label: { type: 'string' },
-                items: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      name: { type: 'string' },
-                      qty: { type: 'number' }
-                    },
-                    required: ['name', 'qty']
-                  }
-                }
-              },
-              required: ['destination_id', 'city', 'province', 'label', 'items']
-            }
-          }
-        }
-      );
+      tools.push(...shippingTools);
     }
     
     // >>> ANGGA: Fase 6.5, jika mode agentic, tambahkan RAG sebagai tool
     if (ragMode === 'agentic') {
-      tools.push({
-        type: 'function',
-        function: {
-          name: 'search_knowledge',
-          description: 'Cari informasi produk, promo, jam operasional, atau kebijakan toko dari basis pengetahuan (knowledge base). Gunakan tool ini jika pelanggan menanyakan info seputar produk atau toko.',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: { type: 'string', description: 'Kata kunci pencarian, misalnya nama produk atau topik (contoh: "harga sepatu nike", "jam buka", "promo lebaran")' }
-            },
-            required: ['query']
-          }
-        }
-      });
+      tools.push(searchKnowledgeTool);
     }
 
     if (tools.length === 0) tools = undefined;
@@ -402,7 +350,10 @@ export class AiService {
               resultStr = JSON.stringify(res);
             } else if (fnName === 'calculate_shipping') {
               const dest = { id: args.destination_id, city: args.city, province: args.province, label: args.label };
-              const res = await this.shipping!.llmCalculateShipping(conversationId, dest, args.items);
+              // >>> ANGGA — F1: `items` OPSIONAL di skema (pelanggan boleh tanya ongkir
+              // sebelum memilih barang → jalur shippingOnly). `quoteUntukTujuan`
+              // membaca `input.items.length`, jadi undefined WAJIB di-default. <<<
+              const res = await this.shipping!.llmCalculateShipping(conversationId, dest, args.items ?? []);
               resultStr = JSON.stringify(res);
             } else if (fnName === 'search_knowledge') {
               const lang = await this.botLang(conversationId);

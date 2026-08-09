@@ -7,6 +7,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../modules/products/products.service';
 import { KnowledgeIndexService } from '../modules/ai/knowledge-index.service';
 import { ShippingService } from '../modules/shipping/shipping.service';
+// >>> ANGGA — F1 (2026-08-09, cowork): skema tool ongkir dipakai BERSAMA
+// jalur produksi (`ai.service.ts`). Sebelumnya tester punya salinan sendiri —
+// deskripsinya justru yang paling matang, itulah yang dipromosikan jadi
+// satu-satunya sumber di `shipping.tools.ts`. <<<
+import { shippingTools } from '../modules/shipping/shipping.tools';
+import { searchKnowledgeTool } from '../modules/knowledge/knowledge.tools';
 import { 
   t, BOT_IDENTITY, BOT_PERSONA_FALLBACK, PERSONA_SECTION_LABEL, 
   PERSONA_TONE_LABEL, PERSONA_STYLE_LABEL, PERSONA_RULES_LABEL, 
@@ -142,68 +148,10 @@ export class ChatSessionManager {
     const bot = await this.prisma.bot.findFirst({ orderBy: { createdAt: 'desc' } });
     const kbId = bot?.knowledgeBaseId ?? null;
 
-    let tools: any[] | undefined = [
-      {
-        type: 'function',
-        function: {
-          name: 'search_destinations',
-          description: 'WAJIB DIPANGGIL KETIKA pelanggan menanyakan ongkos kirim. Gunakan ini untuk memvalidasi kecamatan/kota tujuan pengiriman di sistem logistik sebelum menghitung ongkos kirim. Jangan pernah menebak/mengira-ngira ongkos kirim tanpa memanggil tool ini terlebih dahulu.',
-          parameters: {
-            type: 'object',
-            properties: {
-              keyword: { type: 'string', description: 'Masukkan GABUNGAN nama Kecamatan dan Kota/Kabupaten yang disebut pelanggan untuk pencarian terbaik. Contoh: "Sandubaya Mataram" atau "Cibinong Bogor".' },
-              province: { type: 'string', description: 'Nama provinsi jika pelanggan menyebutkannya spesifik, jika tidak biarkan kosong.' }
-            },
-            required: ['keyword']
-          }
-        }
-      },
-      {
-        type: 'function',
-        function: {
-          name: 'calculate_shipping',
-          description: 'WAJIB dipanggil SETELAH berhasil mendapatkan hasil dari search_destinations. Gunakan tool ini untuk menghitung ongkos kirim. Masukkan data dari search_destinations ke dalam parameter yang diminta. JANGAN PERNAH MENGHITUNG ONGKIR SENDIRI tanpa tool ini.',
-          parameters: {
-            type: 'object',
-            properties: {
-              destination_id: { type: 'string', description: 'ID lokasi dari hasil search_destinations' },
-              city: { type: 'string', description: 'Nama kota dari hasil search_destinations' },
-              province: { type: 'string', description: 'Nama provinsi dari hasil search_destinations' },
-              label: { type: 'string', description: 'Label lengkap dari hasil search_destinations' },
-              items: {
-                type: 'array',
-                description: 'Daftar produk yang ingin dibeli pelanggan (kosongkan jika belum tahu/tidak disebutkan)',
-                items: {
-                  type: 'object',
-                  properties: {
-                    name: { type: 'string' },
-                    qty: { type: 'number' }
-                  },
-                  required: ['name', 'qty']
-                }
-              }
-            },
-            required: ['destination_id', 'city', 'province', 'label']
-          }
-        }
-      }
-    ];
+    let tools: any[] | undefined = [...shippingTools    ];
 
     if (kbId && ragMode === 'agentic') {
-      tools.push({
-        type: 'function',
-        function: {
-          name: 'search_knowledge',
-          description: 'Cari informasi tambahan tentang produk, toko, kebijakan, promo, atau jam operasional dari basis pengetahuan (knowledge base)',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: { type: 'string', description: 'Kata kunci pencarian yang relevan (misal: "jam buka", "bahan sepatu", "promo ongkir")' },
-            },
-            required: ['query'],
-          },
-        },
-      });
+      tools.push(searchKnowledgeTool);
     }
 
     this.logger.debug(`[TestHarness] Sending to AI: model=${resolvedModel}, turns=${history.length + 1}, ragMode=${ragMode}`);

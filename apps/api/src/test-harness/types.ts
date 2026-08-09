@@ -27,7 +27,10 @@ export interface TestMessage {
 
 export interface DebugSnapshot {
   status: string;
-  funnelMode: 'normal' | 'total' | 'patokan' | 'closing';
+  /** >>> ANGGA — F3 (2026-08-09): `closing_followup` ditambahkan; step itu lahir di
+   *  `e4415a5` (pasca-rollback) dan sudah ada di union `computeFunnelMeta`
+   *  (`shipping.service.ts`), tapi tipe di tester tertinggal. <<< */
+  funnelMode: 'normal' | 'total' | 'patokan' | 'closing' | 'closing_followup';
   kotaTujuan?: string;
   ongkir?: {
     amount: number;

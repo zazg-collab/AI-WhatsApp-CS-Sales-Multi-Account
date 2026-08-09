@@ -22,6 +22,10 @@ import { isWithinBusinessHours } from '../../common/business-hours.util';
 import type { AssetsService } from '../assets/assets.service';
 import { WaMessageShape } from './wa.types';
 import { OrderContextService } from '../shipping/order-context.service'; // >>> ANGGA — Order Context Log <<<
+// >>> ANGGA — F3a (2026-08-09, cowork): otak balasan pindah ke ReplyPipeline;
+// berkas ini tinggal jadi ADAPTER kanal WhatsApp. <<<
+import { ReplyPipelineService } from '../reply/reply-pipeline.service';
+import type { ReplyChannel, ReplyConversation } from '../reply/reply.types';
 
 /**
  * Processes inbound WhatsApp messages: ingests, triggers auto-away replies,
@@ -63,6 +67,12 @@ export class WaInboundService {
     // tambahan tetap jalan.
     @Optional() private readonly orderLog?: OrderContextService,
     // <<< ANGGA
+    // >>> ANGGA — F3a: opsional SENGAJA. Dua spec lama membangun service ini
+    // dengan 9 argumen posisional; kalau parameter ini wajib, spec-spec itu
+    // harus disunting — padahal justru merekalah gerbang bukti bahwa F3a
+    // tidak menggeser perilaku. Kalau tidak disuntik, pipeline dibangun
+    // sendiri dari dependensi yang memang sudah dipegang service ini. <<<
+    @Optional() private readonly injectedPipeline?: ReplyPipelineService,
   ) {
     const cooldown = Number(config.get('AUTO_AWAY_COOLDOWN_MS'));
     this.awayCooldownMs = Number.isFinite(cooldown) && cooldown > 0 ? cooldown : 12 * 60 * 60 * 1000;
@@ -276,280 +286,65 @@ export class WaInboundService {
     }
   }
 
-  private async maybeAutoReply(conversationId: string) {
-    const convo = await this.prisma.conversation.findUnique({
-      where: { id: conversationId },
-      // >>> ANGGA: bot ikut diambil untuk memeriksa statusnya <<<
-      include: { customer: true, bot: { select: { status: true } } },
-    });
-    if (!convo) { this.logger.debug(`maybeAutoReply: conversation not found: ${conversationId}`); return; }
-    // >>> ANGGA: gerbang status bot. Sebelumnya `Bot.status` (active/inactive/
-    // draft) tersimpan tapi tidak pernah dibaca kode mana pun — mau apa pun
-    // isinya, bot tetap membalas. Sekarang hanya bot `active` yang bekerja,
-    // jadi status ini berfungsi sebagai saklar mati per-bot tanpa perlu
-    // melepas penugasan akun (dan kehilangan konfigurasinya).
-    // Percakapan TANPA bot sengaja dibiarkan lewat — perilaku lama tetap:
-    // balas dengan persona bawaan.
-    if (convo.bot && convo.bot.status !== BotStatus.active) {
-      this.logger.debug(`maybeAutoReply: bot status is ${convo.bot.status}, not active`);
-      return;
-    }
-    // <<< ANGGA
-    if (convo.takeoverStatus === TakeoverStatus.admin_takeover) { this.logger.debug(`maybeAutoReply: admin takeover active`); return; }
-    if (convo.aiMode === AiMode.ai_off || convo.aiMode === AiMode.ai_paused) { this.logger.debug(`maybeAutoReply: AI mode is off/paused: ${convo.aiMode}`); return; }
-    if (!convo.customer.phoneNumber) { this.logger.debug(`maybeAutoReply: no phone number`); return; }
+  private pipelineFallback?: ReplyPipelineService;
+  private get replyPipeline(): ReplyPipelineService {
+    return (this.injectedPipeline ??
+      (this.pipelineFallback ??= new ReplyPipelineService(this.prisma, this.ai, this.sentinel, this.orderLog)));
+  }
 
-    // The customer's unanswered run of messages. >1 = a burst that may mix
-    // several topics → handled by the segmented path below; a burst always
-    // produces drafts (even in ai_on), so its stale drafts are expired too.
-    const burst = await this.trailingCustomerBurst(conversationId);
-    const isBurst = burst.length > 1;
-    if (convo.aiMode === AiMode.ai_draft || convo.aiMode === AiMode.ai_supervised || isBurst) {
-      await this.expireStaleDrafts(conversationId, convo.whatsappAccountId);
-    }
-
-    if (isBurst) {
-      await this.handleBurstReply(conversationId, convo, burst);
-      return;
-    }
-
-    this.logger.debug(`maybeAutoReply: generating reply for ${conversationId}, mode=${convo.aiMode}`);
-    // >>> ANGGA — E1 (2026-08-05, ketok Bossfren): pesan FORM funnel dibalas
-    // TEMPLATE deterministik yang dirender sistem (OrderContextService.
-    // formWelcome) — LLM tidak dipanggil untuk giliran itu, wording pasti,
-    // angka harga ditulis sistem. Hasilnya masuk percabangan mode AI yang SAMA
-    // di bawah (ai_draft → draft, ai_on → kirim, supervised → review), sesuai
-    // ketok "ikut AI mode". Burst (form + pertanyaan lain sekaligus) sengaja
-    // tidak lewat sini — jalur segmented menanganinya via LLM + seed M3.
-    let sambutanForm: string | null = null;
-    try {
-      sambutanForm =
-        (await this.orderLog?.formWelcome(
-          conversationId,
-          burst[0]?.id ?? '',
-          burst[0]?.content ?? '',
-          (convo.customer as { name?: string | null }).name ?? null,
-          convo.customer.phoneNumber ?? null,
-        )) ?? null;
-    } catch (err) {
-      this.logger.warn(`Sambutan form gagal (lanjut ke LLM): ${err}`);
-      sambutanForm = null;
-    }
-    const { text, moneyBlocked, moneyGateIssues } = sambutanForm
-      ? { text: sambutanForm, moneyBlocked: false, moneyGateIssues: undefined as string[] | undefined }
-      : await this.ai.generateReply(conversationId);
-    // <<< ANGGA
-    if (!text) { this.logger.debug(`maybeAutoReply: generateReply returned empty text`); return; }
-
-    // TOCTOU guard: re-read after AI generation which can take >10s.
-    const fresh = await this.prisma.conversation.findUnique({
-      where: { id: conversationId },
-      select: { aiMode: true, takeoverStatus: true },
-    });
-    if (!fresh) return;
-    if (fresh.takeoverStatus === TakeoverStatus.admin_takeover) return;
-    if (fresh.aiMode === AiMode.ai_off || fresh.aiMode === AiMode.ai_paused) return;
-    const effectiveMode = fresh.aiMode;
-
-    // >>> ANGGA — Fase 113 (2026-08-04): gerbang uang menahan balasan ini
-    // (token {{...}} tak terselesaikan, atau angka rupiah ditulis model
-    // sendiri) — paksa draft di SEMUA mode, didahulukan sebelum percabangan
-    // di bawah supaya ai_on tidak sempat kirim tanpa gerbang ini. "Jangan
-    // pernah kirim teks yang masih memuat {{...}}" berlaku mutlak; lihat
-    // AiService.gateMoneyTokens untuk detail lengkap kenapa ini tidak bisa
-    // hanya jadi gerbang Sentinel (post-send untuk AI ON).
-    if (moneyBlocked) {
-      await this.storeDraft(conversationId, convo.whatsappAccountId, text, undefined, undefined, moneyGateIssues);
-      // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): sebelum ini TIDAK
-      // ADA notifikasi sama sekali untuk balasan tunggal yang ditahan gerbang
-      // uang — satu-satunya cara admin tahu adalah buka inbox manual (dan
-      // sebelum perbaikan sebelumnya, "tahu"-nya cuma dari teks "⚠️ [...]"
-      // yang nempel di draft). Sekarang notifikasi dikirim di SEMUA mode AI
-      // (bukan cuma mode yang biasanya tidak dijaga admin) — soalnya ini
-      // bukan draft rutin, ini sinyal bot HAMPIR kirim harga/ongkir yang
-      // belum terverifikasi, layak diberi tahu langsung apa pun mode-nya.
-      this.notifications.send(
-        `⚠️ Gerbang uang menahan balasan
-${convo.customer.phoneNumber}: ${(moneyGateIssues ?? []).join('; ')}
-Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
-      );
-      return;
-    }
-    // <<< ANGGA
-
-    if (effectiveMode === AiMode.ai_draft) {
-      await this.storeDraft(conversationId, convo.whatsappAccountId, text);
-      return;
-    }
-
-    if (effectiveMode === AiMode.ai_supervised) {
-      let review;
-      try {
-        review = await this.sentinel.review(conversationId, text);
-      } catch (err) {
-        // M1: Hermes/provider timeout/failure. Don't lose the message. Fall back to draft
-        // so the admin can see it and manually route the decision. Log the failure for ops.
-        this.logger.error(`Sentinel review failed (supervised mode fallback to draft): ${err instanceof Error ? err.message : err}`);
-        await this.storeDraft(conversationId, convo.whatsappAccountId, text);
-        return;
-      }
-      if (review.decision === SentinelDecision.approve) {
+  /** >>> ANGGA — F3a: adapter kanal WhatsApp. Semua efek keluar yang khas WA
+   *  tinggal di sini; keputusannya milik `ReplyPipelineService`. <<< */
+  private waChannel(): ReplyChannel {
+    return {
+      expireStaleDrafts: async (convo: ReplyConversation) => {
+        await this.expireStaleDrafts(convo.id, convo.whatsappAccountId);
+      },
+      send: async (convo: ReplyConversation, text: string, sentinelReviewId?: string) => {
+        const message = await this.sendAndStore(
+          { id: convo.id, whatsappAccountId: convo.whatsappAccountId, customer: { phoneNumber: convo.customer.phoneNumber } },
+          text,
+          sentinelReviewId,
+        );
+        return { messageId: message.id };
+      },
+      draft: async (convo: ReplyConversation, text: string, opts) => {
+        await this.storeDraft(
+          convo.id,
+          convo.whatsappAccountId,
+          text,
+          opts?.sentinelReviewId,
+          opts?.quotedMessageId,
+          opts?.moneyGateIssues,
+        );
+      },
+      notifyAdmin: (pesan: string) => {
+        this.notifications.send(pesan);
+      },
+      autoSendAssets: (conversationId: string) => {
         try {
-          await this.sendAndStore(convo, text, review.id);
-        } catch (err) {
-          // Send itself failed (e.g. account disconnected mid-flight) — the
-          // draft already passed review, don't drop it silently.
-          this.logger.error(`Send failed after Sentinel approval (fallback to draft): ${err instanceof Error ? err.message : err}`);
-          await this.storeDraft(conversationId, convo.whatsappAccountId, text, review.id);
-        }
-      } else if (review.decision === SentinelDecision.draft) {
-        await this.storeDraft(conversationId, convo.whatsappAccountId, text, review.id);
-      } else {
-        await this.prisma.conversation.update({
-          where: { id: conversationId },
-          data: { aiMode: AiMode.ai_paused, takeoverStatus: TakeoverStatus.waiting_admin },
-        });
-      }
-      return;
-    }
-
-    let message;
-    try {
-      message = await this.sendAndStore(convo, text);
-    } catch (err) {
-      // ai_on send failed outright (e.g. account disconnected mid-flight) —
-      // hold the already-generated reply as a draft instead of losing it.
-      this.logger.error(`Send failed in ai_on mode (fallback to draft): ${err instanceof Error ? err.message : err}`);
-      await this.storeDraft(conversationId, convo.whatsappAccountId, text);
-      return;
-    }
-
-    try {
-      const assets = this.moduleRef.get<AssetsService>('ASSETS_SERVICE', { strict: false });
-      void assets.maybeAutoSend(conversationId).catch((err: unknown) => this.logger.warn(`asset auto-send failed: ${err}`));
-    } catch { /* AssetsService not resolvable */ }
-
-    this.sentinel
-      .review(conversationId, text)
-      .then((review) => this.prisma.message.update({ where: { id: message.id }, data: { sentinelReviewId: review.id } }))
-      .catch((err) => this.logger.error(`Post-send audit failed: ${err}`));
-
-    // Fire-and-forget: score the lead (PRD 7.7) after receiving enough context
-    // (now that a reply has been generated/sent). Never blocks the reply pipeline.
-    this.ai
-      .leadScore(conversationId)
-      .catch((err) => this.logger.warn(`Lead score failed: ${err}`));
-
-    // Fire-and-forget: schedule follow-up if in closing funnel
-    this.maybeScheduleFollowUp(conversationId).catch((err) => this.logger.warn(`Follow-up scheduling failed: ${err}`));
-  }
-
-  private async maybeScheduleFollowUp(conversationId: string) {
-    try {
-      const FollowUpsService = require('../followups/followups.service').FollowUpsService;
-      const followUps = this.moduleRef.get(FollowUpsService, { strict: false });
-      if (!followUps) return;
-
-      const expect = await this.ai.getFunnelExpect(conversationId);
-      if (expect === 'closing' || expect === 'closing_followup') {
-        const scheduledAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-        await followUps.schedule({
-          conversationId,
-          scheduledAt,
-          message: 'Halo kak, apakah ada kendala? Jadi mau diorder yang mana aja kak?',
-        });
-      }
-    } catch (err) {
-      this.logger.warn(`Failed to schedule follow-up: ${err instanceof Error ? err.message : err}`);
-    }
-  }
-
-  /**
-   * Multi-message burst: ask the AI to split the burst into topics and draft
-   * one reply per topic, each quoting the message that started that topic.
-   * Every reply is held as a draft for admin approval regardless of AI mode —
-   * a combined/segmented answer is too easy to get partly wrong to auto-send.
-   */
-  private async handleBurstReply(
-    conversationId: string,
-    convo: { whatsappAccountId: string; customer: { phoneNumber: string } },
-    burst: Array<{ id: string; content: string | null; messageType: string }>,
-  ) {
-    this.logger.debug(`handleBurstReply: ${burst.length} messages in burst for ${conversationId}`);
-    const segments = await this.ai.generateSegmentedReply(
-      conversationId,
-      burst.map((m, i) => ({ index: i + 1, content: m.content, messageType: m.messageType })),
-    );
-    if (segments.length === 0) return;
-
-    // TOCTOU guard: re-read after generation (can take >10s).
-    const fresh = await this.prisma.conversation.findUnique({
-      where: { id: conversationId },
-      select: { aiMode: true, takeoverStatus: true },
-    });
-    if (!fresh) return;
-    if (fresh.takeoverStatus === TakeoverStatus.admin_takeover) return;
-    if (fresh.aiMode === AiMode.ai_off || fresh.aiMode === AiMode.ai_paused) return;
-
-    // Risk gate (supervised/on only) over the combined draft text. A
-    // block/pause/takeover verdict pauses the bot instead of leaving drafts.
-    let reviewId: string | undefined;
-    if (fresh.aiMode === AiMode.ai_supervised || fresh.aiMode === AiMode.ai_on) {
-      const combined = segments.map((s) => s.text).join('\n\n');
-      try {
-        const review = await this.sentinel.review(conversationId, combined, { multiTopicBurst: true });
-        reviewId = review.id;
-        if (review.decision !== SentinelDecision.approve && review.decision !== SentinelDecision.draft) {
-          await this.prisma.conversation.update({
-            where: { id: conversationId },
-            data: { aiMode: AiMode.ai_paused, takeoverStatus: TakeoverStatus.waiting_admin },
+          const assets = this.moduleRef.get<AssetsService>('ASSETS_SERVICE', { strict: false });
+          void assets.maybeAutoSend(conversationId).catch((err: unknown) => this.logger.warn(`asset auto-send failed: ${err}`));
+        } catch { /* AssetsService not resolvable */ }
+      },
+      scheduleFollowUp: async (conversationId: string, pesan: string, delayMs: number) => {
+        try {
+          const FollowUpsService = require('../followups/followups.service').FollowUpsService;
+          const followUps = this.moduleRef.get(FollowUpsService, { strict: false });
+          if (!followUps) return;
+          await followUps.schedule({
+            conversationId,
+            scheduledAt: new Date(Date.now() + delayMs).toISOString(),
+            message: pesan,
           });
-          return;
+        } catch (err) {
+          this.logger.warn(`Failed to schedule follow-up: ${err instanceof Error ? err.message : err}`);
         }
-      } catch (err) {
-        // Same fallback as the single-message path: don't lose the segments
-        // just because Sentinel/the provider timed out — hold them as drafts
-        // (reviewId left unset) so an admin can see and route them manually.
-        this.logger.error(`Sentinel review failed on burst (fallback to draft): ${err instanceof Error ? err.message : err}`);
-      }
-    }
+      },
+    };
+  }
 
-    for (const segment of segments) {
-      const quotedMessageId =
-        segment.answersIndex != null ? burst[segment.answersIndex - 1]?.id ?? null : null;
-      await this.storeDraft(
-        conversationId,
-        convo.whatsappAccountId,
-        segment.text,
-        reviewId,
-        quotedMessageId,
-        segment.moneyGateIssues,
-      );
-    }
-
-    // >>> ANGGA — koreksi 2026-08-04 (temuan Bossfren): sama seperti balasan
-    // tunggal, segmen burst yang ditahan gerbang uang layak diberi tahu di
-    // SEMUA mode (bukan cuma kalau bukan ai_draft) — ini bukan draft rutin,
-    // ini sinyal bot HAMPIR kirim harga/ongkir yang belum terverifikasi.
-    const moneyGatedSegments = segments.filter((s) => s.moneyGateIssues?.length);
-    if (moneyGatedSegments.length) {
-      const allIssues = moneyGatedSegments.flatMap((s) => s.moneyGateIssues ?? []);
-      this.notifications.send(
-        `⚠️ Gerbang uang menahan balasan
-${convo.customer.phoneNumber}: ${allIssues.join('; ')}
-Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
-      );
-    }
-
-    // ai_draft admins already watch every draft; only ping for modes that
-    // would normally not need a human (supervised/on). Kalau notifikasi
-    // gerbang uang di atas SUDAH terkirim, tidak perlu dobel dengan yang
-    // generik ini.
-    if (fresh.aiMode !== AiMode.ai_draft && !moneyGatedSegments.length) {
-      this.notifications.send(
-        `📝 Balasan AI ditahan untuk approval\n${convo.customer.phoneNumber} mengirim beberapa pesan dengan topik berbeda — ${segments.length} draft balasan menunggu dicek admin sebelum kirim.`,
-      );
-    }
+  private async maybeAutoReply(conversationId: string) {
+    await this.replyPipeline.run(conversationId, this.waChannel());
   }
 
   /** The customer's unanswered trailing run, oldest→newest. Length > 1 means a

@@ -45,9 +45,17 @@ export interface ShippingQuote {
   weightKg: number;
   /** Total harga barang (Σ qty × harga katalog). 0 kalau kutipan ongkir-saja. */
   goodsTotal: number;
-  /** >>> ANGGA: true kalau dihitung TANPA daftar barang — hanya mungkin lewat
-   *  alat uji admin, tidak pernah dari percakapan pelanggan. Angkanya berarti
-   *  ONGKIR saja, bukan total belanja. */
+  /** >>> ANGGA: true kalau kutipan dihitung TANPA daftar barang yang cocok
+   *  katalog. Angkanya berarti ONGKIR saja, bukan total belanja.
+   *
+   *  KOREKSI 2026-08-09 (audit F1): komentar lama bilang ini "hanya mungkin
+   *  lewat alat uji admin, tidak pernah dari percakapan pelanggan". SALAH, dan
+   *  sudah salah sejak sebelum F1 — `quoteUntukTujuan` menyetel
+   *  `shippingOnly = !semuaCocok`, jadi pelanggan yang menyebut nama barang di
+   *  luar katalog SUDAH menghasilkan ini dari percakapan asli. Sejak F1 jalurnya
+   *  bertambah satu lagi: `items` OPSIONAL di skema tool, jadi model boleh
+   *  memanggil `calculate_shipping` sebelum barang dipilih — itu memang jalur
+   *  "cek ongkir dulu" yang menopang aturan keranjang kosong. <<< */
   shippingOnly: boolean;
   /** Nama barang yang disebut pelanggan tapi tidak cocok katalog (kalau ada). */
   unmatchedNames?: string[];

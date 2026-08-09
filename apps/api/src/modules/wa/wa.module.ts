@@ -1,3 +1,4 @@
+import { ReplyModule } from '../reply/reply.module';
 import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { WaController } from './wa.controller';
@@ -23,7 +24,7 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
 import { FollowUpsModule } from '../followups/followups.module';
 
 @Module({
-  imports: [
+  imports: [ReplyModule, 
     ConfigModule,
     PrismaModule,
     AiModule,
