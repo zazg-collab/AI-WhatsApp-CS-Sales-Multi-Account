@@ -212,7 +212,7 @@ describe('PromptBuilderService', () => {
     const afterSystem = msgs.slice(3);
     // first entry is the summary placeholder (also role system)
     expect(afterSystem[0].role).toBe('system');
-    expect(msgs.find((m) => m.role === 'system')?.content || '').toContain('Ringkasan percakapan sebelumnya');
+    expect(afterSystem[0].content).toContain('Ringkasan percakapan sebelumnya');
     const turns = afterSystem.slice(1);
     expect(turns.length).toBeLessThanOrEqual(MAX_HISTORY_MESSAGES);
   });

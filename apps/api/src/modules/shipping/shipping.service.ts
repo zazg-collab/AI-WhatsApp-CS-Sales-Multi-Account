@@ -44,6 +44,7 @@ import {
   // <<< ANGGA
   // >>> ANGGA — fix (2026-08-06, langkah closing)
   SHIPPING_FUNNEL_CLOSING,
+  SHIPPING_FUNNEL_CLOSING_FOLLOWUP,
   // <<< ANGGA
 } from '../../i18n/bot-prompts';
 // >>> ANGGA — Fase 113: satu definisi "angka uang" dipakai ulang dari
@@ -2731,16 +2732,17 @@ export class ShippingService {
       kalimat: string,
       total = false,
       closing = false,
+      closingFollowup = false,
     ): { teks: string | null; step: string } => {
       const bersih = (kalimat ?? '').trim();
       const bolehTanya = bersih.length > 0 && (asks[step] ?? 0) < 2;
-      if (!bolehTanya) {
+      if (!bolehTanya && !closingFollowup) { // closing followup bypasses the 2x cap because we ALWAYS want to steer them back
         this.cache.setFunnelExpect(conversationId, { messageId: lastMsgId, step, kalimat: '' });
         return { teks: null, step };
       }
       void this.orderLog?.recordFunnelAsk(conversationId, step, lastMsgId);
       this.cache.setFunnelExpect(conversationId, { messageId: lastMsgId, step, kalimat: bersih });
-      const varian = closing ? SHIPPING_FUNNEL_CLOSING : total ? SHIPPING_FUNNEL_TOTAL : SHIPPING_FUNNEL_DIRECTIVE;
+      const varian = closingFollowup ? SHIPPING_FUNNEL_CLOSING_FOLLOWUP : closing ? SHIPPING_FUNNEL_CLOSING : total ? SHIPPING_FUNNEL_TOTAL : SHIPPING_FUNNEL_DIRECTIVE;
       return { teks: t(varian, lang)(bersih), step };
     };
     // <<< ANGGA
@@ -2865,6 +2867,10 @@ export class ShippingService {
         return pilih('patokan', kalimatPatokan);
       }
       // <<< ANGGA
+      const closingSudahDitanya = (asks['closing'] ?? 0) >= 1;
+      if (closingSudahDitanya) {
+        return pilih('closing_followup', 'Jadi apakah pesanannya mau diproses sekarang kak?', false, false, true);
+      }
       return pilih('closing', kalimatClosing, false, true);
       // <<< ANGGA
     }
@@ -2880,7 +2886,7 @@ export class ShippingService {
   // kaya: mode step + hidePriceUnits. Dipakai getGroundingText untuk
   // memilih komponen grounding per mode (total vs patokan vs closing).
   private async computeFunnelMeta(conversationId: string): Promise<{
-    mode: 'total' | 'patokan' | 'closing' | 'normal';
+    mode: 'total' | 'patokan' | 'closing' | 'closing_followup' | 'normal';
     hidePriceUnits: boolean;
   }> {
     // >>> ANGGA — fix (2026-08-08, Bug #2 ongkir bocor di patokan):
@@ -2893,6 +2899,7 @@ export class ShippingService {
     const expectFromCache = this.cache.funnelExpect(conversationId);
     if (expectFromCache?.step === 'patokan') return { mode: 'patokan', hidePriceUnits: true };
     if (expectFromCache?.step === 'closing') return { mode: 'closing', hidePriceUnits: true };
+    if (expectFromCache?.step === 'closing_followup') return { mode: 'closing_followup', hidePriceUnits: true };
     if (expectFromCache?.step === 'total') return { mode: 'total', hidePriceUnits: false };
     // <<< ANGGA
 
@@ -3490,18 +3497,43 @@ export class ShippingService {
     groups: Array<{ city: string; cityLabel: string; province: string; level: string; rows: number }>;
   }> {
     const cfg = await this.settings.shipping();
-    const dicari = terapkanAlias(keyword, cfg.destinationAliases);
+    const dicariMentah = terapkanAlias(keyword, cfg.destinationAliases);
+    // 1. Hapus kata duplikat
+    const dicari = [...new Set(dicariMentah.split(/\s+/))].join(' ');
+    
     const rows = await this.mengantar.searchAddress(dicari);
     if (rows === null) return { keyword, dicari, total: 0, gagal: true, rows: [], groups: [] };
+    
     let urut = resolveDestination(rows, dicari);
-    // >>> ANGGA — temuan widget Bossfren (2026-08-05): keyword GABUNGAN
-    // ("sandubaya mataram") memunculkan baris tapi NOL kelompok kandidat —
-    // pencocok level tak pernah cocok dengan frasa utuh. Nilai per kata. <<<
+    
     if (!urut.length && /\s/.test(dicari)) {
-      for (const w of dicari.split(/\s+/).filter((x) => x.length >= 4)) {
-        urut = resolveDestination(rows, w);
-        if (urut.length) break;
+      // 2. Pecah kata & Lindungi Arah Mata Angin
+      const arah = ['utara', 'selatan', 'timur', 'barat', 'tengah', 'tenggara', 'daya', 'laut'];
+      const chunks: string[] = [];
+      for (const p of dicari.split(/\s+/)) {
+        if (arah.includes(p.toLowerCase()) && chunks.length > 0) {
+          chunks[chunks.length - 1] += ` ${p}`;
+        } else {
+          chunks.push(p);
+        }
       }
+
+      // 3. Evaluasi semua chunk
+      let bestUrut: any[] = [];
+      let bestRank = -1;
+      const rankVal: Record<string, number> = { city: 0, district: 1, subdistrict: 2 };
+
+      for (const w of chunks.filter(x => x.length >= 4)) {
+        const temp = resolveDestination(rows, w);
+        if (temp.length > 0) {
+          const maxRank = Math.max(...temp.map(t => rankVal[t.level] ?? -1));
+          if (maxRank > bestRank) {
+            bestRank = maxRank;
+            bestUrut = temp;
+          }
+        }
+      }
+      if (bestUrut.length) urut = bestUrut;
     }
     return {
       keyword,
@@ -3523,6 +3555,10 @@ export class ShippingService {
     };
   }
   // <<< ANGGA
+
+  getFunnelExpect(conversationId: string) {
+    return this.cache.funnelExpect(conversationId)?.step ?? null;
+  }
 
   async resolvePriceTokens(
     conversationId: string,
@@ -4078,11 +4114,51 @@ export class ShippingService {
     const cfg = await this.settings.shipping();
     if (!cfg.mengantarApiKey || !cfg.mengantarOriginId) throw new Error('Konfigurasi API Mengantar belum diatur');
 
-    const dicari = terapkanAlias(keyword, cfg.destinationAliases);
-    const rows = await this.mengantar.searchAddress(dicari);
+    const dicariMentah = terapkanAlias(keyword, cfg.destinationAliases);
+    // 1. Hapus kata duplikat (purwokerto purwokerto timur -> purwokerto timur)
+    const dicari = [...new Set(dicariMentah.split(/\s+/))].join(' ');
+    
+    // 1b. Gabungkan dengan provinsi KHUSUS untuk dikirim ke Mengantar API
+    // agar tidak terkena limit 50 baris yang membuang kandidat sah (seperti kasus "Mataram")
+    const provAlias = province ? terapkanAlias(province, cfg.destinationAliases) : '';
+    const apiQueryMentah = provAlias ? `${dicari} ${provAlias}` : dicari;
+    const apiQuery = [...new Set(apiQueryMentah.split(/\s+/))].join(' ');
+
+    const rows = await this.mengantar.searchAddress(apiQuery);
     if (!rows) throw new Error('Gagal menghubungi server ongkir');
 
     let urut = resolveDestination(rows, dicari);
+
+    if (!urut.length && /\s/.test(dicari)) {
+      // 2. Pecah kata & Lindungi Arah Mata Angin
+      const arah = ['utara', 'selatan', 'timur', 'barat', 'tengah', 'tenggara', 'daya', 'laut'];
+      const chunks: string[] = [];
+      for (const p of dicari.split(/\s+/)) {
+        if (arah.includes(p.toLowerCase()) && chunks.length > 0) {
+          chunks[chunks.length - 1] += ` ${p}`;
+        } else {
+          chunks.push(p);
+        }
+      }
+
+      // 3. Evaluasi semua chunk, pilih yang levelnya paling spesifik (subdistrict > district > city)
+      let bestUrut: any[] = [];
+      let bestRank = -1;
+      const rankVal: Record<string, number> = { city: 0, district: 1, subdistrict: 2 };
+
+      for (const w of chunks.filter(x => x.length >= 4)) {
+        const temp = resolveDestination(rows, w);
+        if (temp.length > 0) {
+          const maxRank = Math.max(...temp.map(t => rankVal[t.level] ?? -1));
+          if (maxRank > bestRank) {
+            bestRank = maxRank;
+            bestUrut = temp;
+          }
+        }
+      }
+      if (bestUrut.length) urut = bestUrut;
+    }
+
     const prov = normalisasiProvinsi(province ?? '');
     if (prov && urut.length) {
       const seprovinsi = urut.filter((c) => {
@@ -4128,8 +4204,20 @@ export class ShippingService {
       // agar nanti saat LLM generate {{total_cod}}, parser token bisa membacanya dari DB!
       await this.cache.set(conversationId, result.quote, 2 * 60 * 60 * 1000); // hardcode TTL 2 jam untuk tools, bisa disesuaikan nanti
 
+      const isShippingOnly = result.quote.shippingOnly;
+      const hasCod = result.quote.codTotal != null && !!result.quote.codCourier;
+      let instructionText = '';
+      
+      if (isShippingOnly) {
+        instructionText = `Ongkir berhasil dihitung! SEKARANG balas pelanggan dengan ramah dan gunakan token {{ongkir}} untuk menampilkan biaya kirim. Jangan bahas opsi pembayaran COD/Transfer. Jangan sebut angka ongkir sendiri, cukup sisipkan {{ongkir}} di dalam balasanmu, lalu tanya produk apa yang mau dipesan.`;
+      } else if (hasCod) {
+        instructionText = `Ongkir berhasil dihitung! SEKARANG balas pelanggan dengan ramah dan gunakan token {{blok_total}} untuk menampilkan rincian harga. Jangan sebut angka ongkir sendiri, cukup sisipkan {{blok_total}} di dalam balasanmu.`;
+      } else {
+        instructionText = `Ongkir berhasil dihitung! SEKARANG balas pelanggan dengan ramah dan gunakan token {{total_transfer}} untuk menampilkan rincian harga. (COD tidak tersedia untuk wilayah ini). Jangan sebut angka ongkir sendiri, cukup sisipkan {{total_transfer}} di dalam balasanmu.`;
+      }
+
       // Kembalikan metadata ringan yang memicu LLM melanjutkan dialog dengan Pede.
-      return `Ongkir berhasil dihitung! SEKARANG balas pelanggan dengan ramah dan gunakan token {{blok_total}} untuk menampilkan rincian harga. Jangan sebut angka ongkir sendiri, cukup sisipkan {{blok_total}} di dalam balasanmu.`;
+      return instructionText;
     } else if (result.status === 'need_more_detail') {
       return {
         status: 'error',

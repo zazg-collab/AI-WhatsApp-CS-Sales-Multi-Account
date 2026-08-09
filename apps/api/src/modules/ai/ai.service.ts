@@ -128,6 +128,10 @@ export class AiService {
     return this.cache.stats();
   }
 
+  getFunnelExpect(conversationId: string) {
+    return this.shipping?.getFunnelExpect(conversationId) ?? null;
+  }
+
   /**
    * >>> ANGGA — Fase 113 (2026-08-04): gerbang uang, dipanggil TANPA SYARAT
    * mode AI dari `generateReply`/`generateSegmentedReply` — lihat catatan di

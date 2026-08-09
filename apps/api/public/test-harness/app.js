@@ -26,6 +26,7 @@ const PROVIDER_MODELS = {
     'openai/gpt-4.5-turbo',
     'google/gemini-2.0-flash-exp',
     'deepseek/deepseek-r1',
+    'deepseek/deepseek-v4-flash-0731',
   ],
 };
 
@@ -61,7 +62,34 @@ const debugTools = document.getElementById('debugTools');
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
   loadSessions();
-  
+  async function fetchOpenRouterModels() {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/models');
+      if (response.ok) {
+        const data = await response.json();
+        const modelIds = data.data.map(model => model.id);
+        PROVIDER_MODELS.openrouter = [
+          'meta-llama/llama-3.3-70b-instruct', // Keep default at top
+          'deepseek/deepseek-v4-flash-0731', // Keep this prominent
+          ...modelIds.filter(id => id !== 'meta-llama/llama-3.3-70b-instruct' && id !== 'deepseek/deepseek-v4-flash-0731')
+        ];
+        
+        // Refresh dropdown if currently openrouter
+        if (providerSelect.value === 'openrouter') {
+          const currentModel = modelSelect.value;
+          modelSelect.innerHTML = PROVIDER_MODELS.openrouter.map(m => `<option value="${m}">${m}</option>`).join('');
+          if (PROVIDER_MODELS.openrouter.includes(currentModel)) {
+            modelSelect.value = currentModel;
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch OpenRouter models', err);
+    }
+  }
+
+  fetchOpenRouterModels();
+
   // Event listeners
   sendBtn.addEventListener('click', sendMessage);
   messageInput.addEventListener('keypress', (e) => {

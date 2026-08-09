@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { FollowUpsController } from './followups.controller';
 import { FollowUpsService } from './followups.service';
@@ -8,7 +8,7 @@ import { WaModule } from '../wa/wa.module';
 @Module({
   imports: [
     BullModule.registerQueue({ name: 'follow-ups' }),
-    WaModule,
+    forwardRef(() => WaModule),
   ],
   controllers: [FollowUpsController],
   providers: [FollowUpsService, FollowUpsProcessor],

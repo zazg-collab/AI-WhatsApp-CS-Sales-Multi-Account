@@ -127,14 +127,18 @@ export class TestHarnessController {
       session.model,
     );
 
+    // Resolve price tokens (like what wa-chat.service does)
+    const resolvedResult = await this.chatManager['shipping'].resolvePriceTokens(sessionId, replyText);
+    const resolvedText = resolvedResult.text;
+
     // Collect debug info (MOCK for Fase 1 + Tool Calls)
-    const debugInfo = await this.debugCollector.collectDebugInfo(sessionId, replyText, executedTools, session.provider);
+    const debugInfo = await this.debugCollector.collectDebugInfo(sessionId, resolvedText, executedTools, session.provider);
 
     // Add assistant message with debug info
     const assistantMessage = await this.repository.addMessage({
       sessionId,
       role: 'assistant',
-      content: replyText,
+      content: resolvedText,
       debugInfo,
     });
 

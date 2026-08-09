@@ -20,6 +20,7 @@ import { AssetsModule } from '../assets/assets.module';
 import { MediaModule } from '../media/media.module';
 import { LearningModule } from '../learning/learning.module';
 import { WebhooksModule } from '../webhooks/webhooks.module';
+import { FollowUpsModule } from '../followups/followups.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { WebhooksModule } from '../webhooks/webhooks.module';
     forwardRef(() => AssetsModule),
     LearningModule,
     WebhooksModule,
+    forwardRef(() => FollowUpsModule),
   ],
   controllers: [WaController, WaOpsController, MediaController],
   providers: [

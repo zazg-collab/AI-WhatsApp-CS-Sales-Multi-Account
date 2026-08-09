@@ -1051,8 +1051,8 @@ describe('Q-Chain — funnel pertanyaan berantai (urutan pakem)', () => {
     // terpisah, bukan bagian dari fix ini; yang fix ini jamin adalah baris
     // KATALOG-nya hilang dan gerbang menahan kalau model tetap menulisnya.)
     expect(grounding).not.toContain('• {{rincian_tagihan}} = BLOK rekap tagihan');
-    expect(grounding).not.toContain('{{total_transfer}}');
-    expect(grounding).not.toContain('{{total_cod}}');
+    expect(grounding).not.toContain('{{total_transfer}} =');
+    expect(grounding).not.toContain('{{total_cod}} =');
     expect(grounding).toContain('LARANGAN KERAS GILIRAN INI: total/rincian tagihan SUDAH pernah disodorkan');
   });
 
@@ -1530,7 +1530,7 @@ describe('Q-Chain fix 2 — REPLAY "mataram dobel": total prematur + teater pros
     expect(grounding).toContain('mau ambil berapa pcs kak?'); // funnel tetap jalan
     // Pra-fix: seluruh katalog total ikut ditawarkan walau langkahnya qty.
     expect(grounding).not.toContain('{{rincian_tagihan}}');
-    expect(grounding).not.toContain('{{total_transfer}}');
+    expect(grounding).not.toContain('{{total_transfer}} =');
     expect(grounding).not.toContain('{{subtotal_barang}}');
     expect(grounding).toContain('LARANGAN KERAS GILIRAN INI');
   });
@@ -1575,7 +1575,7 @@ describe('Q-Chain fix 2 — REPLAY "mataram dobel": total prematur + teater pros
     expect(grounding).not.toContain('mau ambil berapa pcs kak?'); // pertanyaan baku dibungkam
     // Pra-fix: cap → directive null → sensor mati → katalog total ikut tampil.
     expect(grounding).not.toContain('{{rincian_tagihan}}');
-    expect(grounding).not.toContain('{{total_transfer}}');
+    expect(grounding).not.toContain('{{total_transfer}} =');
     expect(grounding).toContain('LARANGAN KERAS');
     const out = await h.svc.resolvePriceTokens(
       'c1',

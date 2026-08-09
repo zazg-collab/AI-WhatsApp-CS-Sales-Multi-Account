@@ -820,6 +820,13 @@ export const SHIPPING_FUNNEL_CLOSING = {
     `SALES-FLOW RULE — HARD REQUIREMENT: address & payment method are COMPLETE, the order is FINAL — do NOT ask about address/landmark/payment again. CLOSE this conversation by confirming the order using the following text VERBATIM as your reply body (a short greeting before it is fine, but the body and line order must match exactly): "${kalimat}" — no translation, no shortening, no paraphrasing.`,
 };
 
+export const SHIPPING_FUNNEL_CLOSING_FOLLOWUP = {
+  id: (kalimat: string) =>
+    `ATURAN ALUR PENJUALAN: pesanan SUDAH final dan form konfirmasi sudah disodorkan sebelumnya. Jika pesan pelanggan berisi pertanyaan di luar order, JAWAB pertanyaan tersebut secara singkat, LALU TUTUP balasanmu dengan kalimat tanya berikut PERSIS APA ADANYA: "${kalimat}" — jangan diterjemahkan/diubah.`,
+  en: (kalimat: string) =>
+    `SALES-FLOW RULE: the order is FINAL and the confirmation form was already provided. If the customer's message contains questions outside the order, ANSWER them briefly, THEN CLOSE your reply with the following question VERBATIM: "${kalimat}" — no translation or modification.`,
+};
+
 // >>> ANGGA — GERBANG PAKEM (2026-08-06, insiden "Kab. Purwokerto ngaco"):
 // tangga minta-kecamatan/provinsi DULU cuma prompt bebas ("minta KECAMATAN-
 // nya") — model boleh mengarang kalimat sendiri, dan sekali lagi mengarang
@@ -859,8 +866,8 @@ export const SHIPPING_GROUNDING_DESTINATION_STUCK = {
 };
 
 export const SHIPPING_GROUNDING_SHIPPING_ONLY = {
-  id: 'DATA ONGKIR TERKINI & SAH — tapi produknya BELUM dipastikan, jadi penanda ongkir di bawah adalah ONGKIR SAJA untuk 1 pcs, BUKAN total belanja. Sebutkan sebagai ongkir, JANGAN pernah menyebutnya total. Setelah itu tanyakan produk mana yang diinginkan supaya totalnya bisa dihitung. Penanda yang tersedia sekarang:',
-  en: 'CURRENT AUTHORITATIVE SHIPPING DATA — but the product is NOT confirmed yet, so the placeholder below is SHIPPING ONLY for 1 item, NOT an order total. State it as shipping cost, NEVER as a total. Then ask which product they want so the total can be computed. Placeholders available right now:',
+  id: 'DATA ONGKIR TERKINI & SAH — tapi produknya BELUM dipastikan, jadi penanda ongkir di bawah adalah ONGKIR SAJA untuk 1 pcs, BUKAN total belanja. Sebutkan sebagai ongkir, JANGAN pernah menyebutnya total. JANGAN menyebutkan opsi pembayaran COD/Transfer karena belum ada total tagihan. Cukup sebutkan ongkirnya dengan ramah, lalu tanyakan dengan natural produk apa yang ingin dipesan oleh pelanggan (jika memanggil pelanggan di tengah kalimat, gunakan kata sapaan \'kakak\', bukan \'kak\' agar terdengar wajar). Penanda yang tersedia sekarang:',
+  en: 'CURRENT AUTHORITATIVE SHIPPING DATA — but the product is NOT confirmed yet, so the placeholder below is SHIPPING ONLY for 1 item, NOT an order total. State it as shipping cost, NEVER as a total. Do NOT mention payment methods like COD or Transfer because there is no total bill yet. Just state the shipping cost politely, and ask naturally which product they would like to order (if using a greeting in the middle of a sentence, use \'kakak\', not \'kak\'). Placeholders available right now:',
 };
 
 export const SHIPPING_GROUNDING_UNRESOLVED_ITEMS = {

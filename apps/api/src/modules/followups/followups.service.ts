@@ -82,6 +82,29 @@ export class FollowUpsService {
     });
   }
 
+  async cancelByConversation(conversationId: string) {
+    const followUps = await this.prisma.followUp.findMany({
+      where: { conversationId, status: 'scheduled' },
+    });
+
+    for (const f of followUps) {
+      try {
+        const job = await this.followUpsQueue.getJob(`followup-${f.id}`);
+        if (job) await job.remove();
+      } catch (e) {
+        this.logger.warn(`Could not remove job for follow-up ${f.id}: ${e}`);
+      }
+    }
+
+    if (followUps.length > 0) {
+      await this.prisma.followUp.updateMany({
+        where: { conversationId, status: 'scheduled' },
+        data: { status: 'cancelled' },
+      });
+      this.logger.log(`Cancelled ${followUps.length} scheduled follow-up(s) for conversation ${conversationId}`);
+    }
+  }
+
   async processJob(followUpId: string) {
     const followUp = await this.prisma.followUp.findUnique({
       where: { id: followUpId },

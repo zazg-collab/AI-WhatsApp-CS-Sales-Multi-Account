@@ -123,6 +123,13 @@ export class WaInboundService {
       );
       // <<< ANGGA
       if (result.suppressAutomation) return;
+      
+      try {
+        const FollowUpsService = require('../followups/followups.service').FollowUpsService;
+        const followUps = this.moduleRef.get(FollowUpsService, { strict: false });
+        await followUps.cancelByConversation(result.conversation.id);
+      } catch (err) { /* FollowUpsService not resolvable */ }
+      
       if (result.csatCaptured) return;
       await this.maybeAutoAway(result).catch((err) =>
         this.logger.warn(`Auto-away failed: ${err}`),
@@ -432,6 +439,29 @@ Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
     this.ai
       .leadScore(conversationId)
       .catch((err) => this.logger.warn(`Lead score failed: ${err}`));
+
+    // Fire-and-forget: schedule follow-up if in closing funnel
+    this.maybeScheduleFollowUp(conversationId).catch((err) => this.logger.warn(`Follow-up scheduling failed: ${err}`));
+  }
+
+  private async maybeScheduleFollowUp(conversationId: string) {
+    try {
+      const FollowUpsService = require('../followups/followups.service').FollowUpsService;
+      const followUps = this.moduleRef.get(FollowUpsService, { strict: false });
+      if (!followUps) return;
+
+      const expect = await this.ai.getFunnelExpect(conversationId);
+      if (expect === 'closing' || expect === 'closing_followup') {
+        const scheduledAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        await followUps.schedule({
+          conversationId,
+          scheduledAt,
+          message: 'Halo kak, apakah ada kendala? Jadi mau diorder yang mana aja kak?',
+        });
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to schedule follow-up: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   /**

@@ -113,10 +113,11 @@ export class ChatSessionManager {
     if (provider === 'mock') {
       return this.mockGenerateReply(userText, history);
     }
-    return this.realGenerateReply(userText, history, model);
+    return this.realGenerateReply(sessionId, userText, history, model);
   }
 
   private async realGenerateReply(
+    sessionId: string,
     userText: string,
     history: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
     model?: string,
@@ -245,7 +246,7 @@ export class ChatSessionManager {
               resultStr = JSON.stringify(res);
             } else if (fnName === 'calculate_shipping') {
               const dest = { id: args.destination_id, city: args.city, province: args.province, label: args.label };
-              const res = await this.shipping.llmCalculateShipping('mock-session-id', dest, args.items || []);
+              const res = await this.shipping.llmCalculateShipping(sessionId, dest, args.items || []);
               parsedResult = res;
               resultStr = JSON.stringify(res);
             } else if (fnName === 'search_knowledge' && kbId) {
@@ -319,7 +320,7 @@ export class ChatSessionManager {
     return [
       { name: 'mock', models: ['mock-v1'] },
       { name: 'anthropic', models: ['claude-sonnet-4', 'claude-opus-4', 'claude-haiku-4'] },
-      { name: 'openrouter', models: ['anthropic/claude-sonnet-4.5', 'openai/gpt-4.5-turbo', 'google/gemini-2.0-flash-exp', 'meta-llama/llama-3.3-70b-instruct'] },
+      { name: 'openrouter', models: ['anthropic/claude-sonnet-4.5', 'openai/gpt-4.5-turbo', 'google/gemini-2.0-flash-exp', 'meta-llama/llama-3.3-70b-instruct', 'deepseek/deepseek-v4-flash-0731'] },
     ];
   }
 }

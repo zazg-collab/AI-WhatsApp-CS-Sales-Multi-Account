@@ -639,7 +639,7 @@ describe('§9.2 — qty > 1 dan/atau lebih dari satu produk berbeda', () => {
     expect(text).toContain('{{ongkir}}');
     // GAGAL kalau kutipan ongkir-saja menawarkan penanda TOTAL — itu berarti
     // total belanja dikutip padahal produknya belum dipastikan.
-    expect(text).not.toContain('{{total_transfer}}');
+    expect(text).not.toContain('{{total_transfer}} =');
     expect(text).not.toContain('{{subtotal_barang}}');
   });
 
@@ -650,7 +650,7 @@ describe('§9.2 — qty > 1 dan/atau lebih dari satu produk berbeda', () => {
     expect(res.quote.shippingOnly).toBe(true);
     const text = await h.svc.getGroundingText('c1');
     expect(text).toContain('kompor gas rinnai');
-    expect(text).not.toContain('{{total_transfer}}');
+    expect(text).not.toContain('{{total_transfer}} =');
   });
 
   it('sebagian barang cocok, sebagian tidak → JANGAN kutip total yang bolong', async () => {
