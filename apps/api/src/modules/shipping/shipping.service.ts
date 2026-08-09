@@ -725,6 +725,12 @@ export function isCourierCodEligible(
 export function isRegionCodBlocked(province: string, keywords: string[]): boolean {
   const lower = (province ?? '').toLowerCase();
   if (!lower) return false;
+  
+  const hardBlocked = ['papua', 'maluku', 'sulawesi tenggara'];
+  if (hardBlocked.some(blocked => lower.includes(blocked))) {
+    return true;
+  }
+
   return (keywords ?? []).some((k) => k && lower.includes(k.toLowerCase()));
 }
 
