@@ -148,6 +148,12 @@ export interface FunnelExpect {
   messageId: string;
   step: string;
   kalimat: string;
+  /** >>> ANGGA — fix (2026-08-10): cap waktu, DIISI OTOMATIS oleh
+   *  `setFunnelExpect` — pemanggil tidak perlu tahu. Dipakai `funnelDirective`
+   *  untuk membedakan "pertanyaan kita barusan, pelanggan sedang menjawab"
+   *  dari "sisa percakapan yang ditinggal tiga hari lalu". Opsional supaya
+   *  entri lama & test yang menyusun objek ini sendiri tetap sah. <<< */
+  at?: number;
 }
 
 interface Entry {
@@ -427,8 +433,16 @@ export class ShippingQuoteCache {
   private readonly funnelExpects = new Map<string, FunnelExpect>();
 
   setFunnelExpect(conversationId: string, expect: FunnelExpect): void {
+    // >>> ANGGA — koreksi AUDIT K23 (2026-08-10): JANGAN mengecap ulang saat
+    // LANGKAH yang sama ditulis lagi. `pilih()` menulis expect di SETIAP
+    // giliran yang lolos gerbang — termasuk cabang "pertanyaan dibungkam" —
+    // jadi cap yang selalu diperbarui membuat batas umur mustahil tercapai
+    // selama pelanggan masih membalas. Cap sekarang menandai kapan langkah
+    // itu MULAI ditunggu, bukan kapan terakhir ditulis. <<<
+    const lama = this.funnelExpects.get(conversationId);
+    const at = expect.at ?? (lama && lama.step === expect.step ? lama.at : undefined) ?? Date.now();
     this.funnelExpects.delete(conversationId);
-    this.funnelExpects.set(conversationId, expect);
+    this.funnelExpects.set(conversationId, { ...expect, at });
     while (this.funnelExpects.size > MAX_QUOTE_ENTRIES) {
       const oldest = this.funnelExpects.keys().next().value;
       if (oldest === undefined) break;
@@ -438,6 +452,18 @@ export class ShippingQuoteCache {
 
   funnelExpect(conversationId: string): FunnelExpect | null {
     return this.funnelExpects.get(conversationId) ?? null;
+  }
+
+  /** >>> ANGGA — fix (2026-08-10): sama seperti `funnelExpect`, tapi menolak
+   *  entri yang sudah lewat umur. Entri TANPA cap waktu (dari sesi sebelum
+   *  perubahan ini, atau disusun langsung oleh test) dianggap segar — supaya
+   *  perubahan ini tidak mematikan funnel di percakapan yang sedang berjalan
+   *  saat deploy. <<< */
+  funnelExpectSegar(conversationId: string, maxAgeMs: number): FunnelExpect | null {
+    const e = this.funnelExpects.get(conversationId);
+    if (!e) return null;
+    if (e.at != null && Date.now() - e.at > maxAgeMs) return null;
+    return e;
   }
 
   clearFunnelExpect(conversationId: string): void {

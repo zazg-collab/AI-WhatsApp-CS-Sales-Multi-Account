@@ -1216,6 +1216,124 @@ describe('Q-Chain — funnel pertanyaan berantai (urutan pakem)', () => {
     expect(tertahan.ok).toBe(false);
   });
 
+  /**
+   * >>> ANGGA — BUG LAPANGAN (2026-08-10, tiga sesi uji Bossfren + query DB):
+   * sesudah langkah PATOKAN ditanya, giliran pelanggan berikutnya berisi
+   * ALAMAT — dan funnel DIAM TOTAL. Nol baris `funnel_ask` di database untuk
+   * giliran itu, alamat tidak masuk cache, tidak ada kalimat wajib disuntik.
+   * Akibatnya bot mengulang minta RT/RW & kelurahan berkali-kali (sampai
+   * pelanggan menjawab "buset udah cukup lengkap itu"), dan formulir closing
+   * akhirnya terkirim berbunyi `Alamat: udah lengkap itu aja.` — kalimat
+   * konfirmasi, bukan alamat, dan itu yang dibaca kurir.
+   *
+   * Akarnya di `funnelDirective`:
+   *     if (!jawabanUang) return null;
+   * dengan `jawabanUang` menebak dari TEKS pelanggan (kata uang/qty). Alamat
+   * dan nomor HP tidak memuat kata uang, jadi ditolak — padahal sistem BARU
+   * SAJA menanyakannya. Aturan "patokan cukup ditanya SEKALI lalu lanjut
+   * closing" sebenarnya SUDAH ADA sepuluh baris di bawahnya; ia hanya tidak
+   * pernah terjangkau.
+   */
+  it('BUG 2026-08-10: giliran ALAMAT sesudah patokan ditanya WAJIB lanjut closing, bukan diam', async () => {
+    const h = harness({
+      lastCustomerText: 'COD deh kak',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 2 }], { qtyPasti: true })],
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1 });
+    const g1 = await h.svc.getGroundingText('c1');
+    // giliran metode: langkah PATOKAN ditanya, funnelExpect tercatat
+    expect(g1).toContain('boleh diinfokan alamat lengkapnya dan dicantumkan patokan rumahnya');
+    expect(h.cache.funnelExpect('c1')?.step).toBe('patokan');
+
+    // giliran berikutnya: pelanggan MENJAWAB dengan alamat. Tidak ada satu pun
+    // kata uang/qty di kalimat ini — itulah intinya.
+    pesanBaru(h, 'm2', 'Fatih, Jl. Pejanggik No. 45 Cakranegara, deket masjid agung');
+    // metode sudah terjawab di giliran sebelumnya dan JEJAKNYA dipersist —
+    // giliran ini teksnya sendiri tidak menyebut cod/transfer lagi.
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({
+      total: 1,
+      patokan: 1,
+      metode_terjawab: 1,
+      metode_cod: 1,
+    });
+    const g2 = await h.svc.getGroundingText('c1');
+
+    // funnel WAJIB bergerak: template closing, bukan patokan lagi, bukan diam.
+    expect(g2).toContain('Terimakasih kak konfirmasinya');
+    expect(h.cache.funnelExpect('c1')?.step).toBe('closing');
+    // dan alamat pelanggan WAJIB tersimpan verbatim untuk {{alamat_lengkap}}
+    expect(h.cache.addressTextOf('c1')).toContain('Jl. Pejanggik No. 45');
+  });
+
+  /**
+   * >>> ANGGA — REGRESI dari AUDIT K23 (2026-08-10). Versi PERTAMA perbaikan di
+   * atas membuka gerbang `jawabanUang` hanya dengan syarat "ada funnelExpect
+   * menggantung". Dua auditor membuktikan terpisah bahwa itu mengunci gerbang
+   * dalam posisi TERBUKA selamanya: `pilih()` menulis expect di setiap giliran
+   * yang lolos, jadi begitu funnel menyala sekali, basa-basi/keluhan/pertanyaan
+   * produk lain ikut mendorong funnel — regresi persis insiden "halo"
+   * 2026-08-05 yang komentarku sendiri klaim aman.
+   *
+   * Test ini menjaga bentuk yang BENAR: gerbang hanya membuka untuk giliran
+   * yang MEMANG menjawab (alamat / nomor HP), bukan untuk giliran apa pun.
+   */
+  it('REGRESI K23: basa-basi sesudah pertanyaan funnel TIDAK boleh mendorong funnel', async () => {
+    const h = harness({
+      lastCustomerText: 'COD deh kak',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 2 }], { qtyPasti: true })],
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1 });
+    await h.svc.getGroundingText('c1'); // langkah patokan ditanya, expect tercatat
+    expect(h.cache.funnelExpect('c1')?.step).toBe('patokan');
+
+    // Giliran basa-basi: nol penanda alamat, nol nomor HP, nol kata uang.
+    pesanBaru(h, 'm2', 'makasih ya kak udah dibantu 🙏');
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({
+      total: 1,
+      patokan: 1,
+      metode_terjawab: 1,
+      metode_cod: 1,
+    });
+    const g2 = await h.svc.getGroundingText('c1');
+
+    // Funnel WAJIB diam: tidak melompat ke closing, tidak menempel kalimat wajib.
+    expect(g2).not.toContain('Terimakasih kak konfirmasinya');
+    expect(h.cache.funnelExpect('c1')?.step).toBe('patokan'); // tidak bergerak
+  });
+
+  /**
+   * >>> ANGGA — REGRESI dari AUDIT K23 (2026-08-10), temuan auditor kedua:
+   * `containsAddressOrLandmark` ada di `shipping.service.ts` sejak 2026-08-06
+   * tapi TIDAK PERNAH DIPANGGIL dari mana pun. Akibatnya cache alamat menerima
+   * teks apa pun selain pilihan metode bayar — dan formulir closing yang
+   * dibaca KURIR terkirim berbunyi "Alamat: udah lengkap itu aja."
+   */
+  it('REGRESI K23: kalimat konfirmasi TIDAK boleh masuk cache alamat', async () => {
+    const h = harness({
+      lastCustomerText: 'COD deh kak',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 2 }], { qtyPasti: true })],
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1 });
+    await h.svc.getGroundingText('c1');
+
+    // alamat sungguhan masuk
+    pesanBaru(h, 'm2', 'Fatih, Jl. Pejanggik No. 45 Cakranegara, deket masjid agung');
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({
+      total: 1, patokan: 1, metode_terjawab: 1, metode_cod: 1,
+    });
+    await h.svc.getGroundingText('c1');
+    expect(h.cache.addressTextOf('c1')).toContain('Jl. Pejanggik No. 45');
+
+    // kalimat konfirmasi TIDAK boleh menimpa/menambah
+    pesanBaru(h, 'm3', 'udah lengkap itu aja.');
+    await h.svc.getGroundingText('c1');
+    expect(h.cache.addressTextOf('c1')).toContain('Jl. Pejanggik No. 45');
+    expect(h.cache.addressTextOf('c1')).not.toContain('udah lengkap itu aja');
+  });
+
   it('Q-Chain v3.1 (revisi Bossfren 2026-08-06): metode TRANSFER -> langkah PATOKAN minta alamat lengkap + patokan + rekening + konfirmasi bukti bayar', async () => {
     const rek = 'BCA 6765556680 a.n Cordova Digital Inovasi';
     const h = harness({

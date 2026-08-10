@@ -164,6 +164,10 @@ export const ORDER_CHANGE_HINT =
  * langsung lompat ke CLOSING karena alamatnya sudah cukup buat kurir.
  */
 const NAMA_JALAN_HINT = /\b(jl\.?|jalan|gg\.?|gang|blok|komplek|perumahan|perum)\b/i;
+/** >>> ANGGA — fix (2026-08-10): nomor HP Indonesia. Dipakai HANYA untuk
+ *  mengenali "giliran ini menjawab permintaan data pengiriman", bukan untuk
+ *  memvalidasi nomornya. <<< */
+export const POLA_NOMOR_HP = /(?:\+?62|0)\s?8\d{2}[\s-]?\d{3,4}[\s-]?\d{3,5}/;
 export function adaAlamatLengkap(text: string): boolean {
   if (!NAMA_JALAN_HINT.test(text ?? '')) return false;
   return /\b(jl\.?|jalan|gg\.?|gang|blok|komplek|perumahan|perum)\b[^,\n]{0,40}?(no\.?\s*)?\d+/i.test(text ?? '');
@@ -2687,9 +2691,55 @@ export class ShippingService {
     // harga/qty yang belum tentu "obrolan order" versi grounding ASUMSI),
     // diOR-kan eksplisit di sini, bukan disembunyikan ke fungsi bersama —
     // supaya bedanya kelihatan jelas dan sengaja, bukan drift lagi.
+    // >>> ANGGA — fix (2026-08-10, tiga sesi uji Bossfren + query DB):
+    // gerbang ini menebak dari TEKS pelanggan apakah giliran ini soal order —
+    // dan lupa satu fakta yang jauh lebih kuat serta sudah tersimpan: KITA
+    // BARU SAJA BERTANYA. Kalau ada `funnelExpect` menggantung, giliran
+    // pelanggan berikutnya ADALAH jawaban atas pertanyaan itu, apa pun
+    // bunyinya — alamat, nomor HP, "udah lengkap itu", "buset udah cukup".
+    //
+    // Tanpa klausa ini, giliran ALAMAT ditolak (tidak memuat kata uang/qty),
+    // funnel pulang null, dan tiga hal gagal sekaligus: alamat tidak masuk
+    // cache (formulir closing terkirim berbunyi "Alamat: udah lengkap itu
+    // aja." — yang dibaca kurir), langkah tidak maju (closing terlambat
+    // beberapa giliran atau tidak terjadi sama sekali), dan tidak ada kalimat
+    // wajib disuntik sehingga model berimprovisasi minta RT/RW berulang-ulang.
+    //
+    // Ini BUKAN kata kunci baru — justru mengurangi ketergantungan pada
+    // tebakan teks. Insiden "halo" (2026-08-05) tetap aman: tanpa pertanyaan
+    // menggantung, klausa ini tidak pernah menyala. Umurnya dibatasi
+    // `orderContextStaleHours` (setelan yang sudah ada, bukan angka karangan)
+    // supaya percakapan yang ditinggal berhari-hari tidak diseret balik ke
+    // tengah funnel begitu pelanggan menyapa lagi. <<<
+    //
+    // ⚠️ KOREKSI AUDIT K23 (2026-08-10): versi pertama klausa ini berbunyi
+    // "ada pertanyaan menggantung" SAJA — dan itu SALAH BESAR. Dua auditor
+    // membuktikannya terpisah: `pilih()` menulis expect di setiap giliran yang
+    // lolos, jadi gerbangnya mengunci dirinya sendiri dalam posisi TERBUKA.
+    // Sekali funnel menyala, basa-basi ("makasih ya udah dibantu"), keluhan,
+    // pertanyaan produk lain, bahkan pesan sesudah pesanan ditutup — semuanya
+    // ikut mendorong funnel. Itu regresi persis insiden "halo" 2026-08-05 yang
+    // komentarku sendiri mengklaim aman. Tidak aman.
+    //
+    // Yang benar bukan "ada pertanyaan menggantung", tapi "giliran ini MEMANG
+    // MENJAWAB pertanyaan itu". Untuk langkah patokan/closing, jawabannya
+    // berbentuk alamat atau nomor HP — dua-duanya bisa dikenali tanpa menebak
+    // maksud. Langkah lain sudah punya pengenalnya sendiri (`patchQty` untuk
+    // qty, `isBridgeCommonSignal` untuk barang/alamat/keranjang), jadi tidak
+    // perlu diperlebar.
+    //
+    // `containsAddressOrLandmark` sudah ada di berkas ini sejak 2026-08-06 dan
+    // selama ini TIDAK PERNAH DIPANGGIL dari mana pun — ditemukan auditor.
+    // Inilah pemakainya.
+    const umurExpectMs = Math.max(1, oc.orderContextStaleHours ?? 24) * 3_600_000;
+    const expectMenggantung = this.cache.funnelExpectSegar(conversationId, umurExpectMs);
+    const menungguDataKirim = expectMenggantung?.step === 'patokan' || expectMenggantung?.step === 'closing';
+    const menjawabDataKirim =
+      menungguDataKirim && (containsAddressOrLandmark(teksG) || POLA_NOMOR_HP.test(teksG));
     const jawabanUang =
       opts.hargaTurn === true ||
       patchQty(teksG) != null ||
+      menjawabDataKirim ||
       this.isBridgeCommonSignal(teksG, memoG?.viaPilihan === true, oc);
     // <<< ANGGA
     if (!jawabanUang) {
@@ -2702,6 +2752,7 @@ export class ShippingService {
       this.logger.debug(
         `funnel DIAM (${conversationId}) teks="${teksG.replace(/\s+/g, ' ').slice(0, 70)}" ` +
           `hargaTurn=${opts.hargaTurn === true} patchQty=${patchQty(teksG) != null} ` +
+          `menunggu=${expectMenggantung?.step ?? '-'} menjawabKirim=${menjawabDataKirim} ` +
           `sinyal=${this.isBridgeCommonSignal(teksG, memoG?.viaPilihan === true, oc)}`,
       );
       return null;
@@ -2868,8 +2919,14 @@ export class ShippingService {
       const rawAlamat = this.cache.addressTextOf(conversationId) ?? '';
       const sanitizedPrev = sanitizeAddressText(rawAlamat);
 
+      // >>> ANGGA — koreksi AUDIT K23 (2026-08-10): dulu SEMUA teks selain
+      // pilihan metode bayar ditumpuk ke cache alamat. Itu sebabnya formulir
+      // closing terkirim berbunyi "Alamat: udah lengkap itu aja." — kalimat
+      // konfirmasi, bukan alamat, dan itu yang dibaca kurir. Sekarang teks
+      // WAJIB memuat penanda jalan/wilayah/patokan. `containsAddressOrLandmark`
+      // sudah ada sejak 2026-08-06 tapi tidak pernah dipakai siapa pun. <<<
       let newAddressPart = '';
-      if (!isPaymentMethodChoice(teksG)) {
+      if (!isPaymentMethodChoice(teksG) && containsAddressOrLandmark(teksG)) {
         newAddressPart = teksG.trim();
       }
 
