@@ -824,9 +824,9 @@ export const SHIPPING_GROUNDING_DATA_READY = {
 // — bukan ditambal daftar frasa.
 export const SHIPPING_FUNNEL_DIRECTIVE = {
   id: (kalimat: string) =>
-    `ATURAN ALUR PENJUALAN — PERINGATAN KERAS, WAJIB DITAATI, TIDAK BOLEH DILANGGAR: balasanmu HARUS diakhiri dengan kalimat tanya berikut PERSIS APA ADANYA sebagai kalimat TERAKHIR: "${kalimat}" — JANGAN diterjemahkan, JANGAN diubah kata-katanya, dan JANGAN mengajukan pertanyaan lain APA PUN — baik sebelum maupun sesudahnya. Khususnya JANGAN menawarkan pilihan metode pembayaran (transfer/COD) sebelum total pesanan tersodor. Sistem otomatis MENAHAN balasan yang melanggar aturan ini.`,
+    `ATURAN ALUR PENJUALAN — PERINGATAN KERAS, WAJIB DITAATI, TIDAK BOLEH DILANGGAR: balasanmu HARUS diakhiri dengan kalimat tanya berikut PERSIS APA ADANYA sebagai kalimat TERAKHIR: "${kalimat}" — JANGAN diterjemahkan, JANGAN diubah kata-katanya, JANGAN menambah pertanyaan lain setelahnya. Sistem otomatis MENAHAN balasan yang melanggar aturan ini.`,
   en: (kalimat: string) =>
-    `SALES-FLOW RULE — HARD REQUIREMENT, MUST NOT BE VIOLATED: your reply MUST end with the following question VERBATIM as the LAST sentence: "${kalimat}" — do NOT translate it, do NOT rephrase it, and do NOT ask ANY other question — neither before nor after it. In particular, do NOT offer a payment-method choice (transfer/COD) before the order total has been presented. The system automatically HOLDS replies that violate this.`,
+    `SALES-FLOW RULE — HARD REQUIREMENT, MUST NOT BE VIOLATED: your reply MUST end with the following question VERBATIM as the LAST sentence: "${kalimat}" — do NOT translate it, do NOT rephrase it, do NOT add another question after it. The system automatically HOLDS replies that violate this.`,
 };
 
 export const SHIPPING_FUNNEL_TOTAL = {

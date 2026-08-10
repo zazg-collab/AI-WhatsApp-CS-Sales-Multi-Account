@@ -407,7 +407,12 @@ export class AiService {
     // tidak bisa membedakan tiga hal yang gejalanya identik: model memang diam,
     // provider memulangkan tool_calls dengan bentuk yang tidak kita kenali,
     // atau balasannya terpotong habis oleh max_tokens. <<<
-    let resTerakhir: { content?: string; tool_calls?: unknown[] } | null = null;
+  let resTerakhir: {
+      content?: string;
+      tool_calls?: unknown[];
+      finish_reason?: string;
+      prompt_tokens?: number;
+    } | null = null;
     const stopTimer = this.metrics?.aiRequestDuration.startTimer();
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -549,6 +554,48 @@ export class AiService {
         if (selesai) break; // >>> ANGGA — F4: balasan sudah diserahkan <<<
       }
 
+      // >>> ANGGA — 2026-08-10: ANGGARAN HABIS SEBELUM SATU KATA PUN DITULIS.
+      //
+      // Diukur, bukan diduga: pada SEMUA balasan kosong yang tercatat,
+      // provider memulangkan `finish_reason: "length"` dengan `content: ""`.
+      // Artinya plafon `max_tokens` tercapai sementara `content` masih nol —
+      // seluruh jatahnya dihabiskan hal lain (penalaran model), dan tidak
+      // tersisa untuk jawabannya. Itu sebabnya giliran 6 kosong 3 dari 3 di
+      // DUA konfigurasi yang berbeda: ia deterministik, bukan keacakan.
+      //
+      // Kenapa mencoba ulang, bukan menaikkan plafon untuk semua giliran:
+      // 80% giliran selesai jauh di bawah 500 token. Menaikkan plafon global
+      // memaksa setiap giliran membayar untuk kasus yang jarang. Percobaan
+      // ulang ini hanya jalan pada sinyal yang TIDAK AMBIGU — `length` DAN
+      // content kosong — jadi giliran normal tidak tersentuh sama sekali.
+      //
+      // `finish_reason` percobaan ulang ikut dicatat: kalau ia `length` lagi,
+      // berarti dugaan "penalaran memakan jatah" kurang besar dan angkanya
+      // perlu dinaikkan lagi — bukan ditebak, dibaca.
+      if (!text.trim() && resTerakhir?.finish_reason === 'length') {
+        this.logger.warn(
+          `Anggaran token habis sebelum jawaban ditulis (${conversationId}) — mencoba ulang dengan plafon lebih besar`,
+        );
+        try {
+          const lega = await this.provider.chatWithTools(messages, {
+            model,
+            maxTokens: 4000,
+            tools,
+          });
+          resTerakhir = lega;
+          if (lega.content?.trim()) {
+            text = lega.content;
+            this.logger.log(`Percobaan ulang plafon besar BERHASIL untuk ${conversationId}`);
+          } else {
+            this.logger.warn(
+              `Percobaan ulang plafon besar TETAP kosong (${conversationId}) — finish_reason=${lega.finish_reason ?? '?'}`,
+            );
+          }
+        } catch (e: any) {
+          this.logger.warn(`Percobaan ulang plafon besar gagal: ${e?.message ?? e}`);
+        }
+      }
+
       // >>> ANGGA — F4: percobaan PAKSA — SENGAJA hanya kalau tidak ada teks
       // sama sekali. Kalau model sudah memberi prosa (jalur pra-F4), teks itu
       // dipakai apa adanya: memanggil ulang cuma untuk mendapat LABEL enum
@@ -651,8 +698,9 @@ export class AiService {
       this.logger.warn(
         `Balasan KOSONG untuk ${conversationId} — kontrak=${kontrakOutcome}` +
           ` funnelStep=${st?.funnelStep ?? 'null'} adaKutipan=${st?.quote ? 'ya' : 'tidak'}` +
-          ` | jawaban provider terakhir: panjangContent=${(resTerakhir?.content ?? '').length}` +
-          ` toolCalls=[${namaTool}] mentah=${JSON.stringify(resTerakhir ?? null).slice(0, 400)}`,
+          ` | finish_reason=${resTerakhir?.finish_reason ?? 'TIDAK ADA'}` +
+          ` promptTokens=${resTerakhir?.prompt_tokens ?? '?'} pesanDiPrompt=${messages.length}` +
+          ` panjangContent=${(resTerakhir?.content ?? '').length} toolCalls=[${namaTool}]`,
       );
     }
 
