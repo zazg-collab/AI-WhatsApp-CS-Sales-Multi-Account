@@ -38,6 +38,16 @@ export interface ChatOptions {
 export interface ChatResponse {
   content: string;
   tool_calls?: any[];
+  /**
+   * >>> ANGGA — 2026-08-10: `finish_reason` dari provider, diteruskan apa
+   * adanya. Ini SATU field yang memisahkan tiga hipotesis yang gejalanya
+   * identik ("balasan kosong"): `length` = anggaran token habis · `stop` =
+   * model memang memilih diam · `content_filter` = ditolak moderasi. Selama
+   * dua hari ketiganya ditebak bergantian tanpa pernah dibedakan.
+   */
+  finish_reason?: string;
+  /** Jumlah token prompt menurut provider — untuk menguji hipotesis "prompt kepanjangan". */
+  prompt_tokens?: number;
 }
 
 /**
@@ -159,7 +169,7 @@ export class AiProviderService {
       }
 
       const body = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string, tool_calls?: any[] } }>;
+        choices?: Array<{ message?: { content?: string, tool_calls?: any[] }; finish_reason?: string }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
       this.recordTokens(model, body.usage);
@@ -167,6 +177,8 @@ export class AiProviderService {
       return {
         content: msg?.content?.trim() ?? '',
         tool_calls: msg?.tool_calls,
+        finish_reason: body.choices?.[0]?.finish_reason,
+        prompt_tokens: body.usage?.prompt_tokens,
       };
     }
     // Unreachable (loop either returns or throws) — satisfy the type checker.
