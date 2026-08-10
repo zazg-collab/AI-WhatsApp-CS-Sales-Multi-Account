@@ -80,7 +80,25 @@ import type { BotLang } from '../../i18n/bot-prompts';
  * kalimat funnel wajib (template di `bot-prompts.ts` sudah dikembalikan ke
  * bunyi aslinya), dan gerbang `funnel_dilanggar` kembali jadi penegaknya.
  */
-const KONTRAK_BALASAN_AKTIF = process.env.REPLY_CONTRACT_ENABLED === 'true';
+function kontrakBalasanAktif(): boolean {
+  // >>> ANGGA — koreksi AUDIT (2026-08-10, ronde penyanggal): dibaca SAAT
+  // DIPAKAI, bukan sebagai konstanta tingkat modul.
+  //
+  // Versi pertama `const ... = process.env...` di tingkat modul, dan itu SALAH
+  // secara mendasar di Nest: seluruh `import` di `app.module.ts` dievaluasi
+  // SEBELUM argumen dekorator `@Module({ imports: [ConfigModule.forRoot()] })`
+  // dijalankan — dan `forRoot()` itulah yang memuat `.env`. Akibatnya menulis
+  // `REPLY_CONTRACT_ENABLED=true` di `.env` TIDAK berefek apa pun; hanya env
+  // var proses sungguhan (docker `environment:`) yang terbaca. Saklar yang
+  // tidak bisa dinyalakan lewat cara yang didokumentasikan sendiri lebih
+  // berbahaya daripada tidak ada saklar.
+  //
+  // Membacanya saat dipakai sekaligus menutup dua temuan lain: spec tidak lagi
+  // perlu akal-akalan `requireActual` untuk memuat ulang modul, dan spec
+  // "saklar mati" bisa benar-benar MEMAKSA mati alih-alih berharap env-nya
+  // kebetulan kosong.
+  return process.env.REPLY_CONTRACT_ENABLED === 'true';
+}
 
 /** All fallback-phrase variants (all languages) — marks an AI "punt to admin". */
 const FALLBACK_MARKERS = Object.values(FALLBACK_PHRASE) as string[];
@@ -242,6 +260,7 @@ export class AiService {
         const kelasIssues = rendered.issueCodes;
         const kelasPrioritas = [
           'funnel_dilanggar',
+          'closing_prematur',
           'kalimat_dobel',
           'kontradiksi_data',
           'rekening_mentah',
@@ -269,7 +288,7 @@ export class AiService {
         // mustahil TETAP HIDUP di jalur retry, dan justru di jalur inilah ia
         // dulu paling sering muncul (retry dipicu oleh pelanggaran gerbang).
         // Sekarang teks retry disusun dengan aturan yang sama persis. <<<
-        const komposisiRetry = KONTRAK_BALASAN_AKTIF
+        const komposisiRetry = kontrakBalasanAktif()
           ? this.shipping.komposisiFunnel?.(conversationId, retryText, { tempel: retry.tempel })
           : undefined;
         if (komposisiRetry) retryText = komposisiRetry.text;
@@ -372,8 +391,8 @@ export class AiService {
       tools.push(searchKnowledgeTool);
     }
 
-    // >>> ANGGA — F4, kini di balik saklar (lihat KONTRAK_BALASAN_AKTIF). <<<
-    if (KONTRAK_BALASAN_AKTIF) tools.push(sendReplyTool);
+    // >>> ANGGA — F4, kini di balik saklar (lihat kontrakBalasanAktif()). <<<
+    if (kontrakBalasanAktif()) tools.push(sendReplyTool);
 
     if (tools.length === 0) tools = undefined;
 
@@ -459,7 +478,7 @@ export class AiService {
           if (call.type !== 'function') continue;
           const fnName = call.function.name;
 
-          if (fnName === SEND_REPLY_TOOL_NAME) {
+          if (kontrakBalasanAktif() && fnName === SEND_REPLY_TOOL_NAME) {
             if (adaToolData) {
               messages.push({
                 role: 'tool',
@@ -538,7 +557,7 @@ export class AiService {
       // dijamin `komposisiFunnel`, bukan oleh kontrak ini. Kalau teksnya
       // kosong, barulah kita memang tidak punya apa-apa untuk dikirim, dan
       // satu panggilan dengan `tool_choice` dipin itu murni keuntungan. <<<
-      if (KONTRAK_BALASAN_AKTIF && !kontrak && !text.trim()) {
+      if (kontrakBalasanAktif() && !kontrak && !text.trim()) {
         try {
           const paksa = await this.provider.chatWithTools(messages, {
             model,
@@ -590,7 +609,7 @@ export class AiService {
     // (`komposisiFunnel().step`) di korpus eval nanti (F6). Optional-call
     // `?.` di mana-mana: harness test lama mem-mock `metrics` dengan dua
     // counter saja, dan telemetri tidak boleh pernah menggagalkan balasan.
-    const kontrakOutcome = !KONTRAK_BALASAN_AKTIF
+    const kontrakOutcome = !kontrakBalasanAktif()
       ? 'disabled'
       : kontrak
       ? kontrakDipaksa
@@ -599,7 +618,7 @@ export class AiService {
       : kontrakRusak
         ? 'malformed'
         : 'fallback';
-    if (KONTRAK_BALASAN_AKTIF)
+    if (kontrakBalasanAktif())
       this.metrics?.replyContract?.inc({
       outcome: kontrakOutcome,
       funnel_declared: kontrak?.funnelQuestionId ?? 'unreported',
@@ -641,7 +660,7 @@ export class AiService {
     // sebenarnya ada di `susunBalasan` (supaya tidak ada pemanggil yang bisa
     // lupa), ini lapisan kedua yang membuat niatnya terbaca di titik pakai.
     const komposisi =
-      KONTRAK_BALASAN_AKTIF && text.trim()
+      kontrakBalasanAktif() && text.trim()
         ? this.shipping?.komposisiFunnel?.(conversationId, text)
         : undefined;
     if (komposisi) {
@@ -705,6 +724,12 @@ export class AiService {
     } catch (err) {
       this.logger.warn(`Segmented reply generation failed: ${err}`);
       const single = await this.generateReply(conversationId);
+      // >>> ANGGA — koreksi AUDIT (2026-08-10): jalur mundur ini SATU-SATUNYA
+      // pintu yang bisa memulangkan segmen kosong (jalur burst normal sudah
+      // disaring dua kali). Tanpa saringan di sini, `handleBurstReply`
+      // mendraft gelembung kosong dan `notifyAdmin` untuk balasan kosong —
+      // yang sudah dipasang di jalur tunggal — tidak punya padanan. <<<
+      if (!single.text.trim()) return [];
       return [{ answersIndex: null, text: single.text, moneyGateIssues: single.moneyGateIssues }];
     }
 
@@ -740,7 +765,7 @@ export class AiService {
       // penanda {{...}} di kalimatnya ikut disubstitusi.
       const segmenTerakhir = segments.length - 1;
       const tersusun = segments.map((s, i) => {
-        const k = KONTRAK_BALASAN_AKTIF
+        const k = kontrakBalasanAktif()
           ? this.shipping?.komposisiFunnel?.(conversationId, s.text, { tempel: i === segmenTerakhir })
           : undefined;
         return { ...s, text: k ? k.text : s.text };
@@ -776,6 +801,12 @@ export class AiService {
       // Jalur mundur yang benar sudah ada: buat ulang sebagai balasan tunggal.
       this.logger.warn(`Segmented reply parse failed (${err}); falling back to single reply`);
       const single = await this.generateReply(conversationId);
+      // >>> ANGGA — koreksi AUDIT (2026-08-10): jalur mundur ini SATU-SATUNYA
+      // pintu yang bisa memulangkan segmen kosong (jalur burst normal sudah
+      // disaring dua kali). Tanpa saringan di sini, `handleBurstReply`
+      // mendraft gelembung kosong dan `notifyAdmin` untuk balasan kosong —
+      // yang sudah dipasang di jalur tunggal — tidak punya padanan. <<<
+      if (!single.text.trim()) return [];
       return [{ answersIndex: null, text: single.text, moneyGateIssues: single.moneyGateIssues }];
     }
   }

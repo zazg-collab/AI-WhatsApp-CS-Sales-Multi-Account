@@ -963,11 +963,18 @@ describe('F4 — komposisiFunnel: kalimat funnel dipasang SISTEM', () => {
     });
     await h.svc.quoteForConversation('c1');
     await h.svc.getGroundingText('c1');
+    // >>> Koreksi AUDIT (2026-08-10): (a) `if (...) return` dibuang — test
+    // yang lulus dengan NOL assertion tidak menjaga apa pun; (b) teks uji kini
+    // MEMUAT kalimat wajib langkahnya, supaya cabang lama "kalimat wajib tidak
+    // ada" tidak ikut merahkan dan yang tersisa hanya gerbang BARU; (c) kode
+    // issue-nya kelas sendiri, bukan menumpang `funnel_dilanggar`.
     const step = h.svc.getFunnelExpect('c1');
-    if (!step || step === 'closing' || step === 'closing_followup') return;
-    const out = await h.svc.resolvePriceTokens('c1', 'Siap kak 🙏\n\n{{catatan_sk}}');
+    expect(step).toBeTruthy();
+    expect(['closing', 'closing_followup']).not.toContain(step);
+    const kalimatWajib = (h.svc as any).cache.funnelExpect('c1')?.kalimat ?? '';
+    const out = await h.svc.resolvePriceTokens('c1', `Siap kak 🙏 {{catatan_sk}}\n\n${kalimatWajib}`);
     expect(out.ok).toBe(false);
-    expect(out.issueCodes).toContain('funnel_dilanggar');
+    expect(out.issueCodes).toContain('closing_prematur');
     expect(out.issues.join(' ')).toContain('penanda penutup pesanan');
   });
 

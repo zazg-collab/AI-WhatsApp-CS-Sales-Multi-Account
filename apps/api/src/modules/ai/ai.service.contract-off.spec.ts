@@ -15,6 +15,18 @@ import { AiService } from './ai.service';
  *     munculnya timeout jaringan di UI).
  */
 describe('AiService — Reply Contract MATI (bawaan)', () => {
+  // >>> ANGGA — koreksi AUDIT (2026-08-10): saklar dipaksa MATI, tidak lagi
+  // bersandar pada env yang kebetulan kosong. Di mesin/CI yang mengekspor
+  // REPLY_CONTRACT_ENABLED=true, versi sebelumnya gagal — padahal yang dijaga
+  // justru perilaku BAWAAN. <<<
+  const envAsli = process.env.REPLY_CONTRACT_ENABLED;
+  beforeEach(() => {
+    delete process.env.REPLY_CONTRACT_ENABLED;
+  });
+  afterAll(() => {
+    if (envAsli !== undefined) process.env.REPLY_CONTRACT_ENABLED = envAsli;
+  });
+
   const buat = () => {
     const prisma: any = {
       conversation: {
@@ -76,6 +88,16 @@ describe('AiService — Reply Contract MATI (bawaan)', () => {
     await svc.generateReply('c1');
     expect(provider.chatWithTools.mock.calls[0][1].maxTokens).toBe(500);
     expect(metrics.replyContract.inc).not.toHaveBeenCalled();
+  });
+
+  it('saklar bisa dinyalakan lewat env SAAT RUNTIME (dibaca ketika dipakai, bukan saat modul dimuat)', async () => {
+    // Penjaga akar T1: kalau saklar kembali jadi konstanta tingkat modul,
+    // test ini merah — dan itulah yang membuat `.env` tidak pernah berefek.
+    const { svc, provider } = buat();
+    process.env.REPLY_CONTRACT_ENABLED = 'true';
+    await svc.generateReply('c1');
+    const tools = provider.chatWithTools.mock.calls[0][1].tools ?? [];
+    expect(tools.map((t: any) => t.function?.name)).toContain('send_reply');
   });
 
   it('teks model dipakai apa adanya, tanpa disentuh komposisi', async () => {

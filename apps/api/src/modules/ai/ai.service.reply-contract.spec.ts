@@ -14,20 +14,21 @@ import { AiService } from './ai.service';
  *   · komposisi kalimat funnel dipanggil dengan teks yang SUDAH final.
  */
 /**
- * >>> ANGGA — 2026-08-10: Reply Contract kini TIDUR di balik
- * `REPLY_CONTRACT_ENABLED` (bawaan mati, lihat alasannya di `ai.service.ts`).
- * Spec ini menyalakannya sebelum modul dimuat supaya perilaku yang sudah
- * dijamin tidak hilang begitu saja — kalau nanti fiturnya dinyalakan lagi
- * sesudah korpus F6, jaminannya masih utuh dan tidak perlu ditulis ulang.
+ * >>> ANGGA — 2026-08-10 (ronde penyanggal): saklar dipaksa MENYALA secara
+ * eksplisit di `beforeEach`, dan dikembalikan di `afterAll`.
  *
- * `jest.isolateModules` dipakai karena saklarnya dibaca SEKALI saat modul
- * dimuat (konstanta tingkat modul) — mengubah `process.env` sesudah impor
- * biasa tidak akan terlihat.
+ * Versi sebelumnya memakai `jest.requireActual` dan komentarnya mengklaim
+ * memakai `jest.isolateModules` — padahal fungsi itu tidak pernah dipanggil.
+ * Test-nya kebetulan tetap hijau (auditor mengira gagal; dijalankan, ternyata
+ * lulus), tapi ia hijau karena detail internal registry Jest, bukan karena
+ * niatnya terbaca. Sekarang saklar dibaca SAAT DIPAKAI (`kontrakBalasanAktif()`),
+ * jadi cukup menyetel env — tidak perlu akal-akalan memuat ulang modul, dan
+ * tidak ada lagi komentar yang berbohong soal caranya.
  */
 const envAsli = process.env.REPLY_CONTRACT_ENABLED;
-process.env.REPLY_CONTRACT_ENABLED = 'true';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { AiService: AiServiceAktif } = jest.requireActual('./ai.service') as { AiService: typeof AiService };
+beforeEach(() => {
+  process.env.REPLY_CONTRACT_ENABLED = 'true';
+});
 afterAll(() => {
   if (envAsli === undefined) delete process.env.REPLY_CONTRACT_ENABLED;
   else process.env.REPLY_CONTRACT_ENABLED = envAsli;
@@ -77,7 +78,7 @@ describe('AiService — Reply Contract (F4, di balik saklar)', () => {
       })),
       resolvePriceTokens: jest.fn(async (_id: string, teks: string) => ({ text: teks, ok: true, issues: [] })),
     };
-    const svc = new (AiServiceAktif as any)(
+    const svc = new (AiService as any)(
       prisma, provider, prompts, { send: jest.fn() }, cache, undefined, metrics, shipping,
     ) as AiService;
     return { svc, provider, metrics, shipping };

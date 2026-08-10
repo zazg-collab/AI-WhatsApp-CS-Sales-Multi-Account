@@ -120,6 +120,15 @@ export class TestHarnessRepository {
     role: 'user' | 'assistant' | 'system';
     content: string;
     debugInfo?: DebugSnapshot;
+    /**
+     * >>> ANGGA — koreksi AUDIT (2026-08-10): true = pesan ini CATATAN ALAT UJI,
+     * bukan ucapan bot. Disimpan `pending` supaya `PromptBuilderService`
+     * membuangnya dari riwayat (ia menyaring `pending`/`failed` untuk pesan
+     * non-pelanggan). Tanpa ini, teks "⚠️ [sistem] Bot tidak mengirim apa pun…"
+     * kembali ke model di giliran berikutnya SEBAGAI UCAPAN BOT SENDIRI, dan
+     * sesi uji berhenti mengukur perilaku yang sesungguhnya. <<<
+     */
+    catatanSistem?: boolean;
   }): Promise<TestMessage> {
     const conversationId = await this.conversationIdOf(data.sessionId);
     if (!conversationId) throw new Error(`Session ${data.sessionId} not found`);
@@ -144,7 +153,7 @@ export class TestHarnessRepository {
         senderType: data.role === 'user' ? SenderType.customer : SenderType.ai,
         content: data.content,
         aiGenerated: data.role !== 'user',
-        status: MessageStatus.sent,
+        status: data.catatanSistem ? MessageStatus.pending : MessageStatus.sent,
       },
     });
     await this.prisma.conversation

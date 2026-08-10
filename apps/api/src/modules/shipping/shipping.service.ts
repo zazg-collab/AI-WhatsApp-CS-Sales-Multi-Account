@@ -3821,7 +3821,11 @@ export class ShippingService {
     // Terlihat di sesi uji nyata: pelanggan menerima "untuk pengiriman ke {{".
     // Apa pun sebabnya (pemotongan, salah ketik model), kurung kurawal ganda
     // TIDAK PERNAH sah muncul di teks yang sampai ke pelanggan.
-    const kurungMenggantung = substituted.match(/\{\{|\}\}/g);
+    // Penanda yang UTUH dibuang dulu — kalau tidak, `{{foo}}` yang tak dikenal
+    // memicu DUA issue untuk satu masalah (cek di atas + cek ini), dan model
+    // menerima dua bullet retry yang salah satunya menuduh "balasan terpotong"
+    // padahal tidak. (Koreksi audit 2026-08-10, ronde penyanggal.)
+    const kurungMenggantung = substituted.replace(/\{\{[a-z_]+\}\}/gi, '').match(/\{\{|\}\}/g);
     if (kurungMenggantung) {
       pushIssue(
         'token_tak_dikenal',
@@ -3966,7 +3970,7 @@ export class ShippingService {
           const tokenClosing = text.match(POLA_TOKEN_CLOSING);
           if (tokenClosing) {
             pushIssue(
-              'funnel_dilanggar',
+              'closing_prematur',
               `Balasan memakai penanda penutup pesanan (${tokenClosing[0]}) di langkah "${expectF.step}" — syarat & ketentuan penutup baru boleh muncul saat closing. Hapus blok itu, jawab yang ditanya saja.`,
             );
           }
@@ -4666,6 +4670,12 @@ export const PRA_TOTAL_STEPS = new Set(['barang', 'alamat', 'keranjang', 'qty'])
 // `resolvePriceTokens`). Uniannya sendiri TIDAK berubah, cuma diberi nama. <<<
 export type IssueCode =
   | 'label_rancu'
+  // >>> ANGGA — koreksi AUDIT (2026-08-10): kelas SENDIRI untuk penanda penutup
+  // yang muncul sebelum langkah closing. Sebelumnya menumpang `funnel_dilanggar`,
+  // sehingga hint retry yang dikirim ke model bicara soal total/tagihan —
+  // instruksi untuk pelanggaran yang tidak dilakukan — dan telemetri mencampur
+  // dua kelas jadi satu sehingga "berapa sering S&K bocor" tidak bisa dihitung.
+  | 'closing_prematur'
   | 'token_tak_dikenal'
   | 'digit_mentah'
   | 'rekening_mentah'
@@ -4694,6 +4704,7 @@ const ISSUE_MAP: Array<[string, IssueCode]> = [
   ['berpura-pura masih mengecek',               'kontradiksi_data'],   // anti-teater (2026-08-05)
   ['mengulang kalimat wajib',                   'kalimat_dobel'],      // ← WAJIB sebelum funnel_dilanggar
   ['melanggar alur penjualan wajib',            'funnel_dilanggar'],   // Q-Chain
+  ['penanda penutup pesanan',                   'closing_prematur'],   // ← WAJIB sebelum funnel_dilanggar
   ['mengulang rincian total',                   'funnel_dilanggar'],   // insiden "cod aja kak" (2026-08-06)
   ['menempelkan angka kutipan ke produk',       'salah_produk'],       // Gerbang Pakem #1
   ['menjumlahkan penanda sendiri',              'jumlah_manual'],      // Gerbang Pakem (2026-08-06)

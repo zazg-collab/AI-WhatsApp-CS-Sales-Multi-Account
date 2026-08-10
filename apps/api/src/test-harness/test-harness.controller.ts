@@ -141,6 +141,9 @@ export class TestHarnessController {
     let outcome: string | undefined;
     let moneyGateIssues: string[] = [];
     let conversationIdUntukDebug: string | undefined;
+    // >>> ANGGA — koreksi AUDIT (2026-08-10): penanda "ini catatan alat uji,
+    // bukan ucapan bot" — menentukan apakah pesannya boleh masuk riwayat prompt. <<<
+    let catatanSistem = false;
 
     if (session.provider === 'mock') {
       const hasil = await this.chatManager.sendMessage(sessionId, body.text, history, 'mock', session.model);
@@ -172,6 +175,7 @@ export class TestHarnessController {
       outcome = 'reason' in hasil && hasil.reason ? `${hasil.kind}:${hasil.reason}` : hasil.kind;
       moneyGateIssues = channel.moneyGateIssues;
       resolvedText = channel.text ?? '';
+      catatanSistem = !resolvedText.trim();
       if (!resolvedText.trim()) {
         resolvedText = `⚠️ [sistem] Bot tidak mengirim apa pun di giliran ini — pipeline berhenti di "${outcome}". Ini catatan alat uji, BUKAN balasan yang akan diterima pelanggan.`;
       }
@@ -193,6 +197,7 @@ export class TestHarnessController {
       role: 'assistant',
       content: resolvedText,
       debugInfo,
+      catatanSistem,
     });
 
     return {

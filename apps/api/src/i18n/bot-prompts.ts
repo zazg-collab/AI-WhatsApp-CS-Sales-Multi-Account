@@ -701,6 +701,10 @@ export const MONEY_GATE_RETRY_HINTS: Record<string, { id: string; en: string }> 
     id: 'Untuk balasan kali ini, JANGAN sebutkan angka atau rincian total sama sekali — baik ditulis sendiri MAUPUN lewat penanda {{...}} manapun (termasuk {{total_cod}}/{{total_transfer}}/{{rincian_tagihan}}). Hapus SELURUH kalimat yang menyinggung total/tagihan, jawab bagian lain yang ditanya secara singkat, lalu tutup dengan pertanyaan wajib yang sudah ditentukan.',
     en: 'For this reply, do NOT mention any total or bill breakdown at all — neither typed yourself NOR via any {{...}} placeholder (including {{total_cod}}/{{total_transfer}}/{{rincian_tagihan}}). Remove EVERY sentence referencing the total/bill, answer the rest briefly, then close with the mandated question.',
   },
+  closing_prematur: {
+    id: 'Balasanmu memakai blok penutup pesanan (syarat & ketentuan / konfirmasi order) padahal langkahnya belum closing. HAPUS seluruh blok itu — pelanggan belum sampai tahap penutupan. Jawab yang ditanya saja, lalu tutup dengan pertanyaan wajib langkah ini.',
+    en: 'Your reply used the order-closing block (terms & conditions / order confirmation) even though this is not the closing step yet. REMOVE that block entirely — the customer has not reached closing. Answer what was asked, then close with this step\'s mandated question.',
+  },
   kontradiksi_data: {
     id: 'Jangan menyangkal data atau bilang akan mengecek dulu — datanya SUDAH tersedia sekarang. Jawab langsung memakai penanda yang tersedia, seperti CS yang sudah memegang datanya, tanpa narasi "sedang mengecek".',
     en: 'Do not deny the data or say you will check first — the data is already available right now. Answer directly using the available placeholder, like an agent who already has the data in hand, without any "checking" narration.',
