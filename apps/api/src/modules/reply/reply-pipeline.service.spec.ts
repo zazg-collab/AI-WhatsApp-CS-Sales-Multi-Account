@@ -57,6 +57,13 @@ describe('ReplyPipelineService — kontrak keputusan & follow-up', () => {
     return new ReplyPipelineService(prisma, ai, sentinel, undefined);
   };
 
+  /** Varian dengan orderLog terpasang — untuk menguji promosi langkah funnel. */
+  const buatDenganLog = (aiMode: AiMode) => {
+    buat(aiMode);
+    const orderLog: any = { promosikanLangkahTerkirim: jest.fn().mockResolvedValue(undefined) };
+    return { svc: new ReplyPipelineService(prisma, ai, sentinel, orderLog), orderLog };
+  };
+
   const tunggu = () => new Promise((r) => setImmediate(r));
 
   /**
@@ -139,5 +146,34 @@ describe('ReplyPipelineService — kontrak keputusan & follow-up', () => {
     expect(prisma.conversation.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { aiMode: AiMode.ai_paused, takeoverStatus: TakeoverStatus.waiting_admin } }),
     );
+  });
+
+  /**
+   * >>> ANGGA — REGRESI (2026-08-10). Bug yang ini kejadian di percakapan uji
+   * sungguhan: giliran alamat menghasilkan langkah `closing`, catatannya masuk
+   * saat prompt DISUSUN, lalu balasannya gagal terkirim kena timeout provider.
+   * Pelanggan tidak pernah melihat formulir pesanan — tapi funnel menganggap
+   * closing selesai, giliran berikutnya jatuh ke `closing_followup`, dan
+   * formulir itu hangus permanen.
+   *
+   * Invariannya: balasan yang tidak sampai membuang SATU GILIRAN, bukan satu
+   * langkah funnel.
+   */
+  it('REGRESI: kirim GAGAL -> langkah funnel TIDAK dipromosikan', async () => {
+    const { svc, orderLog } = buatDenganLog(AiMode.ai_on);
+    channel.send.mockRejectedValue(new Error('The operation was aborted due to timeout'));
+    const out = await svc.run('c1', channel);
+    await tunggu();
+    expect(out.kind).toBe('drafted');
+    expect(orderLog.promosikanLangkahTerkirim).not.toHaveBeenCalled();
+  });
+
+  it('kirim BERHASIL -> langkah funnel dipromosikan tepat sekali', async () => {
+    const { svc, orderLog } = buatDenganLog(AiMode.ai_on);
+    const out = await svc.run('c1', channel);
+    await tunggu();
+    expect(out.kind).toBe('sent');
+    expect(orderLog.promosikanLangkahTerkirim).toHaveBeenCalledTimes(1);
+    expect(orderLog.promosikanLangkahTerkirim).toHaveBeenCalledWith('c1');
   });
 });

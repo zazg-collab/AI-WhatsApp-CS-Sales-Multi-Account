@@ -171,6 +171,13 @@ Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
       return { kind: 'drafted', reason: 'send-failed' };
     }
 
+    // >>> ANGGA — fix (2026-08-10): langkah funnel baru dicatat DI SINI —
+    // sesudah kanal menerima pesannya. Ditaruh di pipeline, bukan di adapter,
+    // supaya WhatsApp dan tester berperilaku sama persis: jalur tester tidak
+    // pernah memanggil `noteOutbound`, jadi kalau promosinya hanya menumpang
+    // di sana, funnel tidak akan pernah maju di harness. <<<
+    void this.orderLog?.promosikanLangkahTerkirim(conversationId);
+
     channel.autoSendAssets?.(conversationId);
 
     this.sentinel

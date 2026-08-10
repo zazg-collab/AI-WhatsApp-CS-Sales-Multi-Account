@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { ShippingQuoteCache } from './shipping-quote.cache';
 // >>> ANGGA — addendum v2 M1/M3: deteksi produk di teks keluar/form memakai
 // pencocok katalog yang sama dengan resolveItems (satu perilaku, satu sumber).
 import { tokenizeForMatch, scoreProductMatch } from '../products/products.util';
@@ -155,6 +156,11 @@ export class OrderContextService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
+    // >>> ANGGA — fix (2026-08-10): cache dibutuhkan untuk MEMPROMOSIKAN
+    // langkah funnel yang tertunda begitu balasannya benar-benar terkirim.
+    // Opsional supaya test lama yang menyusun service ini dengan dua argumen
+    // tetap sah. <<<
+    @Optional() private readonly quoteCache?: ShippingQuoteCache,
   ) {}
 
   private async oc() {
@@ -316,9 +322,72 @@ export class OrderContextService {
    * draft dibuat (draft bisa diedit/ditolak; v1.1 §12.3-11). Catatan kosong /
    * terlalu pendek → fitur mati (fallback: resolve percakapan).
    */
+  /** >>> ANGGA — fix (2026-08-10): promosikan langkah funnel yang tertunda
+   *  menjadi catatan permanen — dipanggil HANYA dari jalur pesan yang
+   *  BENAR-BENAR TERKIRIM (pipeline balasan untuk WhatsApp maupun tester, dan
+   *  `noteOutboundSent` untuk jalur kirim lain). Idempoten: aman dipanggil
+   *  dua kali untuk pesan yang sama. <<< */
+  private readonly langkahDipromosikan = new Set<string>();
+
+  async promosikanLangkahTerkirim(conversationId: string): Promise<void> {
+    if (!conversationId) return;
+    const tertunda = this.quoteCache?.funnelExpect(conversationId) ?? null;
+    if (!tertunda?.step) return;
+    const kunci = `${conversationId}:${tertunda.step}:${tertunda.messageId ?? ''}`;
+    if (this.langkahDipromosikan.has(kunci)) return;
+    this.langkahDipromosikan.add(kunci);
+    while (this.langkahDipromosikan.size > 1000) {
+      const tertua = this.langkahDipromosikan.values().next().value;
+      if (tertua === undefined) break;
+      this.langkahDipromosikan.delete(tertua);
+    }
+    try {
+      await this.recordFunnelAsk(conversationId, tertunda.step, tertunda.messageId ?? '');
+      // Closing yang BENAR-BENAR TERKIRIM = order selesai. Ini penentu utama;
+      // pencocokan string `orderClosingNote` tetap ada sebagai jalur kedua.
+      if (tertunda.step === 'closing') {
+        await this.recordMarker(conversationId, 'completed', 'closing');
+      }
+    } catch (err) {
+      this.logger.warn(`Gagal promosi langkah funnel ${conversationId}: ${err}`);
+    }
+  }
+
   async noteOutboundSent(conversationId: string, text: string): Promise<void> {
     if (!conversationId || !text) return;
+
+    // >>> ANGGA — fix (2026-08-10, TERBUKTI merugikan di lapangan): langkah
+    // funnel dicatat DI SINI, sesudah balasannya benar-benar terkirim —
+    // bukan di `pilih()` saat prompt baru disusun.
+    //
+    // Kejadiannya: giliran alamat menghasilkan langkah `closing`, catatannya
+    // masuk saat prompt dibangun, lalu balasannya GAGAL TERKIRIM kena timeout
+    // provider. Pelanggan tidak pernah melihat formulir pesanan — tapi funnel
+    // sudah menganggap closing selesai, sehingga giliran berikutnya jatuh ke
+    // `closing_followup` dan formulir itu hangus permanen.
+    //
+    // Balasan yang tidak sampai seharusnya cuma membuang satu giliran, bukan
+    // membakar satu langkah. Arah kegagalannya sekarang aman: kalau promosi
+    // ini gagal, langkahnya TIDAK tercatat dan bot mengulang pertanyaannya —
+    // jauh lebih baik daripada melompatinya diam-diam. <<<
+    await this.promosikanLangkahTerkirim(conversationId);
     try {
+      // Order SELESAI. Dulu satu-satunya pendeteksinya adalah pencocokan
+      // string `orderClosingNote` VERBATIM di teks — dan nilai bawaannya
+      // KOSONG, sehingga `note.length < 10` membuat fitur ini mati total di
+      // pemasangan mana pun yang tidak mengisinya. Template closing TRANSFER
+      // bahkan tidak memuat `{{catatan_sk}}` sama sekali, jadi order transfer
+      // tidak akan pernah selesai walau notenya diisi.
+      //
+      // Akibat berantainya besar: tanpa marker, `funnelAsks` tidak pernah
+      // ter-reset, `asks['closing']` tetap >= 1 selamanya, dan
+      // `closing_followup` — yang SENGAJA menembus cap 2x — menodong
+      // "pesanannya mau diproses sekarang kak?" tanpa batas.
+      //
+      // Sekarang langkah funnel yang jadi penentu utama: closing yang
+      // BENAR-BENAR TERKIRIM = order selesai. Pencocokan string tetap
+      // dipertahankan sebagai jalur kedua supaya pemasangan yang sudah
+      // mengandalkannya tidak berubah perilaku.
       const cfg = await this.oc();
       const note = (cfg.orderClosingNote ?? '').trim();
       if (note.length < 10) return;

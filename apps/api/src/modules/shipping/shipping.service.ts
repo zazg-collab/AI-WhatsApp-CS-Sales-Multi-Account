@@ -2828,7 +2828,14 @@ export class ShippingService {
         this.cache.setFunnelExpect(conversationId, { messageId: lastMsgId, step, kalimat: '' });
         return { teks: null, step };
       }
-      void this.orderLog?.recordFunnelAsk(conversationId, step, lastMsgId);
+      // >>> ANGGA — fix (2026-08-10): TIDAK lagi mencatat `funnel_ask` di sini.
+      // `pilih()` jalan saat prompt DISUSUN — sebelum model menulis sepatah
+      // kata, apalagi sebelum pelanggan menerimanya. Satu timeout provider
+      // sudah terbukti membakar langkah `closing` dengan cara itu: catatannya
+      // masuk, balasannya tidak pernah sampai, formulir pesanan hangus.
+      // Pencatatannya pindah ke `OrderContextService.noteOutboundSent`, yaitu
+      // hook untuk pesan yang BENAR-BENAR TERKIRIM. `funnelExpect` di bawah
+      // adalah titipannya — ia sudah menyimpan langkah + messageId. <<<
       this.cache.setFunnelExpect(conversationId, { messageId: lastMsgId, step, kalimat: bersih });
       const varian = closingFollowup ? SHIPPING_FUNNEL_CLOSING_FOLLOWUP : closing ? SHIPPING_FUNNEL_CLOSING : total ? SHIPPING_FUNNEL_TOTAL : SHIPPING_FUNNEL_DIRECTIVE;
       return { teks: t(varian, lang)(bersih), step };
