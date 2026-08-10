@@ -380,6 +380,30 @@ export class AiService {
         resTerakhir = res;
         const toolCalls = res.tool_calls;
 
+        // >>> ANGGA — diagnostik (2026-08-10, cowork): BENTUK tool_calls yang
+        // benar-benar dipulangkan provider. Loop di bawah membuang setiap
+        // panggilan yang `type`-nya bukan 'function' (`continue`) — kalau
+        // provider mengirimnya tanpa field `type`, SELURUH panggilan tool
+        // hilang diam-diam dan tidak ada satu pun jejaknya. Baris ini yang
+        // membedakan "model tidak memanggil tool" dari "kita membuang
+        // panggilannya". <<<
+        if (toolCalls?.length) {
+          this.logger.debug(
+            `tool_calls diterima (${toolCalls.length}): ` +
+              toolCalls
+                .map((t: any) => `${t?.function?.name ?? '?'}[type=${t?.type ?? 'HILANG'}]`)
+                .join(' '),
+          );
+          const dibuang = toolCalls.filter((t: any) => t?.type !== 'function');
+          if (dibuang.length) {
+            this.logger.warn(
+              `${dibuang.length} tool_call DIBUANG karena type !== 'function' — ` +
+                `nama: ${dibuang.map((t: any) => t?.function?.name ?? '?').join(',')}. ` +
+                `Ini berarti jalur tool calling TIDAK pernah benar-benar jalan dengan provider ini.`,
+            );
+          }
+        }
+
         if (!toolCalls || toolCalls.length === 0) {
           break; // LLM returned final text
         }
@@ -582,7 +606,10 @@ export class AiService {
       );
     }
 
-    const komposisi = this.shipping?.komposisiFunnel?.(conversationId, text);
+    // Komposisi hanya berlaku untuk balasan yang MEMANG ada isinya. Penjaga
+    // sebenarnya ada di `susunBalasan` (supaya tidak ada pemanggil yang bisa
+    // lupa), ini lapisan kedua yang membuat niatnya terbaca di titik pakai.
+    const komposisi = text.trim() ? this.shipping?.komposisiFunnel?.(conversationId, text) : undefined;
     if (komposisi) {
       if (komposisi.disisipkan) {
         this.logger.debug(

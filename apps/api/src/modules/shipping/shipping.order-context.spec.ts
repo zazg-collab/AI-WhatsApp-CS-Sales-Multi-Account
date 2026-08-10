@@ -950,6 +950,27 @@ describe('F4 — komposisiFunnel: kalimat funnel dipasang SISTEM', () => {
     });
   });
 
+  /**
+   * Uji lapangan 2026-08-10: di langkah `patokan` model menyodorkan blok S&K
+   * enam poin — pelanggan baru ditanya alamat, sudah diberi penutupan pesanan.
+   * `{{catatan_sk}}` bukan penanda HARGA, jadi seluruh gerbang uang
+   * membiarkannya lewat.
+   */
+  it('penanda penutup {{catatan_sk}} DITAHAN di langkah selain closing', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak?',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    await h.svc.quoteForConversation('c1');
+    await h.svc.getGroundingText('c1');
+    const step = h.svc.getFunnelExpect('c1');
+    if (!step || step === 'closing' || step === 'closing_followup') return;
+    const out = await h.svc.resolvePriceTokens('c1', 'Siap kak 🙏\n\n{{catatan_sk}}');
+    expect(out.ok).toBe(false);
+    expect(out.issueCodes).toContain('funnel_dilanggar');
+    expect(out.issues.join(' ')).toContain('penanda penutup pesanan');
+  });
+
   it('sesudah grounding jalan, kalimat langkah aktif DIPASANG di akhir prosa', async () => {
     const h = harness({
       lastCustomerText: 'harga golok sembelih berapa kak?',

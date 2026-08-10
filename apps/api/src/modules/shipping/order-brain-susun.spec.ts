@@ -82,6 +82,30 @@ describe('order-brain — susunBalasan (Reply Contract F4)', () => {
    * Lima kelas di bawah ditemukan AUDIT, bukan oleh test yang ada — semuanya
    * lolos dari 974 test hijau. Ditulis di sini supaya tidak bisa kembali.
    */
+  /**
+   * Ditemukan Bossfren di UJI LAPANGAN, dan log membuktikannya: provider
+   * memulangkan `{"content":""}` — model tidak menjawab apa pun — lalu
+   * komposisi menempelkan kalimat funnel, sehingga pelanggan yang bertanya
+   * ONGKIR menerima "mau ambil berapa pcs kak?" sebagai jawaban. Kegagalan
+   * total menyamar jadi balasan wajar.
+   */
+  describe('prosa KOSONG tidak boleh ditempeli (uji lapangan 2026-08-10)', () => {
+    it('prosa kosong → dikembalikan kosong, sistem TIDAK mengarang balasan', () => {
+      expect(susunBalasan('', WAJIB)).toEqual({ text: '', disisipkan: false, salinanDibuang: 0 });
+    });
+
+    it('prosa berisi spasi/baris baru saja tetap dianggap kosong', () => {
+      expect(susunBalasan('   \n\n  ', WAJIB).disisipkan).toBe(false);
+      expect(susunBalasan('   \n\n  ', WAJIB).text.trim()).toBe('');
+    });
+
+    it('prosa berisi SATU kata pun tetap ditempeli seperti biasa', () => {
+      const h = susunBalasan('Siap', WAJIB);
+      expect(h.disisipkan).toBe(true);
+      expect(h.text).toBe(`Siap\n\n${WAJIB}`);
+    });
+  });
+
   describe('koreksi audit 2026-08-09', () => {
     // Template closing COD default BERAKHIR dengan {{catatan_sk}}. Versi pertama
     // `polaKalimat` membuang potongan literal kosong di ujung → polanya berhenti

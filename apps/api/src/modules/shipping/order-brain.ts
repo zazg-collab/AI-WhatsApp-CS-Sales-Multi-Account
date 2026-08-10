@@ -49,6 +49,17 @@ export function formatIdr(value: number): string {
 export const POLA_TOKEN_TOTAL =
   /\{\{(rincian_tagihan|subtotal_barang|total_transfer|total_cod|blok_total|total_transfer_diskon|total_cod_diskon|total_transfer_nego|total_cod_nego)\}\}/i;
 
+/**
+ * >>> ANGGA — koreksi UJI LAPANGAN (2026-08-10, cowork): penanda yang HANYA sah
+ * di langkah closing. `{{catatan_sk}}` itu blok syarat & ketentuan penutup
+ * pesanan; ia bukan penanda HARGA, jadi seluruh gerbang uang membiarkannya
+ * lewat. Di sesi uji nyata model menyodorkan blok S&K enam poin lengkap di
+ * langkah PATOKAN — pelanggan baru ditanya alamat, sudah diberi penutupan.
+ * Gerbang uang memang menahan giliran itu (karena rekap totalnya), tapi retry
+ * hanya membuang tokennya total; blok S&K-nya lolos utuh.
+ */
+export const POLA_TOKEN_CLOSING = /\{\{(catatan_sk)\}\}/i;
+
 export function sensorBarisTotal(lines: string[]): void {
   for (let i = lines.length - 1; i >= 0; i--) {
     if (/^• \{\{/.test(lines[i]) && POLA_TOKEN_TOTAL.test(lines[i])) lines.splice(i, 1);
@@ -449,6 +460,23 @@ export function susunBalasan(
   const wajib = (kalimat ?? '').trim();
   const teksAwal = prosa ?? '';
   if (!wajib) return { text: teksAwal, disisipkan: false, salinanDibuang: 0 };
+
+  // >>> ANGGA — koreksi UJI LAPANGAN (2026-08-10, cowork): PROSA KOSONG TIDAK
+  // BOLEH DITEMPELI. Ditemukan Bossfren di sesi uji nyata, dan log
+  // membuktikannya: provider memulangkan `{"content":""}` — model tidak
+  // menjawab APA PUN — lalu fungsi ini dengan patuh menempelkan kalimat funnel,
+  // dan yang sampai ke pelanggan adalah "mau ambil berapa pcs kak?" sebagai
+  // jawaban atas pertanyaan ONGKIR.
+  //
+  // Itu lebih buruk daripada balasan kosong. Kosong itu jujur — kelihatan
+  // gagal, dan ada gerbang yang menanganinya. Yang ini MENYAMARKAN kegagalan
+  // total jadi balasan yang terlihat wajar, sehingga tidak ada manusia maupun
+  // gerbang yang tahu sistemnya barusan tidak menjawab.
+  //
+  // Prinsipnya: komposisi ini MEMPERBAIKI balasan, bukan MENJADI balasan.
+  // Ditolak di sini, bukan di pemanggil, supaya tidak ada pemanggil baru yang
+  // bisa lupa memeriksanya.
+  if (!teksAwal.trim()) return { text: teksAwal, disisipkan: false, salinanDibuang: 0 };
 
   if (!normFunnel(wajib)) return { text: teksAwal, disisipkan: false, salinanDibuang: 0 };
 

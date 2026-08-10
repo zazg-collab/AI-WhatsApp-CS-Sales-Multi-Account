@@ -92,7 +92,21 @@ export class ReplyPipelineService {
       ? { text: sambutanForm, moneyBlocked: false, moneyGateIssues: undefined as string[] | undefined }
       : await this.ai.generateReply(conversationId, opts?.model);
     if (!text) {
-      this.logger.debug(`maybeAutoReply: generateReply returned empty text`);
+      // >>> ANGGA — koreksi UJI LAPANGAN (2026-08-10, cowork): balasan kosong
+      // TIDAK BOLEH berakhir sebagai kesunyian. Sebelumnya jalur ini cuma
+      // menulis satu baris `debug` lalu diam — di WhatsApp produksi artinya
+      // pesan pelanggan lewat tanpa balasan, tanpa draft, DAN tanpa seorang pun
+      // yang tahu. Ditemukan saat uji lapangan: provider memulangkan
+      // `{"content":""}` dan percakapan berhenti begitu saja.
+      //
+      // SENGAJA tidak membuat draft berisi teks penjelasan: draft ada untuk
+      // di-approve, dan teks diagnostik yang ter-approve akan terkirim ke
+      // pelanggan. Yang benar adalah membangunkan admin, bukan menyiapkan
+      // pesan yang salah untuk dikirim. <<<
+      this.logger.warn(`maybeAutoReply: generateReply returned empty text — ${conversationId}`);
+      channel.notifyAdmin(
+        `⚠️ AI tidak menghasilkan balasan untuk percakapan ${conversationId}. Pesan pelanggan BELUM terjawab — mohon dijawab manual.`,
+      );
       return { kind: 'skipped', reason: 'empty-text' };
     }
 

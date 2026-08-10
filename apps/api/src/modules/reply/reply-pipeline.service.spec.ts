@@ -59,6 +59,27 @@ describe('ReplyPipelineService — kontrak keputusan & follow-up', () => {
 
   const tunggu = () => new Promise((r) => setImmediate(r));
 
+  /**
+   * >>> ANGGA — uji lapangan 2026-08-10. Sebelumnya balasan kosong cuma menulis
+   * satu baris `debug` lalu diam: di WhatsApp produksi artinya pesan pelanggan
+   * lewat tanpa balasan, tanpa draft, DAN tanpa seorang pun yang tahu.
+   */
+  describe('balasan KOSONG tidak boleh berakhir sebagai kesunyian', () => {
+    it('membangunkan admin, dan tetap dilaporkan sebagai skipped:empty-text', async () => {
+      const svc = buat(AiMode.ai_draft);
+      ai.generateReply.mockResolvedValue({ text: '', moneyBlocked: false });
+      const hasil = await svc.run('c1', channel);
+      expect(hasil).toEqual({ kind: 'skipped', reason: 'empty-text' });
+      expect(channel.notifyAdmin).toHaveBeenCalledTimes(1);
+      expect((channel.notifyAdmin as jest.Mock).mock.calls[0][0]).toContain('BELUM terjawab');
+      // JANGAN membuat draft: draft ada untuk di-approve, dan teks diagnostik
+      // yang ter-approve akan terkirim ke pelanggan.
+      expect(channel.draft).not.toHaveBeenCalled();
+      expect(channel.send).not.toHaveBeenCalled();
+    });
+  });
+
+
   it('ai_on + langkah closing → kirim, DAN follow-up dijadwalkan', async () => {
     const svc = buat(AiMode.ai_on);
     const out = await svc.run('c1', channel);

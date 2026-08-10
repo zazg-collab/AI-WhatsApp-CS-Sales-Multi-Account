@@ -19,6 +19,7 @@ import {
   katalogPenanda,
   sensorBarisTotal,
   sensorSemuaTokenHarga,
+  POLA_TOKEN_CLOSING,
   // >>> ANGGA — F4 (2026-08-09, cowork): penyusun balasan + normalisasi
   // pembanding kalimat funnel. <<<
   normFunnel,
@@ -3934,6 +3935,29 @@ export class ShippingService {
         // "ditotalin itu jika qty udah jelas dijawab"). Dicek di teks MENTAH
         // (sebelum substitusi) — penanda total yang ditulis model sendiri
         // tetap tertangkap walau katalognya sudah disensor grounding.
+        // >>> ANGGA — koreksi UJI LAPANGAN (2026-08-10, cowork): penanda
+        // CLOSING haram di langkah mana pun sebelum closing. Ditemukan di sesi
+        // uji nyata: di langkah `patokan` model menyodorkan blok S&K enam poin
+        // (`{{catatan_sk}}`) — pelanggan baru ditanya alamat, sudah diberi
+        // penutupan pesanan. Seluruh gerbang uang membiarkannya lewat karena
+        // ia bukan penanda HARGA; gerbang yang menahan giliran itu hanya
+        // mempersoalkan rekap totalnya, dan retry-nya cuma membuang token
+        // total sementara blok S&K-nya lolos utuh.
+        //
+        // Diletakkan di dalam blok `expectF` yang sama supaya hanya berlaku
+        // saat langkah funnel giliran ini memang diketahui — pemanggil lama
+        // yang tidak punya funnelExpect tidak terpengaruh sama sekali.
+        if (expectF.step !== 'closing' && expectF.step !== 'closing_followup') {
+          const tokenClosing = text.match(POLA_TOKEN_CLOSING);
+          if (tokenClosing) {
+            pushIssue(
+              'funnel_dilanggar',
+              `Balasan memakai penanda penutup pesanan (${tokenClosing[0]}) di langkah "${expectF.step}" — syarat & ketentuan penutup baru boleh muncul saat closing. Hapus blok itu, jawab yang ditanya saja.`,
+            );
+          }
+        }
+        // <<< ANGGA
+
         if (PRA_TOTAL_STEPS.has(expectF.step)) {
           const tokenTotal = text.match(POLA_TOKEN_TOTAL);
           if (tokenTotal) {
