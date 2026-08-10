@@ -3814,6 +3814,21 @@ export class ShippingService {
     if (sisaPenanda) {
       pushIssue('token_tak_dikenal', `Penanda tidak dikenal/tidak tersedia untuk kutipan ini: ${sisaPenanda.join(', ')}`);
     }
+    // >>> ANGGA — koreksi UJI LAPANGAN (2026-08-10, cowork): KURUNG MENGGANTUNG.
+    // Cek di atas hanya mengenali penanda yang UTUH (`{{nama}}`). Balasan yang
+    // terpotong di tengah penanda menyisakan `{{` telanjang — bukan penanda,
+    // jadi lolos; bukan angka, jadi `angkaMentah` juga tidak melihatnya.
+    // Terlihat di sesi uji nyata: pelanggan menerima "untuk pengiriman ke {{".
+    // Apa pun sebabnya (pemotongan, salah ketik model), kurung kurawal ganda
+    // TIDAK PERNAH sah muncul di teks yang sampai ke pelanggan.
+    const kurungMenggantung = substituted.match(/\{\{|\}\}/g);
+    if (kurungMenggantung) {
+      pushIssue(
+        'token_tak_dikenal',
+        `Balasan memuat kurung penanda yang menggantung (${kurungMenggantung.length}x "{{" atau "}}") — kemungkinan balasan terpotong di tengah penanda. Tulis ulang lengkap.`,
+      );
+    }
+    // <<< ANGGA
 
     const angkaMentah = [...angkaUtuh(substituted, true)].filter((n) => !inserted.has(n));
     if (angkaMentah.length) {

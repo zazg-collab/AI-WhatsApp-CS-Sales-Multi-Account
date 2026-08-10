@@ -371,8 +371,19 @@ export class AiService {
           // sejak F4 balasannya melintas sebagai string DI DALAM JSON argumen
           // tool. Nama fungsi, nama field, dan escape `\n`/kutip memakan
           // puluhan token yang dulu tidak ada. Tanpa kelonggaran itu, balasan
-          // yang PERSIS muat di 500 sekarang terpotong di tengah JSON. <<<
-          maxTokens: 600,
+          // yang PERSIS muat di 500 sekarang terpotong di tengah JSON.
+          //
+          // >>> Koreksi UJI LAPANGAN (2026-08-10): 600 masih KURANG, dan 600
+          // bukan sekadar kurang sedikit. Bukti dari sesi nyata: satu giliran
+          // terpotong sesudah ~30 karakter jawaban ("Siap ka, untuk pengiriman
+          // ke {{"), giliran lain memulangkan `{"content":""}` sama sekali.
+          // Dua gejala itu cocok dengan SATU sebab: anggaran token habis
+          // SEBELUM jawabannya sempat ditulis — dimakan penalaran model dan
+          // pembungkus JSON argumen tool. Dinaikkan ke 1500. Plafon bukan
+          // target: balasan pendek tetap pendek, yang berubah cuma batas
+          // sebelum ia dipotong di tengah. HIPOTESIS soal penalaran belum
+          // terbukti; yang terbukti cuma gejalanya. <<<
+          maxTokens: 1500,
           tools,
         });
 
@@ -514,7 +525,7 @@ export class AiService {
         try {
           const paksa = await this.provider.chatWithTools(messages, {
             model,
-            maxTokens: 500,
+            maxTokens: 1500,
             tools: [sendReplyTool],
             toolChoice: SEND_REPLY_TOOL_CHOICE,
           });

@@ -145,7 +145,18 @@ function pulihkanAnswerTerpotong(rawArgs: string): string | null {
     if (kandidat.endsWith('\\')) continue; // escape ikut terpotong
     try {
       const v: unknown = JSON.parse(`"${kandidat}"`);
-      if (typeof v === 'string' && v.trim()) return v.trim();
+      if (typeof v === 'string' && v.trim()) {
+        // >>> ANGGA — koreksi UJI LAPANGAN (2026-08-10, cowork): buang SISA
+        // PENANDA yang ikut terpotong. Terlihat di sesi uji nyata — pelanggan
+        // menerima `Siap ka, untuk pengiriman ke {{` dengan kurung menggantung.
+        // Pemotongan bisa jatuh persis di tengah `{{kota_tujuan}}`, dan
+        // fragmen `{{` TIDAK tertangkap gerbang penanda (polanya menuntut
+        // `{{[a-z_]+}}` yang utuh), jadi ia lolos apa adanya ke pelanggan.
+        // Penyelamat ini ada supaya balasan terpotong tetap terkirim; kalau
+        // yang terkirim justru sampah sintaks, ia merugikan bukan menolong.
+        const bersih = v.replace(/\{\{?[a-z_]*$/i, '').replace(/\s+$/u, '');
+        if (bersih.trim()) return bersih.trim();
+      }
     } catch {
       /* masih belum sah — coba lebih pendek */
     }

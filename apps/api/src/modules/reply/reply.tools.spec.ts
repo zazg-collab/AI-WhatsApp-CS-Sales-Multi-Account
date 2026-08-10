@@ -110,6 +110,37 @@ describe('reply.tools — Reply Contract', () => {
     expect(k?.answer).toBe('Baris satu\nBaris du');
   });
 
+  /**
+   * Uji lapangan 2026-08-10: pelanggan menerima "Siap ka, untuk pengiriman ke
+   * {{" — kurung menggantung. Pemotongan jatuh persis di tengah penanda, dan
+   * fragmen `{{` tidak tertangkap gerbang penanda (polanya menuntut bentuk
+   * utuh) maupun gerbang angka.
+   */
+  it('sisa penanda yang ikut terpotong dibuang dari answer yang diselamatkan', () => {
+    const utuh = JSON.stringify({
+      answer: 'Siap ka, untuk pengiriman ke {{kota_tujuan}} ongkirnya {{ongkir}}',
+      funnel_question_id: 'qty',
+      data_status: 'computed',
+    });
+    const k = parseReplyContract(utuh.slice(0, utuh.indexOf('{{kota') + 2));
+    expect(k?.answer).toBe('Siap ka, untuk pengiriman ke');
+    expect(k?.answer).not.toContain('{');
+  });
+
+  it('penanda yang UTUH tidak ikut terbuang saat penyelamatan', () => {
+    const utuh = JSON.stringify({
+      answer: 'Ongkirnya {{ongkir}} ya kak, estimasi tiba',
+      funnel_question_id: 'qty',
+      data_status: 'computed',
+    });
+    const k = parseReplyContract(utuh.slice(0, utuh.indexOf('estimasi') + 4));
+    expect(k?.answer).toContain('{{ongkir}}');
+  });
+
+  it('kalau yang tersisa cuma fragmen penanda → null, jangan kirim sampah', () => {
+    expect(parseReplyContract('{"answer":"{{kota_tuj')).toBeNull();
+  });
+
   it('terpotong SEBELUM answer punya isi → null, bukan pesan kosong', () => {
     expect(parseReplyContract('{"funnel_question_id":"qty","answer":"')).toBeNull();
     expect(parseReplyContract('{"funnel_question_id":"qt')).toBeNull();
