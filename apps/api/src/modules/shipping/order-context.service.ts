@@ -225,15 +225,38 @@ export class OrderContextService {
       // dengan pelanggan menyebut alamat atau nomor HP.
       //
       // Ditaruh di sini, bukan di pemanggil: ini SATU saluran sempit yang
-      // dilewati SEMUA penutupan sesi order — pembatalan (`shipping.service`,
-      // kata batal) maupun dua sumber `completed` (`promosikanLangkahTerkirim`
-      // dan pencocokan `orderClosingNote`). Menaruhnya di pemanggil berarti
-      // menyalin invarian yang sama ke tiga tempat, dan salinan itu drift.
+      // dilewati SEMUA penutupan sesi order. Pemanggilnya EMPAT, bukan tiga
+      // (dihitung ulang oleh penyanggal K23 — angka pertamaku salah):
+      //   1. `shipping.service.ts` — kata pembatalan utuh → `cancelled`.
+      //   2. `promosikanLangkahTerkirim` (di berkas ini) — closing yang
+      //      BENAR-BENAR TERKIRIM → `completed`.
+      //   3. `noteOutboundSent` (di berkas ini) — pencocokan `orderClosingNote`.
+      //   4. `conversations.service.ts` — ADMIN menekan Resolve → `completed`.
+      // Menaruhnya di pemanggil berarti menyalin invarian yang sama ke empat
+      // tempat, dan salinan itu drift.
+      //
+      // Jalur ke-4 (`resolved`) sengaja TIDAK digerbangi khusus: penulisan
+      // penandanya sendiri sudah mengosongkan `funnelAsks` dan `candidates`
+      // (keduanya `break` di baris penanda), jadi mencabut titipan langkah
+      // hanya membuat cache in-memory ikut mengatakan hal yang SAMA dengan
+      // basis data. Membiarkannya menggantung justru menciptakan dua sumber
+      // kebenaran yang bertentangan untuk percakapan yang sama.
       //
       // SENGAJA di jalur sukses (di dalam `try`, bukan `finally`), sejajar
       // dengan `writtenFor` di atas: kalau penandanya gagal ditulis, sesi
       // order tidak benar-benar tertutup dan titipan langkahnya harus tetap
-      // ada. <<<
+      // ada. ⚠️ Catatan jujur (temuan K23): jalur pembatalan di
+      // `shipping.service.ts` justru membersihkan lima keadaan cache lain
+      // TANPA SYARAT sebelum `await recordMarker` — jadi "hanya di jalur
+      // sukses" adalah pilihan berkas ini, bukan pakem rumah yang konsisten.
+      //
+      // ⚠️ Yang TIDAK ditutup di sini, sengaja (satu perubahan satu alasan):
+      // `computeFunnelMeta` membaca `funnelExpect` TANPA cek umur, sementara
+      // `funnelDirective` memakai `funnelExpectSegar`. Order yang berakhir
+      // tanpa penanda sama sekali (pelanggan menghilang; auto-close SLA yang
+      // memakai `updateMany` sehingga tidak pernah melewati sini) meninggalkan
+      // sensor harga + kompresi riwayat menyala PERMANEN. Itu cacat terpisah
+      // dengan sebab terpisah — irisannya sendiri, bukan ditumpangkan ke sini. <<<
       this.quoteCache?.clearFunnelExpect(conversationId);
     } catch (err) {
       this.logger.warn(`Gagal menulis penanda ${type} ${conversationId}: ${err}`);

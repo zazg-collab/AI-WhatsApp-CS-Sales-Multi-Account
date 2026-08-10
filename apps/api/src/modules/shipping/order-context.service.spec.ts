@@ -3,6 +3,7 @@ import {
   mergeSnapshots,
   type OrderSnapshot,
 } from './order-context.service';
+import { ShippingQuoteCache } from './shipping-quote.cache';
 
 /**
  * >>> ANGGA — Order Context Log (blueprint 2026-08-04), Langkah 2.
@@ -128,5 +129,93 @@ describe('candidates — penanda lifecycle & jendela basi', () => {
     const h = harness();
     h.findMany.mockRejectedValueOnce(new Error('db down'));
     await expect(h.svc.candidates('c1')).resolves.toEqual([]);
+  });
+});
+
+/**
+ * >>> ANGGA — LANGKAH 2a butir 4 (2026-08-10, handover Q-Chain v4):
+ * `clearFunnelExpect` ADA di `shipping-quote.cache.ts` sejak 2026-08-10 dan
+ * TIDAK PERNAH DIPANGGIL siapa pun (dicatat sebagai temuan di wasit
+ * `selesai-170`, belum digarap).
+ *
+ * Akibatnya: sesudah pesanan DIBATALKAN atau SELESAI (`completed`), titipan
+ * langkah funnel tetap menggantung di cache sampai `orderContextStaleHours`
+ * (bawaan 24 jam). Selama jendela itu, klausa `menjawabDataKirim` di gerbang
+ * `jawabanUang` — yang menyala kalau `funnelExpect.step` masih `patokan`/
+ * `closing` dan teks pelanggan memuat penanda alamat atau nomor HP — masih
+ * bisa menghidupkan kembali funnel untuk percakapan yang SUDAH DITUTUP.
+ *
+ * Penjaganya ditaruh di `recordMarker`, bukan di pemanggilnya: itu SATU
+ * saluran sempit yang dilewati SEMUA penutupan sesi order — pembatalan
+ * (`shipping.service.ts`, kata batal) maupun dua sumber `completed`
+ * (`promosikanLangkahTerkirim` dan pencocokan `orderClosingNote`). Ditaruh di
+ * pemanggil = invarian yang sama disalin ke tiga tempat dan bisa drift.
+ * Pakem 8d butir 4.
+ */
+describe('LANGKAH 2a: penanda lifecycle mencabut titipan langkah funnel', () => {
+  function harnessDenganCache(rows: Array<{ type: string; payload: unknown; createdAt: Date }> = []) {
+    const create = jest.fn().mockResolvedValue({});
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const prisma: any = { orderContextEvent: { create, findMany } };
+    const settings: any = {
+      shipping: jest.fn().mockResolvedValue({ orderContextStaleHours: 24 }),
+      orderContext: jest.fn().mockResolvedValue({
+        orderContextStaleHours: 24,
+        orderOfferWindowMinutes: 60,
+        orderClosingNote: '',
+        orderFormHintKeywords: [],
+      }),
+    };
+    const cache = new ShippingQuoteCache();
+    const svc = new OrderContextService(prisma, settings, cache);
+    return { svc, create, findMany, cache };
+  }
+
+  it('penanda `completed` mencabut funnelExpect', async () => {
+    const h = harnessDenganCache();
+    h.cache.setFunnelExpect('c1', { messageId: 'm9', step: 'closing', kalimat: 'x' });
+    expect(h.cache.funnelExpect('c1')?.step).toBe('closing');
+
+    await h.svc.recordMarker('c1', 'completed', 'closing');
+
+    expect(h.cache.funnelExpect('c1')).toBeNull();
+  });
+
+  it('penanda `cancelled` mencabut funnelExpect', async () => {
+    const h = harnessDenganCache();
+    h.cache.setFunnelExpect('c1', { messageId: 'm9', step: 'patokan', kalimat: 'x' });
+
+    await h.svc.recordMarker('c1', 'cancelled', 'cancel_keyword');
+
+    expect(h.cache.funnelExpect('c1')).toBeNull();
+  });
+
+  /**
+   * Arah kegagalan yang aman: kalau penandanya GAGAL ditulis, sesi order tidak
+   * benar-benar tertutup — titipan langkah WAJIB tetap ada, persis seperti
+   * pagar `writtenFor` yang juga hanya direset di jalur sukses. Tanpa test ini,
+   * implementasi yang mencabut di `finally` akan terlihat sama benarnya.
+   */
+  it('penanda GAGAL ditulis → funnelExpect TIDAK dicabut', async () => {
+    const h = harnessDenganCache();
+    h.cache.setFunnelExpect('c1', { messageId: 'm9', step: 'closing', kalimat: 'x' });
+    h.create.mockRejectedValueOnce(new Error('db down'));
+
+    await h.svc.recordMarker('c1', 'completed', 'closing');
+
+    expect(h.cache.funnelExpect('c1')?.step).toBe('closing');
+  });
+
+  /** Cache tidak disuntik (test lama menyusun service dengan dua argumen) —
+   *  tidak boleh melempar. */
+  it('tanpa cache disuntik → tetap aman', async () => {
+    const create = jest.fn().mockResolvedValue({});
+    const prisma: any = { orderContextEvent: { create, findMany: jest.fn().mockResolvedValue([]) } };
+    const settings: any = {
+      shipping: jest.fn().mockResolvedValue({}),
+      orderContext: jest.fn().mockResolvedValue({}),
+    };
+    const svc = new OrderContextService(prisma, settings);
+    await expect(svc.recordMarker('c1', 'completed', 'closing')).resolves.toBeUndefined();
   });
 });

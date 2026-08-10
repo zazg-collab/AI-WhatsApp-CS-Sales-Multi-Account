@@ -1334,6 +1334,75 @@ describe('Q-Chain — funnel pertanyaan berantai (urutan pakem)', () => {
     expect(h.cache.addressTextOf('c1')).not.toContain('udah lengkap itu aja');
   });
 
+  /**
+   * >>> ANGGA — LANGKAH 2a butir 4 (2026-08-10): AKIBAT LINTAS MODUL dari
+   * pencabutan `funnelExpect` oleh `recordMarker`.
+   *
+   * Kaitannya dengan `order-context.service.spec.ts` ("penanda lifecycle
+   * mencabut titipan langkah funnel"): spec ITU mengunci KABELNYA (penanda
+   * tertulis → `clearFunnelExpect` terpanggil, dan penanda gagal → tidak
+   * dicabut). Spec INI mengunci AKIBATNYA di sisi funnel, dengan keadaan
+   * pasca-penanda disusun langsung — karena harness di berkas ini memakai
+   * `orderLog` tiruan, jadi `recordMarker` aslinya memang tidak jalan di sini.
+   * Dua-duanya diperlukan; ditulis terpisah supaya jelas mana yang diuji.
+   *
+   * Invariannya: pesanan yang SUDAH DITUTUP tidak boleh dihidupkan lagi hanya
+   * karena pelanggan menyebut alamat atau nomor HP. Tanpa pencabutan, klausa
+   * `menjawabDataKirim` membuka gerbang `jawabanUang` selama `funnelExpect`
+   * masih berbunyi `patokan`/`closing` — sampai 24 jam (`orderContextStaleHours`).
+   */
+  describe('LANGKAH 2a: pesanan yang sudah DITUTUP tidak dihidupkan lagi oleh alamat/HP', () => {
+    async function sampaiClosing() {
+      const h = harness({
+        lastCustomerText: 'COD deh kak',
+        extract: { kota: null, items: [] },
+        logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 2 }], { qtyPasti: true })],
+      });
+      (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1 });
+      await h.svc.getGroundingText('c1');
+      pesanBaru(h, 'm2', 'Fatih, Jl. Pejanggik No. 45 Cakranegara');
+      (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({
+        total: 1, patokan: 1, metode_terjawab: 1, metode_cod: 1,
+      });
+      await h.svc.getGroundingText('c1');
+      expect(h.cache.funnelExpect('c1')?.step).toBe('closing');
+      // Keadaan SESUDAH penanda `completed` tertulis: `funnelAsks` dan
+      // `candidates` sama-sama `break` di baris penanda, jadi dua-duanya kosong.
+      (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({});
+      (h.orderLog.candidates as jest.Mock).mockResolvedValue([]);
+      return h;
+    }
+
+    const ALAMAT_SUSULAN = 'Jl. Melati No. 12 RT 03 RW 05, dekat masjid';
+
+    it('titipan langkah DICABUT (perilaku baru) → funnel DIAM', async () => {
+      const h = await sampaiClosing();
+      h.cache.clearFunnelExpect('c1'); // yang dilakukan `recordMarker`
+
+      pesanBaru(h, 'm3', ALAMAT_SUSULAN);
+      await h.svc.getGroundingText('c1');
+
+      // Gerbang tertutup → `funnelDirective` pulang null → tidak ada langkah
+      // baru yang dititipkan sama sekali.
+      expect(h.cache.funnelExpect('c1')).toBeNull();
+    });
+
+    it('titipan langkah DIBIARKAN (perilaku lama) → funnel hidup lagi dan MUNDUR menanyakan qty', async () => {
+      const h = await sampaiClosing();
+      // TIDAK dicabut — persis keadaan sebelum perbaikan ini.
+
+      pesanBaru(h, 'm3', ALAMAT_SUSULAN);
+      await h.svc.getGroundingText('c1');
+
+      // Gerbang terbuka lewat `menjawabDataKirim`, funnel jalan lagi — dan
+      // karena log order sudah kosong (penanda memutusnya) sementara kutipan
+      // ongkir masih hangat di cache, ia MUNDUR ke `qty`: bot menanyakan
+      // "berapa pcs kak?" kepada pelanggan yang baru saja mengirim alamatnya,
+      // untuk pesanan yang sudah ditutup.
+      expect(h.cache.funnelExpect('c1')?.step).toBe('qty');
+    });
+  });
+
   it('Q-Chain v3.1 (revisi Bossfren 2026-08-06): metode TRANSFER -> langkah PATOKAN minta alamat lengkap + patokan + rekening + konfirmasi bukti bayar', async () => {
     const rek = 'BCA 6765556680 a.n Cordova Digital Inovasi';
     const h = harness({
