@@ -176,4 +176,55 @@ describe('ReplyPipelineService — kontrak keputusan & follow-up', () => {
     expect(orderLog.promosikanLangkahTerkirim).toHaveBeenCalledTimes(1);
     expect(orderLog.promosikanLangkahTerkirim).toHaveBeenCalledWith('c1');
   });
+
+  /**
+   * >>> ANGGA — REGRESI `09c5e70` (2026-08-10). Promosi langkah dipasang di
+   * SATU cabang (sesudah `channel.send` di jalur ai_on). Mode `ai_draft`
+   * pulang lebih dulu, jadi sesi uji — yang berjalan di `ai_draft` — tidak
+   * pernah memajukan funnel sama sekali. Gagal diam-diam dengan 994 test
+   * hijau, karena test regresinya sendiri cuma memakai `ai_on`.
+   *
+   * Test ini menjaga aturannya DI SEMUA MODE sekaligus: yang menentukan
+   * `ReplyOutcome`, bukan mode. Satu mode baru yang lupa dipasangi promosi
+   * akan merah di sini.
+   */
+  describe('REGRESI: promosi langkah ditentukan OUTCOME, bukan mode', () => {
+    /**
+     * >>> ANGGA — koreksi Bossfren 2026-08-10: versi pertama matriks ini cuma
+     * menguji `ai_supervised` di jalur Sentinel yang MENYETUJUI. Padahal
+     * supervised bisa berakhir TERTAHAN — draft, blokir, atau Sentinel error —
+     * dan tiga-tiganya belum sampai ke pelanggan. Menguji satu jalur lalu
+     * menyimpulkan tentang semua jalur: kesalahan yang sama persis dengan yang
+     * melahirkan regresi ini, cuma satu lapis lebih dalam (di test).
+     */
+    it.each([
+      ['ai_on', AiMode.ai_on, SentinelDecision.approve, 'sent', true],
+      ['ai_draft', AiMode.ai_draft, SentinelDecision.approve, 'drafted', false],
+      ['ai_supervised + approve', AiMode.ai_supervised, SentinelDecision.approve, 'sent', true],
+      ['ai_supervised + draft', AiMode.ai_supervised, SentinelDecision.draft, 'drafted', false],
+      ['ai_supervised + block', AiMode.ai_supervised, SentinelDecision.block, 'paused', false],
+    ] as const)('%s -> outcome %s -> promosi=%s', async (_nama, mode, putusan, kind, promosi) => {
+      const { svc, orderLog } = buatDenganLog(mode);
+      sentinel.review.mockResolvedValue({ id: 'r1', decision: putusan });
+      const out = await svc.run('c1', channel);
+      await tunggu();
+      expect(out.kind).toBe(kind);
+      if (promosi) {
+        expect(orderLog.promosikanLangkahTerkirim).toHaveBeenCalledWith('c1');
+      } else {
+        // BELUM sampai ke pelanggan — promosinya menunggu admin menyetujui,
+        // dan saat itu jalur noteOutbound yang memicunya.
+        expect(orderLog.promosikanLangkahTerkirim).not.toHaveBeenCalled();
+      }
+    });
+
+    it('Sentinel ERROR di mode supervised -> tertahan jadi draft, tidak promosi', async () => {
+      const { svc, orderLog } = buatDenganLog(AiMode.ai_supervised);
+      sentinel.review.mockRejectedValue(new Error('sentinel down'));
+      const out = await svc.run('c1', channel);
+      await tunggu();
+      expect(out.kind).toBe('drafted');
+      expect(orderLog.promosikanLangkahTerkirim).not.toHaveBeenCalled();
+    });
+  });
 });

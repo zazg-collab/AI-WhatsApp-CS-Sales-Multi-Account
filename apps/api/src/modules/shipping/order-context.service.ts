@@ -215,6 +215,26 @@ export class OrderContextService {
       // Penanda menutup sesi order → pagar snapshot direset supaya order baru
       // pasca-closing ("eh nambah 1 lagi") boleh menulis lagi di pesan yang sama.
       this.writtenFor.delete(conversationId);
+      // >>> ANGGA — LANGKAH 2a butir 4 (2026-08-10): titipan langkah funnel
+      // ikut dicabut. `clearFunnelExpect` ada sejak 2026-08-10 dan TIDAK
+      // PERNAH DIPANGGIL siapa pun (temuan wasit `selesai-170`), sehingga
+      // sesudah pesanan dibatalkan atau selesai, `funnelExpect` menggantung
+      // sampai `orderContextStaleHours` (bawaan 24 jam). Selama jendela itu
+      // klausa `menjawabDataKirim` di gerbang `jawabanUang` masih bisa
+      // menghidupkan kembali funnel percakapan yang SUDAH ditutup — cukup
+      // dengan pelanggan menyebut alamat atau nomor HP.
+      //
+      // Ditaruh di sini, bukan di pemanggil: ini SATU saluran sempit yang
+      // dilewati SEMUA penutupan sesi order — pembatalan (`shipping.service`,
+      // kata batal) maupun dua sumber `completed` (`promosikanLangkahTerkirim`
+      // dan pencocokan `orderClosingNote`). Menaruhnya di pemanggil berarti
+      // menyalin invarian yang sama ke tiga tempat, dan salinan itu drift.
+      //
+      // SENGAJA di jalur sukses (di dalam `try`, bukan `finally`), sejajar
+      // dengan `writtenFor` di atas: kalau penandanya gagal ditulis, sesi
+      // order tidak benar-benar tertutup dan titipan langkahnya harus tetap
+      // ada. <<<
+      this.quoteCache?.clearFunnelExpect(conversationId);
     } catch (err) {
       this.logger.warn(`Gagal menulis penanda ${type} ${conversationId}: ${err}`);
     }

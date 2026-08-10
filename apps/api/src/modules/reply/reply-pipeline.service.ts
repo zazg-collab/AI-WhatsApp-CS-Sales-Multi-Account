@@ -37,9 +37,50 @@ export class ReplyPipelineService {
     @Optional() private readonly orderLog?: OrderContextService,
   ) {}
 
-  /** `opts.model` dipakai test-harness supaya pilihan provider/model per sesi
-   *  tetap hidup; produksi memanggilnya tanpa opts (model default bot). */
+  /**
+   * >>> ANGGA — fix (2026-08-10, regresi `09c5e70` yang KUSENDIRI buat).
+   *
+   * Promosi langkah funnel DULU kupasang di satu cabang saja (sesudah
+   * `channel.send` di jalur `ai_on`). Mode `ai_draft` pulang lebih dulu, jadi
+   * cabang itu tidak pernah tersentuh — sesi uji berjalan di `ai_draft`,
+   * funnel beku total, bot menagih patokan tanpa henti. Gagal DIAM-DIAM: nol
+   * log, nol error, 994 test hijau, karena test regresinya sendiri cuma
+   * memakai `ai_on`.
+   *
+   * Ketok Bossfren: "harusnya di semua mode; kalau cuma salah satu, fatal ke
+   * depannya." Benar, dan perbaikannya BUKAN menambahkan promosi di cabang
+   * draft — selama aturannya menempel di CABANG, mode/kanal/cabang baru akan
+   * melewatkannya lagi diam-diam.
+   *
+   * Bentuknya sekarang: seluruh logika lama pindah utuh ke `jalankan()`, dan
+   * `run()` jadi SATU titik keputusan yang semua cabang lewati. Yang
+   * menentukan `ReplyOutcome`, bukan mode. Melupakannya jadi mustahil, bukan
+   * sekadar "jangan sampai lupa". <<<
+   */
   async run(conversationId: string, channel: ReplyChannel, opts?: { model?: string }): Promise<ReplyOutcome> {
+    const hasil = await this.jalankan(conversationId, channel, opts);
+    if (this.dianggapSampai(hasil)) {
+      void this.orderLog?.promosikanLangkahTerkirim(conversationId);
+    }
+    return hasil;
+  }
+
+  /**
+   * >>> ANGGA — ketok Bossfren 2026-08-10: HANYA `sent` yang dianggap sampai.
+   * `ai_draft` & `ai_supervised` yang berakhir jadi draft BELUM sampai —
+   * pelanggan baru menerimanya kalau admin menyetujui, dan saat itu jalur
+   * `noteOutbound` yang memicu promosinya. Jangan pernah mencatat "yang akan
+   * sampai"; catat hanya yang sudah pasti terkirim.
+   *
+   * Konsekuensi yang disengaja: sesi uji WAJIB `ai_on` (lihat
+   * `test-harness.repository.ts`). Tester di mode draft tidak menguji apa pun,
+   * karena funnelnya memang tidak boleh maju. <<<
+   */
+  private dianggapSampai(hasil: ReplyOutcome): boolean {
+    return hasil.kind === 'sent';
+  }
+
+  private async jalankan(conversationId: string, channel: ReplyChannel, opts?: { model?: string }): Promise<ReplyOutcome> {
     const convo = (await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       include: { customer: true, bot: { select: { status: true } } },
@@ -170,13 +211,6 @@ Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
       await channel.draft(convo, text);
       return { kind: 'drafted', reason: 'send-failed' };
     }
-
-    // >>> ANGGA — fix (2026-08-10): langkah funnel baru dicatat DI SINI —
-    // sesudah kanal menerima pesannya. Ditaruh di pipeline, bukan di adapter,
-    // supaya WhatsApp dan tester berperilaku sama persis: jalur tester tidak
-    // pernah memanggil `noteOutbound`, jadi kalau promosinya hanya menumpang
-    // di sana, funnel tidak akan pernah maju di harness. <<<
-    void this.orderLog?.promosikanLangkahTerkirim(conversationId);
 
     channel.autoSendAssets?.(conversationId);
 

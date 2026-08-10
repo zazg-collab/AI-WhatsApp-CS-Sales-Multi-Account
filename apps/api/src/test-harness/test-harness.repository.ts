@@ -20,7 +20,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { MessageStatus, SenderType } from '@sentinel/database';
+import { AiMode, MessageStatus, SenderType } from '@sentinel/database';
 import { PrismaService } from '../prisma/prisma.service';
 import type { TestSession, TestMessage, DebugSnapshot } from './types';
 
@@ -84,7 +84,22 @@ export class TestHarnessRepository {
         // `account.aiMode`. Kalau tidak diisi, mode-nya terkunci di default
         // skema selamanya dan cabang `ai_supervised`/`ai_on` (Sentinel, aset,
         // lead score, follow-up) MUSTAHIL diuji lewat tester.
-        ...(akun?.aiMode ? { aiMode: akun.aiMode } : {}),
+        // >>> ANGGA — fix (2026-08-10, ketok Bossfren): sesi uji DIPAKSA
+        // `ai_on`, TIDAK mewarisi mode akun.
+        //
+        // Alasannya bukan kenyamanan. Sejak langkah funnel hanya dicatat saat
+        // balasan BENAR-BENAR TERKIRIM (`kind === 'sent'`), sesi uji yang
+        // mewarisi `ai_draft` tidak akan pernah memajukan funnel — dan itu
+        // BENAR menurut aturannya, karena draft memang belum sampai ke
+        // pelanggan. Akibatnya tester berhenti menguji apa pun: ia menampilkan
+        // draft sebagai "balasan bot", sesuatu yang di produksi tidak pernah
+        // dilihat pelanggan tanpa persetujuan admin.
+        //
+        // Ketimpangan itu sudah ada sebelum perubahan ini; ia baru kelihatan
+        // waktu funnel berhenti maju. Ditutup di sini, bukan diakomodasi
+        // dengan cabang khusus tester — karena cabang khusus justru
+        // menyamarkan bedanya alih-alih menghapusnya.
+        aiMode: AiMode.ai_on,
       },
     });
     const sesi = await (this.prisma as any).testSession.create({
