@@ -158,10 +158,43 @@ async function satuPutaran(nomor) {
   const giliran = [];
   try {
     for (let i = 0; i < SKENARIO.length; i++) {
-      const res = await j('POST', `/test-harness/sessions/${session.id}/send`, { text: SKENARIO[i] });
+      // >>> ANGGA — diagnostik (2026-08-10, cowork): LAMA tiap giliran.
+      // Timeout provider yang muncul 1 dari 3 putaran tidak bisa didiagnosis
+      // tanpa angka ini: 30 detik itu batas per-permintaan di `AI_TIMEOUT_MS`,
+      // dan tanpa distribusi lama-jawab kita tidak tahu apakah batas itu
+      // kelewat sempit atau ada satu giliran yang memang menggantung. <<<
+      const t0 = Date.now();
+      let res;
+      try {
+        res = await j('POST', `/test-harness/sessions/${session.id}/send`, { text: SKENARIO[i] });
+      } catch (e) {
+        // GILIRAN MANA, dan sesudah BERAPA LAMA. Versi pertama cuma mencetak
+        // "GAGAL: HTTP 500" — pesan yang sama persis untuk "provider menolak
+        // permintaan" dan "jawaban tidak selesai dalam batas waktu", padahal
+        // dua-duanya minta perbaikan di tempat yang berbeda.
+        e.message = `giliran ${i + 1} sesudah ${Math.round((Date.now() - t0) / 1000)} detik: ${e.message}`;
+        throw e;
+      }
+      const ms = Date.now() - t0;
       const teks = res?.reply?.content ?? '';
       const debug = res?.reply?.debugInfo ?? null;
-      giliran.push({ n: i + 1, kirim: SKENARIO[i], teks, ...periksa(teks, debug, i + 1) });
+      giliran.push({
+        n: i + 1,
+        kirim: SKENARIO[i],
+        teks,
+        ms,
+        // Keadaan order saat giliran ini dijawab — dipakai membaca pelanggaran
+        // `metode_sebelum_total`: apakah saat itu memang belum ada kutipan
+        // ongkir/barang (jadi larangan "jangan tanya COD/Transfer sebelum
+        // total" tidak pernah disuntikkan), atau ada tapi tetap dilanggar.
+        jejak: {
+          funnelMode: debug?.funnelMode ?? null,
+          adaOngkir: Boolean(debug?.ongkir),
+          jumlahItem: (debug?.items ?? []).length,
+          gateWarnings: debug?.gateWarnings ?? [],
+        },
+        ...periksa(teks, debug, i + 1),
+      });
     }
   } finally {
     await j('DELETE', `/test-harness/sessions/${session.id}`).catch(() => {});
@@ -181,7 +214,24 @@ function ringkas(putaran) {
           hit[k]++;
           perGiliran[g.n - 1][k]++;
         }
-  return { putaran: putaran.length, giliranTotal: total, hit, perGiliran };
+  // Lama-jawab: median & maksimum, keseluruhan dan per giliran. Maksimum yang
+  // penting di sini, bukan rata-rata — yang membunuh sebuah giliran adalah
+  // ekornya, dan ekor itulah yang menabrak batas waktu.
+  const semuaMs = putaran.flatMap((p) => p.map((g) => g.ms)).filter((v) => typeof v === 'number');
+  const med = (xs) => {
+    if (!xs.length) return null;
+    const u = [...xs].sort((a, b) => a - b);
+    return u[Math.floor(u.length / 2)];
+  };
+  const lama = {
+    medianMs: med(semuaMs),
+    maksMs: semuaMs.length ? Math.max(...semuaMs) : null,
+    perGiliranMs: Array.from({ length: SKENARIO.length }, (_, i) => {
+      const xs = putaran.map((p) => p[i]?.ms).filter((v) => typeof v === 'number');
+      return { median: med(xs), maks: xs.length ? Math.max(...xs) : null };
+    }),
+  };
+  return { putaran: putaran.length, giliranTotal: total, hit, perGiliran, lama };
 }
 
 const arg = (nama, bawaan) => {
@@ -223,8 +273,21 @@ for (let i = 1; i <= runs; i++) {
   try {
     const g = await satuPutaran(i);
     putaran.push(g);
-    const rusak = g.filter((x) => x.kosong || x.kurung_menggantung || x.tanya_dobel || x.metode_sebelum_total || x.lupa_produk).length;
-    console.log(`selesai — ${rusak}/${SKENARIO.length} giliran bermasalah`);
+    const rusak = g.filter((x) => x.kosong || x.kurung_menggantung || x.tanya_dobel || x.metode_sebelum_total || x.lupa_produk);
+    const lamaMaks = Math.max(...g.map((x) => x.ms ?? 0));
+    console.log(`selesai — ${rusak.length}/${SKENARIO.length} giliran bermasalah · terlama ${(lamaMaks / 1000).toFixed(1)} detik`);
+    // >>> ANGGA — diagnostik (2026-08-10, cowork): CETAK ISI giliran yang
+    // melanggar, bukan cuma menghitungnya. Angka "metode_sebelum_total 1/12"
+    // membuktikan pelanggaran itu ada tapi tidak menunjukkan KEADAAN saat ia
+    // terjadi — dan tanpa keadaan itu, perbaikan mana pun cuma tebakan.
+    // Sengaja dipotong 240 karakter: cukup untuk membaca kalimatnya, tidak
+    // cukup untuk menenggelamkan tabel hasil. <<<
+    for (const x of rusak) {
+      const kelas = ['kosong', 'kurung_menggantung', 'tanya_dobel', 'metode_sebelum_total', 'lupa_produk'].filter((k) => x[k]);
+      console.log(`    ⌁ giliran ${x.n} [${kelas.join(',')}] mode=${x.jejak.funnelMode} ongkir=${x.jejak.adaOngkir ? 'ada' : 'tidak'} item=${x.jejak.jumlahItem} gerbang=${x.jejak.gateWarnings.length}`);
+      console.log(`      kirim : ${x.kirim}`);
+      console.log(`      balas : ${(x.teks || '(kosong)').replace(/\s+/g, ' ').slice(0, 240)}`);
+    }
   } catch (e) {
     console.log(`GAGAL: ${sebab(e)}`);
   }
@@ -249,10 +312,19 @@ for (const [k, v] of Object.entries(ringkasan.hit)) {
   const persen = ringkasan.giliranTotal ? Math.round((v / ringkasan.giliranTotal) * 100) : 0;
   console.log(`  ${k.padEnd(24)} ${String(v).padStart(3)}/${ringkasan.giliranTotal}  (${persen}%)`);
 }
+if (ringkasan.lama?.medianMs != null) {
+  console.log(
+    `\n  lama jawab: median ${(ringkasan.lama.medianMs / 1000).toFixed(1)} detik · ` +
+      `terlama ${(ringkasan.lama.maksMs / 1000).toFixed(1)} detik ` +
+      `(batas AI_TIMEOUT_MS bawaan 30 detik)`,
+  );
+}
 console.log('\n  per giliran:');
 ringkasan.perGiliran.forEach((g, i) => {
   const isi = Object.entries(g).filter(([, v]) => v > 0).map(([k, v]) => `${k}=${v}`).join(' ');
-  console.log(`    giliran ${i + 1}: ${isi || '— bersih —'}`);
+  const l = ringkasan.lama?.perGiliranMs?.[i];
+  const jam = l?.maks != null ? ` · ${(l.median / 1000).toFixed(1)}/${(l.maks / 1000).toFixed(1)} detik (median/terlama)` : '';
+  console.log(`    giliran ${i + 1}: ${isi || '— bersih —'}${jam}`);
 });
 if (out) {
   const fs = await import('node:fs');
