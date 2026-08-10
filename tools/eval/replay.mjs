@@ -78,8 +78,17 @@ function periksa(teks, debug, indeksGiliran) {
       /(transfer\s*(atau|\/|\|)\s*cod|cod\s*(atau|\/|\|)\s*transfer)/i.test(t) &&
       !['total', 'patokan', 'closing', 'closing_followup'].includes(mode ?? ''),
     gerbang_menahan: (debug?.gateWarnings ?? []).length > 0,
-    // Giliran 2 dan seterusnya wajib menunjukkan bot masih ingat produknya.
-    lupa_produk: indeksGiliran >= 3 && !/golok/i.test(t),
+    // >>> Koreksi (2026-08-10): versi pertama menandai SETIAP giliran >= 3 yang
+    // tidak menyebut "golok" sebagai lupa produk. Itu salah rancang dan
+    // menghasilkan 39% palsu: balasan yang BENAR untuk "cakranegara" (ongkir)
+    // atau "cod aja kak" (minta alamat) memang tidak perlu menyebut nama
+    // produk. Metrik yang menghukum jawaban benar lebih buruk daripada tidak
+    // ada metrik — ia mengarahkan perbaikan ke tempat yang salah.
+    //
+    // Satu-satunya giliran yang BENAR-BENAR membuktikan memori adalah giliran
+    // 4 ("ambil 2 aja"): bot mustahil tahu "2" itu apa tanpa mengingat giliran
+    // 1. Di situlah, dan hanya di situ, tidak menyebut produk = lupa.
+    lupa_produk: indeksGiliran === 4 && !/golok/i.test(t),
     status,
     funnelMode: mode,
   };
@@ -107,9 +116,30 @@ const sebab = (e) => {
  * nol yang terlihat rapi.
  */
 async function preflight() {
-  try {
-    await j('GET', '/test-harness/sessions');
-  } catch (e) {
+  // >>> Koreksi (2026-08-10): `docker compose up -d` pulang begitu container
+  // START, bukan begitu Nest SIAP — dan percobaan pertama Bossfren mati kena
+  // ECONNRESET karena skrip langsung menembak. Ditunggu sampai 90 detik dengan
+  // jeda 3 detik; ini bagian normal dari alur ukur (rebuild → ukur), bukan
+  // keadaan luar biasa.
+  const batas = Date.now() + 90_000;
+  let terakhir;
+  let ronde = 0;
+  for (;;) {
+    try {
+      await j('GET', '/test-harness/sessions');
+      if (ronde) console.log(`API siap sesudah ${ronde * 3} detik.\n`);
+      return;
+    } catch (e) {
+      terakhir = e;
+      if (Date.now() >= batas) break;
+      if (ronde === 0) process.stdout.write('Menunggu API siap ');
+      process.stdout.write('.');
+      ronde++;
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+  {
+    const e = terakhir;
     console.error(`\n✖ API tidak terjangkau di ${BASE}`);
     console.error(`  ${sebab(e)}\n`);
     console.error('  Periksa: (a) container hidup — `docker ps | grep hermes-api`');
