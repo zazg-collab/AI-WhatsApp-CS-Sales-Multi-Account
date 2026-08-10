@@ -168,10 +168,33 @@ export class AiProviderService {
         throw new ServiceUnavailableException(`AI provider error (${res.status})`);
       }
 
-      const body = (await res.json()) as {
+      // >>> ANGGA — fix (2026-08-10, TERUKUR di lapangan): `res.json()` DULU
+      // berada di luar blok `try` yang menjaga `fetch`. Itu bukan detail gaya
+      // — `AbortSignal.timeout` menghitung SELURUH permintaan termasuk
+      // pembacaan badan, dan OpenRouter memulangkan header lebih dulu lalu
+      // menahan badan selama model menulis. Jadi hampir seluruh waktu generasi
+      // jatuh di baris ini, DI LUAR penjagaan. Akibatnya `TimeoutError` mentah
+      // lolos tanpa dibungkus, retry transient tidak pernah berjalan, dan
+      // `AllExceptionsFilter` memulangkannya sebagai HTTP 500 dengan pesan apa
+      // adanya ("The operation was aborted due to timeout") — persis yang
+      // terlihat di 3 dari 5 putaran pengukuran. Sekarang di dalam penjagaan:
+      // timeout jadi transient BENERAN, kena retry, dan kalau tetap gagal
+      // keluar sebagai 503 yang jujur. <<<
+      let body: {
         choices?: Array<{ message?: { content?: string, tool_calls?: any[] }; finish_reason?: string }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
+      try {
+        body = (await res.json()) as typeof body;
+      } catch (err) {
+        lastErr = err;
+        this.logger.warn(`chat body gagal dibaca (attempt ${attempt}/${total}): ${err}`);
+        if (attempt < total) {
+          await this.backoff(attempt);
+          continue;
+        }
+        throw new ServiceUnavailableException('Could not read AI provider response');
+      }
       this.recordTokens(model, body.usage);
       const msg = body.choices?.[0]?.message;
       return {

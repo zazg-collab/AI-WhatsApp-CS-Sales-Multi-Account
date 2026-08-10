@@ -83,10 +83,24 @@ describe('AiService — Reply Contract MATI (bawaan)', () => {
     expect(shipping.komposisiFunnel).not.toHaveBeenCalled();
   });
 
-  it('anggaran token kembali 500, dan telemetri kontrak tidak dipancarkan', async () => {
+  /**
+   * >>> ANGGA — test ini DISUNTING 2026-08-10 sore, dan itu perlu dijelaskan
+   * karena gerbang kerja kita adalah "nol test lama disunting".
+   *
+   * Dulu ia menegakkan `maxTokens === 500` sebagai bagian dari "saklar mati =
+   * perilaku PRA-F4". Angka 500 itu detail mekanisme, bukan perilaku yang
+   * dilihat pelanggan — dan ia sengaja diubah jadi 4000 untuk SEMUA keadaan
+   * saklar, sesudah terukur bahwa menahannya di 500 membeli satu perjalanan
+   * bolak-balik terbuang di 7 dari ±19 giliran plus timeout HTTP 500.
+   *
+   * Yang DIJAGA test ini tetap sama: saklar mati = kontrak tidak dipakai dan
+   * telemetrinya tidak dipancarkan. Itu bagian yang bermakna. Angkanya
+   * mengikuti keputusan plafon, bukan sebaliknya. <<<
+   */
+  it('plafon token seragam (tidak lagi 500), dan telemetri kontrak tidak dipancarkan', async () => {
     const { svc, provider, metrics } = buat();
     await svc.generateReply('c1');
-    expect(provider.chatWithTools.mock.calls[0][1].maxTokens).toBe(500);
+    expect(provider.chatWithTools.mock.calls[0][1].maxTokens).toBe(4000);
     expect(metrics.replyContract.inc).not.toHaveBeenCalled();
   });
 

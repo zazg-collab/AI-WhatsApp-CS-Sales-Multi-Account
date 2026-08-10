@@ -407,11 +407,25 @@ export class AiService {
     // tidak bisa membedakan tiga hal yang gejalanya identik: model memang diam,
     // provider memulangkan tool_calls dengan bentuk yang tidak kita kenali,
     // atau balasannya terpotong habis oleh max_tokens. <<<
-    // >>> ANGGA — 2026-08-10: plafon token giliran ini. Naik SEKALI kalau
-    // provider memulangkan `finish_reason: 'length'` dengan tangan kosong —
-    // alasannya di dalam loop. <<<
-    let plafon = 500;
-    let plafonSudahDinaikkan = false;
+    // >>> ANGGA — 2026-08-10 (SORE): eskalasi plafon DICABUT, plafon dasar
+    // dinaikkan. Ini pencabutan tambalanku sendiri dari pagi ini, bukan
+    // tambahan.
+    //
+    // Tambalan pagi: plafon dasar 500, naik SEKALI ke 4000 kalau provider
+    // memulangkan `finish_reason: 'length'` dengan tangan kosong. Alasannya
+    // "menaikkan plafon global berarti semua giliran membayar untuk kasus
+    // yang jarang". ITU KELIRU: `max_tokens` adalah BATAS ATAS — biayanya
+    // hanya untuk token yang benar-benar ditulis. Menahannya di 500 tidak
+    // menghemat apa pun; ia membeli SATU perjalanan bolak-balik terbuang
+    // setiap kali penalaran model lewat batas — 7 kali dalam ±19 giliran
+    // terukur — dan panggilan eskalasinya cukup panjang untuk menembus batas
+    // waktu 30 detik, yang lalu muncul sebagai HTTP 500.
+    //
+    // Jadi tambalan itu memperbaiki bug A sambil melahirkan kegagalan B.
+    // Dicabut, bukan ditambal lagi: satu jalur kode hilang, satu kelas
+    // kegagalan hilang, dan giliran yang tadinya butuh dua panggilan sekarang
+    // selesai dengan satu. <<<
+    const plafon = 4000;
     let resTerakhir: {
       content?: string;
       tool_calls?: unknown[];
@@ -467,41 +481,14 @@ export class AiService {
           }
         }
 
-        // >>> ANGGA — 2026-08-10: ANGGARAN HABIS SEBELUM SATU KATA PUN DITULIS.
-        //
-        // Diukur, bukan diduga: pada SEMUA balasan kosong yang tercatat,
-        // provider memulangkan `finish_reason: 'length'` dengan `content: ''`
-        // dan tanpa tool call — plafon `max_tokens` tercapai sementara
-        // jawabannya belum ditulis sepatah pun, jatahnya habis dipakai
-        // penalaran model. Itu sebabnya giliran akhir kosong 3 dari 3 di DUA
-        // konfigurasi berbeda: deterministik, bukan keacakan.
-        //
-        // Eskalasi ditaruh DI DALAM loop, bukan sesudahnya. Versi pertama
-        // memanggil ulang di luar loop dan HANYA membaca `content` — begitu
-        // panggilan berplafon besar memulangkan TOOL CALL (`finish_reason:
-        // 'tool_calls'`), hasilnya dibuang dan balasannya tetap kosong.
-        // Terukur: satu-satunya kegagalan yang tersisa persis karena itu.
-        // Di dalam loop, tool call yang datang diproses seperti biasa.
-        //
-        // Naik SEKALI per giliran, dan percobaannya tidak menghabiskan jatah
-        // putaran tool (`attempt--`). Plafon dasar tetap 500: mayoritas
-        // giliran selesai jauh di bawah itu, dan menaikkannya secara global
-        // berarti semua giliran membayar untuk kasus yang jarang.
-        if (
-          !plafonSudahDinaikkan &&
-          res.finish_reason === 'length' &&
-          !text.trim() &&
-          (!toolCalls || toolCalls.length === 0)
-        ) {
-          plafonSudahDinaikkan = true;
-          plafon = 4000;
-          attempt--;
-          this.logger.warn(
-            `Anggaran token habis sebelum jawaban ditulis (${conversationId}) — mengulang dengan plafon ${plafon}`,
-          );
-          continue;
-        }
-
+        // >>> ANGGA — catatan sejarah (2026-08-10): di sini DULU ada eskalasi
+        // plafon token. Dicabut sore harinya karena plafon dasar dinaikkan —
+        // alasan lengkap di deklarasi `plafon` di atas. Keadaan yang dulu ia
+        // tangani (`finish_reason: 'length'` + teks kosong + tanpa tool call)
+        // sekarang tidak lahir lagi: jatah 4000 tidak habis dipakai penalaran
+        // sebelum satu kata pun ditulis. Kalau kelak ia muncul lagi, itu
+        // gejala BARU dan pantas didiagnosis ulang — jangan pasang kembali
+        // eskalasinya secara refleks. <<<
         if (!toolCalls || toolCalls.length === 0) {
           break; // LLM returned final text
         }

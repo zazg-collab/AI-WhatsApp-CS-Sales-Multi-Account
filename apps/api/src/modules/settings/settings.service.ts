@@ -84,7 +84,13 @@ export class SettingsService {
         model: this.config.get<string>('AI_MODEL') ?? 'gpt-4o-mini',
         sentinelModel: this.config.get<string>('SENTINEL_MODEL') ?? this.config.get<string>('HERMES_MODEL') ?? '',
         temperature: this.num(this.config.get('AI_TEMPERATURE'), 0.6),
-        timeoutMs: this.num(this.config.get('AI_TIMEOUT_MS'), 30_000),
+        // >>> ANGGA — fix (2026-08-10): 30 detik TERUKUR kesempitan. Median
+        // satu giliran 13,5-38,4 detik lewat 2-4 panggilan provider, dan
+        // panggilan berplafon besar sendirian menembus 30 detik — itu yang
+        // memulangkan HTTP 500 di 3 dari 5 putaran. 60 detik memberi ruang
+        // untuk satu panggilan terlama yang pernah terukur, dengan satu retry
+        // = 120 detik terburuk. Angkanya dari pengukuran, bukan perasaan. <<<
+        timeoutMs: this.num(this.config.get('AI_TIMEOUT_MS'), 60_000),
         embedModel: this.config.get<string>('AI_EMBED_MODEL') ?? '',
         embedDim: this.num(this.config.get('AI_EMBED_DIM'), 1536),
         ragMode: (this.config.get<string>('AI_RAG_MODE') as 'hybrid' | 'agentic') ?? 'hybrid',
