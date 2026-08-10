@@ -3556,6 +3556,37 @@ export class ShippingService {
    *
    * MURNI baca terhadap keadaan: tidak menulis cache, tidak memanggil apa pun.
    * <<< */
+  /**
+   * >>> ANGGA — LANGKAH 5 (2026-08-10): SATU definisi "titipan langkah ini milik
+   * GILIRAN YANG SEDANG BERJALAN". Diekstrak dari `komposisiFunnel` supaya
+   * `langkahUntukGiliran` di bawah mustahil drift darinya — komentar di
+   * `resolvePriceTokens` sudah mewajibkan penjaga-penjaga ini identik, dan
+   * penyanggal K23 menemukan pembaca ketiga (`getFunnelExpect`) yang melanggar
+   * itu: ia mencap pesan dengan langkah yang kalimatnya justru TIDAK ditempel.
+   */
+  private expectGiliranIni(conversationId: string) {
+    const expectF = this.cache.funnelExpect(conversationId);
+    const msgIdNow = (this.turnMemo.get(conversationId)?.key ?? '').split(':')[0] || '';
+    if (!expectF || !msgIdNow || expectF.messageId !== msgIdNow) return null;
+    return expectF;
+  }
+
+  /**
+   * >>> ANGGA — LANGKAH 5 (2026-08-10): langkah yang DITANYAKAN balasan giliran
+   * ini, untuk ditempelkan ke kolom `Message.funnelStep` pesan keluarnya.
+   *
+   * Beda dari `getFunnelExpect` (yang sengaja TIDAK dipagari `messageId` karena
+   * dipakai menjadwalkan follow-up: di sana yang ditanya "apakah kita sedang di
+   * closing", bukan "apakah giliran ini yang menanyakannya").
+   *
+   * SENGAJA tidak memakai `komposisiFunnel().step`: komposisi hanya lahir kalau
+   * `REPLY_CONTRACT_ENABLED=true`, dan bawaannya FALSE (F4 ditidurkan) — memakai
+   * itu akan membuat kolomnya selalu null di konfigurasi yang berjalan sekarang.
+   */
+  public langkahUntukGiliran(conversationId: string): string | null {
+    return this.expectGiliranIni(conversationId)?.step ?? null;
+  }
+
   public komposisiFunnel(
     conversationId: string,
     prosa: string,
@@ -3564,9 +3595,8 @@ export class ShippingService {
     // `AiService.generateSegmentedReply`.
     opts: { tempel?: boolean } = {},
   ): { text: string; step: string | null; disisipkan: boolean; salinanDibuang: number } {
-    const expectF = this.cache.funnelExpect(conversationId);
-    const msgIdNow = (this.turnMemo.get(conversationId)?.key ?? '').split(':')[0] || '';
-    if (!expectF || !msgIdNow || expectF.messageId !== msgIdNow) {
+    const expectF = this.expectGiliranIni(conversationId);
+    if (!expectF) {
       return { text: prosa, step: null, disisipkan: false, salinanDibuang: 0 };
     }
     const hasil = susunBalasan(prosa, expectF.kalimat ?? '', opts);

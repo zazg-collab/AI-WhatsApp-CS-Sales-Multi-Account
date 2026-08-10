@@ -30,8 +30,10 @@ import {
   HttpCode,
   HttpStatus,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { TestHarnessRepository } from './test-harness.repository';
+import { OrderContextService } from '../modules/shipping/order-context.service';
 import { ChatSessionManager } from './chat-session.manager';
 import { DebugInfoCollector } from './debug-info.collector';
 // >>> ANGGA — F3c (2026-08-09, cowork): provider NON-mock kini lewat otak yang
@@ -55,6 +57,11 @@ export class TestHarnessController {
     private readonly debugCollector: DebugInfoCollector,
     private readonly pipeline: ReplyPipelineService,
     private readonly scenarioLoader: ScenarioLoader,
+    // >>> ANGGA — LANGKAH 5 (2026-08-10): sesi uji mempromosikan langkah funnel
+    // lewat jalur yang SAMA dengan produksi — bukan cabang khusus tester.
+    // Opsional supaya spec lama yang menyusun controller ini dengan lima
+    // argumen tetap sah. <<<
+    @Optional() private readonly orderLog?: OrderContextService,
   ) {}
 
   /**
@@ -137,6 +144,8 @@ export class TestHarnessController {
     // substitusi penanda sudah terjadi di dalam `ai.generateReply`
     // (gerbang uang), sama seperti produksi.
     let resolvedText: string;
+    // >>> ANGGA — LANGKAH 5 (2026-08-10): langkah funnel yang dititipkan kanal. <<<
+    let langkahFunnel: string | null = null;
     let executedTools: any[] | undefined;
     let outcome: string | undefined;
     let moneyGateIssues: string[] = [];
@@ -174,6 +183,10 @@ export class TestHarnessController {
       // (`skipped`) yang alasannya dibuang. <<<
       outcome = 'reason' in hasil && hasil.reason ? `${hasil.kind}:${hasil.reason}` : hasil.kind;
       moneyGateIssues = channel.moneyGateIssues;
+      // >>> ANGGA — LANGKAH 5 (2026-08-10): langkah funnel dititipkan kanal,
+      // dipasang ke baris `Message` yang SUNGGUHAN di bawah. Hanya untuk
+      // giliran yang benar-benar terkirim — sama persis dengan produksi. <<<
+      if (hasil.kind === 'sent') langkahFunnel = channel.funnelStep;
       resolvedText = channel.text ?? '';
       catatanSistem = !resolvedText.trim();
       if (!resolvedText.trim()) {
@@ -198,7 +211,17 @@ export class TestHarnessController {
       content: resolvedText,
       debugInfo,
       catatanSistem,
+      funnelStep: langkahFunnel,
     });
+
+    // >>> ANGGA — LANGKAH 5 (2026-08-10): promosi memakai id baris `Message`
+    // yang SUNGGUHAN. Di produksi ini dipicu `noteOutbound`/ujung `run()`;
+    // di sini barisnya baru lahir sesudah `run()`, jadi dipicu dari sini.
+    // Klaim atomik di `promosikanLangkahTerkirim` yang menjaga supaya
+    // pemanggilan ganda tetap menghasilkan satu catatan. <<<
+    if (langkahFunnel && conversationIdUntukDebug) {
+      await this.orderLog?.promosikanLangkahTerkirim(conversationIdUntukDebug, assistantMessage.id);
+    }
 
     return {
       message: userMessage,

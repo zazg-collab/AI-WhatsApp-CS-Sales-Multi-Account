@@ -219,3 +219,232 @@ describe('LANGKAH 2a: penanda lifecycle mencabut titipan langkah funnel', () => 
     await expect(svc.recordMarker('c1', 'completed', 'closing')).resolves.toBeUndefined();
   });
 });
+
+/**
+ * >>> ANGGA — LANGKAH 5 (2026-08-10, ketok Bossfren): LANGKAH FUNNEL MENEMPEL
+ * PADA PESAN KELUAR, lewat kolom `Message.funnelStep`.
+ *
+ * Sebelumnya sumber promosi adalah `funnelExpect` — SATU slot per PERCAKAPAN,
+ * di MEMORI — padahal yang dipromosikan milik SATU pesan keluar yang bisa baru
+ * terkirim lama kemudian (draft menunggu approve) atau tidak pernah. Dua mode
+ * gagalnya: (1) RESTART menghapus Map-nya; (2) giliran berikutnya (atau
+ * endpoint debug grounding) MENIMPA slotnya.
+ *
+ * ⚠️ Rancangan PERTAMA untuk ini — baris `funnel_pending` di `OrderContextEvent`
+ * — sudah ditulis sampai 1016/1016 hijau lalu DICABUT UTUH. Audit K23 mengukur:
+ * ia mati senyap sesudah tepat 17 giliran (pembacanya ikut `take: 50`), menyusutkan
+ * ingatan lima pembaca log sebesar 33%, dan lupa `break` di penanda segmen
+ * sehingga approve draft lama menghapus konteks order berjalan. Kolom pada
+ * `Message` menghapus keempatnya sekaligus: pencarian lewat primary key, nol
+ * baris tambahan, tidak punya konsep segmen. Rinciannya di
+ * `20260810-langkah5-rancangan-funnel-pending-dicabut`. JANGAN diulang.
+ *
+ * Konsumsinya adalah KLAIM ATOMIK: `updateMany` yang mensyaratkan `funnelStep`
+ * masih terisi lalu mengosongkannya. `count === 0` berarti sudah dipromosikan —
+ * pagar idempotensi yang tahan restart DAN tahan dua approve bersamaan, tanpa
+ * Set di memori. Pola yang sama sudah dipakai `approveDraft` di repo ini.
+ */
+describe('LANGKAH 5: promosi mengklaim `Message.funnelStep` secara atomik', () => {
+  /** Prisma tiruan yang MENGHORMATI argumennya. Harness sebelumnya mengabaikan
+   *  `where`/`orderBy`/`take` — penyanggal K23 membuktikan test semacam itu tetap
+   *  hijau walau filter percakapan dihapus dan `take` dipotong ke 1. */
+  function harnessPesan(pesan: Array<{ id: string; funnelStep: string | null; createdAt?: Date }> = []) {
+    const messages = new Map(pesan.map((m) => [m.id, { createdAt: new Date(), ...m }]));
+    const rows: Array<{ conversationId: string; type: string; payload: any; createdAt: Date }> = [];
+    const create = jest.fn(async ({ data }: any) => {
+      rows.unshift({ ...data, createdAt: new Date() });
+      return data;
+    });
+    const findMany = jest.fn(async (args: any) => {
+      let out = rows.filter((r) => r.conversationId === args?.where?.conversationId);
+      if (args?.orderBy?.createdAt === 'asc') out = [...out].reverse();
+      return typeof args?.take === 'number' ? out.slice(0, args.take) : out;
+    });
+    const updateMany = jest.fn(async ({ where, data }: any) => {
+      // Sapuan per-percakapan (dipakai `recordMarker`): tanpa `id`, kena SEMUA
+      // pesan yang kolomnya masih terisi.
+      if (where && !where.id && where.funnelStep?.not === null) {
+        let n = 0;
+        for (const m of messages.values()) {
+          if (m.funnelStep !== null) { m.funnelStep = data?.funnelStep ?? null; n++; }
+        }
+        return { count: n };
+      }
+      const m = messages.get(where?.id);
+      if (!m) return { count: 0 };
+      // Menghormati syarat `funnelStep: { not: null }` — inti klaim atomiknya.
+      if (where?.funnelStep?.not === null && m.funnelStep === null) return { count: 0 };
+      if (typeof where?.funnelStep === 'string' && m.funnelStep !== where.funnelStep) return { count: 0 };
+      m.funnelStep = data?.funnelStep ?? null;
+      return { count: 1 };
+    });
+    // POTRET, bukan referensi hidup — DB sungguhan memulangkan salinan. Tanpa
+    // ini, pembaca kedua dalam satu balapan ikut melihat perubahan pembaca
+    // pertama, dan mutasi "syarat klaim atomik dihapus" lolos tanpa ketahuan.
+    const findUnique = jest.fn(async ({ where }: any) => {
+      const m = messages.get(where?.id);
+      return m ? { ...m } : null;
+    });
+    const prisma: any = {
+      orderContextEvent: { create, findMany },
+      message: { updateMany, findUnique },
+    };
+    const settings: any = {
+      shipping: jest.fn().mockResolvedValue({ orderContextStaleHours: 24 }),
+      orderContext: jest.fn().mockResolvedValue({
+        orderContextStaleHours: 24, orderOfferWindowMinutes: 60,
+        orderClosingNote: '', orderFormHintKeywords: [],
+      }),
+    };
+    const cache = new ShippingQuoteCache();
+    const svc = new OrderContextService(prisma, settings, cache);
+    const svcSetelahRestart = () => new OrderContextService(prisma, settings, new ShippingQuoteCache());
+    const asks = () => rows.filter((r) => r.type === 'funnel_ask');
+    return { svc, svcSetelahRestart, cache, rows, messages, asks, updateMany };
+  }
+
+  it('pesan yang membawa langkah → `funnel_ask` ditulis dan kolomnya DIKOSONGKAN', async () => {
+    const h = harnessPesan([{ id: 'out-1', funnelStep: 'patokan' }]);
+
+    await h.svc.promosikanLangkahTerkirim('c1', 'out-1');
+
+    expect(h.asks()).toHaveLength(1);
+    expect(h.asks()[0].payload).toEqual(expect.objectContaining({ step: 'patokan', messageId: 'out-1' }));
+    expect(h.messages.get('out-1')?.funnelStep).toBeNull();
+  });
+
+  it('TERTIMPA: cache sudah berisi langkah LAIN, promosi tetap memakai milik PESAN', async () => {
+    const h = harnessPesan([{ id: 'out-1', funnelStep: 'closing' }]);
+    // Giliran berikutnya (atau endpoint debug grounding) menimpa slot percakapan.
+    h.cache.setFunnelExpect('c1', { messageId: 'cust-9', step: 'qty', kalimat: 'berapa pcs' });
+
+    await h.svc.promosikanLangkahTerkirim('c1', 'out-1');
+
+    expect(h.asks()).toHaveLength(1);
+    expect(h.asks()[0].payload).toEqual(expect.objectContaining({ step: 'closing' }));
+  });
+
+  it('RESTART: cache kosong total, promosi tetap jalan dari kolom pesan', async () => {
+    const h = harnessPesan([{ id: 'out-1', funnelStep: 'closing' }]);
+
+    await h.svcSetelahRestart().promosikanLangkahTerkirim('c1', 'out-1');
+
+    expect(h.asks()).toHaveLength(1);
+    expect(h.rows.some((r) => r.type === 'completed')).toBe(true);
+  });
+
+  it('IDEMPOTEN LINTAS RESTART: approve dua kali → tetap SATU `funnel_ask`', async () => {
+    const h = harnessPesan([{ id: 'out-1', funnelStep: 'closing' }]);
+
+    await h.svc.promosikanLangkahTerkirim('c1', 'out-1');
+    await h.svcSetelahRestart().promosikanLangkahTerkirim('c1', 'out-1');
+
+    expect(h.asks()).toHaveLength(1);
+    expect(h.rows.filter((r) => r.type === 'completed')).toHaveLength(1);
+  });
+
+  /**
+   * Yang membuat klaimnya harus ATOMIK, bukan sekadar "baca lalu tulis": DUA
+   * pemanggil bisa membaca kolom yang sama sebelum salah satunya sempat
+   * mengosongkannya. Nyata di produksi — jalur kirim WA menembak `noteOutbound`
+   * dan pipeline juga mempromosikan di ujung `run()`.
+   *
+   * Test ini yang MEMBUNUH mutasi "syarat `funnelStep: { not: null }` dihapus";
+   * versi sekuensial di atas tidak, karena `findUnique` sudah menyaringnya.
+   * Dibuktikan dengan menjalankan mutasinya, bukan diasumsikan.
+   */
+  it('BALAPAN: dua promosi bersamaan untuk pesan yang sama → tetap SATU `funnel_ask` dan SATU `completed`', async () => {
+    const h = harnessPesan([{ id: 'out-1', funnelStep: 'closing' }]);
+    const lain = h.svcSetelahRestart();
+
+    await Promise.all([
+      h.svc.promosikanLangkahTerkirim('c1', 'out-1'),
+      lain.promosikanLangkahTerkirim('c1', 'out-1'),
+    ]);
+
+    expect(h.asks()).toHaveLength(1);
+    expect(h.rows.filter((r) => r.type === 'completed')).toHaveLength(1);
+  });
+
+  /** Tanpa ini: pelanggan membatalkan → admin approve draft `closing` lama →
+   *  penanda `completed` tertulis di atas `cancelled` → `candidates()` break →
+   *  konteks order yang sedang berjalan MUSNAH. Temuan penyanggal K23. */
+  it('penanda lifecycle MENGOSONGKAN kolom seluruh percakapan (bukan cuma cache)', async () => {
+    const h = harnessPesan([
+      { id: 'draft-lama', funnelStep: 'closing' },
+      { id: 'draft-lain', funnelStep: 'patokan' },
+    ]);
+
+    await h.svc.recordMarker('c1', 'cancelled', 'cancel_keyword');
+
+    expect(h.messages.get('draft-lama')?.funnelStep).toBeNull();
+    expect(h.messages.get('draft-lain')?.funnelStep).toBeNull();
+
+    await h.svc.promosikanLangkahTerkirim('c1', 'draft-lama');
+    expect(h.asks()).toHaveLength(0);
+    expect(h.rows.filter((r) => r.type === 'completed')).toHaveLength(0);
+  });
+
+  /** Kolom ini tidak punya umur, sementara cache punya `funnelExpectSegar` DAN
+   *  amnesia restart. "Tahan restart" justru menghapus pembatas umur itu. */
+  it('pesan yang lebih tua dari `orderContextStaleHours` DITOLAK', async () => {
+    const h = harnessPesan([
+      { id: 'out-tua', funnelStep: 'closing', createdAt: new Date(Date.now() - 25 * 3_600_000) },
+    ]);
+
+    await h.svc.promosikanLangkahTerkirim('c1', 'out-tua');
+
+    expect(h.rows).toHaveLength(0);
+    expect(h.messages.get('out-tua')?.funnelStep).toBe('closing');
+  });
+
+  /** Jalur approve draft & jalur kirim WA memakai `noteOutbound`. Mutasi
+   *  "hapus promosi dari `noteOutboundSent`" sebelumnya LOLOS 1019 test —
+   *  yaitu seluruh alasan pekerjaan ini ada tidak terjaga sama sekali. */
+  it('`noteOutbound` (approve admin / kirim WA) MEMPROMOSIKAN langkah pesan itu', async () => {
+    const h = harnessPesan([{ id: 'draft-1', funnelStep: 'patokan' }]);
+
+    await h.svc.noteOutbound('c1', 'draft-1', 'boleh diinfokan alamat lengkapnya kak?');
+
+    expect(h.asks()).toHaveLength(1);
+    expect(h.asks()[0].payload).toEqual(expect.objectContaining({ step: 'patokan', messageId: 'draft-1' }));
+  });
+
+  it('pesan tanpa langkah (mis. jawaban biasa) → nol baris', async () => {
+    const h = harnessPesan([{ id: 'out-1', funnelStep: null }]);
+    await h.svc.promosikanLangkahTerkirim('c1', 'out-1');
+    expect(h.rows).toHaveLength(0);
+  });
+
+  it('klaim ditujukan ke PESAN yang benar — id lain tidak ikut terklaim', async () => {
+    // Langkah non-`closing` SENGAJA: `closing` memicu penanda `completed`, dan
+    // penanda menyapu kolom seluruh percakapan (lihat test berikutnya). Test ini
+    // menguji SASARAN KLAIM, jadi jangan dicampur dengan efek penanda.
+    const h = harnessPesan([
+      { id: 'out-1', funnelStep: 'patokan' },
+      { id: 'out-2', funnelStep: 'total' },
+    ]);
+
+    await h.svc.promosikanLangkahTerkirim('c1', 'out-1');
+
+    expect(h.messages.get('out-1')?.funnelStep).toBeNull();
+    expect(h.messages.get('out-2')?.funnelStep).toBe('total'); // tidak tersentuh
+    expect(h.asks()).toHaveLength(1);
+  });
+
+  /** Efek samping yang DISENGAJA dan dicatat, bukan kejutan: closing yang
+   *  benar-benar terkirim menutup sesi order, dan penutupan menyapu titipan
+   *  langkah yang masih menempel di draft lain percakapan itu. Kalau tidak,
+   *  draft lama bisa dipromosikan ke dalam order berikutnya. */
+  it('closing yang TERKIRIM menutup sesi → titipan draft lain di percakapan itu ikut disapu', async () => {
+    const h = harnessPesan([
+      { id: 'out-closing', funnelStep: 'closing' },
+      { id: 'draft-lain', funnelStep: 'patokan' },
+    ]);
+
+    await h.svc.promosikanLangkahTerkirim('c1', 'out-closing');
+
+    expect(h.rows.filter((r) => r.type === 'completed')).toHaveLength(1);
+    expect(h.messages.get('draft-lain')?.funnelStep).toBeNull();
+  });
+});

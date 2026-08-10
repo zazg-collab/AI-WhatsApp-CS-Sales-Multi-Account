@@ -189,6 +189,12 @@ export class AiService {
     return this.cache.stats();
   }
 
+  /** >>> ANGGA — LANGKAH 5 (2026-08-10): langkah yang ditanyakan balasan giliran
+   *  INI (dipagari `messageId`). Untuk kolom `Message.funnelStep`. <<< */
+  langkahUntukGiliran(conversationId: string): string | null {
+    return this.shipping?.langkahUntukGiliran?.(conversationId) ?? null;
+  }
+
   getFunnelExpect(conversationId: string) {
     return this.shipping?.getFunnelExpect(conversationId) ?? null;
   }

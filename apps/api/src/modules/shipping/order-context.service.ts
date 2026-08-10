@@ -258,6 +258,21 @@ export class OrderContextService {
       // sensor harga + kompresi riwayat menyala PERMANEN. Itu cacat terpisah
       // dengan sebab terpisah — irisannya sendiri, bukan ditumpangkan ke sini. <<<
       this.quoteCache?.clearFunnelExpect(conversationId);
+      // >>> ANGGA — LANGKAH 5 (2026-08-10, temuan K23): kolom `Message.funnelStep`
+      // ikut dikosongkan. `clearFunnelExpect` di atas hanya mencabut CACHE;
+      // tanpa baris ini, draft lama yang masih membawa langkah `closing` bisa
+      // di-approve SESUDAH pelanggan membatalkan — penanda `completed` tertulis
+      // di atas `cancelled`, dan `candidates()` yang break di penanda membuat
+      // konteks order yang sedang berjalan MUSNAH (terukur 1 → 0).
+      //
+      // ⚠️ Urutannya kritis: WAJIB sesudah `clearFunnelExpect`, bukan sebelum.
+      // Harness lama ada yang hanya mem-mock `orderContextEvent`; kalau baris
+      // ini didahulukan, `prisma.message` undefined melempar lebih dulu dan
+      // pencabutan cache LANGKAH 2a mati senyap. <<<
+      await this.prisma.message.updateMany({
+        where: { conversationId, funnelStep: { not: null } },
+        data: { funnelStep: null },
+      });
     } catch (err) {
       this.logger.warn(`Gagal menulis penanda ${type} ${conversationId}: ${err}`);
     }
@@ -365,30 +380,60 @@ export class OrderContextService {
    * draft dibuat (draft bisa diedit/ditolak; v1.1 §12.3-11). Catatan kosong /
    * terlalu pendek → fitur mati (fallback: resolve percakapan).
    */
-  /** >>> ANGGA — fix (2026-08-10): promosikan langkah funnel yang tertunda
-   *  menjadi catatan permanen — dipanggil HANYA dari jalur pesan yang
-   *  BENAR-BENAR TERKIRIM (pipeline balasan untuk WhatsApp maupun tester, dan
-   *  `noteOutboundSent` untuk jalur kirim lain). Idempoten: aman dipanggil
-   *  dua kali untuk pesan yang sama. <<< */
-  private readonly langkahDipromosikan = new Set<string>();
-
-  async promosikanLangkahTerkirim(conversationId: string): Promise<void> {
-    if (!conversationId) return;
-    const tertunda = this.quoteCache?.funnelExpect(conversationId) ?? null;
-    if (!tertunda?.step) return;
-    const kunci = `${conversationId}:${tertunda.step}:${tertunda.messageId ?? ''}`;
-    if (this.langkahDipromosikan.has(kunci)) return;
-    this.langkahDipromosikan.add(kunci);
-    while (this.langkahDipromosikan.size > 1000) {
-      const tertua = this.langkahDipromosikan.values().next().value;
-      if (tertua === undefined) break;
-      this.langkahDipromosikan.delete(tertua);
+  /**
+   * >>> ANGGA — LANGKAH 5 (2026-08-10): sumber langkah adalah KOLOM PADA PESAN
+   * (`Message.funnelStep`), bukan lagi `funnelExpect` di cache.
+   *
+   * `funnelExpect` tetap hidup dan tetap dibutuhkan untuk GILIRAN BERJALAN
+   * (gerbang kalimat wajib, sensor harga, mode funnel) — yang pindah HANYA
+   * sumber promosi. Alasannya: promosi terjadi saat pesan BENAR-BENAR terkirim,
+   * dan untuk draft itu bisa berjam-jam kemudian — sesudah slot per-percakapan
+   * ditimpa giliran lain, atau sesudah proses restart menghapus Map-nya.
+   *
+   * Konsumsinya KLAIM ATOMIK: `updateMany` mensyaratkan kolomnya masih terisi
+   * lalu mengosongkannya. `count === 0` = sudah dipromosikan pihak lain. Itu
+   * menggantikan Set `langkahDipromosikan` yang DICABUT — ia menjaga dari
+   * memori, jadi hilang tiap restart, persis pada jalur yang paling mungkin
+   * melewati restart. Pola klaim ini sama dengan `approveDraft`.
+   */
+  async promosikanLangkahTerkirim(conversationId: string, messageId: string): Promise<void> {
+    if (!conversationId || !messageId) return;
+    let step: string;
+    try {
+      const pesan = await this.prisma.message.findUnique({
+        where: { id: messageId },
+        select: { funnelStep: true, createdAt: true },
+      });
+      if (!pesan?.funnelStep) return;
+      // >>> ANGGA — LANGKAH 5 (2026-08-10, temuan K23): BATAS UMUR. Cache punya
+      // `funnelExpectSegar` DAN amnesia restart yang tanpa sengaja menjinakkan
+      // titipan basi; kolom ini tidak punya keduanya — "tahan restart" justru
+      // menghapus satu-satunya pembatas umur yang ada. Draft `closing` yang
+      // di-approve tiga hari kemudian tidak boleh menutup order. Ambangnya
+      // memakai setelan yang SUDAH ada, bukan angka karangan. <<<
+      const oc = await this.oc();
+      const umurMaksMs = Math.max(1, oc.orderContextStaleHours ?? 24) * 3_600_000;
+      if (Date.now() - new Date(pesan.createdAt).getTime() > umurMaksMs) {
+        this.logger.warn(
+          `Langkah funnel pesan ${messageId} DIABAIKAN — pesannya lebih tua dari ${oc.orderContextStaleHours ?? 24} jam.`,
+        );
+        return;
+      }
+      step = pesan.funnelStep;
+      const klaim = await this.prisma.message.updateMany({
+        where: { id: messageId, funnelStep: { not: null } },
+        data: { funnelStep: null },
+      });
+      if (klaim.count === 0) return; // sudah diklaim pemanggil lain
+    } catch (err) {
+      this.logger.warn(`Gagal mengklaim langkah funnel pesan ${messageId}: ${err}`);
+      return;
     }
     try {
-      await this.recordFunnelAsk(conversationId, tertunda.step, tertunda.messageId ?? '');
+      await this.recordFunnelAsk(conversationId, step, messageId);
       // Closing yang BENAR-BENAR TERKIRIM = order selesai. Ini penentu utama;
       // pencocokan string `orderClosingNote` tetap ada sebagai jalur kedua.
-      if (tertunda.step === 'closing') {
+      if (step === 'closing') {
         await this.recordMarker(conversationId, 'completed', 'closing');
       }
     } catch (err) {
@@ -396,7 +441,7 @@ export class OrderContextService {
     }
   }
 
-  async noteOutboundSent(conversationId: string, text: string): Promise<void> {
+  async noteOutboundSent(conversationId: string, messageId: string, text: string): Promise<void> {
     if (!conversationId || !text) return;
 
     // >>> ANGGA — fix (2026-08-10, TERBUKTI merugikan di lapangan): langkah
@@ -413,7 +458,7 @@ export class OrderContextService {
     // membakar satu langkah. Arah kegagalannya sekarang aman: kalau promosi
     // ini gagal, langkahnya TIDAK tercatat dan bot mengulang pertanyaannya —
     // jauh lebih baik daripada melompatinya diam-diam. <<<
-    await this.promosikanLangkahTerkirim(conversationId);
+    await this.promosikanLangkahTerkirim(conversationId, messageId);
     try {
       // Order SELESAI. Dulu satu-satunya pendeteksinya adalah pencocokan
       // string `orderClosingNote` VERBATIM di teks — dan nilai bawaannya
@@ -446,7 +491,7 @@ export class OrderContextService {
   // PENAWARAN: teks yang menyebut produk katalog tercatat sebagai offer.
   // Fire-and-forget dari jalur kirim; tidak pernah melempar.
   async noteOutbound(conversationId: string, messageId: string, text: string): Promise<void> {
-    await this.noteOutboundSent(conversationId, text);
+    await this.noteOutboundSent(conversationId, messageId, text);
     await this.scanOffer(conversationId, messageId, text, 'text');
   }
 

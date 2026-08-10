@@ -299,11 +299,12 @@ export class WaInboundService {
       expireStaleDrafts: async (convo: ReplyConversation) => {
         await this.expireStaleDrafts(convo.id, convo.whatsappAccountId);
       },
-      send: async (convo: ReplyConversation, text: string, sentinelReviewId?: string) => {
+      send: async (convo: ReplyConversation, text: string, sentinelReviewId?: string, funnelStep?: string | null) => {
         const message = await this.sendAndStore(
           { id: convo.id, whatsappAccountId: convo.whatsappAccountId, customer: { phoneNumber: convo.customer.phoneNumber } },
           text,
           sentinelReviewId,
+          funnelStep,
         );
         return { messageId: message.id };
       },
@@ -315,6 +316,7 @@ export class WaInboundService {
           opts?.sentinelReviewId,
           opts?.quotedMessageId,
           opts?.moneyGateIssues,
+          opts?.funnelStep,
         );
       },
       notifyAdmin: (pesan: string) => {
@@ -370,6 +372,11 @@ export class WaInboundService {
     convo: { id: string; whatsappAccountId: string; customer: { phoneNumber: string } },
     text: string,
     sentinelReviewId?: string,
+    // >>> ANGGA — LANGKAH 5 (2026-08-10): langkah funnel ditulis BERSAMAAN
+    // dengan baris pesannya, dalam satu `create`. Tidak ada jendela antara
+    // "pesan lahir" dan "langkah menempel", jadi tidak ada yang bisa membaca
+    // pesan itu sebelum langkahnya ada. <<<
+    funnelStep?: string | null,
   ) {
     const externalId = await this.gateway.sendText(convo.whatsappAccountId, phoneToJid(convo.customer.phoneNumber), text);
     const message = await this.prisma.message.create({
@@ -381,6 +388,7 @@ export class WaInboundService {
         aiGenerated: true,
         externalId,
         sentinelReviewId,
+        funnelStep: funnelStep ?? undefined,
       },
     });
     await this.prisma.conversation.update({
@@ -404,6 +412,10 @@ export class WaInboundService {
     sentinelReviewId?: string,
     quotedMessageId?: string | null,
     moneyGateIssues?: string[],
+    // >>> ANGGA — LANGKAH 5 (2026-08-10): draft membawa langkahnya sendiri.
+    // Inilah kasus utamanya — approve bisa berjam-jam kemudian, sesudah slot
+    // per-percakapan di memori ditimpa giliran lain atau hilang kena restart. <<<
+    funnelStep?: string | null,
   ) {
     const message = await this.prisma.message.create({
       data: {
@@ -420,6 +432,7 @@ export class WaInboundService {
         // klik "Approve" tanpa "Edit" dulu akan mengirim teks debug internal
         // itu apa adanya ke pelanggan. content sekarang SELALU bersih.
         moneyGateIssues: moneyGateIssues?.length ? moneyGateIssues : undefined,
+        funnelStep: funnelStep ?? undefined,
       },
       // Include the quoted source so the dashboard can show which customer
       // message each segmented draft answers, and this draft's OWN Sentinel

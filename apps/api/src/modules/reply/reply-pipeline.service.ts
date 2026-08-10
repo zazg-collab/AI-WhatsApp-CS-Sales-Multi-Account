@@ -60,7 +60,7 @@ export class ReplyPipelineService {
   async run(conversationId: string, channel: ReplyChannel, opts?: { model?: string }): Promise<ReplyOutcome> {
     const hasil = await this.jalankan(conversationId, channel, opts);
     if (this.dianggapSampai(hasil)) {
-      void this.orderLog?.promosikanLangkahTerkirim(conversationId);
+      if (hasil.kind === 'sent') void this.orderLog?.promosikanLangkahTerkirim(conversationId, hasil.messageId);
     }
     return hasil;
   }
@@ -160,9 +160,14 @@ export class ReplyPipelineService {
     if (fresh.takeoverStatus === TakeoverStatus.admin_takeover) return { kind: 'skipped', reason: 'stale' };
     if (fresh.aiMode === AiMode.ai_off || fresh.aiMode === AiMode.ai_paused) return { kind: 'skipped', reason: 'stale' };
     const effectiveMode = fresh.aiMode;
+    // >>> ANGGA — LANGKAH 5 (2026-08-10): langkah funnel dibaca SEKALI di sini,
+    // lalu diserahkan ke kanal supaya dipersist bersamaan dengan baris pesannya.
+    // Dibaca di pipeline, bukan di adapter: keputusan tetap satu tempat, dan
+    // adapter baru tidak bisa lupa membawanya. <<<
+    const langkahFunnel = this.ai.langkahUntukGiliran(conversationId);
 
     if (moneyBlocked) {
-      await channel.draft(convo, text, { moneyGateIssues });
+      await channel.draft(convo, text, { moneyGateIssues, funnelStep: langkahFunnel });
       channel.notifyAdmin(
         `⚠️ Gerbang uang menahan balasan
 ${convo.customer.phoneNumber}: ${(moneyGateIssues ?? []).join('; ')}
@@ -172,7 +177,7 @@ Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
     }
 
     if (effectiveMode === AiMode.ai_draft) {
-      await channel.draft(convo, text);
+      await channel.draft(convo, text, { funnelStep: langkahFunnel });
       return { kind: 'drafted', reason: 'ai-draft' };
     }
 
@@ -182,21 +187,21 @@ Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
         review = await this.sentinel.review(conversationId, text);
       } catch (err) {
         this.logger.error(`Sentinel review failed (supervised mode fallback to draft): ${err instanceof Error ? err.message : err}`);
-        await channel.draft(convo, text);
+        await channel.draft(convo, text, { funnelStep: langkahFunnel });
         return { kind: 'drafted', reason: 'sentinel-error' };
       }
       if (review.decision === SentinelDecision.approve) {
         try {
-          const { messageId } = await channel.send(convo, text, review.id);
+          const { messageId } = await channel.send(convo, text, review.id, langkahFunnel);
           return { kind: 'sent', messageId };
         } catch (err) {
           this.logger.error(`Send failed after Sentinel approval (fallback to draft): ${err instanceof Error ? err.message : err}`);
-          await channel.draft(convo, text, { sentinelReviewId: review.id });
+          await channel.draft(convo, text, { sentinelReviewId: review.id, funnelStep: langkahFunnel });
           return { kind: 'drafted', reason: 'send-failed' };
         }
       }
       if (review.decision === SentinelDecision.draft) {
-        await channel.draft(convo, text, { sentinelReviewId: review.id });
+        await channel.draft(convo, text, { sentinelReviewId: review.id, funnelStep: langkahFunnel });
         return { kind: 'drafted', reason: 'sentinel-draft' };
       }
       await this.pauseAi(conversationId);
@@ -205,10 +210,10 @@ Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
 
     let messageId: string;
     try {
-      ({ messageId } = await channel.send(convo, text));
+      ({ messageId } = await channel.send(convo, text, undefined, langkahFunnel));
     } catch (err) {
       this.logger.error(`Send failed in ai_on mode (fallback to draft): ${err instanceof Error ? err.message : err}`);
-      await channel.draft(convo, text);
+      await channel.draft(convo, text, { funnelStep: langkahFunnel });
       return { kind: 'drafted', reason: 'send-failed' };
     }
 
@@ -275,13 +280,19 @@ Draft menunggu dicek admin (Edit dulu) sebelum bisa dikirim.`,
       }
     }
 
-    for (const segment of segments) {
+    // >>> ANGGA — LANGKAH 5 (ketok Bossfren 2026-08-10): kalimat funnel ditempel
+    // `komposisiFunnel` ke SEGMEN TERAKHIR, jadi langkahnya menempel di draft
+    // terakhir saja — bukan di semuanya (promosi berlipat) dan bukan di yang
+    // pertama (draft yang salah yang membawanya). <<<
+    const langkahBurst = this.ai.langkahUntukGiliran(conversationId);
+    for (const [i, segment] of segments.entries()) {
       const quotedMessageId =
         segment.answersIndex != null ? burst[segment.answersIndex - 1]?.id ?? null : null;
       await channel.draft(convo, segment.text, {
         sentinelReviewId: reviewId,
         quotedMessageId,
         moneyGateIssues: segment.moneyGateIssues,
+        funnelStep: i === segments.length - 1 ? langkahBurst : null,
       });
     }
 

@@ -43,6 +43,12 @@ describe('WaInboundService auto-reply', () => {
     ai = {
       generateReply: jest.fn().mockResolvedValue({ text: 'satu balasan' }),
       generateSegmentedReply: jest.fn(),
+      // >>> ANGGA — LANGKAH 5 (2026-08-10): pipeline membaca langkah funnel di
+      // jalur utama (dulu hanya saat menjadwalkan follow-up), jadi tiruannya
+      // harus punya metode ini. Penambahan ke OBJEK TIRUAN — nol assertion
+      // diubah, nol test dilemahkan. <<<
+      getFunnelExpect: jest.fn().mockResolvedValue(null),
+      langkahUntukGiliran: jest.fn().mockReturnValue(null),
     };
     const ingest = {};
     sentinel = { review: jest.fn().mockResolvedValue({ id: 'rev1', decision: 'approve' }) };
@@ -305,5 +311,53 @@ describe('WaInboundService auto-reply', () => {
     expect(msg).toMatch(/gerbang uang menahan/i);
     expect(msg).toContain('6281234567890'); // convo.customer.phoneNumber dari harness
     expect(msg).toContain('Angka rupiah ditulis langsung oleh model, bukan lewat penanda: 139000');
+  });
+
+  /**
+   * >>> ANGGA — LANGKAH 5 (2026-08-10): ADAPTER benar-benar MEMPERSIST langkahnya.
+   *
+   * Test pipeline hanya membuktikan langkahnya DIOPER ke kanal. Kalau adapter
+   * diam-diam membuangnya, kolomnya tidak pernah terisi dan seluruh rantai
+   * promosi jadi no-op — persis kelas "hijau tapi tidak jalan" yang meloloskan
+   * regresi `09c5e70`. Karena itu diuji di lapisan yang menulis barisnya.
+   */
+  describe('LANGKAH 5: langkah funnel ditulis bersamaan dengan baris pesan', () => {
+    it('ai_on: `funnelStep` masuk ke `message.create` pesan TERKIRIM', async () => {
+      conversation.aiMode = AiMode.ai_on;
+      ai.langkahUntukGiliran.mockReturnValue('closing');
+      (service as any).scheduleAutoReply('c1');
+      await jest.advanceTimersByTimeAsync(8_000);
+
+      const dibuat = prisma.message.create.mock.calls.map((c: any) => c[0].data);
+      const pesanKeluar = dibuat.find((d: any) => d.senderType === 'ai');
+      expect(pesanKeluar).toBeDefined();
+      expect(pesanKeluar.funnelStep).toBe('closing');
+    });
+
+    /** Mutasi "buang `funnelStep` dari `message.create` DRAFT" sebelumnya LOLOS
+     *  seluruh suite — padahal draft adalah kasus utamanya (approve bisa
+     *  berjam-jam kemudian). Ini yang menutupnya. */
+    it('ai_draft: `funnelStep` masuk ke `message.create` DRAFT', async () => {
+      conversation.aiMode = AiMode.ai_draft;
+      ai.langkahUntukGiliran.mockReturnValue('patokan');
+      (service as any).scheduleAutoReply('c1');
+      await jest.advanceTimersByTimeAsync(8_000);
+
+      const dibuat = prisma.message.create.mock.calls.map((c: any) => c[0].data);
+      const draft = dibuat.find((d: any) => d.senderType === 'ai');
+      expect(draft).toBeDefined();
+      expect(draft.funnelStep).toBe('patokan');
+    });
+
+    it('giliran tanpa langkah menggantung → kolomnya TIDAK diisi', async () => {
+      conversation.aiMode = AiMode.ai_on;
+      ai.langkahUntukGiliran.mockReturnValue(null);
+      (service as any).scheduleAutoReply('c1');
+      await jest.advanceTimersByTimeAsync(8_000);
+
+      const dibuat = prisma.message.create.mock.calls.map((c: any) => c[0].data);
+      const pesanKeluar = dibuat.find((d: any) => d.senderType === 'ai');
+      expect(pesanKeluar.funnelStep).toBeUndefined();
+    });
   });
 });

@@ -477,6 +477,15 @@ model Message {
   rawWaPayload   Json?         @map("raw_wa_payload")
   waMessageType  String?       @map("wa_message_type")
   senderName     String?       @map("sender_name")
+  /// >>> ANGGA — LANGKAH 5 (2026-08-10): langkah funnel yang DITANYAKAN oleh
+  /// pesan keluar INI. Diisi saat pesannya dibuat (kirim maupun draft), lalu
+  /// dikonsumsi saat pesan itu BENAR-BENAR terkirim — promosinya jadi baris
+  /// `funnel_ask`. Ditaruh di sini, bukan di log `OrderContextEvent`, karena
+  /// langkah itu memang ATRIBUT PESAN: ikut terhapus bersama pesannya, dicari
+  /// lewat primary key (tidak bisa tergeser keluar jendela pindai), dan tidak
+  /// mengencerkan jendela 50-baris yang dipakai bersama lima pembaca log.
+  /// Dikosongkan (null) saat dikonsumsi — itu sekaligus klaim atomiknya.
+  funnelStep     String?       @map("funnel_step")
   createdAt      DateTime      @default(now()) @map("created_at")
 
   conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)

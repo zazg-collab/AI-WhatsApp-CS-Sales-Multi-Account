@@ -1310,6 +1310,45 @@ describe('Q-Chain — funnel pertanyaan berantai (urutan pakem)', () => {
    * teks apa pun selain pilihan metode bayar — dan formulir closing yang
    * dibaca KURIR terkirim berbunyi "Alamat: udah lengkap itu aja."
    */
+  /**
+   * >>> ANGGA — LANGKAH 5 (2026-08-10), temuan penyanggal K23: pipeline sempat
+   * memakai `getFunnelExpect` untuk mencap pesan keluar — dan pembaca itu
+   * TIDAK punya pagar `messageId`, sementara kembarannya `komposisiFunnel`
+   * punya. Akibatnya pesan dicap langkah X sementara mesin yang menempelkan
+   * kalimat X menolak menempel: pesannya tidak memuat pertanyaan itu, tapi
+   * langkahnya tetap tercatat. Terjadi tiap giliran yang funnelnya DIAM
+   * (basa-basi) selama titipan lama belum dibersihkan — dan dua kali cukup
+   * untuk membuat `asks[step]` mencapai cap 2 lalu MEMBUNGKAM pertanyaannya.
+   *
+   * Karena itu pagarnya diekstrak jadi SATU definisi (`expectGiliranIni`) yang
+   * dipakai `komposisiFunnel` DAN `langkahUntukGiliran`. Bukan pagar keempat —
+   * justru menghapus kemungkinan drift antar salinan.
+   *
+   * ⚠️ SENGAJA TIDAK memakai `komposisiFunnel().step` seperti usul auditor:
+   * komposisi hanya lahir kalau `REPLY_CONTRACT_ENABLED=true`, dan bawaannya
+   * FALSE (F4 ditidurkan) — resep itu akan membuat kolomnya selalu null.
+   */
+  it('LANGKAH 5: `langkahUntukGiliran` hanya mengakui titipan milik GILIRAN INI', async () => {
+    const h = harness({
+      lastCustomerText: 'COD deh kak',
+      extract: { kota: null, items: [] },
+      logEntries: [entry([{ productId: 'p-golok', name: 'Golok Sembelih Multifungsi', qty: 2 }], { qtyPasti: true })],
+    });
+    (h.orderLog.funnelAsks as jest.Mock).mockResolvedValue({ total: 1 });
+    await h.svc.getGroundingText('c1');
+    const langkahGiliran1 = h.svc.langkahUntukGiliran('c1');
+    expect(langkahGiliran1).toBe(h.cache.funnelExpect('c1')?.step);
+    expect(langkahGiliran1).toBeTruthy();
+
+    // Giliran basa-basi: funnel DIAM, jadi titipan giliran 1 masih menggantung.
+    pesanBaru(h, 'm2', 'makasih ya kak udah dibantu');
+    await h.svc.getGroundingText('c1');
+
+    // Titipannya memang masih ada — tapi ia milik giliran SEBELUMNYA.
+    expect(h.cache.funnelExpect('c1')?.messageId).toBe('m1');
+    expect(h.svc.langkahUntukGiliran('c1')).toBeNull();
+  });
+
   it('REGRESI K23: kalimat konfirmasi TIDAK boleh masuk cache alamat', async () => {
     const h = harness({
       lastCustomerText: 'COD deh kak',

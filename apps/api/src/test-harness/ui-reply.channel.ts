@@ -25,24 +25,46 @@ export class UiReplyChannel implements ReplyChannel {
   moneyGateIssues: string[] = [];
   /** Pemberitahuan yang di produksi dikirim ke admin. */
   adminNotices: string[] = [];
+  /** >>> ANGGA — LANGKAH 5 (2026-08-10, temuan K23): langkah funnel yang
+   *  ditanyakan balasan giliran ini, DITITIPKAN di sini. Kanal ini tidak
+   *  menulis baris `Message` (controller yang menulisnya sesudah `run()`
+   *  selesai), jadi controller yang memasangnya ke baris yang sungguhan lalu
+   *  mempromosikannya. <<< */
+  funnelStep: string | null = null;
   outcome?: ReplyOutcome;
 
   async expireStaleDrafts(): Promise<void> {
     /* tidak relevan di UI — draft uji tidak pernah basi */
   }
 
-  async send(_convo: ReplyConversation, text: string): Promise<{ messageId: string }> {
+  /** >>> ANGGA — LANGKAH 5 (2026-08-10, KOREKSI temuan K23): versi pertama
+   *  membuang `funnelStep` di sini dan menyebutnya "konsekuensi yang dicatat
+   *  terang-terangan". Itu keliru — akibatnya funnel di test-harness BEKU
+   *  TOTAL: `funnel_ask` tidak pernah tercatat, cap anti-cerewet tidak pernah
+   *  menyala, closing tidak pernah menandai order selesai. Mode gagal yang
+   *  persis sama dengan regresi `09c5e70`, di pintu debug utama Bossfren, dan
+   *  diberi nama baik di komentar. Sekarang dititipkan ke field di atas. <<< */
+  async send(
+    _convo: ReplyConversation,
+    text: string,
+    _sentinelReviewId?: string,
+    funnelStep?: string | null,
+  ): Promise<{ messageId: string }> {
     this.text = text;
+    this.funnelStep = funnelStep ?? null;
     return { messageId: `ui-${Date.now()}` };
   }
 
   async draft(
     _convo: ReplyConversation,
     text: string,
-    opts?: { moneyGateIssues?: string[] },
+    opts?: { moneyGateIssues?: string[]; funnelStep?: string | null },
   ): Promise<void> {
     // Burst menghasilkan beberapa draft — gabung supaya semuanya terlihat di UI.
     this.text = this.text ? `${this.text}\n\n${text}` : text;
+    // Burst: hanya segmen TERAKHIR yang membawa langkah, jadi yang non-null
+    // menang dan segmen berikutnya tidak menimpanya balik jadi null.
+    if (opts?.funnelStep) this.funnelStep = opts.funnelStep;
     if (opts?.moneyGateIssues?.length) this.moneyGateIssues.push(...opts.moneyGateIssues);
   }
 

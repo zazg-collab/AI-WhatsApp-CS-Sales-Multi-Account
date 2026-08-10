@@ -144,6 +144,10 @@ export class TestHarnessRepository {
      * sesi uji berhenti mengukur perilaku yang sesungguhnya. <<<
      */
     catatanSistem?: boolean;
+    /** >>> ANGGA — LANGKAH 5 (2026-08-10): langkah funnel yang ditanyakan pesan
+     *  ini, dititipkan `UiReplyChannel`. Dipersist supaya sesi uji memakai jalur
+     *  promosi yang SAMA dengan produksi, bukan jalur khusus tester. <<< */
+    funnelStep?: string | null;
   }): Promise<TestMessage> {
     const conversationId = await this.conversationIdOf(data.sessionId);
     if (!conversationId) throw new Error(`Session ${data.sessionId} not found`);
@@ -169,6 +173,7 @@ export class TestHarnessRepository {
         content: data.content,
         aiGenerated: data.role !== 'user',
         status: data.catatanSistem ? MessageStatus.pending : MessageStatus.sent,
+        funnelStep: data.funnelStep ?? undefined,
       },
     });
     await this.prisma.conversation

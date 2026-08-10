@@ -1,4 +1,4 @@
-import { AiMode, BotStatus, SentinelDecision, TakeoverStatus } from '@sentinel/database';
+import { AiMode, BotStatus, SenderType, SentinelDecision, TakeoverStatus } from '@sentinel/database';
 import { ReplyPipelineService } from './reply-pipeline.service';
 import type { ReplyChannel } from './reply.types';
 
@@ -44,6 +44,9 @@ describe('ReplyPipelineService — kontrak keputusan & follow-up', () => {
       generateSegmentedReply: jest.fn(),
       leadScore: jest.fn().mockResolvedValue(undefined),
       getFunnelExpect: jest.fn().mockResolvedValue('closing'),
+      // >>> ANGGA — LANGKAH 5: pembaca BERPAGAR `messageId` (beda dari
+      // `getFunnelExpect` yang sengaja tanpa pagar untuk follow-up). <<<
+      langkahUntukGiliran: jest.fn().mockReturnValue(null),
     };
     sentinel = { review: jest.fn().mockResolvedValue({ id: 'r1', decision: SentinelDecision.approve }) };
     channel = {
@@ -174,7 +177,8 @@ describe('ReplyPipelineService — kontrak keputusan & follow-up', () => {
     await tunggu();
     expect(out.kind).toBe('sent');
     expect(orderLog.promosikanLangkahTerkirim).toHaveBeenCalledTimes(1);
-    expect(orderLog.promosikanLangkahTerkirim).toHaveBeenCalledWith('c1');
+    // LANGKAH 5: promosi kini menyebut PESAN mana — assertion ikut memeriksanya.
+    expect(orderLog.promosikanLangkahTerkirim).toHaveBeenCalledWith('c1', 'm1');
   });
 
   /**
@@ -210,7 +214,8 @@ describe('ReplyPipelineService — kontrak keputusan & follow-up', () => {
       await tunggu();
       expect(out.kind).toBe(kind);
       if (promosi) {
-        expect(orderLog.promosikanLangkahTerkirim).toHaveBeenCalledWith('c1');
+        // LANGKAH 5: promosi kini menyebut PESAN mana — assertion ikut memeriksanya.
+    expect(orderLog.promosikanLangkahTerkirim).toHaveBeenCalledWith('c1', 'm1');
       } else {
         // BELUM sampai ke pelanggan — promosinya menunggu admin menyetujui,
         // dan saat itu jalur noteOutbound yang memicunya.
@@ -225,6 +230,116 @@ describe('ReplyPipelineService — kontrak keputusan & follow-up', () => {
       await tunggu();
       expect(out.kind).toBe('drafted');
       expect(orderLog.promosikanLangkahTerkirim).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * >>> ANGGA — LANGKAH 5 (2026-08-10, ketok Bossfren): LANGKAH FUNNEL DITITIPKAN
+   * KE PESAN KELUAR saat pesannya DIBUAT.
+   *
+   * `61eade4` sudah memindahkan KEPUTUSAN promosi ke satu titik yang digerakkan
+   * `ReplyOutcome`. Yang belum: sumber langkahnya masih `funnelExpect` — satu
+   * slot per PERCAKAPAN di MEMORI — padahal draft bisa baru di-approve berjam-jam
+   * kemudian, sesudah slot itu ditimpa giliran lain atau hilang kena restart.
+   *
+   * Pipeline membaca langkahnya SEKALI lalu menyerahkannya ke kanal, dan kanal
+   * mempersistnya BERSAMAAN dengan baris pesan. Keputusan tetap satu tempat;
+   * adapter cuma menyimpan apa yang diberikan. Menaruh pembacaan di adapter =
+   * dua salinan aturan yang sama, persis kelas kesalahan yang melahirkan regresi
+   * `09c5e70`.
+   */
+  describe('LANGKAH 5: langkah funnel dititipkan ke pesan keluar saat dibuat', () => {
+    it('ai_on: langkah ikut ke `channel.send`', async () => {
+      const svc = buat(AiMode.ai_on);
+      ai.langkahUntukGiliran.mockReturnValue('closing');
+
+      await svc.run('c1', channel);
+      await tunggu();
+
+      expect(channel.send).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }), 'halo kak', undefined, 'closing',
+      );
+    });
+
+    it('ai_draft: langkah ikut ke `channel.draft` sebagai opsi', async () => {
+      const svc = buat(AiMode.ai_draft);
+      ai.langkahUntukGiliran.mockReturnValue('patokan');
+
+      await svc.run('c1', channel);
+      await tunggu();
+
+      expect(channel.draft).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }), 'halo kak',
+        expect.objectContaining({ funnelStep: 'patokan' }),
+      );
+    });
+
+    /** Ketok Bossfren: kalimat funnel ditempel `komposisiFunnel` ke segmen
+     *  TERAKHIR, jadi langkahnya menempel di draft terakhir saja. */
+    it('burst: hanya draft SEGMEN TERAKHIR yang membawa langkah', async () => {
+      const svc = buat(AiMode.ai_on);
+      ai.langkahUntukGiliran.mockReturnValue('closing');
+      prisma.message.findMany.mockResolvedValue([
+        { id: 'c-2', senderType: SenderType.customer, content: 'dua', messageType: 'text' },
+        { id: 'c-1', senderType: SenderType.customer, content: 'satu', messageType: 'text' },
+      ]);
+      ai.generateSegmentedReply.mockResolvedValue([
+        { text: 'jawaban satu' }, { text: 'jawaban dua' }, { text: 'jawaban tiga' },
+      ]);
+
+      await svc.run('c1', channel);
+      await tunggu();
+
+      const panggilan = (channel.draft as jest.Mock).mock.calls;
+      expect(panggilan).toHaveLength(3);
+      expect(panggilan[0][2]?.funnelStep ?? null).toBeNull();
+      expect(panggilan[1][2]?.funnelStep ?? null).toBeNull();
+      expect(panggilan[2][2]?.funnelStep).toBe('closing');
+    });
+
+    /** Mutasi "cabang gerbang uang & supervised kehilangan langkah" sebelumnya
+     *  LOLOS — padahal dua mode itu yang paling sering berakhir jadi draft
+     *  panjang umur, yaitu justru kasus yang rancangan ini dibuat untuknya. */
+    it('gerbang uang menahan: draftnya TETAP membawa langkah', async () => {
+      const svc = buat(AiMode.ai_on);
+      ai.langkahUntukGiliran.mockReturnValue('total');
+      ai.generateReply.mockResolvedValue({ text: 'halo kak', moneyBlocked: true, issues: ['digit_mentah'] });
+
+      await svc.run('c1', channel);
+      await tunggu();
+
+      expect((channel.draft as jest.Mock).mock.calls[0][2]).toEqual(
+        expect.objectContaining({ funnelStep: 'total' }),
+      );
+    });
+
+    it('ai_supervised: langkah ikut baik saat Sentinel approve maupun saat jadi draft', async () => {
+      const svcKirim = buat(AiMode.ai_supervised);
+      ai.langkahUntukGiliran.mockReturnValue('closing');
+      await svcKirim.run('c1', channel);
+      await tunggu();
+      expect(channel.send).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }), 'halo kak', 'r1', 'closing',
+      );
+
+      const svcDraft = buat(AiMode.ai_supervised);
+      ai.langkahUntukGiliran.mockReturnValue('patokan');
+      sentinel.review.mockResolvedValue({ id: 'r2', decision: SentinelDecision.draft });
+      await svcDraft.run('c1', channel);
+      await tunggu();
+      expect((channel.draft as jest.Mock).mock.calls.at(-1)?.[2]).toEqual(
+        expect.objectContaining({ funnelStep: 'patokan' }),
+      );
+    });
+
+    it('giliran tanpa langkah menggantung: nol titipan, bukan string kosong', async () => {
+      const svc = buat(AiMode.ai_draft);
+      ai.langkahUntukGiliran.mockReturnValue(null);
+
+      await svc.run('c1', channel);
+      await tunggu();
+
+      expect((channel.draft as jest.Mock).mock.calls[0][2]?.funnelStep ?? null).toBeNull();
     });
   });
 });

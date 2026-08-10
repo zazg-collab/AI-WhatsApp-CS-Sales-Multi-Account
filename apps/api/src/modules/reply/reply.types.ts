@@ -26,12 +26,26 @@ export interface ReplyChannel {
   /** Kadaluwarsakan draft lama sebelum menulis yang baru. */
   expireStaleDrafts(convo: ReplyConversation): Promise<void>;
   /** Kirim ke pelanggan. Melempar kalau gagal — pipeline yang menangani fallback. */
-  send(convo: ReplyConversation, text: string, sentinelReviewId?: string): Promise<{ messageId: string }>;
+  /** >>> ANGGA — LANGKAH 5 (2026-08-10): `funnelStep` dipersist BERSAMAAN dengan
+   *  baris pesannya. Pipeline yang memutuskan (satu tempat), kanal yang
+   *  menyimpan — bukan sebaliknya. <<< */
+  send(
+    convo: ReplyConversation,
+    text: string,
+    sentinelReviewId?: string,
+    funnelStep?: string | null,
+  ): Promise<{ messageId: string }>;
   /** Simpan sebagai draft menunggu admin. */
   draft(
     convo: ReplyConversation,
     text: string,
-    opts?: { sentinelReviewId?: string; quotedMessageId?: string | null; moneyGateIssues?: string[] },
+    opts?: {
+      sentinelReviewId?: string;
+      quotedMessageId?: string | null;
+      moneyGateIssues?: string[];
+      /** >>> ANGGA — LANGKAH 5: langkah funnel yang DITANYAKAN draft ini. <<< */
+      funnelStep?: string | null;
+    },
   ): Promise<void>;
   /** Beri tahu admin (gerbang uang menahan, burst menunggu approval, dll). */
   notifyAdmin(pesan: string): void;
