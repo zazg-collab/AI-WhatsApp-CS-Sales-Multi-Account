@@ -24,7 +24,10 @@
  * milik manusia — tapi setidaknya rasa itu tidak lagi dipakai untuk memutuskan
  * commit mana yang salah.
  */
-const BASE = process.env.HERMES_API ?? 'http://localhost:3001/api/v1';
+// 127.0.0.1, BUKAN localhost. Node 18+ menerjemahkan `localhost` ke ::1 (IPv6)
+// lebih dulu, sementara Docker biasanya mempublikasikan port di IPv4 saja —
+// hasilnya `fetch failed` tanpa status, tanpa petunjuk. Sudah kena sekali.
+const BASE = process.env.HERMES_API ?? 'http://127.0.0.1:3001/api/v1';
 const PROVIDER = process.env.EVAL_PROVIDER ?? 'openrouter';
 const MODEL = process.env.EVAL_MODEL ?? 'deepseek/deepseek-v4-flash-0731';
 
@@ -92,6 +95,30 @@ const j = async (metode, jalur, badan) => {
   return r.json();
 };
 
+/** Bungkus fetch supaya penyebab koneksi ikut terbaca, bukan cuma "fetch failed". */
+const sebab = (e) => {
+  const c = e?.cause;
+  return c?.code ? `${e.message} (${c.code}${c.address ? ` ${c.address}:${c.port}` : ''})` : e?.message ?? String(e);
+};
+
+/**
+ * Pemeriksaan awal. Kalau API tidak terjangkau, BERHENTI di sini dengan pesan
+ * yang bisa ditindaklanjuti — jangan mencoba lima putaran lalu mencetak tabel
+ * nol yang terlihat rapi.
+ */
+async function preflight() {
+  try {
+    await j('GET', '/test-harness/sessions');
+  } catch (e) {
+    console.error(`\n✖ API tidak terjangkau di ${BASE}`);
+    console.error(`  ${sebab(e)}\n`);
+    console.error('  Periksa: (a) container hidup — `docker ps | grep hermes-api`');
+    console.error('           (b) port terbuka  — `curl -s -o /dev/null -w "%{http_code}" ' + BASE + '/test-harness/sessions`');
+    console.error('           (c) alamat lain   — HERMES_API=http://127.0.0.1:3001/api/v1 node replay.mjs ...\n');
+    process.exit(2);
+  }
+}
+
 async function satuPutaran(nomor) {
   const { session } = await j('POST', '/test-harness/sessions', {
     name: `eval-${nomor}-${Date.now()}`,
@@ -137,6 +164,11 @@ if (bandingkan > 0) {
   const fs = await import('node:fs');
   const berkas = process.argv.slice(bandingkan + 1).filter((s) => !s.startsWith('--'));
   const data = berkas.map((f) => JSON.parse(fs.readFileSync(f, 'utf8')));
+  const kosong = data.filter((d) => !d.ringkasan?.giliranTotal);
+  if (kosong.length) {
+    console.error(`\n✖ ${kosong.length} berkas berisi NOL giliran (${kosong.map((d) => d.label).join(', ')}) — tidak ada yang bisa dibandingkan.\n`);
+    process.exit(3);
+  }
   const kelas = Object.keys(data[0].ringkasan.hit);
   console.log(`\n${'kelas kegagalan'.padEnd(24)}${data.map((d) => d.label.padStart(14)).join('')}`);
   console.log('-'.repeat(24 + 14 * data.length));
@@ -147,6 +179,8 @@ if (bandingkan > 0) {
   console.log('');
   process.exit(0);
 }
+
+await preflight();
 
 const runs = Number(arg('runs', '5'));
 const label = arg('label', 'tanpa-label');
@@ -162,9 +196,23 @@ for (let i = 1; i <= runs; i++) {
     const rusak = g.filter((x) => x.kosong || x.kurung_menggantung || x.tanya_dobel || x.metode_sebelum_total || x.lupa_produk).length;
     console.log(`selesai — ${rusak}/${SKENARIO.length} giliran bermasalah`);
   } catch (e) {
-    console.log(`GAGAL: ${e.message}`);
+    console.log(`GAGAL: ${sebab(e)}`);
   }
 }
+// >>> Kalau NOL putaran berhasil, ini kegagalan alat — bukan hasil "bersih".
+// Versi pertama mencetak tabel 0/0 yang terlihat rapi dan bahkan menulis
+// berkas hasilnya, sehingga `--bandingkan` menyandingkan dua kekosongan
+// seolah itu temuan. Persis kelas "kegagalan menyamar jadi hasil" yang alat
+// ini justru dibangun untuk memberantasnya.
+if (putaran.length === 0) {
+  console.error(`\n✖ NOL putaran berhasil — tidak ada yang bisa diukur.`);
+  console.error('  Berkas hasil TIDAK ditulis, supaya tidak ada angka palsu yang tersimpan.\n');
+  process.exit(3);
+}
+if (putaran.length < runs) {
+  console.log(`\n⚠ Hanya ${putaran.length} dari ${runs} putaran berhasil — angka di bawah dihitung dari yang berhasil saja.`);
+}
+
 const ringkasan = ringkas(putaran);
 console.log(`\n=== ${label} — ${ringkasan.putaran} putaran, ${ringkasan.giliranTotal} giliran ===`);
 for (const [k, v] of Object.entries(ringkasan.hit)) {
