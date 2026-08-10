@@ -355,6 +355,12 @@ export class AiService {
     let kontrak: ReplyContract | null = null;
     let kontrakRusak = false;
     let kontrakDipaksa = false;
+    // >>> ANGGA — diagnostik (2026-08-10, cowork): jawaban provider TERAKHIR,
+    // apa adanya. Hanya dibaca kalau balasan akhirnya kosong. Tanpa ini kita
+    // tidak bisa membedakan tiga hal yang gejalanya identik: model memang diam,
+    // provider memulangkan tool_calls dengan bentuk yang tidak kita kenali,
+    // atau balasannya terpotong habis oleh max_tokens. <<<
+    let resTerakhir: { content?: string; tool_calls?: unknown[] } | null = null;
     const stopTimer = this.metrics?.aiRequestDuration.startTimer();
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -371,6 +377,7 @@ export class AiService {
         });
 
         text = res.content;
+        resTerakhir = res;
         const toolCalls = res.tool_calls;
 
         if (!toolCalls || toolCalls.length === 0) {
@@ -487,6 +494,7 @@ export class AiService {
             tools: [sendReplyTool],
             toolChoice: SEND_REPLY_TOOL_CHOICE,
           });
+          resTerakhir = paksa;
           const panggilan = (paksa.tool_calls ?? []).find(
             (t: any) => t?.type === 'function' && t.function?.name === SEND_REPLY_TOOL_NAME,
           );
@@ -561,9 +569,16 @@ export class AiService {
     // tidak menempel. Satu baris ini menjawab ketiganya sekaligus. <<<
     if (!text.trim()) {
       const st = this.shipping?.debugState?.(conversationId);
+      const namaTool = Array.isArray(resTerakhir?.tool_calls)
+        ? resTerakhir!.tool_calls!
+            .map((t) => (t as { function?: { name?: string } })?.function?.name ?? '?')
+            .join(',')
+        : 'tidak ada';
       this.logger.warn(
         `Balasan KOSONG untuk ${conversationId} — kontrak=${kontrakOutcome}` +
-          ` funnelStep=${st?.funnelStep ?? 'null'} adaKutipan=${st?.quote ? 'ya' : 'tidak'}`,
+          ` funnelStep=${st?.funnelStep ?? 'null'} adaKutipan=${st?.quote ? 'ya' : 'tidak'}` +
+          ` | jawaban provider terakhir: panjangContent=${(resTerakhir?.content ?? '').length}` +
+          ` toolCalls=[${namaTool}] mentah=${JSON.stringify(resTerakhir ?? null).slice(0, 400)}`,
       );
     }
 
