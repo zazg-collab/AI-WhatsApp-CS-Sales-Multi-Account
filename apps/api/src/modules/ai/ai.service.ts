@@ -394,24 +394,13 @@ export class AiService {
       for (let attempt = 0; attempt < 3; attempt++) {
         const res = await this.provider.chatWithTools(messages, {
           model,
-          // >>> ANGGA — F4 audit (2026-08-09, cowork): 500 → 600. Bukan supaya
-          // balasan boleh lebih panjang — plafon bukan target — tapi karena
-          // sejak F4 balasannya melintas sebagai string DI DALAM JSON argumen
-          // tool. Nama fungsi, nama field, dan escape `\n`/kutip memakan
-          // puluhan token yang dulu tidak ada. Tanpa kelonggaran itu, balasan
-          // yang PERSIS muat di 500 sekarang terpotong di tengah JSON.
-          //
-          // >>> Koreksi UJI LAPANGAN (2026-08-10): 600 masih KURANG, dan 600
-          // bukan sekadar kurang sedikit. Bukti dari sesi nyata: satu giliran
-          // terpotong sesudah ~30 karakter jawaban ("Siap ka, untuk pengiriman
-          // ke {{"), giliran lain memulangkan `{"content":""}` sama sekali.
-          // Dua gejala itu cocok dengan SATU sebab: anggaran token habis
-          // SEBELUM jawabannya sempat ditulis — dimakan penalaran model dan
-          // pembungkus JSON argumen tool. Dinaikkan ke 1500. Plafon bukan
-          // target: balasan pendek tetap pendek, yang berubah cuma batas
-          // sebelum ia dipotong di tengah. HIPOTESIS soal penalaran belum
-          // terbukti; yang terbukti cuma gejalanya. <<<
-          maxTokens: KONTRAK_BALASAN_AKTIF ? 1500 : 500,
+          // >>> ANGGA — 2026-08-10: kenaikan maxTokens (500→600→1500) DICABUT.
+          // Ia dipasang atas dugaan "anggaran habis sebelum jawaban ditulis".
+          // Diuji di lapangan: balasan kosong TETAP terjadi sesudah dinaikkan.
+          // Dugaan tidak terbukti → tambalannya dibuang, bukan ditinggal
+          // berjaga-jaga. Kenaikan itu juga bersamaan dengan munculnya timeout
+          // jaringan di UI, jadi menyimpannya bukan netral. <<<
+          maxTokens: 500,
           tools,
         });
 
@@ -553,7 +542,7 @@ export class AiService {
         try {
           const paksa = await this.provider.chatWithTools(messages, {
             model,
-            maxTokens: 1500,
+            maxTokens: 500,
             tools: [sendReplyTool], // hanya terjangkau saat saklar ON
             toolChoice: SEND_REPLY_TOOL_CHOICE,
           });

@@ -86,64 +86,21 @@ describe('reply.tools — Reply Contract', () => {
   });
 
   /**
-   * Sejak F4 balasan melintas sebagai string DI DALAM JSON argumen tool. Kalau
-   * `max_tokens` kena, dulu akibatnya "balasan terpotong", sekarang bisa jadi
-   * "tidak ada balasan sama sekali" — pertukaran yang lebih buruk dari keadaan
-   * sebelum F4. Penyelamat ini mengembalikannya ke paritas.
+   * >>> ANGGA — 2026-08-10: penyelamat argumen terpotong DICABUT sesudah
+   * terbukti menciptakan bug di layar pelanggan (`Siap ka, untuk pengiriman ke
+   * {{`). Test-test lamanya yang menjamin "answer diselamatkan" ikut dibuang —
+   * menyimpan test untuk perilaku yang sengaja dihapus cuma akan memaksa
+   * penyunting berikutnya menghidupkannya kembali. Diganti satu test yang
+   * menjaga PENCABUTANNYA.
    */
-  it('argumen terpotong di tengah → answer diselamatkan, ditandai di pelanggaranSkema', () => {
-    const utuh = JSON.stringify({
-      answer: 'Ongkir ke Mataram Rp50.000 ya kak, estimasi 3 hari sampai',
-      funnel_question_id: 'qty',
-      data_status: 'computed',
-    });
-    const terpotong = utuh.slice(0, utuh.indexOf('estimasi') + 5);
-    const k = parseReplyContract(terpotong);
-    expect(k).not.toBeNull();
-    expect(k?.answer.startsWith('Ongkir ke Mataram Rp50.000 ya kak')).toBe(true);
-    expect(k?.pelanggaranSkema).toEqual(['argumen JSON terpotong — answer diselamatkan']);
-    expect(k?.funnelQuestionId).toBe('none');
-  });
-
-  it('terpotong PERSIS di tengah escape → tetap terselamatkan (escape sebagian dibuang)', () => {
-    const k = parseReplyContract('{"answer":"Baris satu\\nBaris du\\');
-    expect(k?.answer).toBe('Baris satu\nBaris du');
-  });
-
-  /**
-   * Uji lapangan 2026-08-10: pelanggan menerima "Siap ka, untuk pengiriman ke
-   * {{" — kurung menggantung. Pemotongan jatuh persis di tengah penanda, dan
-   * fragmen `{{` tidak tertangkap gerbang penanda (polanya menuntut bentuk
-   * utuh) maupun gerbang angka.
-   */
-  it('sisa penanda yang ikut terpotong dibuang dari answer yang diselamatkan', () => {
+  it('argumen terpotong → null, TIDAK diselamatkan jadi potongan kalimat', () => {
     const utuh = JSON.stringify({
       answer: 'Siap ka, untuk pengiriman ke {{kota_tujuan}} ongkirnya {{ongkir}}',
       funnel_question_id: 'qty',
       data_status: 'computed',
     });
-    const k = parseReplyContract(utuh.slice(0, utuh.indexOf('{{kota') + 2));
-    expect(k?.answer).toBe('Siap ka, untuk pengiriman ke');
-    expect(k?.answer).not.toContain('{');
-  });
-
-  it('penanda yang UTUH tidak ikut terbuang saat penyelamatan', () => {
-    const utuh = JSON.stringify({
-      answer: 'Ongkirnya {{ongkir}} ya kak, estimasi tiba',
-      funnel_question_id: 'qty',
-      data_status: 'computed',
-    });
-    const k = parseReplyContract(utuh.slice(0, utuh.indexOf('estimasi') + 4));
-    expect(k?.answer).toContain('{{ongkir}}');
-  });
-
-  it('kalau yang tersisa cuma fragmen penanda → null, jangan kirim sampah', () => {
-    expect(parseReplyContract('{"answer":"{{kota_tuj')).toBeNull();
-  });
-
-  it('terpotong SEBELUM answer punya isi → null, bukan pesan kosong', () => {
-    expect(parseReplyContract('{"funnel_question_id":"qty","answer":"')).toBeNull();
-    expect(parseReplyContract('{"funnel_question_id":"qt')).toBeNull();
+    expect(parseReplyContract(utuh.slice(0, utuh.indexOf('{{kota') + 2))).toBeNull();
+    expect(parseReplyContract(utuh.slice(0, 40))).toBeNull();
   });
 
   it('answer kosong / JSON rusak / bukan objek → null (jangan pernah kirim pesan kosong)', () => {

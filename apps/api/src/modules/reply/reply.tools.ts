@@ -120,64 +120,27 @@ export interface ReplyContract {
  * balasan, dan memperlakukannya sebagai balasan akan mengirim pesan kosong.
  */
 /**
- * >>> ANGGA — F4 audit (2026-08-09, cowork): PENYELAMAT ARGUMEN TERPOTONG.
+ * >>> ANGGA — 2026-08-10: PENYELAMAT ARGUMEN TERPOTONG **DICABUT**.
  *
- * Kenapa perlu, dan kenapa ini bukan sekadar "biar aman": sesudah F4, balasan
- * tidak lagi datang sebagai teks polos melainkan sebagai STRING DI DALAM JSON
- * argumen tool. Kalau `max_tokens` kena di tengah jalan, dulu akibatnya
- * "balasan terpotong" — sekarang akibatnya "JSON tidak sah" alias TIDAK ADA
- * BALASAN SAMA SEKALI. Itu pertukaran yang lebih buruk dari keadaan sebelum
- * F4, dan bukan itu yang kita mau beli dengan kontrak ini.
+ * Ia dipasang supaya balasan yang terpotong `max_tokens` tetap terkirim, dengan
+ * alasan "kembali ke paritas pra-F4". Di lapangan ia justru MENCIPTAKAN bug
+ * yang tidak pernah ada sebelumnya: pemotongan jatuh di tengah `{{kota_tujuan}}`
+ * dan pelanggan menerima `Siap ka, untuk pengiriman ke {{` — fragmen yang lolos
+ * semua gerbang. Lalu penyelamat itu kutambal lagi supaya membuang sisa
+ * penanda: tambalan di atas tambalan.
  *
- * Cara kerjanya sengaja bodoh dan bisa ditebak: ambil isi sesudah `"answer":"`,
- * lalu coba parse sebagai string JSON sambil dipendekkan satu karakter demi
- * satu dari ujung sampai sah. Yang pertama sah itu jawabannya. Dibatasi 400
- * langkah karena pemotongan selalu terjadi di UJUNG — kalau 400 karakter
- * terakhir tetap tidak bisa diselamatkan, yang rusak bukan pemotongan.
+ * Keduanya dibuang. Argumen yang tidak bisa diurai = generasi GAGAL, dan
+ * kegagalan ditangani sebagai kegagalan (loop mencoba lagi, lalu balasan kosong
+ * membangunkan admin) — bukan diselamatkan jadi potongan kalimat yang
+ * setengah-setengah. Menyelamatkan keluaran rusak selalu terasa murah hati di
+ * kode dan terlihat memalukan di layar pelanggan.
  */
-function pulihkanAnswerTerpotong(rawArgs: string): string | null {
-  const m = /"answer"\s*:\s*"/.exec(rawArgs ?? '');
-  if (!m) return null;
-  const potongan = rawArgs.slice(m.index + m[0].length);
-  const batas = Math.max(0, potongan.length - 400);
-  for (let n = potongan.length; n > batas; n--) {
-    const kandidat = potongan.slice(0, n);
-    if (kandidat.endsWith('\\')) continue; // escape ikut terpotong
-    try {
-      const v: unknown = JSON.parse(`"${kandidat}"`);
-      if (typeof v === 'string' && v.trim()) {
-        // >>> ANGGA — koreksi UJI LAPANGAN (2026-08-10, cowork): buang SISA
-        // PENANDA yang ikut terpotong. Terlihat di sesi uji nyata — pelanggan
-        // menerima `Siap ka, untuk pengiriman ke {{` dengan kurung menggantung.
-        // Pemotongan bisa jatuh persis di tengah `{{kota_tujuan}}`, dan
-        // fragmen `{{` TIDAK tertangkap gerbang penanda (polanya menuntut
-        // `{{[a-z_]+}}` yang utuh), jadi ia lolos apa adanya ke pelanggan.
-        // Penyelamat ini ada supaya balasan terpotong tetap terkirim; kalau
-        // yang terkirim justru sampah sintaks, ia merugikan bukan menolong.
-        const bersih = v.replace(/\{\{?[a-z_]*$/i, '').replace(/\s+$/u, '');
-        if (bersih.trim()) return bersih.trim();
-      }
-    } catch {
-      /* masih belum sah — coba lebih pendek */
-    }
-  }
-  return null;
-}
-
 export function parseReplyContract(rawArgs: string): ReplyContract | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(rawArgs);
   } catch {
-    const selamat = pulihkanAnswerTerpotong(rawArgs);
-    if (!selamat) return null;
-    return {
-      answer: selamat,
-      funnelQuestionId: 'none',
-      dataStatus: 'computed',
-      funnelQuestionIdMentah: '',
-      pelanggaranSkema: ['argumen JSON terpotong — answer diselamatkan'],
-    };
+    return null;
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
   const obj = parsed as Record<string, unknown>;
