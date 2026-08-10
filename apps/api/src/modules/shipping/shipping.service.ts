@@ -19,8 +19,13 @@ import {
   katalogPenanda,
   sensorBarisTotal,
   sensorSemuaTokenHarga,
+  // >>> ANGGA — F4 (2026-08-09, cowork): penyusun balasan + normalisasi
+  // pembanding kalimat funnel. <<<
+  normFunnel,
+  susunBalasan,
 } from './order-brain';
 export { formatIdr, POLA_TOKEN_TOTAL, buildPriceTokens, katalogPenanda, sensorBarisTotal, sensorSemuaTokenHarga };
+export { normFunnel, susunBalasan };
 import { extractFirstJson } from '../../common/json-extract.util';
 import {
   t,
@@ -3429,6 +3434,73 @@ export class ShippingService {
    *  (kamus AppSetting + catatan_sk bila terisi) — dibacakan prompt-builder di
    *  blok system bersama supaya model tahu penanda apa yang boleh dipakai.
    *  Nilainya TIDAK pernah ikut (diisi resolver sesudah model menjawab). <<< */
+  /**
+   * >>> ANGGA — F4 (2026-08-09, cowork): KOMPOSISI KALIMAT FUNNEL.
+   *
+   * Dipanggil `AiService.generateReply` SESUDAH model menjawab dan SEBELUM
+   * gerbang uang. Tugasnya satu: memastikan kalimat pertanyaan funnel giliran
+   * ini muncul TEPAT SEKALI di akhir balasan — bukan dengan menahan draft yang
+   * salah, tapi dengan MEMASANGNYA sendiri.
+   *
+   * Penjaganya SENGAJA sama persis dengan gerbang `funnel_dilanggar` di
+   * `resolvePriceTokens`: kalimat wajib hanya berlaku kalau `funnelExpect`
+   * memang milik GILIRAN INI (`messageId` cocok). Kalau dua penjaga ini beda,
+   * akan ada giliran yang ditempeli kalimat lalu ditahan gerbang karena
+   * gerbangnya menganggap kalimat itu tidak seharusnya ada — atau sebaliknya.
+   * Keduanya membaca sumber yang sama dan membandingkan dengan normalisasi
+   * yang sama (`normFunnel`).
+   *
+   * Efeknya pada gerbang: di jalur produksi, cabang "kalimat wajib tidak ada"
+   * dan "kalimat wajib dobel" jadi MUSTAHIL tercapai. Gerbangnya tidak dihapus
+   * — ia turun pangkat jadi jaring pengaman untuk pemanggil yang melewatkan
+   * komposisi ini (mis. test lama yang memberi teks langsung ke
+   * `resolvePriceTokens`). Jaring yang tidak pernah kena tidak merugikan;
+   * menghapusnya berarti kehilangan bukti kalau suatu saat komposisinya
+   * terlewat.
+   *
+   * MURNI baca terhadap keadaan: tidak menulis cache, tidak memanggil apa pun.
+   * <<< */
+  public komposisiFunnel(
+    conversationId: string,
+    prosa: string,
+    // `tempel: false` dipakai jalur BURST untuk segmen yang bukan terakhir —
+    // salinan kalimat wajib dibuang, tapi tidak dipasang di situ. Lihat
+    // `AiService.generateSegmentedReply`.
+    opts: { tempel?: boolean } = {},
+  ): { text: string; step: string | null; disisipkan: boolean; salinanDibuang: number } {
+    const expectF = this.cache.funnelExpect(conversationId);
+    const msgIdNow = (this.turnMemo.get(conversationId)?.key ?? '').split(':')[0] || '';
+    if (!expectF || !msgIdNow || expectF.messageId !== msgIdNow) {
+      return { text: prosa, step: null, disisipkan: false, salinanDibuang: 0 };
+    }
+    const hasil = susunBalasan(prosa, expectF.kalimat ?? '', opts);
+    return {
+      text: hasil.text,
+      step: expectF.step,
+      disisipkan: hasil.disisipkan,
+      salinanDibuang: hasil.salinanDibuang,
+    };
+  }
+
+  /** >>> ANGGA — F3c (2026-08-09, cowork): potret keadaan ongkir untuk panel
+   *  debug test-harness. MURNI BACA — tidak memanggil API kurir, tidak menulis
+   *  cache, tidak menjalankan mesin kutipan. Kalau method ini sampai punya efek
+   *  samping, panel debug akan mengubah hal yang sedang ia amati (dan sesi uji
+   *  jadi tidak bisa dipercaya sebagai bukti). Dibuat di sini, bukan dengan
+   *  mengekspor `ShippingQuoteCache`, supaya cache tetap terenkapsulasi. <<< */
+  public debugState(conversationId: string): {
+    funnelStep: string | null;
+    quote: ShippingQuote | null;
+    tokens: Record<string, string>;
+  } {
+    const quote = this.cache.get(conversationId);
+    return {
+      funnelStep: this.cache.funnelExpect(conversationId)?.step ?? null,
+      quote,
+      tokens: quote ? buildPriceTokens(quote) : {},
+    };
+  }
+
   async globalTokenCatalog(): Promise<string[]> {
     const oc = await this.settings.orderContext();
     const names = Object.keys(oc.orderGlobalTokens ?? {}).filter(
@@ -3563,6 +3635,10 @@ export class ShippingService {
   async resolvePriceTokens(
     conversationId: string,
     text: string,
+    // >>> ANGGA — F4 audit (2026-08-09, cowork): `dataStatus` yang DINYATAKAN
+    // model lewat kontrak `send_reply`. Opsional dan default kosong — seluruh
+    // pemanggil lama (termasuk belasan spec) tetap jalan tanpa disunting. <<<
+    opts?: { dataStatus?: 'computed' | 'unavailable' },
   ): Promise<{ text: string; ok: boolean; issues: string[]; issueCodes: IssueCode[] }> {
     // >>> ANGGA — Klaster C (2026-08-06, refactor `klasifikasiAlasanGate`):
     // SEBELUMNYA satu-satunya cara tahu KATEGORI pelanggaran adalah
@@ -3805,8 +3881,11 @@ export class ShippingService {
       const expectF = this.cache.funnelExpect(conversationId);
       const msgIdNow = (this.turnMemo.get(conversationId)?.key ?? '').split(':')[0] || '';
       if (expectF && msgIdNow && expectF.messageId === msgIdNow) {
-        const normF = (s: string) =>
-          (s ?? '').toLowerCase().replace(/[^\p{L}\p{N} ]/gu, ' ').replace(/\s+/g, ' ').trim();
+        // >>> ANGGA — F4: normalisasi ini dulu fungsi lokal di sini. Dipindah ke
+        // `order-brain.normFunnel` supaya gerbang ini dan penyusun balasan
+        // (`susunBalasan`) MUSTAHIL berbeda pendapat soal "kalimatnya ada".
+        // Implementasinya sama persis — nol perubahan perilaku. <<<
+        const normF = normFunnel;
         // >>> ANGGA — fix (2026-08-06, Q-Chain v3.1: kalimat patokan transfer
         // kini memuat penanda {{rekening_transfer}}): `expectF.kalimat` bisa
         // memuat penanda {{...}} sejak revisi ini (mis. "...transfer ke
@@ -3936,6 +4015,28 @@ export class ShippingService {
             `Balasan menyangkal data yang sudah tersedia ("${sangkal}") — kutipan ongkir/tagihan untuk giliran ini SUDAH dihitung sistem; jawab langsung memakai penanda, jangan bilang akan cek dulu.`,
           );
         }
+        // >>> ANGGA — F4 audit (2026-08-09, cowork): KONTRADIKSI YANG DINYATAKAN
+        // SENDIRI OLEH MODEL. Cek di atas menebak niat model dari 15 frasa
+        // (`orderContradictionPhrases`) — daftar yang komentar defaultnya
+        // sendiri mengaku pernah ditambal karena urutan kata berbeda ("saya
+        // AKAN CEK DULU ya kak" lolos dari "akan saya cek dulu"). Kontrak
+        // `send_reply` membuat tebakan itu tidak perlu untuk kasus yang paling
+        // jelas: model MENYATAKAN `data_status: "unavailable"` padahal kutipan
+        // giliran ini sudah dihitung sistem. Nol pencocokan frasa, nol daftar
+        // yang harus dirawat.
+        //
+        // Syaratnya sengaja SAMA PERSIS dengan cek frasa di atas (ada kutipan
+        // + giliran uang) supaya keduanya tidak pernah berbeda pendapat soal
+        // "giliran ini memang soal uang". Ini MENAMBAH, bukan mengganti:
+        // penurunan A′2/A′3 jadi telemetri murni baru aman sesudah korpus eval
+        // F6 ada untuk membuktikannya — sampai saat itu dua-duanya jalan.
+        if (opts?.dataStatus === 'unavailable') {
+          pushIssue(
+            'kontradiksi_data',
+            'Balasan menyatakan datanya belum tersedia (data_status="unavailable") padahal kutipan ongkir/tagihan untuk giliran ini SUDAH dihitung sistem — jawab langsung memakai penanda yang tersedia.',
+          );
+        }
+        // <<< ANGGA
       }
       // >>> ANGGA — ANTI-TEATER PROSES (2026-08-05, insiden "mataram dobel":
       // "saya cek dulu… mohon tunggu… saya proses dulu 🕒 Setelah saya cek,

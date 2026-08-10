@@ -34,6 +34,10 @@ import {
 import { TestHarnessRepository } from './test-harness.repository';
 import { ChatSessionManager } from './chat-session.manager';
 import { DebugInfoCollector } from './debug-info.collector';
+// >>> ANGGA — F3c (2026-08-09, cowork): provider NON-mock kini lewat otak yang
+// SAMA dengan produksi (`ReplyPipelineService`), bukan pipeline tester sendiri. <<<
+import { ReplyPipelineService } from '../modules/reply/reply-pipeline.service';
+import { UiReplyChannel } from './ui-reply.channel';
 import { ScenarioLoader } from './scenario.loader';
 import type {
   CreateSessionRequest,
@@ -49,6 +53,7 @@ export class TestHarnessController {
     private readonly repository: TestHarnessRepository,
     private readonly chatManager: ChatSessionManager,
     private readonly debugCollector: DebugInfoCollector,
+    private readonly pipeline: ReplyPipelineService,
     private readonly scenarioLoader: ScenarioLoader,
   ) {}
 
@@ -118,21 +123,49 @@ export class TestHarnessController {
       content: body.text,
     });
 
-    // Generate AI reply — real AI jika provider != 'mock', else MOCK
-    const { replyText, model, executedTools } = await this.chatManager.sendMessage(
+    // >>> ANGGA — F3c: SATU OTAK, DUA PINTU.
+    //  - provider 'mock'  → tetap lewat ChatSessionManager (balasan kalengan,
+    //    tanpa LLM; berguna untuk menguji UI tanpa biaya token).
+    //  - provider lain    → `ReplyPipelineService`, persis yang dipakai
+    //    WhatsApp. Artinya tester akhirnya ikut menjalankan prompt builder
+    //    produksi, grounding ongkir, gerbang uang, funnel, memori order, dan
+    //    review Sentinel — bukan tiruan yang bisa menyimpang.
+    //
+    // ⚠️ Perbaikan bug ikut di sini: baris lama memanggil
+    // `resolvePriceTokens(sessionId, ...)` padahal fungsi itu mengharapkan
+    // conversationId. Sekarang tidak dipanggil manual sama sekali —
+    // substitusi penanda sudah terjadi di dalam `ai.generateReply`
+    // (gerbang uang), sama seperti produksi.
+    let resolvedText: string;
+    let executedTools: any[] | undefined;
+    let outcome: string | undefined;
+    let moneyGateIssues: string[] = [];
+    let conversationIdUntukDebug: string | undefined;
+
+    if (session.provider === 'mock') {
+      const hasil = await this.chatManager.sendMessage(sessionId, body.text, history, 'mock', session.model);
+      resolvedText = hasil.replyText;
+      executedTools = hasil.executedTools;
+    } else {
+      const conversationId = await this.repository.conversationIdOf(sessionId);
+      if (!conversationId) throw new NotFoundException(`Session ${sessionId} has no conversation`);
+      conversationIdUntukDebug = conversationId;
+      const channel = new UiReplyChannel();
+      const hasil = await this.pipeline.run(conversationId, channel, { model: session.model });
+      resolvedText = channel.text ?? '';
+      outcome = hasil.kind === 'drafted' ? `${hasil.kind}:${hasil.reason}` : hasil.kind;
+      moneyGateIssues = channel.moneyGateIssues;
+    }
+
+    const debugInfo = await this.debugCollector.collectDebugInfo(
       sessionId,
-      body.text,
-      history,
+      resolvedText,
+      executedTools,
       session.provider,
-      session.model,
+      conversationIdUntukDebug,
     );
-
-    // Resolve price tokens (like what wa-chat.service does)
-    const resolvedResult = await this.chatManager['shipping'].resolvePriceTokens(sessionId, replyText);
-    const resolvedText = resolvedResult.text;
-
-    // Collect debug info (MOCK for Fase 1 + Tool Calls)
-    const debugInfo = await this.debugCollector.collectDebugInfo(sessionId, resolvedText, executedTools, session.provider);
+    if (outcome) (debugInfo as any).status = outcome;
+    if (moneyGateIssues.length) debugInfo.gateWarnings = [...debugInfo.gateWarnings, ...moneyGateIssues];
 
     // Add assistant message with debug info
     const assistantMessage = await this.repository.addMessage({

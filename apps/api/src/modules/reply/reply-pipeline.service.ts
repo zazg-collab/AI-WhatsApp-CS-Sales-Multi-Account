@@ -37,7 +37,9 @@ export class ReplyPipelineService {
     @Optional() private readonly orderLog?: OrderContextService,
   ) {}
 
-  async run(conversationId: string, channel: ReplyChannel): Promise<ReplyOutcome> {
+  /** `opts.model` dipakai test-harness supaya pilihan provider/model per sesi
+   *  tetap hidup; produksi memanggilnya tanpa opts (model default bot). */
+  async run(conversationId: string, channel: ReplyChannel, opts?: { model?: string }): Promise<ReplyOutcome> {
     const convo = (await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       include: { customer: true, bot: { select: { status: true } } },
@@ -88,7 +90,7 @@ export class ReplyPipelineService {
     }
     const { text, moneyBlocked, moneyGateIssues } = sambutanForm
       ? { text: sambutanForm, moneyBlocked: false, moneyGateIssues: undefined as string[] | undefined }
-      : await this.ai.generateReply(conversationId);
+      : await this.ai.generateReply(conversationId, opts?.model);
     if (!text) {
       this.logger.debug(`maybeAutoReply: generateReply returned empty text`);
       return { kind: 'skipped', reason: 'empty-text' };

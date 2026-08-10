@@ -15,6 +15,7 @@
 
 import { Module } from '@nestjs/common';
 import { AiModule } from '../modules/ai/ai.module'; // >>> ANGGA — real AI integration
+import { ReplyModule } from '../modules/reply/reply.module'; // >>> ANGGA — F3c: otak balasan bersama <<<
 import { ProductsModule } from '../modules/products/products.module';
 import { TestHarnessController } from './test-harness.controller';
 import { TestHarnessRepository } from './test-harness.repository';
@@ -24,7 +25,7 @@ import { ScenarioLoader } from './scenario.loader';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Module({
-  imports: [AiModule, ProductsModule], // >>> ANGGA — provides AiProviderService & ProductsService
+  imports: [AiModule, ProductsModule, ReplyModule], // >>> ANGGA — provides AiProviderService & ProductsService
   controllers: [TestHarnessController],
   providers: [
     TestHarnessRepository,

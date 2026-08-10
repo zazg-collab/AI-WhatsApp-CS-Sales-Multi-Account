@@ -40,6 +40,21 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // >>> ANGGA — F4 (2026-08-09, cowork): kepatuhan Reply Contract. Ini yang
+  // menggantikan "bug hunting daftar frasa" jadi angka yang bisa dilihat:
+  //   honored   = model menyerahkan balasannya lewat tool `send_reply`
+  //   forced    = tidak, lalu berhasil sesudah satu panggilan PAKSA
+  //   fallback  = dua-duanya gagal, dipakai teks polos (perilaku pra-F4)
+  //   malformed = tool dipanggil tapi argumennya tidak terbaca
+  // `funnel_declared` = enum langkah yang DINYATAKAN model — dipakai sebagai
+  // cek-silang terhadap langkah yang diputus sistem, bukan sebagai pemutus.
+  readonly replyContract = new Counter({
+    name: 'reply_contract_total',
+    help: 'Reply Contract (send_reply) compliance by outcome',
+    labelNames: ['outcome', 'funnel_declared'] as const,
+    registers: [this.registry],
+  });
+
   // Token usage per model — the only visibility into AI spend. prom-client
   // counters take floats, so multiply by your per-token rate in the dashboard
   // to get cost. kind = prompt | completion.

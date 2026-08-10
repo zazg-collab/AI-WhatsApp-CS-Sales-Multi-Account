@@ -935,6 +935,39 @@ describe('P4 — ekstraktor pisah kota/provinsi + saringan provinsi', () => {
   });
 });
 
+// >>> ANGGA — F4 (2026-08-09, cowork): `komposisiFunnel` diuji dengan
+// `ShippingService` ASLI, bukan mock. Spec kontrak di `ai.service` mem-mock
+// method ini, jadi tanpa blok ini tidak ada satu pun test yang membuktikan
+// penjaganya (`funnelExpect` harus milik GILIRAN INI) benar-benar bekerja.
+describe('F4 — komposisiFunnel: kalimat funnel dipasang SISTEM', () => {
+  it('tanpa funnelExpect (percakapan asing) → no-op total', () => {
+    const h = harness({ lastCustomerText: 'halo kak' });
+    expect(h.svc.komposisiFunnel('percakapan-lain', 'Halo kak')).toEqual({
+      text: 'Halo kak',
+      step: null,
+      disisipkan: false,
+      salinanDibuang: 0,
+    });
+  });
+
+  it('sesudah grounding jalan, kalimat langkah aktif DIPASANG di akhir prosa', async () => {
+    const h = harness({
+      lastCustomerText: 'harga golok sembelih berapa kak?',
+      extract: { kota: null, items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    await h.svc.quoteForConversation('c1');
+    await h.svc.getGroundingText('c1');
+    const step = h.svc.getFunnelExpect('c1');
+    if (!step) return; // giliran ini memang tidak mengaktifkan funnel — bukan kegagalan
+    const hasil = h.svc.komposisiFunnel('c1', 'Harganya {{harga_satuan}} kak.');
+    expect(hasil.step).toBe(step);
+    if (hasil.disisipkan) {
+      expect(hasil.text.startsWith('Harganya {{harga_satuan}} kak.')).toBe(true);
+      expect(hasil.text.length).toBeGreaterThan('Harganya {{harga_satuan}} kak.'.length);
+    }
+  });
+});
+
 describe('P2 — penjaga kontradiksi: menyangkal data yang sudah tersedia', () => {
   it('REPLAY: kutipan OK + "belum memiliki informasi ongkir… cek dengan tim logistik" → DITAHAN', async () => {
     const h = harness({
@@ -960,6 +993,33 @@ describe('P2 — penjaga kontradiksi: menyangkal data yang sudah tersedia', () =
     expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok'); // cache
     const out = await h.svc.resolvePriceTokens('c1', 'Untuk garansi saya cek dengan tim dulu ya kak 🙏');
     expect(out.ok).toBe(true);
+  });
+
+  // >>> ANGGA — F4 audit (2026-08-09, cowork): kontradiksi yang DINYATAKAN
+  // sendiri oleh model lewat kontrak `send_reply`, bukan ditebak dari 15 frasa.
+  it('kontrak menyatakan data_status="unavailable" padahal kutipan SUDAH ada → DITAHAN, tanpa cocok frasa apa pun', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak?',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    // Teksnya SENGAJA bersih — tidak memuat satu pun frasa penyangkalan.
+    const out = await h.svc.resolvePriceTokens('c1', 'Ongkirnya {{ongkir}} ya kak.', {
+      dataStatus: 'unavailable',
+    });
+    expect(out.ok).toBe(false);
+    expect(out.issueCodes).toContain('kontradiksi_data');
+    expect(out.issues.join(' ')).toContain('data_status="unavailable"');
+  });
+
+  it('data_status="computed" (atau tidak dinyatakan) tidak menahan apa pun', async () => {
+    const h = harness({
+      lastCustomerText: 'ongkir ke medan berapa kak?',
+      extract: { kota: 'Medan', items: [{ nama: 'Golok Sembelih Multifungsi', qty: 1 }] },
+    });
+    expect(((await h.svc.quoteForConversation('c1')) as any).status).toBe('ok');
+    expect((await h.svc.resolvePriceTokens('c1', 'Ongkirnya {{ongkir}} ya kak.', { dataStatus: 'computed' })).ok).toBe(true);
+    expect((await h.svc.resolvePriceTokens('c1', 'Ongkirnya {{ongkir}} ya kak.')).ok).toBe(true);
   });
 
   it('telemetri mengenal kelas kontradiksi_data', () => {

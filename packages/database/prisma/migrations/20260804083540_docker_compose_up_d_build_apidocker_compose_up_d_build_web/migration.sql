@@ -1,2 +1,14 @@
 -- DropIndex
-DROP INDEX "knowledge_items_embedding_idx";
+-- >>> ANGGA — perbaikan 2026-08-09 (cowork): `IF EXISTS` ditambahkan.
+-- Migrasi ini satu-satunya yang bernama timestamp (hasil `prisma migrate dev`);
+-- sisanya manual bernomor. Tanpa `IF EXISTS`, seluruh riwayat migrasi TIDAK
+-- BISA diputar ulang dari database KOSONG — mentok di sini dengan
+-- `ERROR: index "knowledge_items_embedding_idx" does not exist` (42704),
+-- karena index itu memang belum pernah dibuat pada jalur dari-nol.
+-- Di database yang sudah jalan tidak ada dampak: migrasi ini sudah tercatat
+-- applied, jadi `migrate deploy` melewatinya. Diverifikasi di Postgres 16 +
+-- pgvector: SEBELUM perbaikan gagal di sini; SESUDAH, 44 migrasi lolos semua
+-- dari DB kosong tanpa satu pun `migrate resolve`.
+-- Prisma 5.22 tidak mempermasalahkan berkas migrasi yang sudah applied lalu
+-- diubah — `migrate status` & `migrate deploy` tetap bersih (diuji langsung).
+DROP INDEX IF EXISTS "knowledge_items_embedding_idx";

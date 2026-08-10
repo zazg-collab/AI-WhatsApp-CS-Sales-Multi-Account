@@ -254,3 +254,230 @@ export function katalogPenanda(q: ShippingQuote, hidePriceUnits = false): string
   }
   return lines;
 }
+
+/**
+ * >>> ANGGA — F4 (2026-08-09, cowork) + koreksi audit (2026-08-09).
+ *
+ * SATU definisi normalisasi, dipakai gerbang `funnel_dilanggar` di
+ * `shipping.service.ts` DAN penyusun balasan di bawah: huruf kecil, semua yang
+ * bukan huruf/angka jadi spasi, spasi beruntun dirapatkan, lalu di-trim.
+ *
+ * KOREKSI AUDIT: dulu ada DUA implementasi — `normFunnel` (lowercase dulu, baru
+ * saring) dan `normalisasiBerpeta` (saring dulu, baru lowercase). Untuk karakter
+ * yang lowercase-nya mekar jadi huruf + tanda gabung ("Istanbul" dengan I
+ * bertitik) keduanya menghasilkan string BERBEDA, padahal yang satu dipakai
+ * membuat pola dan yang lain dipakai mencarinya — kalimat yang sudah ada jadi
+ * tidak ketemu, lalu ditempel lagi. Sekarang `normFunnel` DITURUNKAN dari
+ * fungsi berpeta, jadi keduanya mustahil berbeda menurut konstruksi.
+ */
+export function normFunnel(s: string): string {
+  return normalisasiBerpeta(s).norm;
+}
+
+/**
+ * Normalisasi SEKALIGUS memetakan tiap UNIT UTF-16 hasil ke indeks aslinya di
+ * `s`. Dibutuhkan karena kita mencocokkan di ruang ternormalisasi tapi harus
+ * MEMOTONG di teks asli.
+ *
+ * KOREKSI AUDIT: `peta` dulu didorong satu entri per KODE TITIK sementara
+ * `norm` dirangkai per UNIT UTF-16. Untuk huruf/angka di luar BMP (huruf
+ * matematis, Adlam, CJK ext-B) satu kode titik = dua unit, jadi sejak karakter
+ * itu SELURUH peta meleset — potongan memotong di tengah kata, dan kalau
+ * `peta[a]` sampai `undefined`, `slice(0, undefined) + slice(NaN)`
+ * MENGGANDAKAN seluruh balasan. Sekarang peta didorong per unit, jadi
+ * `peta.length === norm.length` selalu.
+ */
+function normalisasiBerpeta(s: string): { norm: string; peta: number[] } {
+  const keluar: string[] = [];
+  const peta: number[] = [];
+  let idx = 0;
+  for (const cp of Array.from(s ?? '')) {
+    const panjang = cp.length;
+    // Lowercase DULU, uji per kode titik hasilnya — urutan yang sama dengan
+    // regex `[^\p{L}\p{N} ]` yang dulu dipakai `normFunnel`.
+    for (const ch of Array.from(cp.toLowerCase())) {
+      if (/[\p{L}\p{N}]/u.test(ch)) {
+        for (let k = 0; k < ch.length; k++) {
+          keluar.push(ch[k]);
+          peta.push(idx);
+        }
+      } else if (keluar.length > 0 && keluar[keluar.length - 1] !== ' ') {
+        keluar.push(' ');
+        peta.push(idx);
+      }
+    }
+    idx += panjang;
+  }
+  while (keluar.length > 0 && keluar[keluar.length - 1] === ' ') {
+    keluar.pop();
+    peta.pop();
+  }
+  return { norm: keluar.join(''), peta };
+}
+
+/** Lebar maksimum satu "lubang" penanda saat pencocokan toleran. Dibatasi
+ *  supaya regex berlubang-banyak tidak bisa jadi backtracking berdetik-detik di
+ *  event loop — kalimat funnel bisa disunting dari dashboard, jadi bentuknya
+ *  bukan sesuatu yang bisa kita jamin. */
+const LEBAR_LUBANG_MAKS = 400;
+
+/**
+ * Pola untuk bentuk TERSUBSTITUSI kalimat wajib: tiap `{{...}}` jadi LUBANG,
+ * potongan literal di antaranya harus cocok berurutan.
+ *
+ * KOREKSI AUDIT: versi pertama membuang potongan literal KOSONG di ujung. Untuk
+ * kalimat yang BERAKHIR dengan penanda — dan template closing COD default
+ * memang berakhir `{{catatan_sk}}` — polanya berhenti di literal sebelum
+ * penanda terakhir, sehingga (a) cek "sudah menutup" tidak pernah kena dan
+ * (b) potongan yang dihapus salah, memotong formulir closing jadi berantakan
+ * SETIAP giliran. Sekarang ekor penanda diberi jangkar rakus sampai akhir teks.
+ */
+function polaKalimat(kalimat: string): RegExp | null {
+  const bagian = kalimat.split(/\{\{[a-z_]+\}\}/gi).map(normFunnel);
+  const ekorPenanda = bagian.length > 1 && bagian[bagian.length - 1] === '';
+  const inti = bagian.filter((b) => b.length > 0);
+  if (inti.length === 0) return null;
+  const escape = (b: string) => b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const badan = inti.map(escape).join(`[\\s\\S]{1,${LEBAR_LUBANG_MAKS}}?`);
+  return new RegExp(ekorPenanda ? `${badan}[\\s\\S]*$` : badan, 'g');
+}
+
+interface Kemunculan {
+  /** Rentang [awal, akhir) di teks ASLI. */
+  asli: [number, number];
+  /** Indeks akhir (eksklusif) di teks TERNORMALISASI — untuk cek "menutup". */
+  akhirNorm: number;
+  /** false = rentang ini hasil GABUNGAN kemunculan yang tumpang tindih, jadi
+   *  bukan "satu kemunculan bersih" dan tidak boleh dihitung sebagai penutup. */
+  tunggal: boolean;
+}
+
+function cariKemunculan(prosa: string, kalimat: string): { hits: Kemunculan[]; panjangNorm: number } {
+  const target = normFunnel(kalimat);
+  const { norm, peta } = normalisasiBerpeta(prosa);
+  if (!target || !norm) return { hits: [], panjangNorm: norm.length };
+
+  let mentah: Array<[number, number]> = [];
+
+  // 1) LITERAL dulu — jalur normal: prosa model memuat penanda `{{...}}` apa
+  //    adanya, sama seperti kalimat wajibnya, jadi cocok persis. Maju satu
+  //    karakter (bukan sepanjang target) supaya kemunculan tumpang tindih ikut
+  //    terhitung; rentangnya digabung di bawah.
+  for (let dari = 0; ; ) {
+    const i = norm.indexOf(target, dari);
+    if (i < 0) break;
+    mentah.push([i, i + target.length]);
+    dari = i + 1;
+  }
+
+  // 2) Baru pola TOLERAN-PENANDA, HANYA kalau literal tidak menemukan apa pun.
+  //    Bentuk tersubstitusi cuma lahir di jalur retry gerbang uang, jadi ini
+  //    memang jalur cadangan — bukan jalur utama.
+  if (mentah.length === 0 && /\{\{[a-z_]+\}\}/i.test(kalimat)) {
+    const pola = polaKalimat(kalimat);
+    if (pola) {
+      for (const m of norm.matchAll(pola)) {
+        if (m.index === undefined || m[0].length === 0) continue;
+        mentah.push([m.index, m.index + m[0].length]);
+      }
+    }
+  }
+  if (mentah.length === 0) return { hits: [], panjangNorm: norm.length };
+
+  mentah.sort((a, b) => a[0] - b[0]);
+  const gabung: Array<[number, number, boolean]> = [[mentah[0][0], mentah[0][1], true]];
+  for (const [a, b] of mentah.slice(1)) {
+    const akhir = gabung[gabung.length - 1];
+    if (a <= akhir[1]) {
+      akhir[1] = Math.max(akhir[1], b);
+      akhir[2] = false; // digabung → bukan kemunculan bersih
+    } else gabung.push([a, b, true]);
+  }
+
+  const hits: Kemunculan[] = gabung.map(([a, b, tunggal]) => {
+    const awalAsli = peta[a];
+    let j = b;
+    while (j < norm.length && norm[j] === ' ') j++;
+    const akhirAsli = j < peta.length ? peta[j] : prosa.length;
+    return { asli: [awalAsli, Math.max(awalAsli, akhirAsli)], akhirNorm: b, tunggal };
+  });
+  return { hits, panjangNorm: norm.length };
+}
+
+/** Hasil penyusunan balasan. `disisipkan` = sistem yang menempelkan kalimatnya. */
+export interface HasilSusunBalasan {
+  text: string;
+  disisipkan: boolean;
+  salinanDibuang: number;
+}
+
+/**
+ * Susun balasan final: prosa model + kalimat funnel wajib, DIJAMIN muncul
+ * TEPAT SEKALI di akhir.
+ *
+ * Tiga jalur, dan urutannya penting:
+ *
+ *  1. **Prosa sudah menutup dengan kalimatnya, tepat sekali → dikembalikan APA
+ *     ADANYA, byte per byte.** Ini jalur normal hari ini, dan sengaja dibuat
+ *     no-op total supaya F4 tidak mengubah satu pun keluaran yang selama ini
+ *     sudah benar. Kalau jalur ini menulis ulang teks (misal merapikan spasi),
+ *     seluruh test lama yang membandingkan string akan goyah tanpa ada yang
+ *     jadi lebih benar.
+ *  2. **Kalimatnya muncul lebih dari sekali, atau nyempil di tengah** → semua
+ *     salinan DIBUANG lalu ditempel sekali di akhir. Ini menggantikan gerbang
+ *     `kalimat_dobel` yang dulu MENAHAN draft: perbaikan deterministik lebih
+ *     baik daripada penolakan, karena pelanggan tetap dapat jawaban.
+ *  3. **Kalimatnya tidak ada** → ditempel. Ini yang membuat kelas
+ *     `funnel_dilanggar` "kalimat hilang" mustahil terjadi di jalur produksi:
+ *     kalimatnya bukan lagi sesuatu yang DIHARAP muncul dari model, tapi
+ *     sesuatu yang DIPASANG sistem.
+ *
+ * `kalimat` kosong = langkah funnel aktif tapi pertanyaannya sedang dibungkam
+ * (cap 2x tanya kena). Tidak ada yang ditempel — gembok totalnya tetap hidup
+ * lewat `funnelExpect`, itu urusan gerbang, bukan urusan penyusun ini.
+ */
+export function susunBalasan(
+  prosa: string,
+  kalimat: string,
+  opts: { tempel?: boolean } = {},
+): HasilSusunBalasan {
+  // `tempel: false` = BUANG SAJA, jangan pasang. Dipakai segmen burst yang
+  // BUKAN segmen terakhir: pertanyaan penutup cuma boleh muncul sekali untuk
+  // seluruh balasan, dan tempatnya di ujung — kalau tiap segmen ditempeli,
+  // pelanggan menerima pertanyaan yang sama beberapa kali berturut-turut.
+  const tempel = opts.tempel !== false;
+  const wajib = (kalimat ?? '').trim();
+  const teksAwal = prosa ?? '';
+  if (!wajib) return { text: teksAwal, disisipkan: false, salinanDibuang: 0 };
+
+  if (!normFunnel(wajib)) return { text: teksAwal, disisipkan: false, salinanDibuang: 0 };
+
+  const { hits, panjangNorm } = cariKemunculan(teksAwal, wajib);
+  // "Sudah menutup" = kemunculan tunggal yang berakhir di ujung teks
+  // ternormalisasi. Dihitung dari indeks, bukan `endsWith`, supaya bentuk
+  // TERSUBSTITUSI (yang tidak sama persis dengan kalimat kanonik) tetap
+  // terhitung menutup.
+  if (tempel && hits.length === 1 && hits[0].tunggal && hits[0].akhirNorm === panjangNorm) {
+    return { text: teksAwal, disisipkan: false, salinanDibuang: 0 };
+  }
+  if (!tempel && hits.length === 0) {
+    return { text: teksAwal, disisipkan: false, salinanDibuang: 0 };
+  }
+
+  let badan = teksAwal;
+  for (let i = hits.length - 1; i >= 0; i--) {
+    badan = badan.slice(0, hits[i].asli[0]) + badan.slice(hits[i].asli[1]);
+  }
+  badan = badan.replace(/[\s]+$/u, '').replace(/^[\s]+/u, '');
+  // Sisa yang tidak memuat satu pun huruf/angka ("!!! ???") bukan badan
+  // balasan — itu sampah tanda baca dari model, jangan ikut terkirim.
+  if (badan && !normFunnel(badan)) badan = '';
+  if (!tempel) {
+    return { text: badan, disisipkan: false, salinanDibuang: hits.length };
+  }
+  return {
+    text: badan ? `${badan}\n\n${wajib}` : wajib,
+    disisipkan: true,
+    salinanDibuang: hits.length,
+  };
+}

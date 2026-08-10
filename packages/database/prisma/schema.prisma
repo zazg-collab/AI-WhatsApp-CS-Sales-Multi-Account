@@ -437,6 +437,7 @@ model Conversation {
   followUps       FollowUp[]
   campaignRecipients CampaignRecipient[]
   orderContextEvents OrderContextEvent[] // >>> ANGGA — Order Context Log <<<
+  testSession        TestSession?           // >>> ANGGA — F3b: percakapan uji test-harness <<<
 
   @@index([whatsappAccountId])
   @@index([customerId])
@@ -482,6 +483,7 @@ model Message {
   sentinelReview SentinelReview? @relation(fields: [sentinelReviewId], references: [id])
   quotedMessage Message?     @relation("MessageQuote", fields: [quotedMessageId], references: [id], onDelete: SetNull)
   quotedBy      Message[]    @relation("MessageQuote")
+  testDebug     TestMessageDebug?   // >>> ANGGA — F3c: debug panel test-harness <<<
 
   @@unique([conversationId, externalId])
   @@index([conversationId, createdAt])
@@ -800,30 +802,45 @@ model OrderContextEvent {
 // >>> ANGGA — Test Harness v2 (2026-08-08): Web Chat Simulator untuk debugging
 // Sentinel tanpa WhatsApp. Isolated tables (no FK ke production). Port-safe
 // design: running di NestJS app yang sama di port 3001 (tidak ganti port).
+// >>> ANGGA — F3b (2026-08-09, cowork): TestSession SUSUT jadi PENUNJUK.
+// Sebelumnya tester punya dunia sendiri (test_sessions + test_messages) yang
+// TIDAK tersentuh otak bot — `shipping.service`/`order-context.service` membaca
+// `conversations`/`messages`, dan `OrderContextEvent` punya FK ke Conversation,
+// jadi memori order MUSTAHIL jalan dari tester. Itu akar T6.
+// Sekarang percakapan uji adalah baris `Conversation` SUNGGUHAN di bawah satu
+// akun WA bertipe test; tabel ini tinggal menyimpan metadata sesi (nama,
+// provider, model) + penunjuk ke percakapannya. Pesan pindah ke `messages`.
+// Hapus sesi = cascade menyapu Conversation + messages + orderContextEvents +
+// sentinelReviews + followUps. Sesi baru = UUID baru = fresh total, termasuk
+// cache in-memory yang dikunci conversationId.
 model TestSession {
-  id        String   @id @default(cuid())
-  name      String
-  provider  String
-  model     String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(cuid())
+  name           String
+  provider       String
+  model          String
+  conversationId String   @unique @map("conversation_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  messages TestMessage[]
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@map("test_sessions")
 }
 
-model TestMessage {
-  id        String   @id @default(cuid())
-  sessionId String   @map("session_id")
-  role      String   // 'user' | 'assistant' | 'system'
-  content   String   @db.Text
-  timestamp DateTime @default(now())
-  debugInfo Json?    @map("debug_info") // DebugSnapshot
+// >>> ANGGA — F3c (2026-08-09, cowork): rumah DebugSnapshot panel test-harness.
+// Sebelum F3b, snapshot ini menumpang kolom `debug_info` di `test_messages`.
+// Pesan uji sekarang tinggal di `messages` (tabel produksi) yang TIDAK punya —
+// dan TIDAK BOLEH diberi — kolom debug khusus tester. Menumpang `rawWaPayload`
+// juga salah kamar. Jadi: tabel sampingan khusus harness, FK ke Message dengan
+// cascade, nol jejak di jalur produksi. Tanpa ini panel debug kehilangan
+// riwayatnya = downgrade.
+model TestMessageDebug {
+  messageId String   @id @map("message_id")
+  debugInfo Json     @map("debug_info")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  session TestSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-  @@index([sessionId, timestamp])
-  @@map("test_messages")
+  @@map("test_message_debug")
 }
 // <<< ANGGA

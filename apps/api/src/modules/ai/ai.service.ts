@@ -22,6 +22,15 @@ import { ShippingService, type ShippingOrderExtract } from '../shipping/shipping
 // inline di sini. Satu-satunya definisi ada di `shipping.tools.ts`, dipakai
 // bersama jalur produksi ini DAN test-harness. <<<
 import { shippingTools } from '../shipping/shipping.tools';
+// >>> ANGGA — F4 (2026-08-09, cowork): Reply Contract. Model menyerahkan
+// balasannya lewat tool `send_reply`; alasannya panjang, ada di berkasnya. <<<
+import {
+  sendReplyTool,
+  parseReplyContract,
+  SEND_REPLY_TOOL_NAME,
+  SEND_REPLY_TOOL_CHOICE,
+  type ReplyContract,
+} from '../reply/reply.tools';
 import { searchKnowledgeTool } from '../knowledge/knowledge.tools';
 // <<< ANGGA
 import {
@@ -154,10 +163,20 @@ export class AiService {
     // bukan langsung diserahkan ke admin. Sengaja HANYA satu kali (bukan
     // loop) supaya biaya panggilan LLM ekstra tetap terkontrol dan tidak ada
     // risiko retry tanpa akhir kalau modelnya memang keras kepala.
-    retry?: { messages: ChatMessage[]; lang: string; model?: string },
+    // >>> ANGGA — F4 audit (2026-08-09, cowork): `tempel` diteruskan ke
+    // komposisi teks HASIL RETRY. Jalur burst memakai `tempel: false` untuk
+    // segmen yang bukan terakhir — lihat `generateSegmentedReply`. <<<
+    retry?: { messages: ChatMessage[]; lang: string; model?: string; tempel?: boolean },
+    // >>> ANGGA — F4 audit: `dataStatus` yang DINYATAKAN model lewat kontrak
+    // `send_reply`. Diteruskan ke gerbang supaya kontradiksi "data sudah ada
+    // tapi model bilang belum" bisa ditangkap dari PERNYATAAN model, bukan
+    // dari mencocokkan 24 frasa. <<<
+    opts?: { dataStatus?: 'computed' | 'unavailable' },
   ): Promise<{ text: string; blocked: boolean; issues?: string[] }> {
     if (!this.shipping) return { text, blocked: false };
-    const rendered = await this.shipping.resolvePriceTokens(conversationId, text);
+    const rendered = await this.shipping.resolvePriceTokens(conversationId, text, {
+      dataStatus: opts?.dataStatus,
+    });
     if (rendered.ok) return { text: rendered.text, blocked: false };
     this.logger.warn(`Gerbang uang menahan balasan ${conversationId}: ${rendered.issues.join('; ')}`);
 
@@ -215,7 +234,19 @@ export class AiService {
         ];
         let retryText = await this.provider.chat(retryMessages, { model: retry.model, maxTokens: 500 });
         retryText = stripDataFences(retryText);
-        const retryRendered = await this.shipping.resolvePriceTokens(conversationId, retryText);
+        // >>> ANGGA — F4 audit (2026-08-09, cowork): LUBANG yang hampir lolos.
+        // Teks hasil retry ini dulu langsung masuk gerbang tanpa lewat
+        // komposisi — artinya deadlock `funnel_dilanggar` yang F4 klaim sudah
+        // mustahil TETAP HIDUP di jalur retry, dan justru di jalur inilah ia
+        // dulu paling sering muncul (retry dipicu oleh pelanggaran gerbang).
+        // Sekarang teks retry disusun dengan aturan yang sama persis. <<<
+        const komposisiRetry = this.shipping.komposisiFunnel?.(conversationId, retryText, {
+          tempel: retry.tempel,
+        });
+        if (komposisiRetry) retryText = komposisiRetry.text;
+        const retryRendered = await this.shipping.resolvePriceTokens(conversationId, retryText, {
+          dataStatus: opts?.dataStatus,
+        });
         if (retryRendered.ok) {
           this.logger.log(`Gerbang uang: percobaan ulang berhasil untuk ${conversationId}`);
           return { text: retryRendered.text, blocked: false };
@@ -312,15 +343,30 @@ export class AiService {
       tools.push(searchKnowledgeTool);
     }
 
+    // >>> ANGGA — F4: kontrak balasan SELALU ikut, tidak bergantung ada/tidaknya
+    // ShippingService — ini pintu keluar balasan, bukan alat cari data. <<<
+    tools.push(sendReplyTool);
+
     if (tools.length === 0) tools = undefined;
 
     let text = '';
+    // >>> ANGGA — F4: kontrak yang diserahkan model, kalau ia memakai
+    // `send_reply`. `null` = tidak menyerahkan (jalur teks polos pra-F4). <<<
+    let kontrak: ReplyContract | null = null;
+    let kontrakRusak = false;
+    let kontrakDipaksa = false;
     const stopTimer = this.metrics?.aiRequestDuration.startTimer();
     try {
       for (let attempt = 0; attempt < 3; attempt++) {
         const res = await this.provider.chatWithTools(messages, {
           model,
-          maxTokens: 500,
+          // >>> ANGGA — F4 audit (2026-08-09, cowork): 500 → 600. Bukan supaya
+          // balasan boleh lebih panjang — plafon bukan target — tapi karena
+          // sejak F4 balasannya melintas sebagai string DI DALAM JSON argumen
+          // tool. Nama fungsi, nama field, dan escape `\n`/kutip memakan
+          // puluhan token yang dulu tidak ada. Tanpa kelonggaran itu, balasan
+          // yang PERSIS muat di 500 sekarang terpotong di tengah JSON. <<<
+          maxTokens: 600,
           tools,
         });
 
@@ -331,6 +377,16 @@ export class AiService {
           break; // LLM returned final text
         }
 
+        // >>> ANGGA — F4: kalau `send_reply` datang BARENGAN tool data dalam
+        // satu batch, tool data yang menang. Alasannya keselamatan jawaban:
+        // batch itu berarti model menulis balasannya SEBELUM membaca hasil
+        // tool — persis keadaan yang bikin ia mengarang angka atau berkelit
+        // "saya cek dulu ya kak". `send_reply`-nya tidak dieksekusi, cuma
+        // dibalas instruksi untuk mengulang sesudah hasilnya masuk. <<<
+        const adaToolData = toolCalls.some(
+          (t: any) => t?.type === 'function' && t.function?.name !== SEND_REPLY_TOOL_NAME,
+        );
+
         // LLM wants to call tools. Append its response to history.
         messages.push({
           role: 'assistant',
@@ -339,9 +395,47 @@ export class AiService {
         });
 
         // Execute each tool
+        let selesai = false;
         for (const call of toolCalls) {
           if (call.type !== 'function') continue;
           const fnName = call.function.name;
+
+          if (fnName === SEND_REPLY_TOOL_NAME) {
+            if (adaToolData) {
+              messages.push({
+                role: 'tool',
+                content: JSON.stringify({
+                  error:
+                    'Hasil tool data baru tersedia dan BELUM kamu baca. Baca dulu, lalu panggil send_reply sekali lagi dengan jawaban yang sudah memakai data itu.',
+                }),
+                tool_call_id: call.id,
+                name: fnName,
+              });
+              continue;
+            }
+            const dibaca = parseReplyContract(call.function.arguments ?? '');
+            if (dibaca) {
+              kontrak = dibaca;
+              text = dibaca.answer;
+              selesai = true;
+              break;
+            }
+            // Argumen tidak terbaca / `answer` kosong: JANGAN diam-diam
+            // mengirim pesan kosong. Beri tahu modelnya, biarkan loop
+            // memutar sekali lagi — kalau tetap gagal, jatuh ke teks polos.
+            kontrakRusak = true;
+            messages.push({
+              role: 'tool',
+              content: JSON.stringify({
+                error:
+                  'Argumen send_reply tidak terbaca atau field "answer" kosong. Panggil lagi dengan answer berisi teks balasan lengkap.',
+              }),
+              tool_call_id: call.id,
+              name: fnName,
+            });
+            continue;
+          }
+
           let resultStr = '';
           try {
             const args = JSON.parse(call.function.arguments);
@@ -374,6 +468,41 @@ export class AiService {
             name: fnName,
           });
         }
+        if (selesai) break; // >>> ANGGA — F4: balasan sudah diserahkan <<<
+      }
+
+      // >>> ANGGA — F4: percobaan PAKSA — SENGAJA hanya kalau tidak ada teks
+      // sama sekali. Kalau model sudah memberi prosa (jalur pra-F4), teks itu
+      // dipakai apa adanya: memanggil ulang cuma untuk mendapat LABEL enum
+      // menambah satu perjalanan bolak-balik ke provider di SETIAP giliran
+      // tanpa membuat jawabannya lebih benar — kalimat funnel-nya toh sudah
+      // dijamin `komposisiFunnel`, bukan oleh kontrak ini. Kalau teksnya
+      // kosong, barulah kita memang tidak punya apa-apa untuk dikirim, dan
+      // satu panggilan dengan `tool_choice` dipin itu murni keuntungan. <<<
+      if (!kontrak && !text.trim()) {
+        try {
+          const paksa = await this.provider.chatWithTools(messages, {
+            model,
+            maxTokens: 500,
+            tools: [sendReplyTool],
+            toolChoice: SEND_REPLY_TOOL_CHOICE,
+          });
+          const panggilan = (paksa.tool_calls ?? []).find(
+            (t: any) => t?.type === 'function' && t.function?.name === SEND_REPLY_TOOL_NAME,
+          );
+          const dibaca = panggilan ? parseReplyContract(panggilan.function.arguments ?? '') : null;
+          if (dibaca) {
+            kontrak = dibaca;
+            kontrakDipaksa = true;
+            text = dibaca.answer;
+          } else if (paksa.content?.trim()) {
+            text = paksa.content;
+          }
+        } catch (e: any) {
+          // Percobaan paksa adalah BONUS, bukan jalur wajib — kegagalannya
+          // tidak boleh menggagalkan balasan yang (mungkin) sudah ada.
+          this.logger.warn(`send_reply paksa gagal: ${e?.message ?? e}`);
+        }
       }
     } catch (err) {
       stopTimer?.();
@@ -394,8 +523,54 @@ export class AiService {
     // menahan token/angka bermasalah. koreksi 2026-08-04 (audit gerbang uang
     // #2): satu percobaan ulang otomatis dengan pesan koreksi sebelum jatuh
     // ke draft manual — `messages`/`resolvedModel` sudah ada di scope ini.
+    // >>> ANGGA — F4 (2026-08-09, cowork): TELEMETRI kepatuhan kontrak.
+    // Ini pengganti "berburu bug daftar frasa": kepatuhan jadi angka yang bisa
+    // dilihat per model, bukan tebakan. Label `funnel_declared` = langkah yang
+    // DINYATAKAN model; dibandingkan dengan langkah yang diputus sistem
+    // (`komposisiFunnel().step`) di korpus eval nanti (F6). Optional-call
+    // `?.` di mana-mana: harness test lama mem-mock `metrics` dengan dua
+    // counter saja, dan telemetri tidak boleh pernah menggagalkan balasan.
+    const kontrakOutcome = kontrak
+      ? kontrakDipaksa
+        ? 'forced'
+        : 'honored'
+      : kontrakRusak
+        ? 'malformed'
+        : 'fallback';
+    this.metrics?.replyContract?.inc({
+      outcome: kontrakOutcome,
+      funnel_declared: kontrak?.funnelQuestionId ?? 'unreported',
+    });
+    if (kontrak && kontrak.pelanggaranSkema.length > 0) {
+      this.logger.warn(
+        `send_reply melanggar skema di ${conversationId}: ${kontrak.pelanggaranSkema.join(', ')}`,
+      );
+    }
+
+    // >>> ANGGA — F4: KOMPOSISI. Kalimat funnel wajib giliran ini dipasang
+    // SISTEM, tepat sekali di akhir — bukan diharap nyempil dari prosa model
+    // lalu dicocokkan string. Dipanggil SEBELUM gerbang uang supaya penanda
+    // {{...}} di dalam kalimatnya ikut disubstitusi seperti sisa teksnya.
+    // Optional-call `?.()` disengaja: spec lama mem-mock ShippingService tanpa
+    // method ini, dan absennya harus berarti "perilaku pra-F4", bukan crash.
+    const komposisi = this.shipping?.komposisiFunnel?.(conversationId, text);
+    if (komposisi) {
+      if (komposisi.disisipkan) {
+        this.logger.debug(
+          `komposisiFunnel ${conversationId}: kalimat langkah "${komposisi.step}" dipasang sistem (salinan dibuang: ${komposisi.salinanDibuang})`,
+        );
+      }
+      text = komposisi.text;
+    }
+    // <<< ANGGA
+
     const lang = await this.botLang(conversationId);
-    const gated = await this.gateMoneyTokens(conversationId, text, { messages, lang, model });
+    const gated = await this.gateMoneyTokens(
+      conversationId,
+      text,
+      { messages, lang, model },
+      { dataStatus: kontrak?.dataStatus },
+    );
     text = gated.text;
     const moneyBlocked = gated.blocked;
     // <<< ANGGA
@@ -462,12 +637,42 @@ export class AiService {
       // wa-inbound.service.ts), tapi tanpa ini admin bisa melihat draft yang
       // masih memuat {{...}} mentah — gerbangnya tetap wajib jalan supaya
       // penanda pendek "gerbang uang menahan" tampil kalau perlu.
+      // >>> ANGGA — F4/G4 (2026-08-09, cowork): BURST ikut kontrak komposisi.
+      // Tanpa ini ada DUA bentuk balasan di sistem yang sama — kontrak untuk
+      // balasan tunggal, prosa bebas untuk burst — dan kelas `funnel_dilanggar`
+      // yang sudah mustahil di jalur tunggal tetap hidup di jalur burst.
+      //
+      // Aturannya beda satu hal dan itu penting: kalimat penutup cuma boleh
+      // ada SEKALI untuk seluruh balasan, dan tempatnya di segmen TERAKHIR.
+      // Segmen lain hanya dibersihkan dari salinannya (`tempel: false`) —
+      // kalau tiap segmen ditempeli, pelanggan menerima pertanyaan yang sama
+      // berkali-kali berturut-turut. Dijalankan SEBELUM gerbang uang supaya
+      // penanda {{...}} di kalimatnya ikut disubstitusi.
+      const segmenTerakhir = segments.length - 1;
+      const tersusun = segments.map((s, i) => {
+        const k = this.shipping?.komposisiFunnel?.(conversationId, s.text, {
+          tempel: i === segmenTerakhir,
+        });
+        return { ...s, text: k ? k.text : s.text };
+      }).filter((s) => s.text.trim().length > 0);
+      // <<< ANGGA
+
       const withGate: Array<{ answersIndex: number | null; text: string; moneyGateIssues?: string[] }> = [];
-      for (const s of segments) {
+      let ke = 0;
+      for (const s of tersusun) {
         // >>> ANGGA — koreksi 2026-08-04 (audit gerbang uang #2): retry sekali
         // juga untuk tiap segmen burst, sama seperti balasan tunggal —
         // `base` (prompt dasar percakapan ini) sudah tersedia di scope ini.
-        const gated = await this.gateMoneyTokens(conversationId, s.text, { messages: base, lang, model: undefined });
+        const gated = await this.gateMoneyTokens(conversationId, s.text, {
+          messages: base,
+          lang,
+          model: undefined,
+          // Retry segmen ini pun harus memakai aturan tempel yang SAMA dengan
+          // penyusunan awalnya — kalau tidak, retry segmen tengah bisa
+          // ditempeli kalimat penutup dan pelanggan menerimanya dua kali.
+          tempel: ke === tersusun.length - 1,
+        });
+        ke += 1;
         withGate.push({ answersIndex: s.answersIndex, text: gated.text, moneyGateIssues: gated.issues });
       }
       // <<< ANGGA

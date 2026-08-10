@@ -22,6 +22,17 @@ export interface ChatOptions {
   /** Ask the provider for a JSON object response when supported. */
   json?: boolean;
   tools?: any[];
+  /**
+   * >>> ANGGA — F4 (2026-08-09, cowork): `tool_choice` yang dikirim apa adanya
+   * ke provider. Default tetap `'auto'` — SATU-SATUNYA pemakai nilai lain
+   * adalah percobaan PAKSA `send_reply` di `AiService.generateReply`, saat
+   * model sudah selesai memanggil tool data tapi tidak menyerahkan balasannya
+   * lewat kontrak. Dibiarkan bertipe longgar karena bentuknya milik protokol
+   * OpenAI-compatible, bukan milik kita; `reply.tools.ts` yang menyediakan
+   * konstanta bentuknya (`SEND_REPLY_TOOL_CHOICE`) supaya tidak ada string
+   * ajaib bertebaran. <<<
+   */
+  toolChoice?: unknown;
 }
 
 export interface ChatResponse {
@@ -108,7 +119,7 @@ export class AiProviderService {
     if (opts.json) payload.response_format = { type: 'json_object' };
     if (opts.tools && opts.tools.length > 0) {
       payload.tools = opts.tools;
-      payload.tool_choice = 'auto';
+      payload.tool_choice = opts.toolChoice ?? 'auto'; // >>> ANGGA — F4 <<<
     }
 
     const model = String(payload.model);
