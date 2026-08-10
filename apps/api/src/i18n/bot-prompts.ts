@@ -698,8 +698,8 @@ export const SHIPPING_MONEY_RULE_POST_TOTAL = {
 // pelanggarannya — bukan satu kalimat generik untuk semua kelas.
 export const MONEY_GATE_RETRY_HINTS: Record<string, { id: string; en: string }> = {
   funnel_dilanggar: {
-    id: 'Untuk balasan kali ini, JANGAN sebutkan angka atau rincian total sama sekali — baik ditulis sendiri MAUPUN lewat penanda {{...}} manapun (termasuk {{total_cod}}/{{total_transfer}}/{{rincian_tagihan}}). Hapus SELURUH kalimat yang menyinggung total/tagihan dan jawab bagian lain yang ditanya secara singkat — pertanyaan penutupnya ditempel SISTEM otomatis, JANGAN kamu tulis sendiri.',
-    en: 'For this reply, do NOT mention any total or bill breakdown at all — neither typed yourself NOR via any {{...}} placeholder (including {{total_cod}}/{{total_transfer}}/{{rincian_tagihan}}). Remove EVERY sentence referencing the total/bill and answer the rest briefly — the closing question is appended BY THE SYSTEM, do NOT write it yourself.',
+    id: 'Untuk balasan kali ini, JANGAN sebutkan angka atau rincian total sama sekali — baik ditulis sendiri MAUPUN lewat penanda {{...}} manapun (termasuk {{total_cod}}/{{total_transfer}}/{{rincian_tagihan}}). Hapus SELURUH kalimat yang menyinggung total/tagihan, jawab bagian lain yang ditanya secara singkat, lalu tutup dengan pertanyaan wajib yang sudah ditentukan.',
+    en: 'For this reply, do NOT mention any total or bill breakdown at all — neither typed yourself NOR via any {{...}} placeholder (including {{total_cod}}/{{total_transfer}}/{{rincian_tagihan}}). Remove EVERY sentence referencing the total/bill, answer the rest briefly, then close with the mandated question.',
   },
   kontradiksi_data: {
     id: 'Jangan menyangkal data atau bilang akan mengecek dulu — datanya SUDAH tersedia sekarang. Jawab langsung memakai penanda yang tersedia, seperti CS yang sudah memegang datanya, tanpa narasi "sedang mengecek".',
@@ -792,7 +792,16 @@ export const SHIPPING_GROUNDING_DATA_READY = {
  *  pakem barang→harga→alamat→konklusi→qty→total→metode). Kalimatnya template
  *  AppSetting, dibacakan VERBATIM; pelanggarannya DITAHAN gerbang
  *  (`resolvePriceTokens`, kelas telemetri funnel_dilanggar). <<< */
-// >>> ANGGA — F4 audit (2026-08-09, cowork): EMPAT template di bawah DIBALIK
+// >>> ANGGA — F4 audit (2026-08-09) lalu DIKEMBALIKAN (2026-08-10, ketok
+// Bossfren sesudah uji lapangan): empat template di bawah sempat dibalik jadi
+// "sistem yang menempel", tapi pembalikan itu TIDAK menghentikan model menulis
+// pertanyaannya sendiri — parafrase satu kata sudah cukup mengalahkan
+// pencocokan, dan pelanggan menerima pertanyaan yang sama dua kali. Sejalan
+// dengan Reply Contract yang kini tidur di balik REPLY_CONTRACT_ENABLED,
+// teksnya dikembalikan ke bunyi aslinya. Catatan lama disimpan di bawah
+// sebagai riwayat keputusan.
+//
+// [RIWAYAT] EMPAT template di bawah DIBALIK
 // arahnya. Dulu: "balasanmu HARUS diakhiri kalimat ini PERSIS". Sekarang:
 // "sistem yang menempelkannya, JANGAN kamu tulis".
 //
@@ -811,16 +820,16 @@ export const SHIPPING_GROUNDING_DATA_READY = {
 // — bukan ditambal daftar frasa.
 export const SHIPPING_FUNNEL_DIRECTIVE = {
   id: (kalimat: string) =>
-    `ATURAN ALUR PENJUALAN — PERINGATAN KERAS, WAJIB DITAATI: giliran ini ditutup dengan pertanyaan "${kalimat}", dan SISTEM yang menempelkannya otomatis di akhir balasanmu. Tugasmu HANYA menjawab pesan pelanggan. JANGAN menulis pertanyaan itu, JANGAN menulis versi parafrasenya, dan JANGAN mengajukan pertanyaan lain apa pun — kalau kamu ikut menuliskannya, pelanggan menerima pertanyaan yang sama dua kali.`,
+    `ATURAN ALUR PENJUALAN — PERINGATAN KERAS, WAJIB DITAATI, TIDAK BOLEH DILANGGAR: balasanmu HARUS diakhiri dengan kalimat tanya berikut PERSIS APA ADANYA sebagai kalimat TERAKHIR: "${kalimat}" — JANGAN diterjemahkan, JANGAN diubah kata-katanya, JANGAN menambah pertanyaan lain setelahnya. Sistem otomatis MENAHAN balasan yang melanggar aturan ini.`,
   en: (kalimat: string) =>
-    `SALES-FLOW RULE — HARD REQUIREMENT, MUST BE FOLLOWED: this turn closes with the question "${kalimat}", and the SYSTEM appends it automatically at the end of your reply. Your job is ONLY to answer the customer's message. Do NOT write that question, do NOT write a paraphrase of it, and do NOT ask any other question — if you write it too, the customer receives the same question twice.`,
+    `SALES-FLOW RULE — HARD REQUIREMENT, MUST NOT BE VIOLATED: your reply MUST end with the following question VERBATIM as the LAST sentence: "${kalimat}" — do NOT translate it, do NOT rephrase it, do NOT add another question after it. The system automatically HOLDS replies that violate this.`,
 };
 
 export const SHIPPING_FUNNEL_TOTAL = {
   id: (kalimat: string) =>
-    `ATURAN ALUR PENJUALAN — PERINGATAN KERAS, WAJIB DITAATI: semua data order sudah lengkap. SODORKAN TOTAL SEKARANG dengan menaruh penanda {{rincian_tagihan}} di baris tersendiri (JANGAN menarasikan blok itu). Pertanyaan penutupnya "${kalimat}" DITEMPEL SISTEM otomatis sesudah balasanmu — JANGAN kamu tulis sendiri, jangan pula versi parafrasenya, dan jangan menambah pertanyaan lain.`,
+    `ATURAN ALUR PENJUALAN — PERINGATAN KERAS, WAJIB DITAATI: semua data order sudah lengkap. SODORKAN TOTAL SEKARANG dengan menaruh penanda {{rincian_tagihan}} di baris tersendiri (JANGAN menarasikan blok itu), lalu akhiri balasanmu dengan kalimat tanya berikut PERSIS APA ADANYA: "${kalimat}" — jangan diterjemahkan/diubah. Sistem MENAHAN balasan yang melanggar.`,
   en: (kalimat: string) =>
-    `SALES-FLOW RULE — HARD REQUIREMENT: the order data is complete. PRESENT THE TOTAL NOW by placing the {{rincian_tagihan}} placeholder on its own line (do NOT narrate the block). The closing question "${kalimat}" is APPENDED BY THE SYSTEM after your reply — do NOT write it yourself, nor a paraphrase of it, and do not add any other question.`,
+    `SALES-FLOW RULE — HARD REQUIREMENT: the order data is complete. PRESENT THE TOTAL NOW by placing the {{rincian_tagihan}} placeholder on its own line (do NOT narrate the block), then end your reply with the following question VERBATIM: "${kalimat}" — no translation, no rephrasing. Violations are HELD by the system.`,
 };
 
 // >>> ANGGA — fix (2026-08-06, ketok Bossfren "harusnya ini sesi klosing
@@ -834,16 +843,16 @@ export const SHIPPING_FUNNEL_TOTAL = {
 // tanya" yang keliru.
 export const SHIPPING_FUNNEL_CLOSING = {
   id: (kalimat: string) =>
-    `ATURAN ALUR PENJUALAN — PERINGATAN KERAS, WAJIB DITAATI: alamat & metode bayar SUDAH lengkap, pesanan SUDAH final — JANGAN bertanya apa pun lagi soal alamat/patokan/metode bayar. Teks konfirmasi pesanan berikut DITEMPEL SISTEM otomatis di akhir balasanmu: "${kalimat}". Tugasmu HANYA menulis sapaan/kalimat pengantar SINGKAT (satu kalimat) sebelum itu — JANGAN menyalin, meringkas, atau memparafrase teks konfirmasi itu, karena isinya akan muncul dua kali.`,
+    `ATURAN ALUR PENJUALAN — PERINGATAN KERAS, WAJIB DITAATI: alamat & metode bayar SUDAH lengkap, pesanan SUDAH final — JANGAN bertanya apa pun lagi soal alamat/patokan/metode bayar. TUTUP percakapan ini dengan mengonfirmasi pesanan memakai teks berikut PERSIS APA ADANYA sebagai isi balasanmu (boleh menambah sapaan singkat di depan, tapi badan & urutan barisnya harus SAMA PERSIS): "${kalimat}" — jangan diterjemahkan/disingkat/diparafrase.`,
   en: (kalimat: string) =>
-    `SALES-FLOW RULE — HARD REQUIREMENT: address & payment method are COMPLETE, the order is FINAL — do NOT ask about address/landmark/payment again. The following order-confirmation text is APPENDED BY THE SYSTEM at the end of your reply: "${kalimat}". Your job is ONLY to write a SHORT one-sentence greeting/lead-in before it — do NOT copy, shorten, or paraphrase that confirmation text, or its content will appear twice.`,
+    `SALES-FLOW RULE — HARD REQUIREMENT: address & payment method are COMPLETE, the order is FINAL — do NOT ask about address/landmark/payment again. CLOSE this conversation by confirming the order using the following text VERBATIM as your reply body (a short greeting before it is fine, but the body and line order must match exactly): "${kalimat}" — no translation, no shortening, no paraphrasing.`,
 };
 
 export const SHIPPING_FUNNEL_CLOSING_FOLLOWUP = {
   id: (kalimat: string) =>
-    `ATURAN ALUR PENJUALAN: pesanan SUDAH final dan form konfirmasi sudah disodorkan sebelumnya. Jika pesan pelanggan berisi pertanyaan di luar order, JAWAB pertanyaan tersebut secara singkat saja. Pertanyaan penutupnya "${kalimat}" DITEMPEL SISTEM otomatis — JANGAN kamu tulis sendiri, jangan pula versi parafrasenya.`,
+    `ATURAN ALUR PENJUALAN: pesanan SUDAH final dan form konfirmasi sudah disodorkan sebelumnya. Jika pesan pelanggan berisi pertanyaan di luar order, JAWAB pertanyaan tersebut secara singkat, LALU TUTUP balasanmu dengan kalimat tanya berikut PERSIS APA ADANYA: "${kalimat}" — jangan diterjemahkan/diubah.`,
   en: (kalimat: string) =>
-    `SALES-FLOW RULE: the order is FINAL and the confirmation form was already provided. If the customer's message contains questions outside the order, ANSWER them briefly. The closing question "${kalimat}" is APPENDED BY THE SYSTEM — do NOT write it yourself, nor a paraphrase of it.`,
+    `SALES-FLOW RULE: the order is FINAL and the confirmation form was already provided. If the customer's message contains questions outside the order, ANSWER them briefly, THEN CLOSE your reply with the following question VERBATIM: "${kalimat}" — no translation or modification.`,
 };
 
 // >>> ANGGA — GERBANG PAKEM (2026-08-06, insiden "Kab. Purwokerto ngaco"):

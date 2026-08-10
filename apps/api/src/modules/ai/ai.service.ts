@@ -53,6 +53,35 @@ import {
 } from '../../i18n/bot-prompts';
 import type { BotLang } from '../../i18n/bot-prompts';
 
+/**
+ * >>> ANGGA — SAKLAR F4 (2026-08-10, ketok Bossfren sesudah uji lapangan).
+ *
+ * Reply Contract (tool `send_reply` + komposisi kalimat funnel oleh sistem)
+ * DIMATIKAN secara bawaan. Kodenya tidak dihapus — ia tidur, dan dinyalakan
+ * lagi HANYA kalau korpus eval F6 bisa membuktikan ia menambah nilai.
+ *
+ * Kenapa dimatikan, dari bukti lapangan dua hari:
+ *  · komposisi MENGGANDAKAN pertanyaan saat model memparafrase kalimat wajib
+ *    (beda satu kata "yang" sudah cukup mengalahkan pencocokan) — pelanggan
+ *    menerima pertanyaan yang sama dua kali;
+ *  · komposisi sempat MENGARANG balasan dari kekosongan: provider memulangkan
+ *    `{"content":""}`, lalu kalimat funnel ditempelkan, dan pelanggan yang
+ *    bertanya ongkir menerima "mau ambil berapa pcs kak?" sebagai jawaban;
+ *  · `send_reply` hanya dipakai model 2 dari 6 giliran (counter
+ *    `reply_contract_total`), jadi jaminan strukturnya memang tidak pernah ada.
+ *
+ * Pelajaran yang lebih besar, dan alasan saklar ini ada alih-alih tambalan
+ * kesekian: seluruh penilaian di atas awalnya dibuat dari sampel SATU
+ * percakapan pada model yang jawabannya berubah-ubah. Tiga hipotesis sebab
+ * diajukan, tiga-tiganya dibantah data. Menyalakan kembali fitur ini tanpa
+ * korpus berarti mengulangi cara kerja yang sudah terbukti gagal.
+ *
+ * Dimatikan berarti bot kembali ke perilaku PRA-F4: model menulis sendiri
+ * kalimat funnel wajib (template di `bot-prompts.ts` sudah dikembalikan ke
+ * bunyi aslinya), dan gerbang `funnel_dilanggar` kembali jadi penegaknya.
+ */
+const KONTRAK_BALASAN_AKTIF = process.env.REPLY_CONTRACT_ENABLED === 'true';
+
 /** All fallback-phrase variants (all languages) — marks an AI "punt to admin". */
 const FALLBACK_MARKERS = Object.values(FALLBACK_PHRASE) as string[];
 
@@ -240,9 +269,9 @@ export class AiService {
         // mustahil TETAP HIDUP di jalur retry, dan justru di jalur inilah ia
         // dulu paling sering muncul (retry dipicu oleh pelanggaran gerbang).
         // Sekarang teks retry disusun dengan aturan yang sama persis. <<<
-        const komposisiRetry = this.shipping.komposisiFunnel?.(conversationId, retryText, {
-          tempel: retry.tempel,
-        });
+        const komposisiRetry = KONTRAK_BALASAN_AKTIF
+          ? this.shipping.komposisiFunnel?.(conversationId, retryText, { tempel: retry.tempel })
+          : undefined;
         if (komposisiRetry) retryText = komposisiRetry.text;
         const retryRendered = await this.shipping.resolvePriceTokens(conversationId, retryText, {
           dataStatus: opts?.dataStatus,
@@ -343,9 +372,8 @@ export class AiService {
       tools.push(searchKnowledgeTool);
     }
 
-    // >>> ANGGA — F4: kontrak balasan SELALU ikut, tidak bergantung ada/tidaknya
-    // ShippingService — ini pintu keluar balasan, bukan alat cari data. <<<
-    tools.push(sendReplyTool);
+    // >>> ANGGA — F4, kini di balik saklar (lihat KONTRAK_BALASAN_AKTIF). <<<
+    if (KONTRAK_BALASAN_AKTIF) tools.push(sendReplyTool);
 
     if (tools.length === 0) tools = undefined;
 
@@ -383,7 +411,7 @@ export class AiService {
           // target: balasan pendek tetap pendek, yang berubah cuma batas
           // sebelum ia dipotong di tengah. HIPOTESIS soal penalaran belum
           // terbukti; yang terbukti cuma gejalanya. <<<
-          maxTokens: 1500,
+          maxTokens: KONTRAK_BALASAN_AKTIF ? 1500 : 500,
           tools,
         });
 
@@ -521,12 +549,12 @@ export class AiService {
       // dijamin `komposisiFunnel`, bukan oleh kontrak ini. Kalau teksnya
       // kosong, barulah kita memang tidak punya apa-apa untuk dikirim, dan
       // satu panggilan dengan `tool_choice` dipin itu murni keuntungan. <<<
-      if (!kontrak && !text.trim()) {
+      if (KONTRAK_BALASAN_AKTIF && !kontrak && !text.trim()) {
         try {
           const paksa = await this.provider.chatWithTools(messages, {
             model,
             maxTokens: 1500,
-            tools: [sendReplyTool],
+            tools: [sendReplyTool], // hanya terjangkau saat saklar ON
             toolChoice: SEND_REPLY_TOOL_CHOICE,
           });
           resTerakhir = paksa;
@@ -573,14 +601,17 @@ export class AiService {
     // (`komposisiFunnel().step`) di korpus eval nanti (F6). Optional-call
     // `?.` di mana-mana: harness test lama mem-mock `metrics` dengan dua
     // counter saja, dan telemetri tidak boleh pernah menggagalkan balasan.
-    const kontrakOutcome = kontrak
+    const kontrakOutcome = !KONTRAK_BALASAN_AKTIF
+      ? 'disabled'
+      : kontrak
       ? kontrakDipaksa
         ? 'forced'
         : 'honored'
       : kontrakRusak
         ? 'malformed'
         : 'fallback';
-    this.metrics?.replyContract?.inc({
+    if (KONTRAK_BALASAN_AKTIF)
+      this.metrics?.replyContract?.inc({
       outcome: kontrakOutcome,
       funnel_declared: kontrak?.funnelQuestionId ?? 'unreported',
     });
@@ -620,7 +651,10 @@ export class AiService {
     // Komposisi hanya berlaku untuk balasan yang MEMANG ada isinya. Penjaga
     // sebenarnya ada di `susunBalasan` (supaya tidak ada pemanggil yang bisa
     // lupa), ini lapisan kedua yang membuat niatnya terbaca di titik pakai.
-    const komposisi = text.trim() ? this.shipping?.komposisiFunnel?.(conversationId, text) : undefined;
+    const komposisi =
+      KONTRAK_BALASAN_AKTIF && text.trim()
+        ? this.shipping?.komposisiFunnel?.(conversationId, text)
+        : undefined;
     if (komposisi) {
       if (komposisi.disisipkan) {
         this.logger.debug(
@@ -717,9 +751,9 @@ export class AiService {
       // penanda {{...}} di kalimatnya ikut disubstitusi.
       const segmenTerakhir = segments.length - 1;
       const tersusun = segments.map((s, i) => {
-        const k = this.shipping?.komposisiFunnel?.(conversationId, s.text, {
-          tempel: i === segmenTerakhir,
-        });
+        const k = KONTRAK_BALASAN_AKTIF
+          ? this.shipping?.komposisiFunnel?.(conversationId, s.text, { tempel: i === segmenTerakhir })
+          : undefined;
         return { ...s, text: k ? k.text : s.text };
       }).filter((s) => s.text.trim().length > 0);
       // <<< ANGGA

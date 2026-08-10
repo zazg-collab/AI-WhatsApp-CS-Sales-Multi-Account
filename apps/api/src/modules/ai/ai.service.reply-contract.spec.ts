@@ -13,7 +13,27 @@ import { AiService } from './ai.service';
  *     hanya untuk mendapat label enum);
  *   · komposisi kalimat funnel dipanggil dengan teks yang SUDAH final.
  */
-describe('AiService — Reply Contract (F4)', () => {
+/**
+ * >>> ANGGA — 2026-08-10: Reply Contract kini TIDUR di balik
+ * `REPLY_CONTRACT_ENABLED` (bawaan mati, lihat alasannya di `ai.service.ts`).
+ * Spec ini menyalakannya sebelum modul dimuat supaya perilaku yang sudah
+ * dijamin tidak hilang begitu saja — kalau nanti fiturnya dinyalakan lagi
+ * sesudah korpus F6, jaminannya masih utuh dan tidak perlu ditulis ulang.
+ *
+ * `jest.isolateModules` dipakai karena saklarnya dibaca SEKALI saat modul
+ * dimuat (konstanta tingkat modul) — mengubah `process.env` sesudah impor
+ * biasa tidak akan terlihat.
+ */
+const envAsli = process.env.REPLY_CONTRACT_ENABLED;
+process.env.REPLY_CONTRACT_ENABLED = 'true';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { AiService: AiServiceAktif } = jest.requireActual('./ai.service') as { AiService: typeof AiService };
+afterAll(() => {
+  if (envAsli === undefined) delete process.env.REPLY_CONTRACT_ENABLED;
+  else process.env.REPLY_CONTRACT_ENABLED = envAsli;
+});
+
+describe('AiService — Reply Contract (F4, di balik saklar)', () => {
   const buatHarness = () => {
     const prisma: any = {
       conversation: {
@@ -57,7 +77,7 @@ describe('AiService — Reply Contract (F4)', () => {
       })),
       resolvePriceTokens: jest.fn(async (_id: string, teks: string) => ({ text: teks, ok: true, issues: [] })),
     };
-    const svc = new (AiService as any)(
+    const svc = new (AiServiceAktif as any)(
       prisma, provider, prompts, { send: jest.fn() }, cache, undefined, metrics, shipping,
     ) as AiService;
     return { svc, provider, metrics, shipping };
