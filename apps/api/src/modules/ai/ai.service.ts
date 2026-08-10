@@ -407,7 +407,12 @@ export class AiService {
     // tidak bisa membedakan tiga hal yang gejalanya identik: model memang diam,
     // provider memulangkan tool_calls dengan bentuk yang tidak kita kenali,
     // atau balasannya terpotong habis oleh max_tokens. <<<
-  let resTerakhir: {
+    // >>> ANGGA — 2026-08-10: plafon token giliran ini. Naik SEKALI kalau
+    // provider memulangkan `finish_reason: 'length'` dengan tangan kosong —
+    // alasannya di dalam loop. <<<
+    let plafon = 500;
+    let plafonSudahDinaikkan = false;
+    let resTerakhir: {
       content?: string;
       tool_calls?: unknown[];
       finish_reason?: string;
@@ -418,13 +423,7 @@ export class AiService {
       for (let attempt = 0; attempt < 3; attempt++) {
         const res = await this.provider.chatWithTools(messages, {
           model,
-          // >>> ANGGA — 2026-08-10: kenaikan maxTokens (500→600→1500) DICABUT.
-          // Ia dipasang atas dugaan "anggaran habis sebelum jawaban ditulis".
-          // Diuji di lapangan: balasan kosong TETAP terjadi sesudah dinaikkan.
-          // Dugaan tidak terbukti → tambalannya dibuang, bukan ditinggal
-          // berjaga-jaga. Kenaikan itu juga bersamaan dengan munculnya timeout
-          // jaringan di UI, jadi menyimpannya bukan netral. <<<
-          maxTokens: 500,
+          maxTokens: plafon,
           tools,
         });
 
@@ -454,6 +453,41 @@ export class AiService {
                 `Ini berarti jalur tool calling TIDAK pernah benar-benar jalan dengan provider ini.`,
             );
           }
+        }
+
+        // >>> ANGGA — 2026-08-10: ANGGARAN HABIS SEBELUM SATU KATA PUN DITULIS.
+        //
+        // Diukur, bukan diduga: pada SEMUA balasan kosong yang tercatat,
+        // provider memulangkan `finish_reason: 'length'` dengan `content: ''`
+        // dan tanpa tool call — plafon `max_tokens` tercapai sementara
+        // jawabannya belum ditulis sepatah pun, jatahnya habis dipakai
+        // penalaran model. Itu sebabnya giliran akhir kosong 3 dari 3 di DUA
+        // konfigurasi berbeda: deterministik, bukan keacakan.
+        //
+        // Eskalasi ditaruh DI DALAM loop, bukan sesudahnya. Versi pertama
+        // memanggil ulang di luar loop dan HANYA membaca `content` — begitu
+        // panggilan berplafon besar memulangkan TOOL CALL (`finish_reason:
+        // 'tool_calls'`), hasilnya dibuang dan balasannya tetap kosong.
+        // Terukur: satu-satunya kegagalan yang tersisa persis karena itu.
+        // Di dalam loop, tool call yang datang diproses seperti biasa.
+        //
+        // Naik SEKALI per giliran, dan percobaannya tidak menghabiskan jatah
+        // putaran tool (`attempt--`). Plafon dasar tetap 500: mayoritas
+        // giliran selesai jauh di bawah itu, dan menaikkannya secara global
+        // berarti semua giliran membayar untuk kasus yang jarang.
+        if (
+          !plafonSudahDinaikkan &&
+          res.finish_reason === 'length' &&
+          !text.trim() &&
+          (!toolCalls || toolCalls.length === 0)
+        ) {
+          plafonSudahDinaikkan = true;
+          plafon = 4000;
+          attempt--;
+          this.logger.warn(
+            `Anggaran token habis sebelum jawaban ditulis (${conversationId}) — mengulang dengan plafon ${plafon}`,
+          );
+          continue;
         }
 
         if (!toolCalls || toolCalls.length === 0) {
@@ -552,48 +586,6 @@ export class AiService {
           });
         }
         if (selesai) break; // >>> ANGGA — F4: balasan sudah diserahkan <<<
-      }
-
-      // >>> ANGGA — 2026-08-10: ANGGARAN HABIS SEBELUM SATU KATA PUN DITULIS.
-      //
-      // Diukur, bukan diduga: pada SEMUA balasan kosong yang tercatat,
-      // provider memulangkan `finish_reason: "length"` dengan `content: ""`.
-      // Artinya plafon `max_tokens` tercapai sementara `content` masih nol —
-      // seluruh jatahnya dihabiskan hal lain (penalaran model), dan tidak
-      // tersisa untuk jawabannya. Itu sebabnya giliran 6 kosong 3 dari 3 di
-      // DUA konfigurasi yang berbeda: ia deterministik, bukan keacakan.
-      //
-      // Kenapa mencoba ulang, bukan menaikkan plafon untuk semua giliran:
-      // 80% giliran selesai jauh di bawah 500 token. Menaikkan plafon global
-      // memaksa setiap giliran membayar untuk kasus yang jarang. Percobaan
-      // ulang ini hanya jalan pada sinyal yang TIDAK AMBIGU — `length` DAN
-      // content kosong — jadi giliran normal tidak tersentuh sama sekali.
-      //
-      // `finish_reason` percobaan ulang ikut dicatat: kalau ia `length` lagi,
-      // berarti dugaan "penalaran memakan jatah" kurang besar dan angkanya
-      // perlu dinaikkan lagi — bukan ditebak, dibaca.
-      if (!text.trim() && resTerakhir?.finish_reason === 'length') {
-        this.logger.warn(
-          `Anggaran token habis sebelum jawaban ditulis (${conversationId}) — mencoba ulang dengan plafon lebih besar`,
-        );
-        try {
-          const lega = await this.provider.chatWithTools(messages, {
-            model,
-            maxTokens: 4000,
-            tools,
-          });
-          resTerakhir = lega;
-          if (lega.content?.trim()) {
-            text = lega.content;
-            this.logger.log(`Percobaan ulang plafon besar BERHASIL untuk ${conversationId}`);
-          } else {
-            this.logger.warn(
-              `Percobaan ulang plafon besar TETAP kosong (${conversationId}) — finish_reason=${lega.finish_reason ?? '?'}`,
-            );
-          }
-        } catch (e: any) {
-          this.logger.warn(`Percobaan ulang plafon besar gagal: ${e?.message ?? e}`);
-        }
       }
 
       // >>> ANGGA — F4: percobaan PAKSA — SENGAJA hanya kalau tidak ada teks
