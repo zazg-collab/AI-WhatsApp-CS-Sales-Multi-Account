@@ -442,7 +442,19 @@ export class AiService {
           this.logger.debug(
             `tool_calls diterima (${toolCalls.length}): ` +
               toolCalls
-                .map((t: any) => `${t?.function?.name ?? '?'}[type=${t?.type ?? 'HILANG'}]`)
+                // >>> ANGGA — diagnostik (2026-08-10, cowork): ARGUMEN ikut
+                // dicatat. Tanpa ini, "search_destinations dipanggil" tidak
+                // bisa dibedakan dari "search_destinations dipanggil dengan
+                // keyword kotor yang pasti 0 hasil" — dua hal yang menuntut
+                // perbaikan di tempat berbeda. <<<
+                .map(
+                  (t: any) =>
+                    `${t?.function?.name ?? '?'}[type=${t?.type ?? 'HILANG'}] args=${String(
+                      t?.function?.arguments ?? '',
+                    )
+                      .replace(/\s+/g, ' ')
+                      .slice(0, 160)}`,
+                )
                 .join(' '),
           );
           const dibuang = toolCalls.filter((t: any) => t?.type !== 'function');

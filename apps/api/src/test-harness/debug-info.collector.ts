@@ -59,6 +59,10 @@ export class DebugInfoCollector {
           snap.funnelMode = (['total', 'patokan', 'closing', 'closing_followup'].includes(st.funnelStep)
             ? st.funnelStep
             : 'normal') as DebugSnapshot['funnelMode'];
+          // >>> ANGGA — diagnostik (2026-08-10, cowork): simpan langkah MENTAH
+          // di fieldnya sendiri. `status` di bawah ditimpa outcome pipeline
+          // oleh controller, jadi `funnel:<langkah>` selalu hilang. <<<
+          snap.funnelStep = st.funnelStep;
           snap.status = `funnel:${st.funnelStep}`;
         }
         snap.tokens = st.tokens ?? {};

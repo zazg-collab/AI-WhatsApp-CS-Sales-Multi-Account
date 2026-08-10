@@ -31,6 +31,12 @@ export interface DebugSnapshot {
    *  `e4415a5` (pasca-rollback) dan sudah ada di union `computeFunnelMeta`
    *  (`shipping.service.ts`), tapi tipe di tester tertinggal. <<< */
   funnelMode: 'normal' | 'total' | 'patokan' | 'closing' | 'closing_followup';
+  /** >>> ANGGA — diagnostik (2026-08-10, cowork): langkah funnel MENTAH
+   *  (`barang`/`alamat`/`keranjang`/`qty`/…). `funnelMode` di atas meruntuhkan
+   *  semua langkah pra-total jadi `'normal'`, dan `status` — yang dulu memuat
+   *  `funnel:<langkah>` — DITIMPA oleh outcome pipeline di controller. Jadi
+   *  langkah sebenarnya tidak pernah bisa dibaca dari panel mana pun. <<< */
+  funnelStep?: string;
   kotaTujuan?: string;
   ongkir?: {
     amount: number;

@@ -2692,7 +2692,20 @@ export class ShippingService {
       patchQty(teksG) != null ||
       this.isBridgeCommonSignal(teksG, memoG?.viaPilihan === true, oc);
     // <<< ANGGA
-    if (!jawabanUang) return null;
+    if (!jawabanUang) {
+      // >>> ANGGA — diagnostik (2026-08-10, cowork): titik DIAM funnel.
+      // Giliran yang berisi ALAMAT / NOMOR HP / konfirmasi tidak lolos tes
+      // teks `jawabanUang`, sehingga seluruh funnel pulang null: alamat tidak
+      // masuk cache, langkah tidak maju, kalimat wajib tidak disuntik. Baris
+      // ini yang membuktikannya di log, bukan lagi disimpulkan dari ketiadaan
+      // baris `funnel_ask` di database. <<<
+      this.logger.debug(
+        `funnel DIAM (${conversationId}) teks="${teksG.replace(/\s+/g, ' ').slice(0, 70)}" ` +
+          `hargaTurn=${opts.hargaTurn === true} patchQty=${patchQty(teksG) != null} ` +
+          `sinyal=${this.isBridgeCommonSignal(teksG, memoG?.viaPilihan === true, oc)}`,
+      );
+      return null;
+    }
 
     const entries = (await this.orderLog.candidates(conversationId)).filter(
       (e) => e.fresh && e.snapshot.items.length > 0,
@@ -2754,6 +2767,12 @@ export class ShippingService {
     ): { teks: string | null; step: string } => {
       const bersih = (kalimat ?? '').trim();
       const bolehTanya = bersih.length > 0 && (asks[step] ?? 0) < 2;
+      // >>> ANGGA — diagnostik (2026-08-10, cowork): langkah yang DIPILIH,
+      // beserta alasan kalau pertanyaannya dibungkam. <<<
+      this.logger.debug(
+        `funnel langkah (${conversationId}) -> ${step}` +
+          (bolehTanya ? '' : ` [DIBUNGKAM: kalimat=${bersih.length ? 'ada' : 'KOSONG'} asks=${asks[step] ?? 0}]`),
+      );
       if (!bolehTanya && !closingFollowup) { // closing followup bypasses the 2x cap because we ALWAYS want to steer them back
         this.cache.setFunnelExpect(conversationId, { messageId: lastMsgId, step, kalimat: '' });
         return { teks: null, step };
@@ -2868,6 +2887,14 @@ export class ShippingService {
       // <<< GEMINI
       const alamatSudahLengkap = adaAlamatLengkap(alamatGabungan);
       const patokanSudahDitanya = (asks['patokan'] ?? 0) >= 1;
+      // >>> ANGGA — diagnostik (2026-08-10, cowork): isi cache alamat + dua
+      // syarat yang memutuskan patokan vs closing. Insiden yang memicunya:
+      // formulir closing terkirim berbunyi "Alamat: udah lengkap itu aja."
+      // — alamat asli pelanggan tidak pernah masuk cache. <<<
+      this.logger.debug(
+        `funnel alamat (${conversationId}) cache="${alamatGabungan.replace(/\n/g, ' | ').slice(0, 90)}" ` +
+          `lengkap=${alamatSudahLengkap} patokanDitanya=${patokanSudahDitanya}`,
+      );
       if (!alamatSudahLengkap && !patokanSudahDitanya) {
         return pilih('patokan', kalimatPatokan);
       }
@@ -3007,6 +3034,10 @@ export class ShippingService {
       this.logger.warn(`Grounding ongkir gagal: ${err}`);
       result = { status: 'api_error' };
     }
+    // >>> ANGGA — diagnostik (2026-08-10, cowork): status kutipan menentukan
+    // cabang mana yang jalan — dan KETIGA pemanggil `funnelDirective` ada di
+    // dalam cabang `ok`. Status selain itu = funnel tidak pernah tersentuh. <<<
+    this.logger.debug(`grounding (${conversationId}) status=${result.status}`);
 
     switch (result.status) {
       case 'ok': {
