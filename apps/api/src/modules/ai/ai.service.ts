@@ -553,6 +553,20 @@ export class AiService {
     // {{...}} di dalam kalimatnya ikut disubstitusi seperti sisa teksnya.
     // Optional-call `?.()` disengaja: spec lama mem-mock ShippingService tanpa
     // method ini, dan absennya harus berarti "perilaku pra-F4", bukan crash.
+    // >>> ANGGA — koreksi AUDIT (2026-08-10, cowork): balasan KOSONG naik ke
+    // WARN, lengkap dengan keadaan yang menyebabkannya. Sebelumnya kejadian ini
+    // cuma meninggalkan satu baris `debug` di pipeline ("returned empty text")
+    // tanpa konteks — begitu terjadi di sesi uji nyata, tidak ada satu pun
+    // petunjuk apakah modelnya diam, kontraknya rusak, atau komposisinya yang
+    // tidak menempel. Satu baris ini menjawab ketiganya sekaligus. <<<
+    if (!text.trim()) {
+      const st = this.shipping?.debugState?.(conversationId);
+      this.logger.warn(
+        `Balasan KOSONG untuk ${conversationId} — kontrak=${kontrakOutcome}` +
+          ` funnelStep=${st?.funnelStep ?? 'null'} adaKutipan=${st?.quote ? 'ya' : 'tidak'}`,
+      );
+    }
+
     const komposisi = this.shipping?.komposisiFunnel?.(conversationId, text);
     if (komposisi) {
       if (komposisi.disisipkan) {

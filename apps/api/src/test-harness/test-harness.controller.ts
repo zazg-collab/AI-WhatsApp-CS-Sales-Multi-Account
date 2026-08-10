@@ -152,9 +152,29 @@ export class TestHarnessController {
       conversationIdUntukDebug = conversationId;
       const channel = new UiReplyChannel();
       const hasil = await this.pipeline.run(conversationId, channel, { model: session.model });
-      resolvedText = channel.text ?? '';
-      outcome = hasil.kind === 'drafted' ? `${hasil.kind}:${hasil.reason}` : hasil.kind;
+      // >>> ANGGA — koreksi AUDIT (2026-08-10, cowork): JANGAN PERNAH gelembung
+      // kosong. Dulu `channel.text ?? ''` — kalau pipeline berhenti sebelum
+      // menyentuh kanal (`skipped`/`paused`), yang tersimpan & tampil adalah
+      // pesan asisten BERISI STRING KOSONG. Bossfren menemukannya di sesi uji
+      // nyata: satu gelembung hijau melompong tanpa satu pun petunjuk kenapa,
+      // sementara ALASANNYA sudah dipegang `ReplyOutcome` dan tinggal dibuang
+      // begitu saja di baris berikutnya.
+      //
+      // Kenapa alasannya ditulis ke BADAN pesan, bukan cuma ke panel debug:
+      // panel hanya menampilkan giliran TERAKHIR, jadi begitu Bossfren
+      // mengirim pesan berikutnya, jejak kenapa giliran ini kosong hilang
+      // selamanya. Ditulis di badan = melekat pada gilirannya, bisa dibaca
+      // ulang berhari-hari kemudian saat menelusuri percakapan.
+      //
+      // `reason` juga ikut ke `outcome` untuk SEMUA jenis, bukan cuma
+      // `drafted` — dulu justru jenis yang paling butuh penjelasan
+      // (`skipped`) yang alasannya dibuang. <<<
+      outcome = 'reason' in hasil && hasil.reason ? `${hasil.kind}:${hasil.reason}` : hasil.kind;
       moneyGateIssues = channel.moneyGateIssues;
+      resolvedText = channel.text ?? '';
+      if (!resolvedText.trim()) {
+        resolvedText = `⚠️ [sistem] Bot tidak mengirim apa pun di giliran ini — pipeline berhenti di "${outcome}". Ini catatan alat uji, BUKAN balasan yang akan diterima pelanggan.`;
+      }
     }
 
     const debugInfo = await this.debugCollector.collectDebugInfo(
