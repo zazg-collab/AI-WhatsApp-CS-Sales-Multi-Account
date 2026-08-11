@@ -65,6 +65,24 @@ class AiSettingsDto {
 
   @IsOptional() @IsNumber() @Min(64) @Max(8192)
   embedDim?: number;
+
+  /**
+   * >>> ANGGA — perbaikan 2026-08-11 (cowork): `ragMode` DIPULANGKAN oleh
+   * `SettingsService.ai()` sejak ia lahir, tapi tidak pernah ditambahkan ke DTO
+   * ini. Karena `main.ts` memasang `forbidNonWhitelisted: true`, UI yang
+   * mengambil objek settings lalu mengirimnya balik apa adanya SELALU ditolak
+   * dengan `ai.property ragMode should not exist` — jadi **seluruh tab AI tidak
+   * bisa disimpan**, termasuk ganti model. Itu pula yang membuat baris DB
+   * `AppSetting.ai` bertahan memuat model lama meski `.env` sudah diubah
+   * (dan `.env` sendiri kalah oleh baris DB — jebakan K22).
+   *
+   * Ini persis kelas insiden `bc0bf94` yang komentar di bawah sudah
+   * memperingatkannya: field baru WAJIB tiga tempat (types + defaults + DTO).
+   * Aturannya sudah ada dan tetap dilanggar, jadi sekarang ia DIJAGA MESIN —
+   * `settings.roundtrip.spec.ts` menguji invariannya, bukan field ini saja.
+   */
+  @IsOptional() @IsIn(['hybrid', 'agentic'])
+  ragMode?: 'hybrid' | 'agentic';
   // <<< ANGGA
 }
 
