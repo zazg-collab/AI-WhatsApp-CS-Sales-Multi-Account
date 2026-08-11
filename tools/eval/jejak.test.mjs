@@ -75,10 +75,20 @@ test('toolDipakai = NAMA tool yang jalan di giliran ini, argumen & hasil dibuang
   // Ini yang memisahkan "kutipan LAHIR di giliran ini" dari "kutipan sudah ada
   // sejak sebelumnya" — satu-satunya pemilah yang tersedia, karena seluruh
   // snapshot adalah keadaan PASCA-giliran.
-  assert.deepEqual(bangunJejak({ ...snapshotPenuh, toolCalls: undefined }).toolDipakai, []);
   // Argumen/hasil TIDAK boleh ikut: berkas hasil akan membengkak tanpa
   // menjawab apa pun.
   assert.equal(JSON.stringify(j.toolDipakai).includes('Cakranegara'), false);
+});
+
+test('toolDipakai: TIDAK DIREKAM (null) tidak boleh menyamar jadi NOL TOOL ([])', () => {
+  // Terukur di putaran ukur pertama: `debug.toolCalls` SELALU `undefined` untuk
+  // provider nyata (`test-harness.controller.ts:174` cuma mengisi
+  // `executedTools` di cabang 'mock'). Memetakannya ke `[]` = mengarang fakta.
+  const { toolCalls, ...tanpaTool } = snapshotPenuh;
+  assert.equal(bangunJejak(tanpaTool).toolDipakai, null);
+  assert.equal(bangunJejak({ ...snapshotPenuh, toolCalls: undefined }).toolDipakai, null);
+  // `[]` HANYA kalau memang direkam dan memang nol.
+  assert.deepEqual(bangunJejak({ ...snapshotPenuh, toolCalls: [] }).toolDipakai, []);
 });
 
 test('toolDipakai tahan bentuk cacat — nol lemparan, nama hilang jadi "?"', () => {
@@ -92,7 +102,7 @@ test('snapshot ADA tapi kutipan tidak hidup → tokens {} , BUKAN null', () => {
   assert.equal(j.funnelStep, null);
   assert.equal(j.adaOngkir, false);
   assert.equal(j.jumlahItem, 0);
-  assert.deepEqual(j.toolDipakai, []);
+  assert.equal(j.toolDipakai, null);
 });
 
 test('snapshot yang KEHILANGAN kunci tokens juga → {} (bukan null, bukan undefined)', () => {
@@ -115,7 +125,7 @@ test('giliran TANPA debugInfo → tokens null (dibedakan dari {} di atas)', () =
     assert.equal(j.adaOngkir, false);
     assert.equal(j.jumlahItem, 0);
     assert.deepEqual(j.gateWarnings, []);
-    assert.deepEqual(j.toolDipakai, []);
+    assert.equal(j.toolDipakai, null);
   }
 });
 

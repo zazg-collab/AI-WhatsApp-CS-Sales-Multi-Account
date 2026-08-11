@@ -433,7 +433,12 @@ for (let i = 1; i <= runs; i++) {
       const kelas = KELAS_GAGAL.filter((k) => x[k]);
       const ai = x.jejak.ai;
       const rute = ai ? ` llm=${ai.panggilan}${ai.gagal ? `(${ai.gagal} gagal)` : ''} penyedia=${ai.penyedia.join('+') || '?'}` : '';
-      const alat = x.jejak.toolDipakai?.length ? ` tool=${x.jejak.toolDipakai.join('+')}` : '';
+      // `null` = tidak direkam (jalur provider nyata: SELALU, sampai
+      // `executedTools` disambungkan di controller). Ditulis terang-terangan,
+      // bukan disembunyikan jadi baris kosong — pembaca harus tahu dimensi ini
+      // sedang buta, bukan menyimpulkan "nol tool berjalan".
+      const td = x.jejak.toolDipakai;
+      const alat = td == null ? ' tool=tak-direkam' : td.length ? ` tool=${td.join('+')}` : ' tool=nol';
       console.log(`    ⌁ giliran ${x.n} [${kelas.join(',')}] mode=${x.jejak.funnelMode} langkah=${x.jejak.funnelStep ?? '—'} ongkir=${x.jejak.adaOngkir ? 'ada' : 'tidak'} item=${x.jejak.jumlahItem} gerbang=${x.jejak.gateWarnings.length}${alat}${rute}`);
       // >>> BARU-1 langkah 1 (2026-08-11): isi token giliran ini.
       //

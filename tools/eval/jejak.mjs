@@ -95,7 +95,22 @@ export function bangunJejak(debug) {
     funnelStep: debug?.funnelStep ?? null,
     // Nama saja. Argumen & hasil sengaja dibuang: yang ditanya cuma "apakah
     // keadaan order BERUBAH di giliran ini", bukan isinya.
-    toolDipakai: (debug?.toolCalls ?? []).map((t) => t?.name ?? '?'),
+    //
+    // >>> KOREKSI SEBELUM COMMIT (2026-08-11, terukur di putaran ukur pertama):
+    // versi pertama memetakan `toolCalls` yang absen jadi `[]`. Itu MENGARANG
+    // fakta. Terukur: `debug.toolCalls` **SELALU** `undefined` untuk provider
+    // nyata — `test-harness.controller.ts:174` hanya mengisi `executedTools` di
+    // cabang `'mock'`; di cabang provider sungguhan variabelnya tidak pernah
+    // ditugaskan, karena panggilan tool hidup di dalam `ai.service.ts` dan
+    // tidak pernah naik ke `ReplyOutcome`. Jadi `[]` akan terbaca "nol tool
+    // berjalan di giliran ini" padahal yang benar "tidak ada yang merekam" —
+    // persis kelas kesalahan yang `tokens: null` vs `{}` dibangun untuk
+    // mencegah, dan ia lolos ke berkas hasil putaran pertama.
+    //   `null` = tidak direkam (jalur provider nyata hari ini: SELALU ini)
+    //   `[]`   = direkam, dan memang nol tool berjalan
+    // Sampai `executedTools` disambungkan untuk provider nyata, field ini akan
+    // `null` terus — dan itu jawaban yang JUJUR, bukan data yang hilang. <<<
+    toolDipakai: debug?.toolCalls ? debug.toolCalls.map((t) => t?.name ?? '?') : null,
     // TIGA nilai, dan bedanya menentukan cara membaca berkas hasil:
     //   `null` = giliran ini tidak punya `debugInfo` sama sekali
     //   `{}`   = ada snapshot, TIDAK ada kutipan hidup

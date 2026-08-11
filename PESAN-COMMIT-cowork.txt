@@ -36,9 +36,20 @@ APA
   yang melanggar; SENSUS TOKEN + KAWAT SANDUNG invarian `tokens≠{} ⟺ adaOngkir`
   tiap putaran; peringatan kalau `--out` tidak diberikan.
 
+KOREKSI SEBELUM COMMIT — ditemukan oleh putaran ukur itu sendiri
+`tool=[]` di 18 dari 18 giliran. Ditelusuri: `debug.toolCalls` SELALU `undefined`
+untuk provider nyata (`test-harness.controller.ts:174` cuma mengisi
+`executedTools` di cabang 'mock'; panggilan tool hidup di `ai.service.ts` dan
+tidak pernah naik ke `ReplyOutcome`). Memetakannya ke `[]` menyatakan "nol tool
+berjalan" untuk giliran yang sebenarnya TIDAK DIREKAM — kelas kesalahan yang
+`tokens: null` vs `{}` dibangun untuk mencegah. Diperbaiki, bukan ditinggal:
+`null` = tidak direkam · `[]` = direkam & memang nol; layar mencetak
+`tool=tak-direkam` terang-terangan. Utang: sambungkan `executedTools` untuk
+provider nyata lewat mekanisme `jejakAi` yang sudah ada dan terbukti.
+
 BUKTI
-* 85/85 `node --test` (74 lama + 11 baru), nol test lama disunting.
-* 15/15 mutan mati (skrip mutasi try/finally + assert cadangan; tidak dikomit).
+* 86/86 `node --test` (74 lama + 12 baru), nol test lama disunting.
+* 16/16 mutan mati (skrip mutasi try/finally + assert cadangan; tidak dikomit).
 * Uji asap terhadap API tiruan: 4 skenario (normal · invarian dilanggar ·
   kolektor buta · tanpa debugInfo) — sensus & kawat sandung menyala tepat.
 * Berkas hasil LAMA tetap terbaca `--bandingkan` (nol `undefined`, nol lemparan).
