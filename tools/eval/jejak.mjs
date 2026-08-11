@@ -108,9 +108,28 @@ export function bangunJejak(debug) {
     // mencegah, dan ia lolos ke berkas hasil putaran pertama.
     //   `null` = tidak direkam (jalur provider nyata hari ini: SELALU ini)
     //   `[]`   = direkam, dan memang nol tool berjalan
-    // Sampai `executedTools` disambungkan untuk provider nyata, field ini akan
-    // `null` terus — dan itu jawaban yang JUJUR, bukan data yang hilang. <<<
-    toolDipakai: debug?.toolCalls ? debug.toolCalls.map((t) => t?.name ?? '?') : null,
+    // >>> IRISAN A (2026-08-11): sumbernya sekarang DUA, dengan urutan yang
+    // disengaja — dan bukan karena duplikasi, melainkan karena dua provider
+    // memang mengisi tempat yang berbeda:
+    //   1. `debug.toolCalls` — jalur `'mock'`. Bentuknya paling kaya
+    //      (`{name, args, result}`) dan cuma jalur itu yang mengisinya.
+    //   2. `debug.aiRingkas.toolDijalankan` — jalur provider NYATA. Dicatat di
+    //      `ai.service.ts` lewat AsyncLocalStorage yang sama dengan pencatat
+    //      penyedia, ditempelkan ke panggilan LLM yang memintanya, TANPA dedup
+    //      (pengulangan itu temuannya sendiri — utang A2).
+    // Didahulukan #1 supaya jalur mock tidak berubah artinya: di sana
+    // `aiRingkas.toolDijalankan` akan `[]` (nol panggilan LLM) padahal
+    // toolnya memang berjalan.
+    //   `null` = tidak direkam sama sekali (biner lama / tanpa `debugInfo`)
+    //   `[]`   = direkam, dan memang nol tool berjalan
+    // `Array.isArray` di KEDUA cabang, bukan cuma yang kedua (koreksi ronde 3):
+    // berkas ini mem-parse JSON dari batas luar (`r.json()`), jadi bentuk
+    // wadahnya tidak dijamin siapa pun. Test "tahan bentuk cacat" di bawah
+    // sudah menjaga cacat pada ELEMEN; asimetrinya ada di WADAH. Ini penjaga
+    // batas parsing — BUKAN klaim bahwa bentuk itu muncul di produksi.
+    toolDipakai:
+      (Array.isArray(debug?.toolCalls) ? debug.toolCalls.map((t) => t?.name ?? '?') : null) ??
+      (Array.isArray(debug?.aiRingkas?.toolDijalankan) ? [...debug.aiRingkas.toolDijalankan] : null),
     // TIGA nilai, dan bedanya menentukan cara membaca berkas hasil:
     //   `null` = giliran ini tidak punya `debugInfo` sama sekali
     //   `{}`   = ada snapshot, TIDAK ada kutipan hidup

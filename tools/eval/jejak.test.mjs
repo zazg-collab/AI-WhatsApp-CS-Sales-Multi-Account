@@ -49,7 +49,7 @@ const snapshotPenuh = {
   },
   gateWarnings: ['angka_tak_bersumber'],
   toolCalls: [{ name: 'hitung_ongkir', args: { kota: 'Cakranegara' }, result: { ok: true } }],
-  aiRingkas: { panggilan: 4, gagal: 0, penyedia: ['DeepInfra'] },
+  aiRingkas: { panggilan: 4, gagal: 0, penyedia: ['DeepInfra'], toolDijalankan: ['calculate_shipping'] },
 };
 
 test('tokens disimpan UTUH beserta nilainya, bukan cuma keberadaannya', () => {
@@ -84,16 +84,64 @@ test('toolDipakai: TIDAK DIREKAM (null) tidak boleh menyamar jadi NOL TOOL ([])'
   // Terukur di putaran ukur pertama: `debug.toolCalls` SELALU `undefined` untuk
   // provider nyata (`test-harness.controller.ts:174` cuma mengisi
   // `executedTools` di cabang 'mock'). Memetakannya ke `[]` = mengarang fakta.
-  const { toolCalls, ...tanpaTool } = snapshotPenuh;
-  assert.equal(bangunJejak(tanpaTool).toolDipakai, null);
-  assert.equal(bangunJejak({ ...snapshotPenuh, toolCalls: undefined }).toolDipakai, null);
+  const { toolCalls, aiRingkas, ...telanjang } = snapshotPenuh;
+  assert.equal(bangunJejak(telanjang).toolDipakai, null);
   // `[]` HANYA kalau memang direkam dan memang nol.
-  assert.deepEqual(bangunJejak({ ...snapshotPenuh, toolCalls: [] }).toolDipakai, []);
+  //
+  // ⚠️ CATATAN RONDE 3 — jangan dihapus karena "bentuk ini tidak bisa lahir":
+  // benar, `debug-info.collector.ts` hanya menugaskan `toolCalls` saat
+  // `executedTools.length > 0`, jadi `[]` tidak muncul di produksi hari ini.
+  // Yang dipatok di sini adalah DOMAIN sebuah fungsi murni — masukan `[]`
+  // harus keluar `[]`, jangan tergelincir jadi `null`. Ia berubah dari inert
+  // jadi cakupan hidup begitu syarat di collector itu pernah dilonggarkan.
+  assert.deepEqual(bangunJejak({ ...telanjang, toolCalls: [] }).toolDipakai, []);
+});
+
+test('IRISAN A — provider NYATA: toolDipakai dibaca dari aiRingkas.toolDijalankan', () => {
+  // Jalur provider nyata tidak pernah mengisi `debug.toolCalls`; yang mengisi
+  // adalah jejak AsyncLocalStorage di `ai.service.ts`.
+  const { toolCalls, ...nyata } = snapshotPenuh;
+  assert.deepEqual(bangunJejak(nyata).toolDipakai, ['calculate_shipping']);
+  // Nol tool berjalan → `[]`, BUKAN null: alat ukurnya jalan, jawabannya nol.
+  assert.deepEqual(
+    bangunJejak({ ...nyata, aiRingkas: { ...nyata.aiRingkas, toolDijalankan: [] } }).toolDipakai,
+    [],
+  );
+  // Biner lama: `aiRingkas` ada tapi belum punya fieldnya → tidak direkam.
+  assert.equal(
+    bangunJejak({ ...nyata, aiRingkas: { panggilan: 2, gagal: 0, penyedia: [] } }).toolDipakai,
+    null,
+  );
+});
+
+test('IRISAN A — pengulangan TIDAK di-dedup, dan daftarnya disalin bukan dirujuk', () => {
+  // `calculate_shipping` dua kali di satu giliran adalah TEMUAN (utang A2),
+  // bukan kebisingan yang boleh diringkas.
+  const { toolCalls, ...nyata } = snapshotPenuh;
+  const ring = { ...nyata.aiRingkas, toolDijalankan: ['calculate_shipping', 'calculate_shipping'] };
+  const j = bangunJejak({ ...nyata, aiRingkas: ring });
+  assert.deepEqual(j.toolDipakai, ['calculate_shipping', 'calculate_shipping']);
+  ring.toolDijalankan.push('DIUBAH');
+  assert.equal(j.toolDipakai.length, 2);
+});
+
+test('IRISAN A — jalur mock DIDAHULUKAN: toolCalls menang atas aiRingkas', () => {
+  // Di jalur mock `aiRingkas.toolDijalankan` akan `[]` (nol panggilan LLM)
+  // padahal toolnya memang berjalan. Kalau urutannya terbalik, jalur mock
+  // berubah artinya jadi "nol tool".
+  const j = bangunJejak({ ...snapshotPenuh, aiRingkas: { panggilan: 0, gagal: 0, penyedia: [], toolDijalankan: [] } });
+  assert.deepEqual(j.toolDipakai, ['hitung_ongkir']);
 });
 
 test('toolDipakai tahan bentuk cacat — nol lemparan, nama hilang jadi "?"', () => {
   const j = bangunJejak({ ...snapshotPenuh, toolCalls: [{ args: {} }, null, { name: 'cek_stok' }] });
   assert.deepEqual(j.toolDipakai, ['?', '?', 'cek_stok']);
+  // Penjaga batas parsing pada WADAH, bukan cuma pada elemen: `toolCalls` yang
+  // truthy tapi BUKAN array dulu melempar `TypeError` dan menewaskan seluruh
+  // putaran ukur. Bukan klaim bahwa bentuk ini muncul di produksi.
+  for (const cacat of ['string', 7, {}, true]) {
+    assert.deepEqual(bangunJejak({ ...snapshotPenuh, toolCalls: cacat }).toolDipakai, ['calculate_shipping']);
+  }
 });
 
 test('snapshot ADA tapi kutipan tidak hidup → tokens {} , BUKAN null', () => {
