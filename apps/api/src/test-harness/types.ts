@@ -25,6 +25,8 @@ export interface TestMessage {
   debugInfo?: DebugSnapshot;
 }
 
+import type { JejakPanggilanAi, ringkasJejakAi } from '../common/ai-call-trace';
+
 export interface DebugSnapshot {
   status: string;
   /** >>> ANGGA — F3 (2026-08-09): `closing_followup` ditambahkan; step itu lahir di
@@ -56,6 +58,13 @@ export interface DebugSnapshot {
     args: any;
     result: any;
   }>;
+  /** >>> ANGGA — F6 Bagian 1 butir 1 (2026-08-11, cowork): SIAPA yang melayani
+   *  giliran ini. Satu giliran bisa menembak banyak panggilan LLM (loop tool,
+   *  percobaan paksa, retry, Sentinel, resolusi tujuan), jadi ini DAFTAR —
+   *  bukan satu nilai. `penyedia: null` berarti TIDAK DILAPORKAN, bukan nol. <<< */
+  aiCalls?: JejakPanggilanAi[];
+  /** Ringkasan siap baca dari `aiCalls` — dipakai `tools/eval/replay.mjs`. */
+  aiRingkas?: ReturnType<typeof ringkasJejakAi>;
 }
 
 export interface TestScenario {

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
 import { MetricsService } from '../../common/metrics/metrics.service';
+import { catatPanggilanAi, type JejakPanggilanAi } from '../../common/ai-call-trace';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -48,6 +49,63 @@ export interface ChatResponse {
   finish_reason?: string;
   /** Jumlah token prompt menurut provider — untuk menguji hipotesis "prompt kepanjangan". */
   prompt_tokens?: number;
+}
+
+/**
+ * >>> ANGGA — F6 Bagian 1 butir 1 (2026-08-11, cowork): KUNCI RUTE PENYEDIA.
+ *
+ * `allow_fallbacks:false` menyuruh OpenRouter TIDAK berpindah ke penyedia hulu
+ * cadangan. Itu yang membuat pengukuran berulang membandingkan hal yang sama —
+ * gerbang lulus F6 ("3x berulang, sebaran < 5 poin") mustahil dipenuhi kalau
+ * tiap putaran boleh dilayani penyedia yang berbeda.
+ *
+ * SENGAJA di balik saklar, bawaan MATI, atas ketok Bossfren 2026-08-11.
+ * Produksi tetap punya fallback: rute terkunci berarti penyedia hulu tumbang =
+ * panggilan GAGAL KERAS, dan itu keputusan operasional tersendiri yang tidak
+ * boleh diselundupkan lewat pekerjaan alat ukur. Yang menyalakannya cuma
+ * `tools/eval/replay.mjs`.
+ *
+ * Dibaca SAAT DIPAKAI, bukan konstanta tingkat modul — di Nest seluruh `import`
+ * dievaluasi SEBELUM `ConfigModule.forRoot()` memuat `.env`, jadi konstanta
+ * tingkat modul menghasilkan saklar yang tidak bisa dinyalakan lewat cara yang
+ * didokumentasikan sendiri. `REPLY_CONTRACT_ENABLED` sudah sekali kena persis
+ * itu (audit selesai-167). <<<
+ */
+function kunciRutePenyedia(): boolean {
+  return process.env.EVAL_LOCK_PROVIDER === 'true';
+}
+
+/**
+ * >>> ANGGA — F6 Bagian 1, OPSI C (2026-08-11, ketok Bossfren): TOMBOL LENGAN EVAL.
+ *
+ * Gerbang F6 adalah gerbang VALIDASI ALAT, bukan gerbang mutu bot — nota
+ * handover menuliskannya sendiri. Lengan yang menjawab gerbang itu dijalankan
+ * `temperature 0` supaya sisa sebaran apa pun MUSTAHIL berasal dari sampling
+ * model, dan karena itu pasti cacat alat. Lengan kedua tetap temperature
+ * produksi untuk memvonis F4 — kelas bug yang membunuh F4 (parafrase kalimat
+ * funnel → pertanyaan dobel terkirim) adalah fenomena SAMPLING dan di
+ * temperature 0 ia sebagian besar lenyap.
+ *
+ * Nilai kosong / bukan angka DIABAIKAN, tidak diteruskan sebagai `NaN`.
+ * `NaN` di `temperature` akan diserialkan JSON jadi `null` dan diam-diam
+ * mengubah arti payload — kelas kegagalan senyap yang tidak boleh ada di
+ * dalam alat ukur. Dibaca SAAT DIPAKAI, alasan sama dengan saklar di atas. <<<
+ */
+function angkaEnvEval(nama: 'EVAL_TEMPERATURE' | 'EVAL_SEED'): number | null {
+  const mentah = process.env[nama];
+  if (mentah === undefined || mentah.trim() === '') return null;
+  const n = Number(mentah);
+  if (!Number.isFinite(n)) return null;
+  // >>> KOREKSI AUDIT K23 (A8, 2026-08-11): `Number.isFinite` saja meloloskan
+  // `EVAL_TEMPERATURE=3`, `=-1`, `EVAL_SEED=42.5`, `=1e99` — semuanya masuk
+  // payload apa adanya dan memancing 400 dari hulu, yang non-transient
+  // sehingga tidak di-retry dan menjatuhkan seluruh putaran pengukuran.
+  // Yang TIDAK kulakukan: membuang `seed` dari payload untuk endpoint yang
+  // mungkin menolaknya — premis itu tidak terbukti (penyanggal: `seed` standar
+  // di OpenAI/OpenRouter/vLLM) dan menambal atas dugaan yang tak terkonfirmasi
+  // adalah persis yang pakem 8c larang. Yang terbukti cuma rentangnya. <<<
+  if (nama === 'EVAL_TEMPERATURE') return n >= 0 && n <= 2 ? n : null;
+  return Number.isInteger(n) ? n : null;
 }
 
 /**
@@ -131,11 +189,86 @@ export class AiProviderService {
       payload.tools = opts.tools;
       payload.tool_choice = opts.toolChoice ?? 'auto'; // >>> ANGGA — F4 <<<
     }
+    // >>> ANGGA — F6 Bagian 1 (2026-08-11): kunci rute, lihat catatan di atas.
+    // Kuncinya TIDAK ditulis sama sekali saat saklar mati — bukan ditulis
+    // `true`, supaya payload produksi byte-per-byte sama dengan sebelum
+    // perubahan ini dan tidak ada perilaku baru yang menyelinap. <<<
+    const ruteTerkunci = kunciRutePenyedia();
+    if (ruteTerkunci) payload.provider = { allow_fallbacks: false };
+    // >>> ANGGA — KOREKSI AUDIT K23 (2026-08-11, ronde penyanggal). Versi
+    // pertama menimpa temperature SESUDAH `opts.temperature ?? ai.temperature`,
+    // dengan alasan tertulis "Sentinel & learning-miner mengirim temperature
+    // sendiri (0/0.1/0.2/0.3), kalau tidak ditimpa sebagian panggilan tetap
+    // stokastik". **Alasan itu SALAH**, dan inventaris pemanggil membuktikannya:
+    //
+    //   - pemanggil in-turn yang mengirim temperature EKSPLISIT semuanya sudah 0
+    //     (`shipping.service.ts:917` extractOrderTarget, `sentinel.service.ts:283`
+    //     llmReview) — menimpanya 0→0, nol manfaat
+    //   - yang 0.2/0.1/0.3 semuanya dipicu ADMIN dan TIDAK PERNAH jalan di dalam
+    //     giliran (`learning-miner:225/255`, `sentinel:471/547`, `ai.service:946`)
+    //
+    // Jadi penimpaan-sesudah tidak menambah determinisme apa pun pada giliran
+    // yang diukur, tapi MENJANGKAU jalur non-eval: selama sesi ukur berjalan,
+    // `minePersona`/`minePlaybook` yang ditekan admin menulis baris
+    // `learningProposal` ke DB pada temperature 0 alih-alih 0.2/0.1, permanen
+    // dan tanpa penanda apa pun. Efek samping di luar sasaran alat ukur.
+    //
+    // ⚠️ Tapi auditor pertama menyimpulkan dari situ "cabut saja penimpaannya",
+    // dan ITU JUGA SALAH — penyanggal membuktikannya. EMPAT pemanggil in-turn
+    // tidak mengirim temperature sama sekali sehingga jatuh ke `ai.temperature`
+    // = 0.6, dan salah satunya GENERATOR BALASAN UTAMA (`ai.service.ts:444`,
+    // plus `:289` retry, `:606` percobaan paksa, `:768` burst). Merekalah yang
+    // membuat giliran stokastik, dan merekalah yang memang harus dipatok.
+    //
+    // Bentuk yang benar karena itu: tombol lengan jadi **DEFAULT**, bukan
+    // PENIMPA. Pemanggil yang menyebut temperature-nya sendiri tetap dihormati
+    // (learning-miner aman), pemanggil yang diam dipatok (empat jalur di atas
+    // ikut lengan). Diagnosisnya dari auditor, resepnya bukan. <<<
+    const suhuEval = angkaEnvEval('EVAL_TEMPERATURE');
+    if (suhuEval !== null && opts.temperature === undefined) payload.temperature = suhuEval;
+    const seedEval = angkaEnvEval('EVAL_SEED');
+    if (seedEval !== null) payload.seed = seedEval;
+    // Deklarasi LENGAN, dibaca dari env apa adanya — BUKAN diturunkan dari jalur
+    // kode yang kebetulan terlewati giliran ini. Lihat catatan NB-5 di
+    // `ai-call-trace.ts`: menurunkannya dari jalur menghasilkan tanda tangan
+    // yang berubah-ubah menurut cabang mana yang aktif.
+    const lenganEval = { temperature: suhuEval, seed: seedEval, kunciRute: ruteTerkunci };
 
     const model = String(payload.model);
     const total = AiProviderService.RETRIES + 1;
     let lastErr: unknown;
     for (let attempt = 1; attempt <= total; attempt++) {
+      // >>> ANGGA — F6 Bagian 1 (2026-08-11): SATU entri jejak per PERCOBAAN,
+      // termasuk percobaan yang GAGAL. Retry transient justru tempat rute
+      // berpindah penyedia; kalau hanya percobaan sukses yang dicatat,
+      // perpindahan itu tak terlihat — padahal itu confound yang dicari. <<<
+      const t0 = Date.now();
+      const catat = (bagian: Partial<JejakPanggilanAi>) =>
+        catatPanggilanAi({
+          modelDiminta: model,
+          modelDilayani: null,
+          penyedia: null,
+          idGenerasi: null,
+          promptTokens: null,
+          completionTokens: null,
+          finishReason: null,
+          percobaan: attempt,
+          // Dicatat supaya `kesahihan.mjs` bisa MENOLAK membandingkan dua
+          // berkas hasil dari lengan yang berbeda. Begitu ada dua lengan,
+          // kesalahan termudah adalah menyandingkan angka lengan 1 dengan
+          // lengan 2 lalu menyimpulkan salah — alat harus menolaknya, bukan
+          // mengandalkan orang ingat.
+          temperature: typeof payload.temperature === 'number' ? payload.temperature : null,
+          // NB-4: dibaca dari PAYLOAD, sama seperti `temperature` di atas —
+          // versi pertama membaca `seedEval` (env) sehingga satu objek memuat
+          // satu klaim payload dan satu klaim env.
+          seed: typeof payload.seed === 'number' ? payload.seed : null,
+          lenganEval,
+          ms: Date.now() - t0,
+          payloadMintaKunciRute: ruteTerkunci,
+          galat: null,
+          ...bagian,
+        });
       let res: Response;
       try {
         res = await fetch(`${ai.baseUrl}/chat/completions`, {
@@ -147,6 +280,7 @@ export class AiProviderService {
         });
       } catch (err) {
         // Network/timeout — transient, retry if attempts remain.
+        catat({ galat: String(err) });
         lastErr = err;
         this.logger.warn(`chat request failed (attempt ${attempt}/${total}): ${err}`);
         if (attempt < total) {
@@ -160,6 +294,7 @@ export class AiProviderService {
         const text = await res.text().catch(() => '');
         // Retry only transient server-side statuses; 4xx (except 429) is our bug.
         const transient = res.status >= 500 || res.status === 429;
+        catat({ galat: `HTTP ${res.status}: ${text.slice(0, 200)}` });
         this.logger.error(`chat error ${res.status} (attempt ${attempt}/${total}): ${text}`);
         if (transient && attempt < total) {
           await this.backoff(attempt);
@@ -183,10 +318,19 @@ export class AiProviderService {
       let body: {
         choices?: Array<{ message?: { content?: string, tool_calls?: any[] }; finish_reason?: string }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
+        // >>> ANGGA — F6 Bagian 1 (2026-08-11): field khas OpenRouter. SEMUANYA
+        // opsional dengan sengaja — badan respons sungguhan dari repo ini belum
+        // pernah kulihat sendiri, jadi ketiadaannya harus terbaca sebagai batas
+        // alat ukur (`penyedia: null` = TIDAK DILAPORKAN), bukan diam-diam jadi
+        // nol yang terlihat seperti temuan. <<<
+        provider?: string;
+        model?: string;
+        id?: string;
       };
       try {
         body = (await res.json()) as typeof body;
       } catch (err) {
+        catat({ galat: `badan tidak terbaca: ${err}` });
         lastErr = err;
         this.logger.warn(`chat body gagal dibaca (attempt ${attempt}/${total}): ${err}`);
         if (attempt < total) {
@@ -196,6 +340,14 @@ export class AiProviderService {
         throw new ServiceUnavailableException('Could not read AI provider response');
       }
       this.recordTokens(model, body.usage);
+      catat({
+        penyedia: body.provider ?? null,
+        modelDilayani: body.model ?? null,
+        idGenerasi: body.id ?? null,
+        promptTokens: body.usage?.prompt_tokens ?? null,
+        completionTokens: body.usage?.completion_tokens ?? null,
+        finishReason: body.choices?.[0]?.finish_reason ?? null,
+      });
       const msg = body.choices?.[0]?.message;
       return {
         content: msg?.content?.trim() ?? '',

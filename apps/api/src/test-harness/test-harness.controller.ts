@@ -19,6 +19,7 @@
  * Created: 2026-08-08
  */
 
+import { bukaJejakAi, denganJejakAi, ringkasJejakAi } from '../common/ai-call-trace';
 import {
   Controller,
   Get,
@@ -153,6 +154,19 @@ export class TestHarnessController {
     // >>> ANGGA — koreksi AUDIT (2026-08-10): penanda "ini catatan alat uji,
     // bukan ucapan bot" — menentukan apakah pesannya boleh masuk riwayat prompt. <<<
     let catatanSistem = false;
+    // >>> ANGGA — F6 Bagian 1 butir 1 (2026-08-11, cowork): penampung jejak
+    // panggilan LLM giliran ini. Dimiliki DI SINI, bukan dikembalikan
+    // `pipeline.run()`. ⚠️ BATAS YANG DIAKUI (audit K23 2026-08-11): sifat
+    // "selamat dari throw" itu nyata di TINGKAT MODUL dan dijaga test, tapi
+    // BELUM dimanfaatkan di sini — `sendMessage` tidak punya try/catch, jadi
+    // giliran yang melempar tetap pulang 500 tanpa `debugInfo` dan jejaknya
+    // dibuang GC. Justru giliran timeout yang paling butuh data penyedia.
+    // Sengaja TIDAK diperbaiki di slice ini: mengubahnya berarti mengubah
+    // kontrak error harness (500 → 200 + catatan), keputusan tersendiri.
+    // Dicatat sebagai utang, bukan dibiarkan diam-diam.
+    // Jalur 'mock' tidak menembak LLM sama sekali, jadi penampungnya tinggal
+    // kosong — itu jawaban yang benar, bukan data yang hilang. <<<
+    const jejakAi = bukaJejakAi();
 
     if (session.provider === 'mock') {
       const hasil = await this.chatManager.sendMessage(sessionId, body.text, history, 'mock', session.model);
@@ -163,7 +177,9 @@ export class TestHarnessController {
       if (!conversationId) throw new NotFoundException(`Session ${sessionId} has no conversation`);
       conversationIdUntukDebug = conversationId;
       const channel = new UiReplyChannel();
-      const hasil = await this.pipeline.run(conversationId, channel, { model: session.model });
+      const hasil = await denganJejakAi(jejakAi, () =>
+        this.pipeline.run(conversationId, channel, { model: session.model }),
+      );
       // >>> ANGGA — koreksi AUDIT (2026-08-10, cowork): JANGAN PERNAH gelembung
       // kosong. Dulu `channel.text ?? ''` — kalau pipeline berhenti sebelum
       // menyentuh kanal (`skipped`/`paused`), yang tersimpan & tampil adalah
@@ -202,6 +218,32 @@ export class TestHarnessController {
       conversationIdUntukDebug,
     );
     if (outcome) (debugInfo as any).status = outcome;
+    // >>> ANGGA — F6 Bagian 1 (2026-08-11): SELALU dipasang, termasuk saat
+    // kosong. Field yang absen dan field yang berisi daftar kosong berbeda
+    // artinya bagi `replay.mjs`: absen = biner ini belum punya alat ukurnya,
+    // kosong = giliran ini memang tidak menembak LLM. Membedakan keduanya
+    // mencegah alat itu membaca versi lama sebagai "nol panggilan". <<<
+    // >>> ANGGA — koreksi AUDIT K23 (2026-08-11): SALINAN, bukan referensi hidup.
+    // Dua auditor terpisah menemukan hal yang sama: di jalur `ai_on` (dan sesi
+    // harness DIPAKSA `ai_on`), `reply-pipeline` menembak `sentinel.review()`
+    // dan `ai.leadScore()` TANPA di-await. ALS merambat ke keduanya — dibuktikan
+    // penyanggal dengan spec sementara — jadi mereka mendorong entri ke array
+    // yang sama BEBERAPA DETIK sesudah baris ini. Kalau `aiCalls` disimpan
+    // sebagai referensi hidup, satu baris pesan bisa berakhir memuat `aiCalls`
+    // dan `aiRingkas` yang saling membantah, dan salinan DB berbeda dari
+    // salinan respons HTTP.
+    //
+    // Yang SENGAJA TIDAK kulakukan: mem-`await` kedua panggilan itu. Keduanya
+    // pasca-kirim by design; meng-await-nya menambah satu round-trip LLM penuh
+    // ke latensi yang dilihat PELANGGAN di produksi, demi sebuah alat ukur.
+    // Konsekuensinya dinyatakan terang-terangan alih-alih disembunyikan:
+    // **panggilan LLM pasca-kirim (Sentinel, leadScore) DI LUAR CAKUPAN
+    // angka ini.** Kalau nanti mau dimasukkan, ia WAJIB dipisah per model —
+    // `sentinel.review` memakai `sentinelModel()` yang berbeda, jadi
+    // mencampurnya ke satu baris "giliran dilayani" cuma menukar satu
+    // kebohongan dengan kebohongan lain. <<<
+    debugInfo.aiCalls = [...jejakAi];
+    debugInfo.aiRingkas = ringkasJejakAi(debugInfo.aiCalls);
     if (moneyGateIssues.length) debugInfo.gateWarnings = [...debugInfo.gateWarnings, ...moneyGateIssues];
 
     // Add assistant message with debug info

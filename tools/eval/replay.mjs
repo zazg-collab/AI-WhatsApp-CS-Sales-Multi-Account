@@ -14,6 +14,19 @@
  * bukan karangan: semuanya gejala yang BENAR-BENAR terlihat di sesi uji
  * Bossfren, jadi angkanya langsung berbicara soal keluhan yang nyata.
  *
+ * >>> F6 Bagian 1 butir 1 (2026-08-11): RUTE PENYEDIA HULU.
+ * Angka mutu bot dari alat ini TIDAK SAH sebagai perbandingan selama rutenya
+ * belum terkunci — biner yang sama diukur empat sesi memberi `kosong`
+ * 25%/0%/0%/0%. Alat ini sekarang MEMBACA penyedia yang benar-benar melayani
+ * tiap giliran dan berteriak sendiri kalau angkanya tidak layak dibandingkan.
+ *
+ * ⚠️ `EVAL_LOCK_PROVIDER=true` dibaca oleh PROSES API, bukan oleh skrip ini —
+ * skrip ini cuma klien HTTP. Menyetelnya di shell tempat `replay.mjs` jalan
+ * TIDAK ADA EFEKNYA. Setel di container/proses API:
+ *   docker compose run -e EVAL_LOCK_PROVIDER=true ...   (atau `environment:`)
+ * Kalau lupa, alat ini yang memberitahu — bukan diam lalu memulangkan angka
+ * yang terlihat rapi.
+ *
  * Pemakaian:
  *   node tools/eval/replay.mjs --runs 5 --label "HEAD"
  *   node tools/eval/replay.mjs --runs 5 --label "a85a7c0" --out hasil-a85a7c0.json
@@ -27,6 +40,8 @@
 // 127.0.0.1, BUKAN localhost. Node 18+ menerjemahkan `localhost` ke ::1 (IPv6)
 // lebih dulu, sementara Docker biasanya mempublikasikan port di IPv4 saja —
 // hasilnya `fetch failed` tanpa status, tanpa petunjuk. Sudah kena sekali.
+import { cetakKesahihan, bedaKonfigurasi, pasangkanPerKasus, konfigurasiLengan } from './kesahihan.mjs';
+
 const BASE = process.env.HERMES_API ?? 'http://127.0.0.1:3001/api/v1';
 const PROVIDER = process.env.EVAL_PROVIDER ?? 'openrouter';
 const MODEL = process.env.EVAL_MODEL ?? 'deepseek/deepseek-v4-flash-0731';
@@ -192,6 +207,10 @@ async function satuPutaran(nomor) {
           adaOngkir: Boolean(debug?.ongkir),
           jumlahItem: (debug?.items ?? []).length,
           gateWarnings: debug?.gateWarnings ?? [],
+          // >>> F6 Bagian 1 (2026-08-11): `undefined` (bukan `null`) berarti
+          // biner yang diukur BELUM punya alat ukur ini — dibedakan dari
+          // `{panggilan:0}` yang berarti giliran ini memang tidak menembak LLM.
+          ai: debug?.aiRingkas,
         },
         ...periksa(teks, debug, i + 1),
       });
@@ -249,6 +268,28 @@ if (bandingkan > 0) {
     console.error(`\n✖ ${kosong.length} berkas berisi NOL giliran (${kosong.map((d) => d.label).join(', ')}) — tidak ada yang bisa dibandingkan.\n`);
     process.exit(3);
   }
+  // >>> OPSI C (2026-08-11): PENJAGA LINTAS-LENGAN, dicetak SEBELUM angka apa
+  // pun. Dua lengan pengukuran (temperature 0 = validasi ALAT · temperature
+  // produksi = vonis BOT) menghasilkan berkas yang bentuknya identik, dan
+  // menyandingkannya menghasilkan kesimpulan yang mulus dan salah. Ditolak di
+  // sini, bukan diperingatkan di bawah tabel yang sudah terlanjur dibaca. <<<
+  const bedaKonf = bedaKonfigurasi(data);
+  for (const d of data) {
+    const k = konfigurasiLengan(d.putaran);
+    // NB-3: berkas tanpa data TIDAK boleh mencetak pernyataan positif
+    // ("seed=[tidak dikirim]") tentang sesuatu yang tidak ia ketahui.
+    const teks = k.lengan
+      ? `temperature=${k.lengan.temperature ?? 'produksi'} seed=${k.lengan.seed ?? 'tidak dikirim'} kunciRute=${k.lengan.kunciRute}`
+      : 'TIDAK DIKETAHUI (biner tanpa pencatat lengan, atau lengan berubah di tengah pengukuran)';
+    console.log(`  lengan ${d.label}: model=[${k.modelDiminta.join(',') || '?'}] ${teks}`);
+  }
+  if (bedaKonf.length) {
+    console.error(`\n⛔ BERKAS INI LAHIR DARI LENGAN PENGUKURAN YANG BERBEDA — tidak dibandingkan.`);
+    for (const b of bedaKonf) console.error(`   · ${b}`);
+    console.error(`   Selisih apa pun antar kolom tidak bisa dipisahkan dari selisih konfigurasi.\n`);
+    process.exit(4);
+  }
+
   const kelas = Object.keys(data[0].ringkasan.hit);
   console.log(`\n${'kelas kegagalan'.padEnd(24)}${data.map((d) => d.label.padStart(14)).join('')}`);
   console.log('-'.repeat(24 + 14 * data.length));
@@ -256,8 +297,74 @@ if (bandingkan > 0) {
     const baris = data.map((d) => `${d.ringkasan.hit[k]}/${d.ringkasan.giliranTotal}`.padStart(14)).join('');
     console.log(k.padEnd(24) + baris);
   }
+  // >>> Koreksi AUDIT K23 (2026-08-11): dulu jalur ini `process.exit(0)` tepat
+  // di sini — tanpa satu pun vonis kesahihan. Itu cacat terparah dari
+  // kelompoknya, karena JUSTRU DI SINI perbandingan A-vs-B terjadi. Dua berkas
+  // bisa masing-masing "sah" secara internal namun dilayani penyedia yang
+  // BERBEDA satu sama lain, dan tabel di atas akan terbaca sebagai "commit B
+  // memperbaiki `kosong`" padahal yang berubah penyedianya — persis confound
+  // yang seluruh pekerjaan ini dibangun untuk memberantasnya. Datanya sudah
+  // tersimpan di berkas hasil sejak awal, cuma tidak pernah dibaca. <<<
   console.log('');
-  process.exit(0);
+  const vonis = [];
+  for (const d of data) {
+    console.log(`  --- kesahihan: ${d.label} ---`);
+    vonis.push({ label: d.label, ...cetakKesahihan(d.putaran ?? [], '    ') });
+    console.log('');
+  }
+  const semuaPenyedia = [...new Set(vonis.flatMap((v) => v.penyedia))];
+  if (vonis.some((v) => !v.sah)) {
+    console.log('  ⛔ SETIDAKNYA SATU KOLOM TIDAK SAH — tabel di atas TIDAK boleh dipakai memutuskan commit mana yang benar.\n');
+  } else if (semuaPenyedia.length > 1) {
+    console.log(`  ⛔ Tiap kolom sah SENDIRI-SENDIRI, tapi dilayani penyedia BERBEDA (${semuaPenyedia.join(' vs ')}).`);
+    console.log('     Selisih antar kolom tidak bisa dibedakan dari selisih penyedia. Ukur ulang di jendela yang sama.\n');
+  } else {
+    console.log(`  ✔ Semua kolom sah dan dilayani penyedia yang sama (${semuaPenyedia[0]}) — selisihnya layak dibaca.\n`);
+  }
+
+  // >>> OPSI C (2026-08-11): PERBANDINGAN BERPASANGAN PER-KASUS.
+  // Tabel agregat di atas membiarkan kasus yang perilakunya TIDAK berubah tetap
+  // menyumbang kebisingan ke selisihnya. Di sini kasus stabil menyumbang NOL —
+  // tuas terbesar yang tersedia, dan tidak butuh satu putaran tambahan maupun
+  // menyentuh temperature. Hanya dijalankan untuk DUA berkas; berpasangan
+  // bertiga bukan perbandingan, itu tabel lain lagi. <<<
+  if (data.length === 2) {
+    const pas = pasangkanPerKasus(data[0], data[1]);
+    console.log(`  --- berpasangan per-kasus: ${data[0].label} → ${data[1].label} ---`);
+    if (pas.kelasTimpang.length) console.log(`  ⚠ kelas hanya ada di SATU berkas, tidak dibandingkan: ${pas.kelasTimpang.join(', ')}`);
+    if (pas.hanyaDi.length) console.log(`  ⚠ ${pas.hanyaDi.length} kasus hanya ada di satu berkas (${pas.hanyaDi.map((h) => `${h.n}@${h.label}`).join(', ')}) — TIDAK dibandingkan.`);
+    // A5: klaim "kasus stabil menyumbang NOL kebisingan" hanya berlaku kalau
+    // keluarannya dipatok. Di lengan produksi, `ra !== rb` tanpa ambang berarti
+    // kasus yang perilakunya TIDAK berubah tetap sering dilaporkan "berubah"
+    // dengan label yang terdengar pasti. Diukur penyanggal: pada p(gagal)=0,3
+    // dan 3 putaran, 64% kasus stabil dilaporkan berubah, arahnya 50:50 acak.
+    const L = vonis[0]?.lengan;
+    if (!L || L.temperature !== 0) {
+      console.log(`  ⚠ LENGAN PRODUKSI (temperature tidak dipatok): daftar di bawah DIDOMINASI KEBISINGAN SAMPLING.`);
+      console.log(`    Pada p(gagal)~0,3 dengan 3 putaran, ~64% kasus yang TIDAK berubah tetap muncul di sini,`);
+      console.log(`    dengan arah membaik/memburuk yang 50:50 acak. Jangan baca satu baris sebagai bukti.`);
+    }
+    if (!pas.sepadan) {
+      console.log(`  ⛔ Dua berkas ini memutar SKENARIO BERBEDA di kasus ${pas.takSepadan.join(', ')} — tidak bisa dipasangkan.\n`);
+    } else if (!pas.berubah.length) {
+      console.log(`  Nol dari ${pas.dibandingkan} kasus yang dibandingkan berubah perilakunya.\n`);
+    } else {
+      console.log(`  ${pas.berubah.length} dari ${pas.dibandingkan} kasus yang dibandingkan berubah:`);
+      for (const b of pas.berubah) {
+        for (const [k, d] of Object.entries(b.delta))
+          console.log(`    kasus ${b.n} · ${k.padEnd(22)} ${d.a} → ${d.b}  (${d.arah})`);
+        console.log(`      kirim: ${b.kirim}`);
+      }
+      console.log('');
+    }
+  }
+  // >>> KOREKSI AUDIT K23 (A10): dulu SEMUA jalur pulang 0, termasuk sesudah
+  // mencetak "⛔ TIDAK SAH". Skrip/CI apa pun yang menulis
+  // `replay.mjs --bandingkan … && lanjut` menerima lampu hijau untuk
+  // perbandingan yang alat ini sendiri baru saja nyatakan tidak sah — yang
+  // mengembalikan ketergantungan pada "orang membaca layar", persis yang mau
+  // dihapus. Kode keluar sekarang mencerminkan vonisnya. <<<
+  process.exit(vonis.some((v) => !v.sah) || semuaPenyedia.length > 1 ? 5 : 0);
 }
 
 await preflight();
@@ -284,7 +391,9 @@ for (let i = 1; i <= runs; i++) {
     // cukup untuk menenggelamkan tabel hasil. <<<
     for (const x of rusak) {
       const kelas = ['kosong', 'kurung_menggantung', 'tanya_dobel', 'metode_sebelum_total', 'lupa_produk'].filter((k) => x[k]);
-      console.log(`    ⌁ giliran ${x.n} [${kelas.join(',')}] mode=${x.jejak.funnelMode} ongkir=${x.jejak.adaOngkir ? 'ada' : 'tidak'} item=${x.jejak.jumlahItem} gerbang=${x.jejak.gateWarnings.length}`);
+      const ai = x.jejak.ai;
+      const rute = ai ? ` llm=${ai.panggilan}${ai.gagal ? `(${ai.gagal} gagal)` : ''} penyedia=${ai.penyedia.join('+') || '?'}` : '';
+      console.log(`    ⌁ giliran ${x.n} [${kelas.join(',')}] mode=${x.jejak.funnelMode} ongkir=${x.jejak.adaOngkir ? 'ada' : 'tidak'} item=${x.jejak.jumlahItem} gerbang=${x.jejak.gateWarnings.length}${rute}`);
       console.log(`      kirim : ${x.kirim}`);
       console.log(`      balas : ${(x.teks || '(kosong)').replace(/\s+/g, ' ').slice(0, 240)}`);
     }
@@ -319,6 +428,12 @@ if (ringkasan.lama?.medianMs != null) {
       `(batas AI_TIMEOUT_MS bawaan 30 detik)`,
   );
 }
+// >>> F6 Bagian 1 (2026-08-11): VONIS KESAHIHAN, dicetak SEBELUM rincian
+// per-giliran supaya tidak bisa terlewat. Alat ukur yang tahu dirinya sedang
+// tidak sah WAJIB mengatakannya — bukan memulangkan tabel rapi yang menipu.
+console.log('\n  --- rute penyedia hulu (panggilan chat saja; embeddings & panggilan pasca-kirim di luar cakupan) ---');
+cetakKesahihan(putaran);
+
 console.log('\n  per giliran:');
 ringkasan.perGiliran.forEach((g, i) => {
   const isi = Object.entries(g).filter(([, v]) => v > 0).map(([k, v]) => `${k}=${v}`).join(' ');
