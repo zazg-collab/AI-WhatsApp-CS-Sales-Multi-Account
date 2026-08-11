@@ -1,0 +1,80 @@
+feat(ai): catat tool yang benar-benar DIJALANKAN ke jejak panggilan AI
+
+BARU-1 irisan A. Prasyarat pembuktian, bukan perbaikan: diagnosis "kutipan
+hilang di giliran 4" berhenti di satu hipotesis yang tidak bisa dibuktikan
+MAUPUN dibantah — DUA mesin menulis kunci cache ongkir yang sama tanpa wasit
+(`finalizeQuote` lewat grounding vs `llmCalculateShipping` lewat panggilan
+tool). Petunjuknya terukur: giliran 5 semestinya memakai snapshot qty 1
+(Rp50.000) tapi menghasilkan Rp100.000 (qty 2) — ada penulis kedua di giliran
+yang sama.
+
+Yang menghalangi: `DebugSnapshot.toolCalls` SELALU `undefined` untuk provider
+nyata. `test-harness.controller.ts` hanya mengisi `executedTools` di cabang
+'mock'; eksekusi tool hidup di `ai.service.ts` dan tidak pernah naik ke
+`ReplyOutcome`.
+
+APA
+* `common/ai-call-trace.ts` — `toolDijalankan?: string[]` di `JejakPanggilanAi`,
+  `catatToolDijalankan()`, dan `toolDijalankan` di `ringkasJejakAi()`.
+  Menumpang AsyncLocalStorage yang SAMA dengan pencatat penyedia — nol
+  mekanisme baru, nol sumber kebenaran kedua. Nama ditempel ke panggilan LLM
+  yang memintanya, TANPA dedup (pengulangan itu temuannya sendiri — utang A2).
+* `modules/ai/ai.service.ts` — `TOOL_DIKENAL` sebagai SATU sumber untuk dua
+  hal: siapa yang dicatat, dan siapa yang dianggap `Unknown function`.
+  Pencatatan terjadi SESUDAH `JSON.parse` dan SEBELUM `await`.
+* `tools/eval/jejak.mjs` — `toolDipakai` membaca `aiRingkas.toolDijalankan`
+  untuk provider nyata; `toolCalls` tetap didahulukan untuk jalur mock.
+
+TDD
+RED ditulis lebih dulu di tingkat ASSERTION (bukan compile error): 4 test lewat
+API publik lama + cast struktural → 4 gagal / 14 lolos terhadap kode belum
+diperbaiki. Baru implementasi → hijau.
+
+AUDIT K23 TIGA RONDE — LENGKAP
+Ronde 1 (auditor segar): 9 temuan, 2 PARAH.
+Ronde 2 (dua penyanggal): 3 DICORET sebagai false flag, 4 diturunkan
+keparahannya, 4 cacat BARU. Salah satunya (N1: "`chatWithTools` mungkin tidak
+mencatat, jadi seluruh irisan ini bisa selalu kosong") diverifikasi satu grep
+dan TERBANTAH — `chat()` cuma membungkus `chatWithTools()`, dan
+`catatPanggilanAi` hidup di dalam `chatWithTools`.
+
+DIPERBAIKI di ronde 3 (yang bertahan):
+* Pencatat DIPINDAH dari sebelum `JSON.parse` ke sesudahnya, dan dijaga
+  `TOOL_DIKENAL`. Versi pertama berbohong dua kali, dua-duanya menyentuh nama
+  yang paling menentukan: argumen terpotong (`finish_reason:'length'`) →
+  `calculate_shipping` tercatat "dijalankan" padahal `llmCalculateShipping`
+  tidak pernah dipanggil dan cache tidak ditulis; dan nama halusinasi yang
+  jatuh ke `Unknown function` juga tercatat.
+* Penjaga lemparan di `catatToolDijalankan` — alat ukur tidak boleh mematikan
+  balasan pelanggan.
+* `Array.isArray` di KEDUA cabang `jejak.mjs` (asimetri penjaga wadah).
+* Komentar yang salah DICABUT: klaim "`send_reply` tidak tercatat" bersandar
+  pada feature-flag yang bawaannya OFF; sesudah `TOOL_DIKENAL` klaimnya benar
+  secara konstruksi.
+
+DICORET beserta alasannya (jangan dikerjakan ulang):
+* Penghitung "nama dijatuhkan karena penampung kosong" — keadaannya TIDAK
+  TERJANGKAU (terverifikasi), dan penghitungnya tidak punya tempat tinggal
+  selain state global, yang dilarang invarian berkas itu. Deteksi gratisnya:
+  silang log `tool_calls diterima (N)` dengan `toolDipakai: []`.
+* Atribusi per-panggilan "rusak karena panggilan LLM bersarang" — nol jalur
+  nyata: satu-satunya `provider.chat` di `shipping.service.ts` ada di
+  `extractOrderTarget` (jalur grounding), bukan di loop tool.
+* "Dua sumber terisi lalu satu dibuang senyap" — hanya terjadi di jalur mock,
+  dan di sana penampung jejak tidak pernah aktif.
+* Mengganti test `toolCalls: []` — ia mematok DOMAIN fungsi murni, bukan klaim
+  bentuk produksi; dipertahankan dengan catatan.
+
+BUKTI
+* tsc bersih · **1087/1087 jest (85 suite)** · **89/89 `node --test`**
+* **7/7 mutan mati** sisi TypeScript + **19/19** sisi `jejak.mjs`
+* nol test lama disunting
+
+⚠️ INSIDEN ALAT (dicatat, bukan disembunyikan): `timeout 40 node mutasi.mjs`
+membunuh proses dengan SIGTERM, sehingga blok `try/finally` TIDAK jalan dan
+satu mutan tertinggal di `ai.service.ts`. Ketahuan dari `sha256sum` langsung
+sesudahnya, dipulihkan dari berkas cadangan, diverifikasi hash-nya kembali
+identik. Sisa uji mutasi dijalankan satu-mutan-per-panggilan tanpa `timeout`.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Hoat862MeH7VEwVcujuBBb

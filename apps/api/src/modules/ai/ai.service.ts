@@ -6,6 +6,23 @@ import { assertConversationScope, type ScopedUser } from '../../common/account-s
 import { NotificationsService } from '../../notifications/notifications.service';
 import { MetricsService } from '../../common/metrics/metrics.service';
 import { extractFirstJson } from '../../common/json-extract.util'; // >>> ANGGA <<<
+import { catatToolDijalankan } from '../../common/ai-call-trace'; // >>> BARU-1 irisan A <<<
+
+/**
+ * >>> BARU-1 irisan A (2026-08-11, cowork): SATU sumber untuk "tool data apa
+ * yang benar-benar punya implementasi di loop tool".
+ *
+ * Dipakai DUA kali di tempat yang sama: memutuskan apa yang dicatat sebagai
+ * "dijalankan", dan memutuskan apa yang dianggap `Unknown function`. Sengaja
+ * satu himpunan, bukan dua daftar yang harus dijaga tetap sama — duplikasi
+ * daftar adalah drift, dan proyek ini sudah pernah membayarnya (dua salinan
+ * `KELAS_GAGAL` di `replay.mjs` yang isinya berbeda).
+ *
+ * `send_reply` SENGAJA tidak di sini: ia kontrak balasan, bukan tool yang
+ * mengubah keadaan order, dan jalurnya sendiri (`kontrakBalasanAktif()`)
+ * menangani dirinya di atas.
+ */
+const TOOL_DIKENAL = new Set(['search_destinations', 'calculate_shipping', 'search_knowledge']);
 import {
   AiProviderService,
   ChatMessage,
@@ -561,22 +578,54 @@ export class AiService {
           let resultStr = '';
           try {
             const args = JSON.parse(call.function.arguments);
-            if (fnName === 'search_destinations') {
-              const res = await this.shipping!.llmSearchDestinations(args.keyword, args.province);
-              resultStr = JSON.stringify(res);
-            } else if (fnName === 'calculate_shipping') {
-              const dest = { id: args.destination_id, city: args.city, province: args.province, label: args.label };
-              // >>> ANGGA — F1: `items` OPSIONAL di skema (pelanggan boleh tanya ongkir
-              // sebelum memilih barang → jalur shippingOnly). `quoteUntukTujuan`
-              // membaca `input.items.length`, jadi undefined WAJIB di-default. <<<
-              const res = await this.shipping!.llmCalculateShipping(conversationId, dest, args.items ?? []);
-              resultStr = JSON.stringify(res);
-            } else if (fnName === 'search_knowledge') {
-              const lang = await this.botLang(conversationId);
-              const res = await this.prompts.llmSearchKnowledge(knowledgeBaseId, args.query, lang);
-              resultStr = JSON.stringify(res);
-            } else {
+            // >>> BARU-1 irisan A (2026-08-11, cowork) — KOREKSI RONDE 3.
+            //
+            // Versi pertama mencatat SEBELUM `JSON.parse` dan TANPA memeriksa
+            // nama. Dua penyanggal membuktikan dua kebohongan yang lahir dari
+            // situ, dan dua-duanya menyentuh nama yang paling menentukan:
+            //   · argumen terpotong (`finish_reason:'length'` — kelas yang
+            //     sudah pernah terjadi di repo ini) → `JSON.parse` melempar →
+            //     `llmCalculateShipping` TIDAK PERNAH dipanggil, cache TIDAK
+            //     ditulis — tapi `calculate_shipping` tetap masuk daftar
+            //     "tool yang dijalankan". Penyelidik menyimpulkan mesin tool
+            //     menulis cache padahal tidak. Persis vonis terbalik yang
+            //     seluruh irisan ini dibangun untuk mencegah.
+            //   · nama halusinasi (`hitung_ongkir`) yang jatuh ke cabang
+            //     `Unknown function` juga tercatat sebagai "dijalankan",
+            //     padahal nol implementasi tersentuh.
+            //
+            // `TOOL_DIKENAL` sekarang menjadi SATU sumber untuk dua hal
+            // sekaligus — siapa yang boleh dicatat, dan siapa yang dianggap
+            // dikenal. Itu disengaja: kalau kelak ada tool ke-4 yang lupa
+            // didaftarkan, ia langsung jatuh ke `Unknown function` dan
+            // toolnya BERHENTI BEKERJA — kegagalan yang berisik dan langsung
+            // ketahuan — bukan diam-diam hilang dari daftar pengukuran.
+            // Drift yang senyap ditukar dengan drift yang berteriak.
+            //
+            // Tetap dicatat SEBELUM `await`: tool yang melempar DI TENGAH bisa
+            // sudah menulis cache, dan itu justru yang sedang diselidiki
+            // (hipotesis "dua mesin menulis kunci cache ongkir"). Semantiknya
+            // "percobaan", bukan "sukses" — sama seperti `percobaan` di
+            // `JejakPanggilanAi`.
+            if (!TOOL_DIKENAL.has(fnName)) {
               resultStr = JSON.stringify({ error: `Unknown function ${fnName}` });
+            } else {
+              catatToolDijalankan(fnName);
+              if (fnName === 'search_destinations') {
+                const res = await this.shipping!.llmSearchDestinations(args.keyword, args.province);
+                resultStr = JSON.stringify(res);
+              } else if (fnName === 'calculate_shipping') {
+                const dest = { id: args.destination_id, city: args.city, province: args.province, label: args.label };
+                // >>> ANGGA — F1: `items` OPSIONAL di skema (pelanggan boleh tanya ongkir
+                // sebelum memilih barang → jalur shippingOnly). `quoteUntukTujuan`
+                // membaca `input.items.length`, jadi undefined WAJIB di-default. <<<
+                const res = await this.shipping!.llmCalculateShipping(conversationId, dest, args.items ?? []);
+                resultStr = JSON.stringify(res);
+              } else {
+                const lang = await this.botLang(conversationId);
+                const res = await this.prompts.llmSearchKnowledge(knowledgeBaseId, args.query, lang);
+                resultStr = JSON.stringify(res);
+              }
             }
           } catch (e: any) {
             this.logger.warn(`Tool call ${fnName} failed: ${e.message}`);

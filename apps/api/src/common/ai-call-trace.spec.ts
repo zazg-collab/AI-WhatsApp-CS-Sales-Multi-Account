@@ -1,4 +1,4 @@
-import { bukaJejakAi, denganJejakAi, catatPanggilanAi, ringkasJejakAi, type JejakPanggilanAi } from './ai-call-trace';
+import { bukaJejakAi, denganJejakAi, catatPanggilanAi, catatToolDijalankan, ringkasJejakAi, type JejakPanggilanAi } from './ai-call-trace';
 
 const contoh = (over: Partial<JejakPanggilanAi> = {}): JejakPanggilanAi => ({
   modelDiminta: 'm',
@@ -179,5 +179,112 @@ describe('ringkasJejakAi.konfigurasi — identitas lengan', () => {
     ]);
     expect(r.konfigurasi.temperatureEfektif).toEqual([0, 0.6]);
     expect(r.konfigurasi.lengan).toEqual(L0);   // identitasnya TIDAK ikut goyah
+  });
+});
+
+/**
+ * >>> BARU-1 irisan A (2026-08-11, cowork): JEJAK TOOL YANG BENAR-BENAR DIJALANKAN.
+ *
+ * Kenapa ini dibangun, dan kenapa di sini: diagnosis "kutipan hilang di giliran 4"
+ * berhenti di satu hipotesis yang tidak bisa dibuktikan MAUPUN dibantah —
+ * DUA mesin menulis kunci cache ongkir yang sama tanpa wasit (`finalizeQuote`
+ * lewat grounding, dan `llmCalculateShipping` lewat panggilan tool model).
+ * Petunjuknya terukur: giliran 5 semestinya memakai snapshot qty 1 (Rp50.000)
+ * tapi menghasilkan Rp100.000 (qty 2) — ada penulis kedua di giliran yang sama.
+ *
+ * Yang menghalangi pembuktian: `DebugSnapshot.toolCalls` SELALU `undefined`
+ * untuk provider nyata (`test-harness.controller.ts` hanya mengisi
+ * `executedTools` di cabang 'mock'; eksekusi tool hidup di `ai.service.ts` dan
+ * tidak pernah naik ke `ReplyOutcome`).
+ *
+ * Jadi tool dicatat menumpang mekanisme yang SUDAH ADA dan sudah terbukti —
+ * `AsyncLocalStorage` yang sama dengan pencatat penyedia — dan ditempelkan ke
+ * panggilan LLM yang MEMINTANYA, bukan ke satu daftar datar. Itu lebih kaya
+ * (ketahuan tool mana lahir dari panggilan keberapa) dan tidak menambah sumber
+ * kebenaran kedua yang bisa drift.
+ */
+describe('jejak tool yang dijalankan', () => {
+  it('ringkasJejakAi mengumpulkan nama tool dari SELURUH panggilan, sesuai urutan', () => {
+    // Struktural: `toolDijalankan` belum ada di tipe saat test ini ditulis.
+    // Sengaja lewat API publik LAMA supaya RED-nya jatuh di ASSERTION, bukan
+    // di compile — RED yang gagal compile tidak membuktikan apa-apa soal
+    // perilakunya.
+    const a = { ...contoh(), toolDijalankan: ['calculate_shipping'] } as unknown as JejakPanggilanAi;
+    const b = { ...contoh(), toolDijalankan: ['send_reply'] } as unknown as JejakPanggilanAi;
+    const r = ringkasJejakAi([a, b]) as unknown as { toolDijalankan: string[] };
+    expect(r.toolDijalankan).toEqual(['calculate_shipping', 'send_reply']);
+  });
+
+  it('panggilan TANPA tool tidak menyumbang apa pun — daftarnya kosong, bukan undefined', () => {
+    const r = ringkasJejakAi([contoh(), contoh()]) as unknown as { toolDijalankan: string[] };
+    expect(r.toolDijalankan).toEqual([]);
+  });
+
+  it('nama yang SAMA dua kali TIDAK di-dedup — pengulangan itu justru temuannya', () => {
+    // HEAD cuma punya pembatas putaran, nol deteksi panggilan tool BERULANG
+    // dengan argumen sama (utang A2). Kalau ringkasan ini men-dedup, bukti
+    // pengulangan itu hilang sebelum sempat dibaca siapa pun.
+    const a = {
+      ...contoh(),
+      toolDijalankan: ['calculate_shipping', 'calculate_shipping'],
+    } as unknown as JejakPanggilanAi;
+    const r = ringkasJejakAi([a]) as unknown as { toolDijalankan: string[] };
+    expect(r.toolDijalankan).toEqual(['calculate_shipping', 'calculate_shipping']);
+  });
+
+  it('panggilan lama TANPA field ini tidak bikin ringkasan melempar', () => {
+    // Berkas hasil & baris DB lama lahir sebelum field ini ada.
+    const r = ringkasJejakAi([contoh()]) as unknown as { toolDijalankan: string[] };
+    expect(() => r.toolDijalankan).not.toThrow();
+    expect(r.toolDijalankan).toEqual([]);
+  });
+});
+
+describe('catatToolDijalankan', () => {
+  it('DI LUAR penampung adalah no-op SENYAP — alat ukur tidak boleh mematikan bot', () => {
+    // Invarian yang sama dengan `catatPanggilanAi`: produksi menjalankan tool
+    // di setiap giliran TANPA penampung terbuka.
+    expect(() => catatToolDijalankan('calculate_shipping')).not.toThrow();
+  });
+
+  it('menempel ke panggilan LLM TERAKHIR, bukan ke daftar datar', () => {
+    const sink = bukaJejakAi();
+    return denganJejakAi(sink, async () => {
+      catatPanggilanAi(contoh({ percobaan: 1 }));
+      catatToolDijalankan('search_destinations');
+      catatPanggilanAi(contoh({ percobaan: 2 }));
+      catatToolDijalankan('calculate_shipping');
+      catatToolDijalankan('search_knowledge');
+      expect(sink[0].toolDijalankan).toEqual(['search_destinations']);
+      expect(sink[1].toolDijalankan).toEqual(['calculate_shipping', 'search_knowledge']);
+      expect(ringkasJejakAi(sink).toolDijalankan).toEqual([
+        'search_destinations',
+        'calculate_shipping',
+        'search_knowledge',
+      ]);
+    });
+  });
+
+  it('penampung KOSONG (tool tanpa panggilan tercatat) DIJATUHKAN, bukan dipaksa masuk', () => {
+    // Secara alur mustahil — tool lahir dari respons model, dan responsnya
+    // dicatat lebih dulu. Kalau sampai terjadi, ia menandakan urutan yang
+    // berubah; menaruhnya di entri yang salah lebih buruk daripada hilang.
+    const sink = bukaJejakAi();
+    return denganJejakAi(sink, async () => {
+      expect(() => catatToolDijalankan('calculate_shipping')).not.toThrow();
+      expect(sink).toEqual([]);
+      expect(ringkasJejakAi(sink).toolDijalankan).toEqual([]);
+    });
+  });
+
+  it('panggilan yang tidak menjalankan tool tetap `undefined`, bukan array kosong', () => {
+    // Membedakan "panggilan ini nol tool" dari "panggilan ini punya tool" di
+    // tingkat ENTRI. Diruntuhkan jadi kosong hanya di tingkat RINGKASAN.
+    const sink = bukaJejakAi();
+    return denganJejakAi(sink, async () => {
+      catatPanggilanAi(contoh());
+      expect(sink[0].toolDijalankan).toBeUndefined();
+      expect(ringkasJejakAi(sink).toolDijalankan).toEqual([]);
+    });
   });
 });

@@ -124,6 +124,35 @@ export interface JejakPanggilanAi {
   payloadMintaKunciRute: boolean;
   /** Ringkasan kegagalan percobaan ini; `null` kalau berhasil. */
   galat: string | null;
+  /**
+   * >>> BARU-1 irisan A (2026-08-11, cowork): NAMA tool yang benar-benar
+   * DIJALANKAN sebagai akibat panggilan LLM ini.
+   *
+   * Kenapa ditempelkan ke ENTRI PANGGILAN, bukan jadi daftar datar tersendiri:
+   * yang ditanya diagnosis bukan cuma "tool apa yang jalan di giliran ini",
+   * melainkan "tool itu lahir dari panggilan model yang mana" — satu giliran
+   * bisa memutar loop tool beberapa kali, dan panggilan berulang dengan
+   * argumen sama adalah temuannya sendiri (utang A2). Menempelkannya di sini
+   * juga berarti nol sumber kebenaran kedua yang bisa drift.
+   *
+   * Di mana atribusi itu SELAMAT, dan di mana tidak (ronde 3, menjawab auditor
+   * yang mengira ia tidak pernah dipakai): ia ikut ke `DebugSnapshot.aiCalls`
+   * — yang controller test-harness simpan utuh ke baris `Message` dan ke
+   * respons HTTP — jadi bisa dibaca dari panel debug dan dari DB. Yang TIDAK
+   * membawanya adalah berkas hasil `replay.mjs`: `jejak.mjs` sengaja hanya
+   * menyalin daftar DATAR (`aiRingkas.toolDijalankan`), karena pertanyaan
+   * BARU-1 tidak butuh atribusi per-panggilan dan berkas hasilnya sudah besar.
+   *
+   * Semantik `percobaan`, bukan `sukses`: dicatat saat tool MULAI dijalankan,
+   * jadi tool yang melempar tetap tercatat. Itu memang yang ditanya — tool
+   * yang gagal di tengah bisa sudah menulis cache sebelum melempar.
+   *
+   * `undefined` = panggilan ini tidak menjalankan tool apa pun, ATAU entri
+   * lahir dari biner sebelum field ini ada. Keduanya diruntuhkan jadi kosong
+   * oleh `ringkasJejakAi`, dan itu benar untuk pertanyaannya: pembeda "biner
+   * tanpa alat ukur" sudah dipegang `aiRingkas` yang absen seluruhnya.
+   */
+  toolDijalankan?: string[];
 }
 
 const penampung = new AsyncLocalStorage<JejakPanggilanAi[]>();
@@ -143,6 +172,44 @@ export function catatPanggilanAi(entri: JejakPanggilanAi): void {
   penampung.getStore()?.push(entri);
 }
 
+/**
+ * >>> BARU-1 irisan A (2026-08-11, cowork): catat satu tool yang MULAI
+ * dijalankan, tempelkan ke panggilan LLM TERAKHIR yang tercatat.
+ *
+ * No-op senyap dalam DUA keadaan, dan dua-duanya disengaja:
+ *  - tidak ada penampung aktif → produksi. Sama seperti `catatPanggilanAi`:
+ *    alat ukur TIDAK BOLEH bisa mematikan bot.
+ *  - penampung ada tapi masih KOSONG → tool jalan tanpa satu pun panggilan LLM
+ *    tercatat sebelumnya. Secara alur ini TIDAK TERJANGKAU, dan sekarang sudah
+ *    diverifikasi sampai ke bawah (ronde 2 audit K23): `AiProviderService.chat()`
+ *    hanya membungkus `chatWithTools()`, dan `catatPanggilanAi` hidup DI DALAM
+ *    `chatWithTools` — satu entri per percobaan HTTP, didorong sebelum ia
+ *    pulang. Loop tool berjalan sesudah itu. Kalau toh sampai terjadi, ia
+ *    menandakan urutan yang berubah, dan menyimpan nama di entri yang salah
+ *    lebih buruk daripada tidak menyimpannya. Dijatuhkan, bukan dipaksa masuk.
+ *
+ * >>> DITOLAK DI RONDE 3 — jangan diusulkan lagi: **penghitung penjatuhan.**
+ * Auditor mengusulkannya supaya "kegagalan alat ukur tidak menyamar jadi
+ * `[]` = nol tool". Dicoret, tiga alasan, yang ketiga menentukan:
+ *   1. keadaannya tidak terjangkau (lihat paragraf di atas — TERVERIFIKASI,
+ *      bukan diasumsikan);
+ *   2. memisahkannya dari no-op produksi menuntut cabang baru di jalur yang
+ *      komentarnya sendiri mewajibkan no-op SENYAP;
+ *   3. penghitungnya tidak punya tempat tinggal selain STATE GLOBAL — di
+ *      berkas yang invariannya justru "penampung dimiliki PEMANGGIL, nol biaya
+ *      saat tidak dipakai". Menambah mesin global untuk keadaan mustahil, di
+ *      alat yang dibangun supaya tidak punya mesin global.
+ * Deteksinya sudah tersedia gratis dan nol kode: silang baris log
+ * `tool_calls diterima (N)` di `ai.service.ts` dengan `toolDipakai: []` di
+ * berkas hasil. Kalau N > 0 tapi daftarnya kosong, itu penjatuhan.
+ */
+export function catatToolDijalankan(nama: string): void {
+  const jejak = penampung.getStore();
+  const terakhir = jejak?.[jejak.length - 1];
+  if (!terakhir) return;
+  (terakhir.toolDijalankan ??= []).push(nama);
+}
+
 /** Ringkasan yang bisa dibaca manusia: berapa panggilan, dilayani siapa saja. */
 export function ringkasJejakAi(jejak: JejakPanggilanAi[]): {
   panggilan: number;
@@ -153,6 +220,13 @@ export function ringkasJejakAi(jejak: JejakPanggilanAi[]): {
   payloadMintaKunciRute: boolean;
   /** Model yang benar-benar DILAYANI. Bukti sisi hulu, bukan niat sisi klien. */
   modelDilayani: string[];
+  /**
+   * Nama tool yang dijalankan sepanjang giliran, URUT dan **TANPA dedup**.
+   * Pengulangan disengaja dipertahankan: `calculate_shipping` dua kali di satu
+   * giliran adalah temuan, bukan kebisingan (HEAD cuma punya pembatas putaran,
+   * nol deteksi panggilan tool berulang — utang A2). Daftar kosong = nol tool.
+   */
+  toolDijalankan: string[];
   /**
    * Konfigurasi lengan pengukuran. Dipakai `kesahihan.mjs` untuk MENOLAK
    * membandingkan dua berkas hasil yang lahir dari lengan berbeda.
@@ -180,6 +254,7 @@ export function ringkasJejakAi(jejak: JejakPanggilanAi[]): {
     promptTokens: jejak.reduce((n, e) => n + (e.promptTokens ?? 0), 0),
     payloadMintaKunciRute: jejak.length > 0 && jejak.every((e) => e.payloadMintaKunciRute),
     modelDilayani: [...new Set(jejak.map((e) => e.modelDilayani).filter((m): m is string => Boolean(m)))],
+    toolDijalankan: jejak.flatMap((e) => e.toolDijalankan ?? []),
     konfigurasi: {
       modelDiminta: [...new Set(jejak.map((e) => e.modelDiminta).filter(Boolean))].sort(),
       lengan: lenganSeragam(jejak),
