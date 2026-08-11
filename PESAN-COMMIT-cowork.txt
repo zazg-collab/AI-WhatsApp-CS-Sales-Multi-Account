@@ -1,0 +1,59 @@
+feat(eval): rekam tokens/funnelStep/toolCalls ke jejak — instrumentasi BARU-1
+
+BARU-1 langkah 1. INSTRUMENTASI MURNI: vonis `metode_sebelum_total` TIDAK
+disentuh sama sekali. Nol test lama disunting.
+
+KENAPA — diukur dulu, bukan ditebak (26 giliran nyata dari lengan1.json,
+recon-deepseek.json, hasil-head-v5.json):
+
+* `funnelMode` gagal ke DUA arah, bukan satu. Handover cuma mencatat false
+  positive. Terukur juga false NEGATIVE: hasil-head-v5 p2g4 bermode `total`,
+  menawarkan "COD atau transfer", nol angka total di balasan — TIDAK di-flag.
+  Di lengan1, `funnelMode` = `normal` di 12/12 giliran; sumbangannya ke vonis
+  persis NOL.
+* Arah yang tercatat di handover ("pindahkan keputusan ke keberadaan kutipan")
+  TERBANTAH oleh data yang sama: ia menyembuhkan 1 false positive (p2g3) tapi
+  melahirkan 2 false negative (p1g4, p2g4 — kutipan ADA di cache, bot bilang
+  "cek dulu ke admin", total tidak pernah disodorkan). Bersihnya lebih buruk,
+  jadi tambalan itu TIDAK ditulis.
+* Keberadaan `tokens` juga bukan field yang dicari: rantainya diverifikasi
+  sampai hulu — `debugState()` memulangkan `quote ? buildPriceTokens(quote) : {}`
+  dan `snap.ongkir` diisi iff `quote`, jadi `tokens ≠ {}` ⟺ `adaOngkir` yang
+  sudah lama tercatat. Yang belum pernah terukur adalah NILAI di dalamnya.
+
+APA
+* tools/eval/jejak.mjs (BARU) — pemetaan DebugSnapshot→jejak dipisah dari
+  replay.mjs supaya bisa dipatok test (replay.mjs punya top-level await +
+  process.exit; meng-import-nya dari test = menjalankan alat ukurnya).
+  Tiga field baru: `tokens` (nilai utuh), `funnelStep` (langkah MENTAH),
+  `toolDipakai` (NAMA tool yang jalan di giliran ini — pemilah satu-satunya
+  antara "kutipan LAHIR di giliran ini" dan "kutipan sudah ada sejak tadi",
+  karena seluruh snapshot adalah keadaan PASCA-giliran).
+* tools/eval/jejak.test.mjs (BARU) — 11 test. Ditulis MERAH dulu di tingkat
+  assertion (5 merah / 2 hijau terhadap pemetaan lama), bukan sekadar
+  module-not-found.
+* tools/eval/replay.mjs — pakai bangunJejak(); cetak NILAI token untuk giliran
+  yang melanggar; SENSUS TOKEN + KAWAT SANDUNG invarian `tokens≠{} ⟺ adaOngkir`
+  tiap putaran; peringatan kalau `--out` tidak diberikan.
+
+BUKTI
+* 85/85 `node --test` (74 lama + 11 baru), nol test lama disunting.
+* 15/15 mutan mati (skrip mutasi try/finally + assert cadangan; tidak dikomit).
+* Uji asap terhadap API tiruan: 4 skenario (normal · invarian dilanggar ·
+  kolektor buta · tanpa debugInfo) — sensus & kawat sandung menyala tepat.
+* Berkas hasil LAMA tetap terbaca `--bandingkan` (nol `undefined`, nol lemparan).
+
+AUDIT K23 TIGA RONDE — LENGKAP
+* Ronde 1: 2 auditor segar → 21 temuan.
+* Ronde 2 (penyanggal, 2 agen): 3 DICORET sebagai false flag, 6 diturunkan
+  keparahannya, 5 cacat BARU ditemukan.
+* Ronde 3: yang bertahan diperbaiki + test regresi. Rincian yang dicoret
+  beserta alasannya ada di ledger.
+
+DICABUT (bukan ditambal) di ronde 3: kalimat komentar yang mengklaim
+`cetakKesahihan` membedakan `ai: undefined` dari `null` — terbukti SALAH
+(`kesahihan.mjs` pakai `if (!r)`), dan analogi aliasing `fCtx.items` yang tidak
+berlaku untuk objek hasil `r.json()`.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Hoat862MeH7VEwVcujuBBb

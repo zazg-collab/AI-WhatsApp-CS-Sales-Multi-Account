@@ -59,6 +59,7 @@
 // lebih dulu, sementara Docker biasanya mempublikasikan port di IPv4 saja —
 // hasilnya `fetch failed` tanpa status, tanpa petunjuk. Sudah kena sekali.
 import { cetakKesahihan, bedaKonfigurasi, pasangkanPerKasus, konfigurasiLengan, cetakSebaran, kelasGabungan, selHit } from './kesahihan.mjs';
+import { bangunJejak } from './jejak.mjs';
 
 const BASE = process.env.HERMES_API ?? 'http://127.0.0.1:3001/api/v1';
 const PROVIDER = process.env.EVAL_PROVIDER ?? 'openrouter';
@@ -220,16 +221,12 @@ async function satuPutaran(nomor) {
         // `metode_sebelum_total`: apakah saat itu memang belum ada kutipan
         // ongkir/barang (jadi larangan "jangan tanya COD/Transfer sebelum
         // total" tidak pernah disuntikkan), atau ada tapi tetap dilanggar.
-        jejak: {
-          funnelMode: debug?.funnelMode ?? null,
-          adaOngkir: Boolean(debug?.ongkir),
-          jumlahItem: (debug?.items ?? []).length,
-          gateWarnings: debug?.gateWarnings ?? [],
-          // >>> F6 Bagian 1 (2026-08-11): `undefined` (bukan `null`) berarti
-          // biner yang diukur BELUM punya alat ukur ini — dibedakan dari
-          // `{panggilan:0}` yang berarti giliran ini memang tidak menembak LLM.
-          ai: debug?.aiRingkas,
-        },
+        //
+        // >>> BARU-1 langkah 1 (2026-08-11): pemetaannya pindah ke
+        // `./jejak.mjs` supaya bisa dipatok test — berkas ini punya top-level
+        // `await` + `process.exit()`, jadi meng-import-nya dari test berarti
+        // MENJALANKAN alat ukurnya. Alasan tiap field ada di sana. <<<
+        jejak: bangunJejak(debug),
         ...periksa(teks, debug, i + 1),
       });
     }
@@ -436,7 +433,26 @@ for (let i = 1; i <= runs; i++) {
       const kelas = KELAS_GAGAL.filter((k) => x[k]);
       const ai = x.jejak.ai;
       const rute = ai ? ` llm=${ai.panggilan}${ai.gagal ? `(${ai.gagal} gagal)` : ''} penyedia=${ai.penyedia.join('+') || '?'}` : '';
-      console.log(`    ⌁ giliran ${x.n} [${kelas.join(',')}] mode=${x.jejak.funnelMode} ongkir=${x.jejak.adaOngkir ? 'ada' : 'tidak'} item=${x.jejak.jumlahItem} gerbang=${x.jejak.gateWarnings.length}${rute}`);
+      const alat = x.jejak.toolDipakai?.length ? ` tool=${x.jejak.toolDipakai.join('+')}` : '';
+      console.log(`    ⌁ giliran ${x.n} [${kelas.join(',')}] mode=${x.jejak.funnelMode} langkah=${x.jejak.funnelStep ?? '—'} ongkir=${x.jejak.adaOngkir ? 'ada' : 'tidak'} item=${x.jejak.jumlahItem} gerbang=${x.jejak.gateWarnings.length}${alat}${rute}`);
+      // >>> BARU-1 langkah 1 (2026-08-11): isi token giliran ini.
+      //
+      // Sengaja SELURUH token, bukan pilihan "yang kelihatan penting":
+      // menyaring di sini berarti sudah memutuskan field mana yang membuktikan
+      // "total tersodor", padahal justru itu yang belum terukur.
+      //
+      // >>> KOREKSI ronde 2 audit K23: versi pertama mencetak NAMA token saja.
+      // Terbantah — himpunan namanya adalah fungsi dari ada/tidaknya kutipan,
+      // jadi ia mengulang `ongkir=ada` di baris atasnya dan menjawab nol
+      // pertanyaan. Yang dicari NILAInya, jadi nilainya yang dicetak. Newline
+      // di `blok_total` diratakan supaya satu giliran tetap satu baris. <<<
+      const tk = x.jejak.tokens;
+      const isiToken = tk == null
+        ? '(tanpa debugInfo)'
+        : Object.keys(tk).length
+          ? Object.entries(tk).map(([k, v]) => `${k}=${String(v).replace(/\s+/g, ' ')}`).join(' · ').slice(0, 400)
+          : '(kosong — TIDAK ada kutipan hidup; lihat sensus di bawah sebelum menyimpulkan sebabnya)';
+      console.log(`      token : ${isiToken}`);
       console.log(`      kirim : ${x.kirim}`);
       console.log(`      balas : ${(x.teks || '(kosong)').replace(/\s+/g, ' ').slice(0, 240)}`);
     }
@@ -497,6 +513,47 @@ if (ringkasan.lama?.medianMs != null) {
 // putaran (`5/12`); gerbang F6 menanyakan SELISIH antar putaran. Dua besaran
 // berbeda, dan sampai hari ini yang dicetak bukan yang ditanya — sebarannya
 // harus dihitung manual dari JSON. Sekarang alat menjawabnya sendiri. <<<
+// >>> BARU-1 langkah 1 (2026-08-11) — SENSUS TOKEN + KAWAT SANDUNG INVARIAN.
+//
+// Lahir dari ronde 2 audit K23, dan alasannya satu: satu-satunya cara putaran
+// ukur ini bisa disalahbaca secara diam-diam adalah kalau panel debug BUTA
+// se-putaran. `tokens: {}` yang berarti "kolektor tidak sempat membaca"
+// (`ShippingService` tak ter-inject · `conversationId` kosong · `debugState()`
+// melempar dan `catch` menelannya · provider `mock`) terlihat persis sama
+// dengan `{}` yang berarti "memang tidak ada kutipan" — dan pembacanya akan
+// menyimpulkan "sistem tidak pernah menghitung total" padahal ALAT-nya yang
+// tidak pernah membaca. Itu kelas bahaya utama proyek ini: nilai yang terlihat
+// sah, artinya lain.
+//
+// Kawat sandung di bawah menguji premis yang SELURUH irisan ini bersandar
+// padanya — `tokens tidak kosong ⟺ adaOngkir`, diverifikasi sampai
+// `ShippingService.debugState()`. Kalau biner yang diukur ternyata bukan yang
+// diasumsikan, itu ketahuan di putaran yang sama, bukan di ronde audit
+// berikutnya. Nol pengaruh ke vonis: ini murni cetak. <<<
+{
+  const semua = putaran.flat();
+  const tNull = semua.filter((x) => x.jejak?.tokens == null).length;
+  const tKosong = semua.filter((x) => x.jejak?.tokens && !Object.keys(x.jejak.tokens).length).length;
+  const tIsi = semua.length - tNull - tKosong;
+  console.log(`\n  --- sensus token (BARU-1) ---`);
+  console.log(`    ${tIsi} berisi · ${tKosong} kosong · ${tNull} tanpa debugInfo  (dari ${semua.length} giliran)`);
+  if (!tIsi && tKosong) {
+    console.log('    ⚠ NOL giliran berkutipan. SEBELUM menyimpulkan "total tidak pernah lahir": `tokens:{}`');
+    console.log('      juga muncul kalau ShippingService tidak ter-inject, `conversationId` kosong, atau');
+    console.log('      `debugState()` melempar — periksa `adaOngkir`/`items` dan log server dulu.');
+  }
+  if (tNull) {
+    console.log(`    ⚠ ${tNull} giliran TANPA \`debugInfo\` sama sekali — panel debug tidak menjawab, bukan order yang kosong.`);
+    console.log('      Catatan: `periksa()` menilai giliran seperti ini dengan `funnelMode = null`, sehingga');
+    console.log('      `metode_sebelum_total` bisa menyala karena KETIADAAN DATA. Utang pra-ada; jangan dibaca sebagai pelanggaran.');
+  }
+  const langgar = semua.filter((x) => x.jejak?.tokens && (Object.keys(x.jejak.tokens).length > 0) !== x.jejak.adaOngkir);
+  if (langgar.length) {
+    console.log(`    ⛔ ${langgar.length} giliran MELANGGAR invarian "tokens≠{} ⟺ adaOngkir" (giliran ${langgar.map((x) => x.n).join(', ')}).`);
+    console.log('       Biner yang diukur BUKAN yang diasumsikan `jejak.mjs`. Jangan pakai hasil ini untuk memutuskan apa pun.');
+  }
+}
+
 console.log('\n  --- rute penyedia hulu (panggilan chat saja; embeddings & panggilan pasca-kirim di luar cakupan) ---');
 const vonisKesahihan = cetakKesahihan(putaran);
 
@@ -517,6 +574,15 @@ if (out) {
   const fs = await import('node:fs');
   fs.writeFileSync(out, JSON.stringify({ label, waktu: new Date().toISOString(), ringkasan, putaran }, null, 2));
   console.log(`\nTersimpan: ${out}`);
+} else {
+  // >>> BARU-1 langkah 1 (2026-08-11, ronde 2 audit K23): layar hanya mencetak
+  // giliran yang MELANGGAR; giliran yang bersih tidak pernah menampilkan
+  // tokennya. Untuk BARU-1 justru giliran bersih yang sering memegang
+  // jawabannya, dan tanpa `--out` nilai token seluruh putaran ini hilang
+  // permanen — satu putaran (laptop + kuota LLM + risiko 429) terbuang tanpa
+  // ada yang sadar sampai berkasnya dicari dan tidak ada. <<<
+  console.log('\n⚠ Tanpa `--out`, nilai token giliran yang BERSIH tidak tersimpan di mana pun —');
+  console.log('  dan justru giliran bersih yang sering menjawab pertanyaan BARU-1. Ulangi dengan `--out <berkas>.json`.');
 }
 
 // >>> A10 (diperluas, 2026-08-11): jalur `--bandingkan` sudah memulangkan kode
