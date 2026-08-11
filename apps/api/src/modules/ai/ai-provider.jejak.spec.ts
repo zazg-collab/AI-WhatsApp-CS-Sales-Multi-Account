@@ -30,10 +30,13 @@ const balas = (over: Record<string, unknown> = {}) => ({
 describe('AiProviderService — jejak penyedia hulu & kunci rute', () => {
   const realFetch = global.fetch;
   const realEnv = process.env.EVAL_LOCK_PROVIDER;
+  const realPin = process.env.EVAL_PROVIDER_ONLY;
   afterEach(() => {
     global.fetch = realFetch;
     if (realEnv === undefined) delete process.env.EVAL_LOCK_PROVIDER;
     else process.env.EVAL_LOCK_PROVIDER = realEnv;
+    if (realPin === undefined) delete process.env.EVAL_PROVIDER_ONLY;
+    else process.env.EVAL_PROVIDER_ONLY = realPin;
     jest.restoreAllMocks();
   });
 
@@ -101,6 +104,35 @@ describe('AiProviderService — jejak penyedia hulu & kunci rute', () => {
     const payload = JSON.parse((f.mock.calls[0][1] as any).body);
     expect(payload.provider).toEqual({ allow_fallbacks: false });
     expect(jejak[0].payloadMintaKunciRute).toBe(true);
+  });
+
+  it('pin penyedia ikut TERCATAT di jejak, dan menyalakan kunciRute di jejak itu', async () => {
+    // >>> Ditemukan MUTATION TESTING (mutasi Q5 lolos). Test payload-ku sudah
+    // memeriksa `provider.allow_fallbacks === false`, tapi TIDAK memeriksa apa
+    // yang TERCATAT. Akibat mutasinya: payload benar-benar terkunci, tapi
+    // `payloadMintaKunciRute` tercatat false → `kesahihan.mjs` mencetak
+    // "payload TIDAK meminta kunci rute" dan memvonis TIDAK SAH untuk putaran
+    // yang justru paling benar. Alarm palsu di alat yang tugasnya memutuskan
+    // gerbang kelulusan — dan alarm palsu berulang melatih orang mengabaikan
+    // peringatan yang sungguhan. <<<
+    process.env.EVAL_PROVIDER_ONLY = 'DeepInfra';
+    delete process.env.EVAL_LOCK_PROVIDER;
+    global.fetch = jest.fn().mockResolvedValue(balas()) as any;
+    const jejak = bukaJejakAi();
+    await denganJejakAi(jejak, () => makeService().chatWithTools([{ role: 'user', content: 'x' }]));
+    expect(jejak[0].lenganEval.pinPenyedia).toEqual(['DeepInfra']);
+    expect(jejak[0].lenganEval.kunciRute).toBe(true);
+    expect(jejak[0].payloadMintaKunciRute).toBe(true);
+  });
+
+  it('tanpa pin dan tanpa saklar, jejak mencatat TIDAK terkunci', async () => {
+    delete process.env.EVAL_PROVIDER_ONLY;
+    delete process.env.EVAL_LOCK_PROVIDER;
+    global.fetch = jest.fn().mockResolvedValue(balas()) as any;
+    const jejak = bukaJejakAi();
+    await denganJejakAi(jejak, () => makeService().chatWithTools([{ role: 'user', content: 'x' }]));
+    expect(jejak[0].lenganEval.pinPenyedia).toBeNull();
+    expect(jejak[0].payloadMintaKunciRute).toBe(false);
   });
 
   it('kegagalan jaringan tetap meninggalkan jejak, lalu galatnya tetap dilempar', async () => {

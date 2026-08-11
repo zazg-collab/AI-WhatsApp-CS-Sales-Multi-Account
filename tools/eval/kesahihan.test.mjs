@@ -12,9 +12,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cetakKesahihan, ringkasPenyedia } from './kesahihan.mjs';
 
+// ⚠️ `konfigurasi` DITAMBAHKAN ke fixture ini (2026-08-11, ronde perbaikan K23).
+// Bukan pelemahan assertion: sesudah penyanggal, giliran yang TIDAK merekam
+// lengan memang membatalkan vonis ("ketiadaan data tidak pernah jatuh ke ✔").
+// Fixture lama tidak punya `konfigurasi` sama sekali, jadi setiap test di blok
+// ini — yang menguji hal LAIN — ikut merah karena alasan yang tidak ia uji.
+// Test yang memang menguji ketiadaan lengan membuatnya eksplisit.
+const LENGAN_SAH = { temperature: 0, seed: null, kunciRute: true, pinPenyedia: ['deepinfra'] };
 const ai = (o = {}) => ({
   panggilan: 1, gagal: 0, penyedia: ['DeepSeek'], penyediaTidakDilaporkan: 0,
-  promptTokens: 100, payloadMintaKunciRute: true, modelDilayani: ['deepseek/v4'], ...o,
+  promptTokens: 100, payloadMintaKunciRute: true, modelDilayani: ['deepseek/v4'],
+  konfigurasi: { modelDiminta: ['deepseek/v4'], lengan: LENGAN_SAH, temperatureEfektif: [0] },
+  ...o,
 });
 const giliran = (o) => ({ jejak: { ai: o === null ? undefined : ai(o) } });
 /** Satu putaran berisi n giliran serupa. */
@@ -100,7 +109,13 @@ import { konfigurasiLengan, bedaKonfigurasi, pasangkanPerKasus } from './kesahih
 
 const KELAS = ['kosong', 'tanya_dobel'];
 /** Satu giliran hasil: n, teks kirim, kelas yang menyala, konfigurasi lengan. */
-const L = (temperature = 0, seed = null, kunciRute = true) => ({ temperature, seed, kunciRute });
+// ⚠️ BAWAAN `pinPenyedia` DIUBAH dari null → ['deepinfra'] (2026-08-11).
+// Bukan pelemahan: sesudah ronde penyanggal, "kunci rute TANPA pin" memang
+// TIDAK SAH — `allow_fallbacks:false` sendirian terbukti tidak mengunci rute.
+// Jadi lengan bawaan yang dipakai test-test lain harus mewakili lengan yang
+// SAH, kalau tidak setiap test tentang hal LAIN ikut merah karena alasan yang
+// tidak ia uji. Test yang memang menguji "tanpa pin" mengoper null eksplisit.
+const L = (temperature = 0, seed = null, kunciRute = true, pinPenyedia = ['deepinfra']) => ({ temperature, seed, kunciRute, pinPenyedia });
 const g2 = (n, kirim, nyala = [], konf = { modelDiminta: ['m'], lengan: L(), temperatureEfektif: [0] }) => ({
   n, kirim,
   ...Object.fromEntries(KELAS.map((k) => [k, nyala.includes(k)])),
@@ -227,4 +242,76 @@ test('NB-1 — aiRingkas tanpa `penyedia` tidak bikin alat ukur CRASH', () => {
   const cacat = [[{ n: 1, kirim: 'a', jejak: { ai: { panggilan: 1, gagal: 0, penyediaTidakDilaporkan: 0 } } }]];
   const asli = console.log; console.log = () => {};
   try { assert.doesNotThrow(() => cetakKesahihan(cacat)); } finally { console.log = asli; }
+});
+
+// ─── PIN PENYEDIA — sesudah ronde penyanggal audit K23 (2026-08-11) ───
+//
+// ⚠️ BLOK INI DITULIS ULANG. Versi pertamanya mengunci "pin dibandingkan dengan
+// penyedia yang melayani". Penyanggal membuktikan perbandingan itu ANTI-KORELASI
+// DENGAN KEBENARAN: pin memakai SLUG OpenRouter, badan respons memakai NAMA
+// TAMPILAN, dan keduanya ruang nama berbeda — `GET /api/v1/providers` (101
+// penyedia) menunjukkan kelima nama yang kami ukur ada sebagai `name` dan NOL
+// sebagai `slug`; `Google` slug-nya `google-vertex`. Jadi pemeriksaan itu lulus
+// saat pin SALAH dan gagal saat pin BENAR. Dicabut.
+// Yang dikunci sekarang adalah besaran yang memang bisa dibuktikan dari data.
+
+const gPin = (n, kirim, pin, dilayani, over = {}) => ({
+  n, kirim, kosong: false, tanya_dobel: false,
+  jejak: { ai: { panggilan: 1, gagal: 0, penyedia: dilayani, penyediaTidakDilaporkan: 0,
+                 payloadMintaKunciRute: true, modelDilayani: ['m'],
+                 konfigurasi: { modelDiminta: ['m'], lengan: L(0, null, true, pin), temperatureEfektif: [0] },
+                 ...over } },
+});
+
+test('pin diminta + tepat SATU penyedia melayani → SAH', () => {
+  assert.equal(vonis([[gPin(1, 'a', ['deepinfra'], ['DeepInfra'])]]).sah, true);
+});
+
+test('nama-dilayani BEDA dari pin TIDAK lagi membatalkan vonis — itu ruang nama lain', () => {
+  // Justru kasus paling umum: operator mengisi slug yang BENAR (`deepinfra`),
+  // respons melaporkan nama tampilan (`DeepInfra`). Versi lama memvonis
+  // "PIN TIDAK DIHORMATI" di sini → gerbang F6 permanen merah untuk konfigurasi
+  // yang benar. Yang menentukan sah tetap: satu penyedia untuk seluruh putaran.
+  assert.equal(vonis([[gPin(1, 'a', ['deepinfra'], ['DeepInfra'])]]).sah, true);
+});
+
+test('DUA penyedia melayani → TIDAK SAH, apa pun pin-nya', () => {
+  // Ini yang benar-benar kita pedulikan, dan ia bisa dibuktikan dari data.
+  assert.equal(vonis([[gPin(1, 'a', ['deepinfra'], ['DeepInfra']), gPin(2, 'b', ['deepinfra'], ['Crusoe'])]]).sah, false);
+});
+
+test('kunci rute TANPA pin → TIDAK SAH (allow_fallbacks sendirian tidak mengunci)', () => {
+  assert.equal(vonis([[gPin(1, 'a', null, ['DeepInfra'])]]).sah, false);
+});
+
+test('B2 — LENGAN BERUBAH di tengah pengukuran → TIDAK SAH', () => {
+  // Dulu `r.lengan[0]` dipakai mewakili seluruh putaran, jadi giliran ke-2 yang
+  // diukur dengan lengan berbeda lolos tanpa jejak.
+  const a = gPin(1, 'a', ['deepinfra'], ['DeepInfra']);
+  const b = gPin(2, 'b', ['parasail'], ['DeepInfra']);
+  assert.equal(vonis([[a, b]]).sah, false);
+});
+
+test('B5 — giliran yang TIDAK merekam lengan membatalkan vonis', () => {
+  const utuh = gPin(1, 'a', ['deepinfra'], ['DeepInfra']);
+  const tanpaLengan = gPin(2, 'b', ['deepinfra'], ['DeepInfra']);
+  tanpaLengan.jejak.ai.konfigurasi = { modelDiminta: ['m'], lengan: null, temperatureEfektif: [0] };
+  assert.equal(vonis([[utuh, tanpaLengan]]).sah, false);
+});
+
+test('B5 — giliran tanpa alat ukur sama sekali membatalkan vonis', () => {
+  const utuh = gPin(1, 'a', ['deepinfra'], ['DeepInfra']);
+  assert.equal(vonis([[utuh, { n: 2, kirim: 'b', jejak: {} }]]).sah, false);
+});
+
+test('B1 — pin BERBEDA antar berkas ditolak `bedaKonfigurasi`', () => {
+  // Cerminan `lenganSeragam` sisi TypeScript; tanpa ini dua berkas yang di-pin
+  // ke penyedia berbeda lolos dibandingkan dan selisih penyedia terbaca sebagai
+  // selisih kode — confound yang justru sedang diberantas, lewat pintu belakang.
+  const A = { label: 'A', putaran: [[gPin(1, 'a', ['deepinfra'], ['DeepInfra'])]] };
+  const B = { label: 'B', putaran: [[gPin(1, 'a', ['parasail'], ['Parasail'])]] };
+  const beda = bedaKonfigurasi([A, B]);
+  assert.equal(beda.length, 1);
+  assert.match(beda[0], /^lengan:/);
+  assert.match(beda[0], /pin=deepinfra/);   // cacat-baru-3: pin ikut TERLIHAT di pesannya
 });

@@ -61,8 +61,18 @@ export interface LenganEval {
   temperature: number | null;
   /** `EVAL_SEED`; `null` = tidak dikirim. */
   seed: number | null;
-  /** `EVAL_LOCK_PROVIDER`. */
+  /** `EVAL_LOCK_PROVIDER`, ATAU dinyalakan sendiri oleh `pinPenyedia`. */
   kunciRute: boolean;
+  /**
+   * `EVAL_PROVIDER_ONLY` — penyedia hulu yang DIMINTA. `null` = tidak di-pin.
+   *
+   * ⚠️ Ini NIAT KLIEN, bukan bukti. Pembuktiannya ada di `penyedia` (dari badan
+   * respons): `kesahihan.mjs` membandingkan keduanya dan memvonis TIDAK SAH
+   * kalau hulu melayani penyedia di luar pin. Tanpa perbandingan itu, `only`
+   * cuma janji — dan proyek ini sudah sekali tertipu `allow_fallbacks:false`
+   * yang terdengar seperti penguncian padahal bukan.
+   */
+  pinPenyedia: string[] | null;
 }
 
 export interface JejakPanggilanAi {
@@ -187,6 +197,11 @@ function lenganSeragam(jejak: JejakPanggilanAi[]): LenganEval | null {
   const ada = jejak.map((e) => e.lenganEval).filter(Boolean);
   if (!ada.length || ada.length !== jejak.length) return null;
   const [a] = ada;
-  const seragam = ada.every((l) => l.temperature === a.temperature && l.seed === a.seed && l.kunciRute === a.kunciRute);
+  const samaPin = (x: string[] | null, y: string[] | null) =>
+    (x === null && y === null) || (!!x && !!y && x.length === y.length && x.every((v, i) => v === y[i]));
+  const seragam = ada.every(
+    (l) => l.temperature === a.temperature && l.seed === a.seed && l.kunciRute === a.kunciRute
+      && samaPin(l.pinPenyedia, a.pinPenyedia),
+  );
   return seragam ? { ...a } : null;
 }

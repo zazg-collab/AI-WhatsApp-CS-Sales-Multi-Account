@@ -91,6 +91,48 @@ function kunciRutePenyedia(): boolean {
  * mengubah arti payload — kelas kegagalan senyap yang tidak boleh ada di
  * dalam alat ukur. Dibaca SAAT DIPAKAI, alasan sama dengan saklar di atas. <<<
  */
+/**
+ * >>> ANGGA — F6 Bagian 1 (2026-08-11): PIN PENYEDIA HULU, `EVAL_PROVIDER_ONLY`.
+ *
+ * Kenapa ini ada padahal `EVAL_LOCK_PROVIDER` sudah ada: **dokumentasi
+ * OpenRouter membantah `allow_fallbacks:false` sebagai penguncian.** Ia hanya
+ * mematikan cadangan SESUDAH pilihan default dibuat, dan pilihan default itu
+ * tetap ditentukan routing OpenRouter tiap permintaan. Yang mengunci adalah
+ * `provider.only` (atau `order`).
+ *
+ * Dan besarannya sudah terukur, bukan lagi dugaan: putaran pengintaian pertama
+ * (6 giliran, 20 panggilan) dilayani LIMA penyedia berbeda — DeepInfra 4,
+ * StreamLake 3, Parasail 1, Google 1, Crusoe 1 — dan berpindah DI DALAM satu
+ * giliran (giliran 3: Crusoe + StreamLake + DeepInfra untuk 5 panggilan).
+ *
+ * ⚠️ Nilainya adalah SLUG penyedia menurut OpenRouter, dan slug itu BELUM
+ * terverifikasi — yang kita punya baru NAMA TAMPILAN dari badan respons
+ * ("DeepInfra"). Alat ini sengaja tidak menebak padanannya: ia mengirim apa
+ * adanya, lalu `tools/eval/kesahihan.mjs` MEMERIKSA TANDA TERIMA — penyedia
+ * yang benar-benar melayani dibandingkan dengan yang di-pin. Kalau slug-nya
+ * salah, itu ketahuan dari DATA, bukan dari asumsi yang lolos diam-diam.
+ * <<<
+ */
+function pinPenyediaEval(): string[] | null {
+  const mentah = process.env.EVAL_PROVIDER_ONLY;
+  if (!mentah) return null;
+  // >>> B6 (audit K23): saklar TETANGGA di `.env.example` berbentuk
+  // `EVAL_LOCK_PROVIDER=false`, jadi menulis `EVAL_PROVIDER_ONLY=false` untuk
+  // mematikannya adalah kekeliruan yang WAJAR. Tanpa penyaringan ini hasilnya
+  // `only:['false']` — penyedia yang tidak ada — dan hulu memulangkan 4xx yang
+  // non-transient sehingga TIDAK di-retry dan SELURUH putaran pengukuran mati,
+  // dengan pesan yang tidak menyebut pin sama sekali.
+  const BOOLEAN_MIRIP = new Set(['true', 'false', '0', '1', 'off', 'on', 'no', 'yes', 'none', 'null']);
+  const daftar = mentah
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s && !BOOLEAN_MIRIP.has(s.toLowerCase()));
+  // Daftar kosong DIBUANG, tidak diteruskan sebagai `only: []` — itu bukan
+  // "tanpa pin", itu "tidak boleh penyedia mana pun", payload yang mustahil
+  // dipenuhi dan gagal sebagai error hulu yang menyesatkan.
+  return daftar.length ? daftar : null;
+}
+
 function angkaEnvEval(nama: 'EVAL_TEMPERATURE' | 'EVAL_SEED'): number | null {
   const mentah = process.env[nama];
   if (mentah === undefined || mentah.trim() === '') return null;
@@ -193,8 +235,13 @@ export class AiProviderService {
     // Kuncinya TIDAK ditulis sama sekali saat saklar mati — bukan ditulis
     // `true`, supaya payload produksi byte-per-byte sama dengan sebelum
     // perubahan ini dan tidak ada perilaku baru yang menyelinap. <<<
-    const ruteTerkunci = kunciRutePenyedia();
-    if (ruteTerkunci) payload.provider = { allow_fallbacks: false };
+    // Pin menyalakan kunci rute SENDIRI: meminta penyedia tertentu lalu
+    // mengizinkan fallback ke penyedia lain adalah permintaan yang membatalkan
+    // dirinya sendiri.
+    const pinEval = pinPenyediaEval();
+    const ruteTerkunci = kunciRutePenyedia() || pinEval !== null;
+    if (pinEval) payload.provider = { only: pinEval, allow_fallbacks: false };
+    else if (ruteTerkunci) payload.provider = { allow_fallbacks: false };
     // >>> ANGGA — KOREKSI AUDIT K23 (2026-08-11, ronde penyanggal). Versi
     // pertama menimpa temperature SESUDAH `opts.temperature ?? ai.temperature`,
     // dengan alasan tertulis "Sentinel & learning-miner mengirim temperature
@@ -232,7 +279,12 @@ export class AiProviderService {
     // kode yang kebetulan terlewati giliran ini. Lihat catatan NB-5 di
     // `ai-call-trace.ts`: menurunkannya dari jalur menghasilkan tanda tangan
     // yang berubah-ubah menurut cabang mana yang aktif.
-    const lenganEval = { temperature: suhuEval, seed: seedEval, kunciRute: ruteTerkunci };
+    const lenganEval = {
+      temperature: suhuEval,
+      seed: seedEval,
+      kunciRute: ruteTerkunci,
+      pinPenyedia: pinEval,
+    };
 
     const model = String(payload.model);
     const total = AiProviderService.RETRIES + 1;

@@ -12,7 +12,7 @@ const contoh = (over: Partial<JejakPanggilanAi> = {}): JejakPanggilanAi => ({
   ms: 0,
   temperature: 0.6,
   seed: null,
-  lenganEval: { temperature: null, seed: null, kunciRute: false },
+  lenganEval: { temperature: null, seed: null, kunciRute: false, pinPenyedia: null },
   payloadMintaKunciRute: false,
   galat: null,
   ...over,
@@ -131,7 +131,7 @@ describe('ringkasJejakAi', () => {
  */
 describe('ringkasJejakAi.konfigurasi — identitas lengan', () => {
   const dengan = (l: JejakPanggilanAi['lenganEval']) => contoh({ lenganEval: l });
-  const L0 = { temperature: 0, seed: 42, kunciRute: true };
+  const L0 = { temperature: 0, seed: 42, kunciRute: true, pinPenyedia: ['DeepInfra'] };
 
   it('lengan seragam diteruskan apa adanya', () => {
     expect(ringkasJejakAi([dengan(L0), dengan({ ...L0 })]).konfigurasi.lengan).toEqual(L0);
@@ -152,6 +152,14 @@ describe('ringkasJejakAi.konfigurasi — identitas lengan', () => {
     const tanpa = { ...contoh() } as any;
     delete tanpa.lenganEval;
     expect(ringkasJejakAi([dengan(L0), tanpa]).konfigurasi.lengan).toBeNull();
+  });
+
+  it('pin penyedia BERBEDA → lengan tidak seragam → null', () => {
+    // Tanpa ini, dua berkas hasil yang di-pin ke penyedia BERBEDA akan lolos
+    // sebagai "selengan" dan selisih antar keduanya terbaca sebagai selisih
+    // kode — padahal itu selisih penyedia, confound yang justru sedang diberantas.
+    const r = ringkasJejakAi([dengan(L0), dengan({ ...L0, pinPenyedia: ['StreamLake'] })]);
+    expect(r.konfigurasi.lengan).toBeNull();
   });
 
   it('jejak kosong → null, BUKAN objek kosong yang bisa dianggap "sama"', () => {

@@ -87,6 +87,8 @@ export function cetakKesahihan(putaran, indent = '    ') {
   if (r.modelDilayani.size) console.log(`${i}model dilayani       : ${[...r.modelDilayani].join(' · ')}`);
   if (r.takDilaporkan) console.log(`${i}penyedia tak dilapor : ${r.takDilaporkan} PANGGILAN (bukan giliran)`);
   console.log(`${i}payload minta kunci  : ${r.giliranMintaKunci}/${r.giliranBerLlm} giliran ber-LLM`);
+  const pinInfo = r.lengan[0]?.pinPenyedia;
+  if (pinInfo) console.log(`${i}pin penyedia diminta : ${pinInfo.join(', ')}`);
   if (r.giliranTanpaLlm) console.log(`${i}giliran tanpa LLM    : ${r.giliranTanpaLlm} (dikeluarkan dari penyebut)`);
   if (r.giliranTanpaAlat) console.log(`${i}tanpa alat ukur      : ${r.giliranTanpaAlat}`);
 
@@ -96,6 +98,51 @@ export function cetakKesahihan(putaran, indent = '    ') {
   if (r.gagal) masalah.push(`${r.gagal} percobaan GAGAL — titik paling mungkin rute berpindah, dan pengacau utama angka lama-jawab`);
   if (r.giliranMintaKunci < r.giliranBerLlm) masalah.push('payload TIDAK meminta kunci rute (`EVAL_LOCK_PROVIDER=true` di PROSES API, bukan di shell replay)');
   if (r.modelDilayani.size > 1) masalah.push(`${r.modelDilayani.size} varian model berbeda dilayani`);
+
+  // >>> ANGGA — DICABUT lalu DIGANTI, ronde penyanggal audit K23 (2026-08-11).
+  //
+  // Versi pertama membandingkan `pinPenyedia` (SLUG, diisi operator) dengan
+  // `penyedia` dari badan respons (NAMA TAMPILAN). Penyanggal menembak
+  // `GET https://openrouter.ai/api/v1/providers` — publik, tanpa auth, 101
+  // penyedia, dan `name` serta `slug` adalah KOLOM TERPISAH. Kelima nama yang
+  // benar-benar kami ukur (DeepInfra, StreamLake, Parasail, Google, Crusoe)
+  // ada sebagai `name` dan **NOL** sebagai `slug`. "Google" yang menentukan:
+  // slugnya `google-vertex`.
+  //
+  // Jadi pemeriksaan itu ANTI-KORELASI DENGAN KEBENARAN — ia LULUS persis saat
+  // pin kemungkinan besar SALAH (operator menulis nama tampilan), dan GAGAL
+  // persis saat pin kemungkinan besar BENAR (operator menulis slug). Gerbang F6
+  // jadi permanen merah untuk konfigurasi yang benar. Dicabut, bukan ditambal.
+  //
+  // `toLowerCase` di kedua sisi JUGA DITOLAK: 23 dari 101 penyedia punya
+  // `name.toLowerCase() !== slug`, dan normalisasi agresif pun masih gagal untuk
+  // lima — termasuk `Google → google-vertex`, salah satu yang kami ukur. Lebih
+  // buruk: mode gagalnya berbalik jadi LOLOS DIAM-DIAM ("cocok" karena kebetulan
+  // string), arah yang berkas ini justru dibangun untuk memberantasnya.
+  //
+  // YANG DIPAKAI SEBAGAI GANTINYA: besaran yang memang bisa dibuktikan dari
+  // data — **tepat SATU penyedia melayani seluruh pengukuran** (sudah dijaga
+  // `daftar.length > 1` di atas). Itu OUTCOME yang kita pedulikan; apakah pin
+  // yang MENYEBABKANNYA tidak perlu diklaim.
+  const pin = r.lengan[0]?.pinPenyedia ?? null;
+  if (!pin && r.lengan[0]?.kunciRute) {
+    // Ini TERVERIFIKASI ke dokumentasi OpenRouter, jadi tetap jadi masalah.
+    masalah.push('kunci rute diminta TANPA pin penyedia — `allow_fallbacks:false` sendirian TIDAK mengunci rute (butuh `EVAL_PROVIDER_ONLY`)');
+  }
+  // Cacat-baru-1 & B5: ketiadaan data TIDAK PERNAH boleh jatuh ke ✔.
+  // `giliranTanpaAlat` dan `lenganTakTerekam` selama ini dihitung lalu tidak
+  // pernah dibaca — dan di atasnya kini berdiri kalimat yang berbunyi "SELURUH
+  // giliran", klaim universal atas giliran yang alat ini tak pernah lihat.
+  if (r.lenganTakTerekam)
+    masalah.push(`${r.lenganTakTerekam} giliran tidak merekam lengan — identitas pengukurannya tidak diketahui`);
+  if (r.giliranTanpaAlat)
+    masalah.push(`${r.giliranTanpaAlat} giliran tanpa alat ukur — tidak bisa dinyatakan sah maupun tidak`);
+  // Cacat-baru-2 & B2: `r.lengan[0]` dipakai mewakili seluruh putaran, padahal
+  // `konfigurasiLengan` di berkas yang SAMA sudah memeriksa keseragaman. Satu
+  // modul, dua standar, dan jalur ukur memakai yang lemah. Ditolak saat berbeda
+  // — BUKAN disatukan (union), karena union melegalkan pengukuran heterogen.
+  if (r.lengan.length && !r.lengan.every((l) => samaLengan(l, r.lengan[0])))
+    masalah.push('LENGAN BERUBAH DI TENGAH PENGUKURAN — giliran-giliran ini tidak diukur dengan konfigurasi yang sama');
 
   if (masalah.length) {
     console.log(`\n${i}⚠ ANGKA MUTU DI ATAS TIDAK SAH UNTUK DIBANDINGKAN LINTAS PUTARAN.`);
@@ -110,7 +157,14 @@ export function cetakKesahihan(putaran, indent = '    ') {
   // menyatakan dua fakta yang salah adalah lebih buruk daripada diam. Sekarang
   // dibaca dari lengan yang benar-benar terekam. <<<
   const L = r.lengan[0];
-  console.log(`${i}  ⚠ Yang TIDAK dibuktikan alat ini: apakah HULU menghormati permintaan kunci itu.`);
+  if (L?.pinPenyedia) {
+    console.log(`${i}  Pin diminta [${L.pinPenyedia.join(', ')}] · yang melayani [${daftar.map(([n]) => n).join(', ')}].`);
+    console.log(`${i}  ⚠ Keduanya SENGAJA TIDAK dibandingkan: pin memakai SLUG OpenRouter, badan respons`);
+    console.log(`${i}    memakai NAMA TAMPILAN, dan itu dua ruang nama berbeda (mis. Google → google-vertex).`);
+    console.log(`${i}    Yang dibuktikan di sini bukan "pin dihormati", melainkan "satu penyedia untuk seluruh putaran".`);
+  } else {
+    console.log(`${i}  ⚠ Yang TIDAK dibuktikan alat ini: apakah HULU menghormati permintaan kunci itu.`);
+  }
   if (L && L.temperature === 0 && L.seed !== null)
     console.log(`${i}    Determinisme: temperature 0 + seed ${L.seed} DIMINTA — tapi apakah hulu menghormati \`seed\` juga tidak dibuktikan.`);
   else if (L && L.temperature === 0)
@@ -142,9 +196,7 @@ export function konfigurasiLengan(putaran) {
       for (const v of k.modelDiminta ?? []) modelDiminta.add(v);
       if (k.lengan) lengan.push(k.lengan); else tanpaLengan++;
     }
-  const seragam = lengan.length > 0 && lengan.every(
-    (l) => l.temperature === lengan[0].temperature && l.seed === lengan[0].seed && l.kunciRute === lengan[0].kunciRute,
-  );
+  const seragam = lengan.length > 0 && lengan.every((l) => samaLengan(l, lengan[0]));
   return {
     modelDiminta: [...modelDiminta].sort(),
     // `null` = TIDAK DIKETAHUI. Bukan "kosong", bukan "sama dengan yang lain
@@ -158,8 +210,16 @@ export function konfigurasiLengan(putaran) {
 
 const samaPersis = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
+const samaPin = (x, y) =>
+  (!x && !y) || (!!x && !!y && x.length === y.length && x.every((v, i) => v === y[i]));
+
+// >>> B1 (audit K23): `lenganSeragam` di sisi TypeScript sudah membandingkan pin,
+// cerminannya di sini TIDAK — jadi dua berkas dengan pin BERBEDA lolos sebagai
+// "selengan", dan selisih antar penyedia terbaca sebagai selisih kode. Persis
+// confound yang seluruh pekerjaan ini berantas, lolos lewat pintu belakang. <<<
 const samaLengan = (a, b) =>
-  a !== null && b !== null && a.temperature === b.temperature && a.seed === b.seed && a.kunciRute === b.kunciRute;
+  a !== null && b !== null && a.temperature === b.temperature && a.seed === b.seed
+  && a.kunciRute === b.kunciRute && samaPin(a.pinPenyedia, b.pinPenyedia);
 
 /**
  * Daftar perbedaan konfigurasi antar berkas. Kosong = boleh dibandingkan.
@@ -181,7 +241,9 @@ export function bedaKonfigurasi(daftarBerkas) {
     return beda;
   }
   const acuan = konf[0];
-  const tulis = (l) => `temperature=${l.temperature ?? 'produksi'} seed=${l.seed ?? 'tidak dikirim'} kunciRute=${l.kunciRute}`;
+  // Cacat-baru-3: tanpa pin di sini, pesan penolakannya menampilkan dua string
+  // IDENTIK dan berbunyi "berbeda" tanpa perbedaan yang terlihat.
+  const tulis = (l) => `temperature=${l.temperature ?? 'produksi'} seed=${l.seed ?? 'tidak dikirim'} kunciRute=${l.kunciRute} pin=${l.pinPenyedia?.join('+') ?? 'tidak'}`;
   for (const lain of konf.slice(1)) {
     if (!samaLengan(acuan.k.lengan, lain.k.lengan))
       beda.push(`lengan: ${acuan.label}=[${tulis(acuan.k.lengan)}] vs ${lain.label}=[${tulis(lain.k.lengan)}]`);

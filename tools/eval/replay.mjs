@@ -20,12 +20,17 @@
  * 25%/0%/0%/0%. Alat ini sekarang MEMBACA penyedia yang benar-benar melayani
  * tiap giliran dan berteriak sendiri kalau angkanya tidak layak dibandingkan.
  *
- * ⚠️ `EVAL_LOCK_PROVIDER=true` dibaca oleh PROSES API, bukan oleh skrip ini —
- * skrip ini cuma klien HTTP. Menyetelnya di shell tempat `replay.mjs` jalan
- * TIDAK ADA EFEKNYA. Setel di container/proses API:
- *   docker compose run -e EVAL_LOCK_PROVIDER=true ...   (atau `environment:`)
- * Kalau lupa, alat ini yang memberitahu — bukan diam lalu memulangkan angka
- * yang terlihat rapi.
+ * ⚠️ TOMBOL LENGAN dibaca oleh PROSES API, bukan oleh skrip ini — skrip ini cuma
+ * klien HTTP. Menyetelnya di shell tempat `replay.mjs` jalan TIDAK ADA EFEKNYA.
+ * Setel di container/proses API (`environment:` atau `docker compose run -e`):
+ *   EVAL_PROVIDER_ONLY=<slug>   ← INI yang mengunci rute
+ *   EVAL_TEMPERATURE=0  EVAL_SEED=42   ← lengan 1 (validasi alat)
+ *
+ * ⚠️ KOREKSI 2026-08-11: versi sebelumnya menyuruh `EVAL_LOCK_PROVIDER=true`
+ * sebagai cara mengunci rute. Itu SALAH dan sekarang otomatis divonis TIDAK SAH
+ * — `allow_fallbacks:false` sendirian hanya mematikan CADANGAN sesudah pilihan
+ * default dibuat; penguncian butuh `provider.only`. Ditulis di sini supaya
+ * berkas hasil lama yang lahir dari instruksi itu tidak diperlakukan sebagai sah.
  *
  * Pemakaian:
  *   node tools/eval/replay.mjs --runs 5 --label "HEAD"
@@ -279,7 +284,7 @@ if (bandingkan > 0) {
     // NB-3: berkas tanpa data TIDAK boleh mencetak pernyataan positif
     // ("seed=[tidak dikirim]") tentang sesuatu yang tidak ia ketahui.
     const teks = k.lengan
-      ? `temperature=${k.lengan.temperature ?? 'produksi'} seed=${k.lengan.seed ?? 'tidak dikirim'} kunciRute=${k.lengan.kunciRute}`
+      ? `temperature=${k.lengan.temperature ?? 'produksi'} seed=${k.lengan.seed ?? 'tidak dikirim'} kunciRute=${k.lengan.kunciRute} pin=${k.lengan.pinPenyedia?.join('+') ?? 'tidak'}`
       : 'TIDAK DIKETAHUI (biner tanpa pencatat lengan, atau lengan berubah di tengah pengukuran)';
     console.log(`  lengan ${d.label}: model=[${k.modelDiminta.join(',') || '?'}] ${teks}`);
   }
