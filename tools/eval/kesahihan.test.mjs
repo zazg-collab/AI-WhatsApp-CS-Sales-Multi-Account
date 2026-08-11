@@ -315,3 +315,413 @@ test('B1 — pin BERBEDA antar berkas ditolak `bedaKonfigurasi`', () => {
   assert.match(beda[0], /^lengan:/);
   assert.match(beda[0], /pin=deepinfra/);   // cacat-baru-3: pin ikut TERLIHAT di pesannya
 });
+
+// ─── SEBARAN PER-PUTARAN — pertanyaan yang gerbang F6 sebenarnya ajukan ───
+//
+// Ditulis sesudah lengan 1 pertama (2026-08-11). Alat mencetak `5/12` — JUMLAH
+// lintas putaran — sementara gerbangnya berbunyi "3x berulang, sebaran < 5
+// poin", yaitu SEBARAN ANTAR putaran. Dua besaran yang berbeda, dan yang
+// dicetak bukan yang ditanya. Sebaran sesungguhnya harus dihitung manual dengan
+// Python dari JSON: putaran 1 = 33%, putaran 2 = 50% → 17 poin. Alat ukur yang
+// tidak bisa menjawab pertanyaan gerbangnya sendiri belum selesai.
+
+import { sebaranPerPutaran } from './kesahihan.mjs';
+
+/** n giliran, `rusak` di antaranya menyalakan `kosong`. */
+const put = (n, rusak) => Array.from({ length: n }, (_, i) => ({
+  n: i + 1, kirim: `k${i + 1}`, kosong: i < rusak, tanya_dobel: false,
+}));
+
+// >>> ANGGA — 2026-08-11, PERUBAHAN SEMANTIK YANG DISENGAJA (bukan pelemahan).
+//
+// Ronde 3 audit K23 memasang pagar `MIN_GILIRAN = 21` di `sebaranPerPutaran`:
+// pada N giliran, persentase hanya bisa bernilai kelipatan 100/N, sehingga di
+// N=6 sebaran non-nol TERKECIL sudah 16 poin — ambang "< 5" di situ de facto
+// berarti "cacah wajib identik". Penyanggal menghitung titik baliknya: N=21.
+//
+// Akibatnya fixture 6-giliran TIDAK LAGI SAH untuk menguji vonis LULUS/GAGAL,
+// dan tiga test di bawah dipindah ke n >= 21 (25 dan 40). Yang TIDAK berubah:
+// ambangnya tetap 5, tidak satu pun assertion dihapus, dan test yang cuma
+// menguji ARITMATIKA sebaran tetap memakai n=6 apa adanya — justru sekarang
+// dengan assertion TAMBAHAN `bisaDinilai === false` supaya perbedaan antara
+// "angkanya benar" dan "vonisnya boleh diambil" terkunci hitam-putih.
+
+test('sebaran = selisih persentase TERTINGGI dan TERENDAH antar putaran', () => {
+  const r = sebaranPerPutaran([put(6, 2), put(6, 3)], ['kosong']);
+  const k = r.kelas.find((x) => x.kelas === 'kosong');
+  // `perPutaran` = TAMPILAN (bulat). `sebaran` = VONIS (rasio eksak).
+  // Ronde 3 memisahkan keduanya: 50 − 33⅓ = 16,67 dan yang dipakai gerbang
+  // adalah angka itu, bukan 17. Assertion ini SATU-SATUNYA yang berubah
+  // nilainya, dan perubahannya disengaja — lihat komentar besar di
+  // `sebaranPerPutaran`.
+  assert.deepEqual(k.perPutaran, [33, 50]);
+  assert.equal(k.sebaran.toFixed(2), '16.67');
+  // Aritmatikanya benar DAN vonisnya tetap tidak boleh diambil di n=6.
+  assert.equal(r.bisaDinilai, false);
+});
+
+test('nol perbedaan → sebaran 0', () => {
+  const k = sebaranPerPutaran([put(6, 2), put(6, 2), put(6, 2)], ['kosong']).kelas[0];
+  assert.equal(k.sebaran, 0);
+});
+
+test('gerbang LULUS: 3 putaran cukup panjang, seluruh kelas sebaran < 5 poin', () => {
+  const r = sebaranPerPutaran([put(25, 2), put(25, 2), put(25, 2)], ['kosong', 'tanya_dobel']);
+  assert.equal(r.bisaDinilai, true);
+  assert.equal(r.lulus, true);
+  assert.equal(r.alasan.length, 0);
+});
+
+test('gerbang GAGAL kalau SATU kelas saja melebihi 5 poin', () => {
+  // 40 giliran: 2/40 = 5%, 4/40 = 10% → sebaran 5 poin, dan n >= 21 sehingga
+  // kegagalannya benar-benar datang dari AMBANG, bukan dari pagar panjang.
+  const r = sebaranPerPutaran([put(40, 2), put(40, 2), put(40, 4)], ['kosong']);
+  assert.equal(r.bisaDinilai, true);
+  assert.equal(r.lulus, false);
+  assert.match(r.alasan[0], /kosong/);
+});
+
+test('alasan sebaran MENCANTUMKAN penyebut, bukan cuma persen', () => {
+  // "5 poin" untuk 2/40 vs 4/40 terbaca seperti temuan besar; penyebutnya yang
+  // memberi tahu pembaca bahwa peristiwanya dua giliran.
+  const r = sebaranPerPutaran([put(40, 2), put(40, 2), put(40, 4)], ['kosong']);
+  assert.match(r.alasan[0], /2\/40/);
+  assert.match(r.alasan[0], /4\/40/);
+});
+
+test('KURANG dari 3 putaran → TIDAK BISA DINILAI, dan itu bukan LULUS', () => {
+  // Justru keadaan lengan 1 pertama: 2 dari 3 putaran berhasil karena 429.
+  // Dua putaran yang kebetulan mirip TIDAK boleh terbaca sebagai gerbang lewat.
+  // Panjangnya sengaja 25 supaya SATU-SATUNYA sebab adalah jumlah putaran.
+  const r = sebaranPerPutaran([put(25, 2), put(25, 2)], ['kosong']);
+  assert.equal(r.lulus, false);
+  assert.equal(r.cukupPutaran, false);
+  assert.equal(r.bisaDinilai, false);
+  assert.equal(r.takBisaDinilai.length, 1);
+  assert.match(r.takBisaDinilai[0], /2 dari 3/);
+});
+
+test('nol putaran → tidak lulus, tidak melempar', () => {
+  const r = sebaranPerPutaran([], ['kosong']);
+  assert.equal(r.lulus, false);
+  assert.deepEqual(r.kelas, []);
+});
+
+test('rasio, bukan cacah: 3/6 dan 2/4 adalah sebaran NOL', () => {
+  // >>> KOREKSI RONDE 3: judul & alasan lama berbunyi "putaran yang mati di
+  // tengah menyisakan giliran lebih sedikit". Ditelusuri ke `satuPutaran()`,
+  // itu TIDAK BISA TERJADI — kegagalan melempar dan seluruh putaran dibuang,
+  // jadi tiap putaran yang masuk selalu tepat sepanjang skenario. Test ini
+  // karena itu diturunkan jadi apa adanya: penguncian ARITMATIKA rasio, yang
+  // tetap penting karena ambang 5 poin harus berarti sama di korpus 6, 51,
+  // dan 196 kasus. Ia tidak lagi mengklaim apa pun tentang perilaku harness.
+  const k = sebaranPerPutaran([put(6, 3), put(4, 2)], ['kosong']).kelas[0];
+  assert.deepEqual(k.perPutaran, [50, 50]);
+  assert.equal(k.sebaran, 0);
+});
+
+test('BATAS: sebaran tepat 5 poin GAGAL — gerbangnya "< 5", bukan "<= 5"', () => {
+  // 40 giliran supaya 5 poin bisa dibentuk persis (2/40 = 5%, 0/40 = 0%) DAN
+  // tetap di atas MIN_GILIRAN. Fixture lamanya 20 giliran — persis satu di
+  // bawah titik balik, jadi ia menguji ambang di wilayah yang ambangnya sendiri
+  // tidak bermakna.
+  const r = sebaranPerPutaran([put(40, 2), put(40, 0), put(40, 0)], ['kosong']);
+  assert.equal(r.kelas[0].sebaran, 5);
+  assert.equal(r.bisaDinilai, true);
+  assert.equal(r.lulus, false);
+});
+
+test('BATAS: sebaran 4 poin LULUS', () => {
+  const r = sebaranPerPutaran([put(25, 1), put(25, 0), put(25, 0)], ['kosong']);
+  assert.equal(r.kelas[0].sebaran, 4);
+  assert.equal(r.lulus, true);
+});
+
+// ─── C3 · pagar panjang putaran: ambang 5 hanya bermakna mulai n = 21 ───
+
+test('C3: putaran 20 giliran TIDAK BISA DINILAI meski sebarannya 0', () => {
+  // Sebaran 0 adalah nilai paling "lulus" yang mungkin — dan tetap ditolak,
+  // karena di n=20 langkah persentase terkecil (5 poin) sudah menyentuh ambang.
+  const r = sebaranPerPutaran([put(20, 1), put(20, 1), put(20, 1)], ['kosong']);
+  assert.equal(r.kelas[0].sebaran, 0);
+  assert.equal(r.bisaDinilai, false);
+  assert.equal(r.lulus, false);
+  assert.match(r.takBisaDinilai.join(' '), /21/);
+});
+
+test('C3: n = 21 tepat sudah boleh dinilai — titik baliknya inklusif', () => {
+  const r = sebaranPerPutaran([put(21, 1), put(21, 1), put(21, 1)], ['kosong']);
+  assert.equal(r.bisaDinilai, true);
+  assert.equal(r.lulus, true);
+});
+
+test('C3: SATU putaran pendek saja sudah membatalkan penilaian', () => {
+  const r = sebaranPerPutaran([put(25, 2), put(25, 2), put(6, 0)], ['kosong']);
+  assert.equal(r.bisaDinilai, false);
+  assert.equal(r.lulus, false);
+});
+
+// ─── C1 · putaran NOL giliran bukan "0% pelanggaran" ───
+
+test('C1: tiga putaran NOL giliran tidak boleh terbaca LULUS', () => {
+  const r = sebaranPerPutaran([[], [], []], ['kosong']);
+  assert.equal(r.lulus, false);
+  assert.equal(r.bisaDinilai, false);
+  assert.match(r.takBisaDinilai.join(' '), /NOL giliran/);
+});
+
+test('C1: putaran NOL giliran disebut KOSONG saja, bukan sekalian "terlalu pendek"', () => {
+  // >>> TEMUAN UJI MUTASI (2026-08-11): mutan "pagar `n > 0` dicabut" HIDUP —
+  // seluruh 57 test lain tetap hijau tanpa pagar itu, karena vonisnya kebetulan
+  // sama (dua-duanya menolak). Yang berubah cuma ALASANNYA: putaran nol giliran
+  // ikut dituduh "hanya 0 giliran — di bawah 21", padahal ia bukan pendek, ia
+  // KOSONG. Alat ukur yang menyebut sebab yang salah mengarahkan perbaikan ke
+  // tempat yang salah — persis kesalahan yang menghasilkan `lupa_produk` 39%
+  // palsu. Test ini mengunci sebabnya, bukan cuma vonisnya.
+  const r = sebaranPerPutaran([[], [], []], ['kosong']);
+  assert.equal(r.takBisaDinilai.length, 1);
+  assert.doesNotMatch(r.takBisaDinilai[0], /di bawah 21/);
+});
+
+test('C1: satu putaran kosong di antara putaran sah tetap membatalkan', () => {
+  const r = sebaranPerPutaran([put(25, 2), [], put(25, 2)], ['kosong']);
+  assert.equal(r.lulus, false);
+  assert.match(r.takBisaDinilai.join(' '), /1 putaran berisi NOL giliran/);
+});
+
+// ─── C4/C5/C9 · daftar kelas: ketiadaan pemeriksaan bukan kebersihan ───
+
+test('C4: daftar kelas KOSONG → tidak lulus (tidak ada yang diperiksa)', () => {
+  const r = sebaranPerPutaran([put(25, 0), put(25, 0), put(25, 0)], []);
+  assert.equal(r.lulus, false);
+  assert.equal(r.bisaDinilai, false);
+  assert.match(r.takBisaDinilai.join(' '), /kelas kegagalan KOSONG/);
+});
+
+test('C9: `kelas` undefined tidak melempar — memberi VONIS, bukan crash', () => {
+  const r = sebaranPerPutaran([put(25, 0), put(25, 0), put(25, 0)], undefined);
+  assert.equal(r.lulus, false);
+  assert.deepEqual(r.kelas, []);
+});
+
+test('C9: `putaran` undefined tidak melempar', () => {
+  const r = sebaranPerPutaran(undefined, ['kosong']);
+  assert.equal(r.lulus, false);
+  assert.deepEqual(r.kelas, []);
+});
+
+// ─── C2/N3 · vonis kesahihan MENANG atas vonis sebaran ───
+
+test('C2: `sah: false` membuat gerbang GAGAL walau sebaran 0 dan bisa dinilai', () => {
+  // Ini kontradiksi yang benar-benar tercetak di lengan 1: blok atas menyatakan
+  // pengukurannya TIDAK SAH, blok bawah mencetak ✔. Sebaran yang dihitung dari
+  // pengukuran terconfound bukan bukti apa pun.
+  const putaranSah = [put(25, 2), put(25, 2), put(25, 2)];
+  assert.equal(sebaranPerPutaran(putaranSah, ['kosong'], { sah: true }).lulus, true);
+  const r = sebaranPerPutaran(putaranSah, ['kosong'], { sah: false });
+  assert.equal(r.lulus, false);
+  assert.equal(r.sahHulu, false);
+  // Dua vonis TETAP TERPISAH: sebarannya sendiri masih layak dinilai, dan
+  // angkanya masih berguna sebagai diagnosis kebisingan.
+  assert.equal(r.bisaDinilai, true);
+  assert.equal(r.alasan.length, 0);
+});
+
+test('C2: `sah` bawaannya true — pemanggil lama tidak berubah artinya', () => {
+  const r = sebaranPerPutaran([put(25, 2), put(25, 2), put(25, 2)], ['kosong']);
+  assert.equal(r.sahHulu, true);
+  assert.equal(r.lulus, true);
+});
+
+// ─── N1 · jumlah & nomor putaran DIBACA dari data, tidak ditulis keras "3" ───
+
+test('N1: nomor putaran bawaan = urutan data', () => {
+  const r = sebaranPerPutaran([put(25, 0), put(25, 0), put(25, 0)], ['kosong']);
+  assert.deepEqual(r.nomor, [1, 2, 3]);
+});
+
+test('N1: nomor putaran NYATA diteruskan apa adanya (putaran gagal dilewati)', () => {
+  // `--runs 5` dengan putaran 2 dan 4 mati karena 429 menyisakan putaran 1,3,5.
+  // Label yang mengarang "put1 put2 put3" akan menyembunyikan fakta itu.
+  const r = sebaranPerPutaran([put(25, 0), put(25, 0), put(25, 0)], ['kosong'], { nomor: [1, 3, 5] });
+  assert.deepEqual(r.nomor, [1, 3, 5]);
+  assert.equal(r.lulus, true);
+});
+
+test('N1: giliran per putaran dilaporkan — penyebutnya bisa dicetak', () => {
+  const r = sebaranPerPutaran([put(25, 1), put(23, 1)], ['kosong']);
+  assert.deepEqual(r.giliranPerPutaran, [25, 23]);
+  assert.deepEqual(r.kelas[0].cacah, [1, 1]);
+});
+
+test('lebih dari 3 putaran tetap dinilai — gerbang bilang "3x", bukan "tepat 3x"', () => {
+  const r = sebaranPerPutaran(
+    [put(25, 2), put(25, 2), put(25, 2), put(25, 2), put(25, 2)],
+    ['kosong'],
+  );
+  assert.equal(r.nomor.length, 5);
+  assert.equal(r.lulus, true);
+});
+
+
+// ─── RONDE 3 · rasio EKSAK untuk vonis, pembulatan hanya untuk tampilan ───
+
+test('R3: 1 dari 21 giliran = 4,76 poin → LULUS (pembulatan tidak boleh menggagalkan)', () => {
+  // Persis janji `MIN_GILIRAN = 21`: pada 21 giliran, selisih satu kasus
+  // menghasilkan 4,76 poin — di bawah ambang. Versi yang membulatkan dulu
+  // memvonis 5 → GAGAL, jadi pagarnya mengingkari perhitungan yang
+  // melahirkannya. Fixture C3 yang lama tidak pernah menangkap ini karena
+  // ketiga putarannya identik (sebaran 0).
+  const r = sebaranPerPutaran([put(21, 1), put(21, 0), put(21, 0)], ['kosong']);
+  assert.equal(r.kelas[0].sebaran.toFixed(2), '4.76');
+  assert.equal(r.lulus, true);
+});
+
+test('R3: korpus penuh 196 — toleransi 9 kasus lulus, 10 kasus gagal', () => {
+  const lulus = sebaranPerPutaran([put(196, 9), put(196, 0), put(196, 0)], ['kosong']);
+  assert.equal(lulus.kelas[0].sebaran.toFixed(2), '4.59');
+  assert.equal(lulus.lulus, true);
+  const gagal = sebaranPerPutaran([put(196, 10), put(196, 0), put(196, 0)], ['kosong']);
+  assert.equal(gagal.kelas[0].sebaran.toFixed(2), '5.10');
+  assert.equal(gagal.lulus, false);
+});
+
+test('R3: tampilan tetap bulat walau vonis eksak — dua angka, dua peran', () => {
+  const k = sebaranPerPutaran([put(21, 1), put(21, 0), put(21, 0)], ['kosong']).kelas[0];
+  assert.deepEqual(k.perPutaran, [5, 0, 0]);
+  assert.ok(Number.isInteger(k.perPutaran[0]));
+  assert.ok(!Number.isInteger(k.sebaran));
+});
+
+// ─── RONDE 3 · kelas yang tidak pernah terekam bukan "nol pelanggaran" ───
+
+test('R3: kelas yang fieldnya TIDAK PERNAH ada → tidak bisa dinilai, bukan ✔', () => {
+  // `g?.[k]` tidak bisa membedakan field ABSEN dari `false`. Satu nama baru di
+  // `KELAS_GAGAL` tanpa field padanannya di `periksa()` akan mencetak
+  // `0% 0/25` yang rapi lalu menyumbang ✔ ke gerbang F6. Drift ini SUDAH
+  // pernah terjadi sekali di repo ini (`gerbang_menahan` hilang dari salah
+  // satu daftar), jadi ini bukan kekhawatiran hipotetis.
+  const r = sebaranPerPutaran([put(25, 0), put(25, 0), put(25, 0)], ['kosong', 'kelas_hantu']);
+  assert.equal(r.lulus, false);
+  assert.equal(r.bisaDinilai, false);
+  assert.match(r.takBisaDinilai.join(' '), /kelas_hantu/);
+  assert.equal(r.kelas.find((k) => k.kelas === 'kelas_hantu').terekam, false);
+});
+
+test('R3: KONTROL — kelas yang terekam dan semuanya `false` TETAP lulus', () => {
+  // Tanpa test ini, penjaga di atas bisa "diperbaiki" jadi menolak setiap
+  // kelas bersih — membalik cacatnya, bukan menutupnya.
+  const r = sebaranPerPutaran([put(25, 0), put(25, 0), put(25, 0)], ['kosong', 'tanya_dobel']);
+  assert.equal(r.kelas.every((k) => k.terekam), true);
+  assert.equal(r.lulus, true);
+});
+
+// ─── RONDE 3 · pesan "terlalu pendek" menyebut panjang yang MEMANG pendek ───
+
+test('R3: putaran KOSONG tidak ikut disebut di daftar panjang "terlalu pendek"', () => {
+  const r = sebaranPerPutaran([[], put(6, 0), put(6, 0)], ['kosong']);
+  const pesan = r.takBisaDinilai.find((a) => /di bawah 21/.test(a));
+  assert.match(pesan, /hanya 6 giliran/);
+  assert.doesNotMatch(pesan, /0\//);
+});
+
+test('R3: putaran yang CUKUP panjang tidak ikut dituduh pendek', () => {
+  const r = sebaranPerPutaran([put(25, 0), put(25, 0), put(6, 0)], ['kosong']);
+  const pesan = r.takBisaDinilai.find((a) => /di bawah 21/.test(a));
+  assert.match(pesan, /1 putaran hanya 6 giliran/);
+  assert.doesNotMatch(pesan, /25/);
+});
+
+// ─── RONDE 3 · `cetakSebaran` — pencetak yang DILIHAT operator, dulu nol test ───
+
+import { cetakSebaran } from './kesahihan.mjs';
+
+/** Jalankan `cetakSebaran` sambil menadah seluruh barisnya. */
+function tadah(...args) {
+  const asli = console.log;
+  const baris = [];
+  console.log = (...a) => baris.push(a.join(' '));
+  try {
+    const r = cetakSebaran(...args);
+    return { baris, r, teks: baris.join('\n') };
+  } finally {
+    console.log = asli;
+  }
+}
+
+test('cetakSebaran: vonis yang DICETAK sama dengan vonis fungsi murninya', () => {
+  // Gerbang bisa benar di dalam dan tetap salah di layar. Ini yang dibaca
+  // operator, dan sampai ronde 3 ia tidak punya satu pun test.
+  const lulus = tadah([put(25, 2), put(25, 2), put(25, 2)], ['kosong'], '  ');
+  assert.equal(lulus.r.lulus, true);
+  assert.match(lulus.teks, /✔ GERBANG F6 LEWAT/);
+  const gagal = tadah([put(40, 2), put(40, 0), put(40, 0)], ['kosong'], '  ');
+  assert.equal(gagal.r.lulus, false);
+  assert.match(gagal.teks, /✖ GERBANG F6 BELUM LEWAT/);
+  assert.doesNotMatch(gagal.teks, /✔/);
+});
+
+test('cetakSebaran: `sah:false` mencetak vonis TIDAK SAH, bukan ✔ maupun "belum lewat"', () => {
+  // Kontradiksi yang benar-benar tercetak di lengan 1: blok atas TIDAK SAH,
+  // blok bawah ✔. Sebabnya ada di layar, jadi pengunciannya juga harus di layar.
+  const t = tadah([put(25, 2), put(25, 2), put(25, 2)], ['kosong'], '  ', { sah: false });
+  assert.doesNotMatch(t.teks, /✔/);
+  assert.match(t.teks, /TIDAK SAH/);
+});
+
+test('cetakSebaran: jumlah kolom header = jumlah sel tiap baris kelas', () => {
+  const t = tadah([put(25, 2), put(25, 1), put(25, 0)], ['kosong', 'tanya_dobel'], '  ');
+  const header = t.baris.find((b) => b.includes('put1'));
+  const kolom = (header.match(/put\d+/g) ?? []).length;
+  assert.equal(kolom, 3);
+  for (const nama of ['kosong', 'tanya_dobel']) {
+    const baris = t.baris.find((b) => b.trimStart().startsWith(nama));
+    assert.equal((baris.match(/%/g) ?? []).length, kolom);
+  }
+});
+
+test('cetakSebaran: penyebut ikut tercetak — "5 poin" tanpa penyebut menyesatkan', () => {
+  const t = tadah([put(40, 2), put(40, 0), put(40, 0)], ['kosong'], '  ');
+  assert.match(t.teks, /2\/40/);
+  assert.match(t.teks, /0\/40/);
+});
+
+test('cetakSebaran: nomor putaran NYATA dipakai di header, bukan 1..n', () => {
+  const t = tadah([put(25, 0), put(25, 0), put(25, 0)], ['kosong'], '  ', { nomor: [1, 3, 5] });
+  const header = t.baris.find((b) => b.includes('put1'));
+  assert.deepEqual(header.match(/put\d+/g), ['put1', 'put3', 'put5']);
+});
+
+
+// ─── RONDE 3 · daftar kelas tabel `--bandingkan` = GABUNGAN, bukan berkas [0] ───
+
+import { kelasGabungan, selHit } from './kesahihan.mjs';
+
+const berkasHit = (label, hit, total) => ({ label, ringkasan: { hit, giliranTotal: total } });
+
+test('kelasGabungan: kelas yang hanya ada di berkas KEDUA tidak boleh hilang', () => {
+  // Terukur di jalur nyata: berkas lama (5 kelas) di kolom kiri membuat baris
+  // `gerbang_menahan` lenyap dari tabel, lalu tetap ditutup `✔ Semua kolom sah`.
+  const lama = berkasHit('lama', { kosong: 1, tanya_dobel: 0 }, 72);
+  const baru = berkasHit('baru', { kosong: 2, tanya_dobel: 1, gerbang_menahan: 3 }, 72);
+  assert.deepEqual(kelasGabungan([lama, baru]), ['kosong', 'tanya_dobel', 'gerbang_menahan']);
+  // Urutan berkas TIDAK boleh mengubah isi tabel.
+  assert.deepEqual(
+    [...kelasGabungan([baru, lama])].sort(),
+    [...kelasGabungan([lama, baru])].sort(),
+  );
+});
+
+test('selHit: kelas yang tidak diukur ditandai, bukan dicetak `undefined/72`', () => {
+  const lama = berkasHit('lama', { kosong: 1 }, 72);
+  assert.equal(selHit(lama, 'kosong'), '1/72');
+  assert.equal(selHit(lama, 'gerbang_menahan'), 'tidak diukur');
+  // Nol yang SAH tetap dicetak sebagai angka — "tidak diukur" hanya untuk absen.
+  assert.equal(selHit(berkasHit('x', { kosong: 0 }, 72), 'kosong'), '0/72');
+});
+
+test('kelasGabungan/selHit: berkas cacat tidak melempar', () => {
+  assert.deepEqual(kelasGabungan(undefined), []);
+  assert.deepEqual(kelasGabungan([{}, null]), []);
+  assert.equal(selHit(undefined, 'kosong'), 'tidak diukur');
+});

@@ -37,6 +37,19 @@
  *   node tools/eval/replay.mjs --runs 5 --label "a85a7c0" --out hasil-a85a7c0.json
  *   node tools/eval/replay.mjs --bandingkan hasil-a.json hasil-b.json
  *
+ * KODE KELUAR (jalur ukur) — vonis, bukan hukuman; berkas `--out` SELALU
+ * ditulis lebih dulu, apa pun kodenya:
+ *   0 = gerbang F6 lewat
+ *   5 = pengukurannya TIDAK SAH (rute/lengan terconfound) — makna yang sama
+ *       dengan kode 5 di jalur `--bandingkan`
+ *   6 = gerbang F6 GAGAL sungguhan (sebaran >= 5 poin pada pengukuran sah)
+ *   7 = gerbang TIDAK BISA DINILAI (putaran < 3, giliran < 21, kelas tak
+ *       terekam) — bukan lulus, dan bukan gagal
+ * Jangan merangkai jalur ukur dengan `&&`: pengukuran yang BERHASIL pun
+ * memulangkan 7 selama korpusnya masih skenario asap 6 giliran. Jalankan tiap
+ * langkah sebagai perintah terpisah; `--bandingkan` tetap sah dijalankan
+ * apa pun vonis langkah ukurnya.
+ *
  * Yang TIDAK dilakukan alat ini: menilai apakah kalimatnya enak dibaca. Ia
  * hanya menghitung pelanggaran yang bisa diperiksa mesin. Penilaian rasa tetap
  * milik manusia — tapi setidaknya rasa itu tidak lagi dipakai untuk memutuskan
@@ -45,7 +58,7 @@
 // 127.0.0.1, BUKAN localhost. Node 18+ menerjemahkan `localhost` ke ::1 (IPv6)
 // lebih dulu, sementara Docker biasanya mempublikasikan port di IPv4 saja —
 // hasilnya `fetch failed` tanpa status, tanpa petunjuk. Sudah kena sekali.
-import { cetakKesahihan, bedaKonfigurasi, pasangkanPerKasus, konfigurasiLengan } from './kesahihan.mjs';
+import { cetakKesahihan, bedaKonfigurasi, pasangkanPerKasus, konfigurasiLengan, cetakSebaran, kelasGabungan, selHit } from './kesahihan.mjs';
 
 const BASE = process.env.HERMES_API ?? 'http://127.0.0.1:3001/api/v1';
 const PROVIDER = process.env.EVAL_PROVIDER ?? 'openrouter';
@@ -226,8 +239,21 @@ async function satuPutaran(nomor) {
   return giliran;
 }
 
+/**
+ * >>> N2 — audit K23 ronde 3 (2026-08-11): SATU daftar kelas kegagalan.
+ *
+ * Daftar ini dulu ditulis DUA KALI dengan isi BERBEDA: `ringkas()` memuat enam
+ * kelas (dipakai tabel ringkasan DAN gerbang sebaran, lewat
+ * `Object.keys(ringkasan.hit)`), sementara penyaring diagnostik per-giliran
+ * memuat lima — `gerbang_menahan` hilang. Akibatnya persis kelas kegagalan
+ * yang alat ini dibangun untuk memberantasnya: sebuah pelanggaran IKUT
+ * MENJATUHKAN vonis gerbang tapi TIDAK PERNAH tercetak isinya, jadi tidak ada
+ * yang bisa ditelusuri. Duplikasi daftar = drift; sekarang satu sumber.
+ */
+const KELAS_GAGAL = ['kosong', 'kurung_menggantung', 'tanya_dobel', 'metode_sebelum_total', 'gerbang_menahan', 'lupa_produk'];
+
 function ringkas(putaran) {
-  const kelas = ['kosong', 'kurung_menggantung', 'tanya_dobel', 'metode_sebelum_total', 'gerbang_menahan', 'lupa_produk'];
+  const kelas = KELAS_GAGAL;
   const total = putaran.length * SKENARIO.length;
   const hit = Object.fromEntries(kelas.map((k) => [k, 0]));
   const perGiliran = Array.from({ length: SKENARIO.length }, () => Object.fromEntries(kelas.map((k) => [k, 0])));
@@ -295,11 +321,15 @@ if (bandingkan > 0) {
     process.exit(4);
   }
 
-  const kelas = Object.keys(data[0].ringkasan.hit);
+  // RONDE 3: GABUNGAN kelas dari seluruh berkas — bukan dari berkas pertama.
+  // Berkas hasil lama lahir sebelum `gerbang_menahan` ada; mengambil daftar
+  // dari satu berkas membuat kelas itu hilang senyap dari tabel (atau muncul
+  // sebagai `undefined/72`) tepat di tempat perbandingan A-vs-B terjadi.
+  const kelas = kelasGabungan(data);
   console.log(`\n${'kelas kegagalan'.padEnd(24)}${data.map((d) => d.label.padStart(14)).join('')}`);
   console.log('-'.repeat(24 + 14 * data.length));
   for (const k of kelas) {
-    const baris = data.map((d) => `${d.ringkasan.hit[k]}/${d.ringkasan.giliranTotal}`.padStart(14)).join('');
+    const baris = data.map((d) => selHit(d, k).padStart(14)).join('');
     console.log(k.padEnd(24) + baris);
   }
   // >>> Koreksi AUDIT K23 (2026-08-11): dulu jalur ini `process.exit(0)` tepat
@@ -380,12 +410,20 @@ const out = arg('out', null);
 console.log(`Memutar ${SKENARIO.length} giliran x ${runs} putaran — label "${label}"`);
 console.log(`API ${BASE} · provider ${PROVIDER} · model ${MODEL}\n`);
 const putaran = [];
+// >>> N1 — audit K23 ronde 3: nomor putaran yang BENAR-BENAR berhasil, disimpan
+// sejajar dengan `putaran`. Kalau putaran 2 dan 4 mati kena 429, label "put1
+// put2 put3" akan mengarang urutan yang tidak pernah terjadi dan menyembunyikan
+// fakta bahwa dua putaran hilang. Sengaja TIDAK dimasukkan ke `putaran` itu
+// sendiri supaya bentuk JSON hasil tidak berubah — `--bandingkan` dan berkas
+// hasil lama tetap terbaca. <<<
+const nomorPutaran = [];
 for (let i = 1; i <= runs; i++) {
   process.stdout.write(`  putaran ${i}/${runs} ... `);
   try {
     const g = await satuPutaran(i);
     putaran.push(g);
-    const rusak = g.filter((x) => x.kosong || x.kurung_menggantung || x.tanya_dobel || x.metode_sebelum_total || x.lupa_produk);
+    nomorPutaran.push(i);
+    const rusak = g.filter((x) => KELAS_GAGAL.some((k) => x[k]));
     const lamaMaks = Math.max(...g.map((x) => x.ms ?? 0));
     console.log(`selesai — ${rusak.length}/${SKENARIO.length} giliran bermasalah · terlama ${(lamaMaks / 1000).toFixed(1)} detik`);
     // >>> ANGGA — diagnostik (2026-08-10, cowork): CETAK ISI giliran yang
@@ -395,7 +433,7 @@ for (let i = 1; i <= runs; i++) {
     // Sengaja dipotong 240 karakter: cukup untuk membaca kalimatnya, tidak
     // cukup untuk menenggelamkan tabel hasil. <<<
     for (const x of rusak) {
-      const kelas = ['kosong', 'kurung_menggantung', 'tanya_dobel', 'metode_sebelum_total', 'lupa_produk'].filter((k) => x[k]);
+      const kelas = KELAS_GAGAL.filter((k) => x[k]);
       const ai = x.jejak.ai;
       const rute = ai ? ` llm=${ai.panggilan}${ai.gagal ? `(${ai.gagal} gagal)` : ''} penyedia=${ai.penyedia.join('+') || '?'}` : '';
       console.log(`    ⌁ giliran ${x.n} [${kelas.join(',')}] mode=${x.jejak.funnelMode} ongkir=${x.jejak.adaOngkir ? 'ada' : 'tidak'} item=${x.jejak.jumlahItem} gerbang=${x.jejak.gateWarnings.length}${rute}`);
@@ -436,8 +474,37 @@ if (ringkasan.lama?.medianMs != null) {
 // >>> F6 Bagian 1 (2026-08-11): VONIS KESAHIHAN, dicetak SEBELUM rincian
 // per-giliran supaya tidak bisa terlewat. Alat ukur yang tahu dirinya sedang
 // tidak sah WAJIB mengatakannya — bukan memulangkan tabel rapi yang menipu.
+//
+// >>> C2/C8/N3 — audit K23 ronde 3 (2026-08-11): URUTANNYA DIBALIK, dan
+// alasannya bukan kerapian.
+//
+// Versi pertama mencetak sebaran DULU lalu kesahihan, sehingga keluaran lengan
+// 1 memuat `✔ GERBANG F6 LEWAT` beberapa baris DI ATAS `⛔ TIDAK SAH` untuk
+// pengukuran yang sama. Pembaca yang berhenti di baris pertama membawa pulang
+// kesimpulan terbalik. Lebih dalam dari urutan cetak: `sah` memang tidak pernah
+// dibaca jalur ukur sama sekali (N3) — dua vonis berjalan sendiri-sendiri.
+//
+// Sekarang kesahihan dihitung LEBIH DULU dan hasilnya DITERUSKAN sebagai
+// `opsi.sah`. Vonis kesahihan MENANG: sebaran yang dihitung dari pengukuran
+// terconfound bukan bukti apa pun. Angka sebarannya tetap dicetak — ia berguna
+// sebagai diagnosis kebisingan — tapi ia tidak lagi boleh memberi ✔ sendiri.
+//
+// Komentar lama di blok ini menyatakan kesahihan "dicetak SEBELUM rincian
+// per-giliran supaya tidak bisa terlewat"; sejak sebaran disisipkan di atasnya
+// kalimat itu berhenti benar dan tidak ada yang mengoreksinya. Diperbaiki.
+//
+// >>> 2026-08-11: SEBARAN ANTAR PUTARAN. Tabel di atas menjumlahkan seluruh
+// putaran (`5/12`); gerbang F6 menanyakan SELISIH antar putaran. Dua besaran
+// berbeda, dan sampai hari ini yang dicetak bukan yang ditanya — sebarannya
+// harus dihitung manual dari JSON. Sekarang alat menjawabnya sendiri. <<<
 console.log('\n  --- rute penyedia hulu (panggilan chat saja; embeddings & panggilan pasca-kirim di luar cakupan) ---');
-cetakKesahihan(putaran);
+const vonisKesahihan = cetakKesahihan(putaran);
+
+console.log('\n  --- sebaran antar putaran (INI yang ditanya gerbang F6) ---');
+const vonisGerbang = cetakSebaran(putaran, Object.keys(ringkasan.hit), '    ', {
+  sah: vonisKesahihan.sah,
+  nomor: nomorPutaran,
+});
 
 console.log('\n  per giliran:');
 ringkasan.perGiliran.forEach((g, i) => {
@@ -450,4 +517,34 @@ if (out) {
   const fs = await import('node:fs');
   fs.writeFileSync(out, JSON.stringify({ label, waktu: new Date().toISOString(), ringkasan, putaran }, null, 2));
   console.log(`\nTersimpan: ${out}`);
+}
+
+// >>> A10 (diperluas, 2026-08-11): jalur `--bandingkan` sudah memulangkan kode
+// keluar yang mencerminkan vonisnya; jalur UKUR masih selalu 0 — termasuk
+// sesudah mencetak `✖ GERBANG F6 BELUM LEWAT`. Selama begitu, satu-satunya
+// penjaga gerbang adalah orang yang membaca layar, dan itu persis yang
+// hendak dihapus. Berkas hasil TETAP ditulis lebih dulu: kode keluar adalah
+// vonis, bukan hukuman — datanya masih dibutuhkan untuk menelusuri sebabnya.
+//
+// >>> RONDE 3: satu kode untuk tiga sebab yang berbeda DICABUT. Versi
+// sebelumnya memulangkan 6 untuk "gagal", "tidak bisa dinilai", DAN "tidak
+// sah" sekaligus — dan karena `SKENARIO` sekarang cuma 6 giliran (di bawah
+// `MIN_GILIRAN`), setiap pengukuran yang BERHASIL pun keluar 6. Kode keluar
+// yang selalu sama adalah kode keluar tanpa informasi.
+//
+// Yang SENGAJA TIDAK dilakukan: menambah flag `--tanpa-gerbang`. Itu menambal
+// rancangan yang keliru, dan proyek ini melarangnya. Akar masalahnya bukan
+// gerbangnya — melainkan bahwa korpusnya belum ada; begitu L4a (51 kasus)
+// disambungkan ke jalur ini, gerbangnya bisa dinilai dengan sendirinya.
+if (!vonisKesahihan.sah) {
+  console.log('\n  (kode keluar 5 — pengukuran TIDAK SAH; hasil di atas tetap ditulis)');
+  process.exit(5);
+}
+if (!vonisGerbang.bisaDinilai) {
+  console.log('\n  (kode keluar 7 — gerbang F6 tidak bisa dinilai; hasil di atas tetap ditulis)');
+  process.exit(7);
+}
+if (!vonisGerbang.lulus) {
+  console.log('\n  (kode keluar 6 — gerbang F6 GAGAL; hasil di atas tetap ditulis)');
+  process.exit(6);
 }

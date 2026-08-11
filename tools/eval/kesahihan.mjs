@@ -325,3 +325,232 @@ export function pasangkanPerKasus(a, b, kelasDiminta) {
     dibandingkan: kunci.length - hanyaDi.length,
   };
 }
+
+/**
+ * >>> ANGGA — 2026-08-11: SEBARAN ANTAR PUTARAN — pertanyaan yang gerbang F6
+ * sebenarnya ajukan, dan yang alat ini SELAMA INI TIDAK BISA JAWAB.
+ *
+ * Gerbang F6 berbunyi: *"korpus jalan 3x berulang, sebaran < 5 poin."*
+ * `replay.mjs` mencetak `5/12` — JUMLAH pelanggaran lintas seluruh putaran.
+ * Itu besaran yang BERBEDA. Sebaran antar putaran harus dihitung sendiri dari
+ * JSON, dan di lengan 1 pertama memang harus kuhitung manual dengan Python:
+ * putaran 1 = 33%, putaran 2 = 50% → 17 poin. Alat ukur yang tidak bisa
+ * menjawab pertanyaan gerbangnya sendiri belum selesai dibangun.
+ *
+ * DUA KEPUTUSAN YANG SENGAJA:
+ *
+ * 1. **Persentase, bukan cacah.** ALASAN VERSI PERTAMA SALAH FAKTA dan
+ *    dikoreksi di ronde 3: ia berbunyi "putaran yang mati di tengah menyisakan
+ *    giliran lebih sedikit". Ditelusuri ke produsennya, itu tidak bisa terjadi
+ *    — `satuPutaran()` MELEMPAR saat satu giliran gagal, dan pemanggilnya
+ *    membuang SELURUH putaran itu sebelum `putaran.push`. Yang berkurang
+ *    adalah JUMLAH PUTARAN (ditangani `cukupPutaran >= 3`), bukan panjangnya.
+ *    Preseden koreksi A9 di berkas ini: kalimat yang menyatakan fakta salah
+ *    tentang alatnya sendiri lebih buruk daripada diam.
+ *
+ *    Alasan yang BENAR: ambang "5 poin" harus punya arti yang sama lintas
+ *    UKURAN KORPUS — 6 giliran asap, 51 kasus L4a, 196 kasus korpus penuh.
+ *    Cacah tidak bisa memberikan itu (2 pelanggaran dari 6 dan dari 196 adalah
+ *    dua dunia berbeda); rasio bisa. Itu pula yang membuat pagar
+ *    `MIN_GILIRAN` di bawah ini perlu ada.
+ *
+ * 2. **Kurang dari 3 putaran = TIDAK BISA DINILAI, dan itu BUKAN lulus.**
+ *    Ini persis keadaan lengan 1 pertama: 2 dari 3 putaran berhasil karena 429.
+ *    Dua putaran yang kebetulan mirip tidak boleh terbaca sebagai gerbang lewat
+ *    — gerbangnya sendiri menyebut angka 3, dan ketiadaan data tidak pernah
+ *    boleh jatuh ke ✔.
+ */
+export function sebaranPerPutaran(putaran, kelas, opsi = {}) {
+  const { sah = true, nomor = null } = opsi;
+  const daftar = putaran ?? [];
+  const daftarKelas = Array.isArray(kelas) ? kelas : [];
+
+  // C9: `kelas` dulu tidak dijaga sementara `putaran` dijaga — asimetri yang
+  // membuat alat ukur CRASH alih-alih memberi vonis (preseden NB-1).
+  // C4/C5: daftar kelas KOSONG bukan "semua kelas bersih", ia "tidak ada yang
+  // diperiksa" — dan ketiadaan pemeriksaan tidak pernah boleh jatuh ke ✔.
+  const takBisaDinilai = [];
+  if (!daftarKelas.length) takBisaDinilai.push('daftar kelas kegagalan KOSONG — tidak ada yang diperiksa');
+
+  // C1: putaran KOSONG dulu dibaca "0% pelanggaran" lewat `p.length ? … : 0`,
+  // sehingga tiga putaran nol giliran memberi `✔ GERBANG F6 LEWAT`. Nol
+  // pengukuran diubah jadi angka nol yang sah — kelas kesalahan yang berkas ini
+  // sudah dua kali perbaiki di tempat lain, dan tetap kuulangi di sini.
+  const kosong = daftar.filter((p) => !p?.length).length;
+  if (kosong) takBisaDinilai.push(`${kosong} putaran berisi NOL giliran — tidak ada yang diukur`);
+
+  const giliranPerPutaran = daftar.map((p) => p?.length ?? 0);
+  const adaGiliran = daftar.some((p) => p?.length);
+  const perKelas = daftar.length && daftarKelas.length
+    ? daftarKelas.map((k) => {
+        const cacah = daftar.map((p) => (p ?? []).filter((g) => g?.[k]).length);
+        // >>> RONDE-3 (2026-08-11) — `sebaran` sekarang RASIO EKSAK, bukan
+        // selisih persentase yang sudah dibulatkan.
+        //
+        // Pembulatan-dulu membuat pagar `MIN_GILIRAN = 21` MENGINGKARI
+        // perhitungan yang melahirkannya: 1/21 = 4,76% (eksak, di bawah ambang)
+        // dibulatkan jadi 5 → gerbang GAGAL. Terukur juga di korpus penuh:
+        // 9/196 = 4,59 → dibulatkan 5 → GAGAL, padahal seharusnya lewat.
+        // Pencarian menyeluruh N=21..400 menemukan 99.845 pasangan yang eksak
+        // < 5 tapi bulat >= 5, dan **NOL** kasus arah sebaliknya — jadi bugnya
+        // selalu ke arah TERLALU KETAT: gerbang menuduh alat ukur berisik
+        // padahal ia diam. Itu tetap kesalahan: ia mengarahkan perbaikan ke
+        // tempat yang tidak rusak.
+        //
+        // `perPutaran` TETAP bulat — itu untuk mata manusia di tabel.
+        // Yang dibulatkan hanya TAMPILAN, tidak pernah VONIS.
+        const rasio = daftar.map((p, i) => (p?.length ? (cacah[i] / p.length) * 100 : 0));
+        const perPutaran = rasio.map((v) => Math.round(v));
+        const min = Math.min(...rasio);
+        const maks = Math.max(...rasio);
+        // Kelas yang field-nya tidak pernah muncul di SATU pun giliran bukan
+        // "nol pelanggaran" — ia TIDAK TERUKUR. `g?.[k]` tak bisa membedakan
+        // absen dari `false`, jadi salah ketik nama kelas (atau nama baru di
+        // `KELAS_GAGAL` tanpa field di `periksa()`) akan mencetak `0% 0/25`
+        // rapi lalu menyumbang ✔ ke gerbang. Drift itu SUDAH pernah terjadi
+        // sekali di repo ini (`gerbang_menahan`).
+        const terekam = daftar.some((pu) => (pu ?? []).some((g) => g && k in g));
+        return { kelas: k, cacah, perPutaran, rasio, min, maks, sebaran: maks - min, terekam };
+      })
+    : [];
+  if (adaGiliran)
+    for (const k of perKelas)
+      if (!k.terekam)
+        takBisaDinilai.push(
+          `kelas \`${k.kelas}\` TIDAK PERNAH terekam di data — ia dihitung 0% karena fieldnya absen, bukan karena bersih`,
+        );
+
+  const cukupPutaran = daftar.length >= 3;
+  if (!cukupPutaran)
+    takBisaDinilai.push(`baru ${daftar.length} dari 3 putaran yang dibutuhkan gerbang`);
+
+  // >>> C3 — TEMUAN PALING MENENTUKAN dari audit K23, dan ia menyelamatkan
+  // ambangnya dari "diperbaiki" ke arah yang salah.
+  //
+  // Persentase pada N giliran hanya bisa bernilai kelipatan 100/N. Pada N=6
+  // nilainya 0/17/33/50/67/83/100, jadi **sebaran non-nol TERKECIL adalah 16
+  // poin** — ambang "< 5" di situ de facto berarti "cacah wajib IDENTIK di
+  // semua putaran, atau GAGAL". Ambang 5 tidak punya makna operasional.
+  //
+  // Auditor menyimpulkan "ambangnya salah". **Penyanggal membalikkannya**, dan
+  // menghitung titik baliknya: **N=21**. Di bawah itu gerbangnya biner; di
+  // **N=51 (L4a)** langkahnya 1,96 poin sehingga selisih sampai **2 kasus**
+  // masih lulus; di **N=196 (korpus penuh)** langkahnya 0,51 poin, toleransi
+  // **9 kasus** (9/196 = 4,59 lulus · 10/196 = 5,10 gagal — angka "7" di versi
+  // pertama komentar ini salah hitung, dikoreksi ronde 3). Jadi ambang 5 BENAR untuk korpus sasaran — yang keliru adalah
+  // MENILAI GERBANGNYA di skenario asap 6 giliran. Menurunkan/menaikkan ambang
+  // akan merusak gerbang persis di tempat ia harus bekerja.
+  const MIN_GILIRAN = 21;
+  // Cacahnya sudah disaring `n > 0`, tapi daftar yang DICETAK dulu tidak:
+  // `[put(25), put(25), put(6)]` berbunyi "1 putaran hanya 25/6 giliran",
+  // menuduh putaran 25-giliran berada di bawah 21. Alat ukur yang menyebut
+  // SEBAB yang salah mengarahkan perbaikan ke tempat yang salah — pelanggaran
+  // yang test C1 di berkas uji dibangun khusus untuk mengunci.
+  const pendek = giliranPerPutaran.filter((n) => n > 0 && n < MIN_GILIRAN);
+  const terlaluPendek = pendek.length;
+  if (terlaluPendek)
+    takBisaDinilai.push(
+      `${terlaluPendek} putaran hanya ${[...new Set(pendek)].join('/')} giliran — di bawah ${MIN_GILIRAN}, ` +
+        `ambang 5 poin tidak bermakna (langkah persentase terkecilnya sudah > 5)`,
+    );
+
+  const alasan = [];
+  for (const k of perKelas)
+    if (k.sebaran >= 5)
+      alasan.push(
+        `${k.kelas}: sebaran ${k.sebaran.toFixed(1)} poin (` +
+          k.perPutaran.map((v, i) => `${v}% [${k.cacah[i]}/${giliranPerPutaran[i]}]`).join(' → ') + ')',
+      );
+
+  return {
+    kelas: perKelas,
+    nomor: nomor ?? daftar.map((_, i) => i + 1),
+    giliranPerPutaran,
+    cukupPutaran,
+    bisaDinilai: takBisaDinilai.length === 0,
+    takBisaDinilai,
+    sahHulu: sah,
+    maksSebaran: perKelas.length ? Math.max(...perKelas.map((k) => k.sebaran)) : 0,
+    alasan,
+    // C2/N3: vonis kesahihan MENANG. Sebaran yang dihitung dari pengukuran
+    // terconfound bukan bukti apa pun, jadi F6 TUNDUK padanya — bukan digabung
+    // jadi satu boolean (angka sebarannya tetap berguna sebagai diagnosis
+    // kebisingan meski tidak sah, dan alasan ketidaksahihan tetap perlu tampil
+    // terpisah). Dua angka, satu vonis berjenjang.
+    lulus: sah && takBisaDinilai.length === 0 && alasan.length === 0,
+  };
+}
+
+/** Cetak tabel sebaran + vonis gerbang F6. `opsi.sah` dari `cetakKesahihan`. */
+export function cetakSebaran(putaran, kelas, indent = '    ', opsi = {}) {
+  const r = sebaranPerPutaran(putaran, kelas, opsi);
+  const i = indent;
+  if (r.kelas.length) {
+    const lebar = Math.max(...r.kelas.map((k) => k.kelas.length), 5);
+    // N2/C3: penyebutnya IKUT DICETAK. "17 poin" untuk 1/6 vs 0/6 terbaca
+    // seperti 3,4x di atas batas, padahal peristiwanya satu giliran tunggal.
+    console.log(`${i}${'kelas'.padEnd(lebar)}  ${r.nomor.map((n) => `put${n}`.padStart(10)).join('')}${'sebaran'.padStart(10)}`);
+    for (const k of r.kelas) {
+      const sel = k.perPutaran.map((v, n) => `${v}% ${k.cacah[n]}/${r.giliranPerPutaran[n]}`.padStart(10)).join('');
+      console.log(`${i}${k.kelas.padEnd(lebar)}  ${sel}${`${k.sebaran.toFixed(1)} poin`.padStart(12)}${k.sebaran >= 5 ? ' ⟵' : ''}`);
+    }
+    console.log('');
+  }
+
+  if (!r.bisaDinilai) {
+    console.log(`${i}✖ GERBANG F6 TIDAK BISA DINILAI:`);
+    for (const a of r.takBisaDinilai) console.log(`${i}  · ${a}`);
+    return r;
+  }
+  if (!r.sahHulu) {
+    // Vonis kesahihan menang. Angka sebaran di atas tetap berguna sebagai
+    // diagnosis kebisingan, tapi ia bukan bukti apa-apa soal gerbang.
+    console.log(`${i}✖ GERBANG F6 TIDAK BISA DINILAI — pengukurannya sendiri dinyatakan TIDAK SAH di blok atas.`);
+    console.log(`${i}  Sebaran di atas tetap berguna sebagai petunjuk kebisingan, bukan sebagai vonis.`);
+    return r;
+  }
+  if (r.lulus) {
+    // N1: jumlah putaran DIBACA dari data, bukan ditulis keras "3 putaran" —
+    // bawaan `--runs` adalah 5, dan alat yang mengarang angka yang tidak ia
+    // ukur adalah persis pelanggaran yang koreksi A9 tutup di berkas ini.
+    console.log(`${i}✔ GERBANG F6 LEWAT — ${r.nomor.length} putaran, sebaran tertinggi ${r.maksSebaran.toFixed(1)} poin (< 5).`);
+  } else {
+    console.log(`${i}✖ GERBANG F6 BELUM LEWAT:`);
+    for (const a of r.alasan) console.log(`${i}  · ${a}`);
+    console.log(`${i}  Ingat bunyi gerbangnya: sebaran lebar berarti ALAT UKURNYA yang belum sah,`);
+    console.log(`${i}  bukan botnya. Telusuri dulu apakah tiap hit memang pelanggaran sungguhan.`);
+  }
+  return r;
+}
+
+
+/**
+ * >>> RONDE 3 audit K23 (2026-08-11): daftar kelas untuk tabel `--bandingkan`.
+ *
+ * Dulu `Object.keys(data[0].ringkasan.hit)` — daftar diambil dari berkas
+ * PERTAMA saja. Terukur di dua arah, dan dua-duanya buruk:
+ *   · berkas lama (5 kelas) di kolom kiri → baris `gerbang_menahan` HILANG
+ *     total dari tabel, lalu tetap ditutup `✔ Semua kolom sah`;
+ *   · berkas baru (6 kelas) di kolom kiri → sel kanan tercetak `undefined/72`,
+ *     yang terlihat seperti data.
+ * Peringatan "kelas hanya ada di SATU berkas" memang ada, tapi jauh DI BAWAH
+ * tabel yang sudah terlanjur dibaca. Ini cacat A3 yang sama dengan yang sudah
+ * ditutup di `pasangkanPerKasus`, masih hidup satu blok di atasnya.
+ *
+ * Dipindah ke sini — bukan dibiarkan di `replay.mjs` — karena `replay.mjs`
+ * menjalankan `preflight()` saat diimpor, sehingga apa pun di dalamnya tidak
+ * bisa diuji. Itu persis alasan berkas ini dilahirkan.
+ */
+export function kelasGabungan(data) {
+  const urut = [];
+  for (const d of data ?? [])
+    for (const k of Object.keys(d?.ringkasan?.hit ?? {})) if (!urut.includes(k)) urut.push(k);
+  return urut;
+}
+
+/** Sel tabel untuk kelas `k` di berkas `d`. Kelas yang absen ditandai, bukan `undefined`. */
+export function selHit(d, k) {
+  const hit = d?.ringkasan?.hit ?? {};
+  if (!(k in hit)) return 'tidak diukur';
+  return `${hit[k]}/${d?.ringkasan?.giliranTotal ?? 0}`;
+}
